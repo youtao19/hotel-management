@@ -1,9 +1,17 @@
 const routes = [
   {
+    path: '/login',
+    component: () => import('pages/Login.vue')
+  },
+  {
     path: '/',
-    component: () => import('layouts/MainLayout.vue'),
+    component: () => import('layouts/HomeView.vue'),
     children: [
-      { path: '', component: () => import('pages/IndexPage.vue') }
+      { path: '', redirect: '/Dash-board' },
+      { path: 'Dash-board', component: () => import('pages/Dash-board.vue') },
+      { path: 'check-in', component: () => import('pages/Check-in.vue') },
+      { path: 'room-status', component: () => import('pages/RoomStatus.vue') },
+      
     ]
   },
 
@@ -11,7 +19,7 @@ const routes = [
   // but you can also remove it
   {
     path: '/:catchAll(.*)*',
-    component: () => import('pages/ErrorNotFound.vue')
+    redirect: '/login'
   }
 ]
 

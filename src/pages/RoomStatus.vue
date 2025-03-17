@@ -1,0 +1,592 @@
+<template>
+  <!-- 主容器，使用 Quasar 的 padding 类 -->
+  <div class="room-status q-pa-md">
+    <!-- 页面标题 -->
+    <h1 class="text-h4 q-mb-md">房间状态</h1>
+    
+    <!-- 筛选器部分 -->
+    <div class="filters q-mb-md">
+      <div class="row q-col-gutter-md">
+        <!-- 房间类型筛选下拉框 -->
+        <div class="col-md-4 col-sm-6 col-xs-12">
+          <q-select
+            v-model="filterType"
+            :options="roomTypeOptions"
+            label="房间类型"
+            outlined
+            emit-value        
+            map-options       
+            clearable         
+            clear-icon="close"
+          />
+        </div>
+        
+        <!-- 房间状态筛选下拉框 -->
+        <div class="col-md-4 col-sm-6 col-xs-12">
+          <q-select
+            v-model="filterStatus"
+            :options="statusOptions"
+            label="房间状态"
+            outlined
+            emit-value
+            map-options
+            clearable
+            clear-icon="close"
+          />
+        </div>
+        
+        <!-- 筛选操作按钮 -->
+        <div class="col-md-4 col-sm-12 col-xs-12 flex items-center">
+          <q-btn
+            color="primary"
+            icon="filter_alt"
+            label="应用筛选"
+            @click="applyFilters"
+            class="q-mr-sm"
+          />
+          <q-btn
+            outline
+            color="grey"
+            icon="restart_alt"
+            label="重置"
+            @click="resetFilters"
+          />
+        </div>
+      </div>
+    </div>
+    
+    <!-- 状态统计卡片部分 -->
+    <div class="status-summary q-mb-md">
+      <div class="row q-col-gutter-sm">
+        <!-- 空闲房间统计卡片 -->
+        <div class="col-md col-sm-6 col-xs-6">
+          <q-card class="bg-green-1 text-center cursor-pointer" @click="setStatusFilter('available')">
+            <q-card-section>
+              <div class="text-subtitle2">空闲</div>
+              <div class="text-h5">{{ getStatusCount('available') }}</div>
+            </q-card-section>
+          </q-card>
+        </div>
+        <!-- 已入住房间统计卡片 -->
+        <div class="col-md col-sm-6 col-xs-6">
+          <q-card class="bg-red-1 text-center cursor-pointer" @click="setStatusFilter('occupied')">
+            <q-card-section>
+              <div class="text-subtitle2">已入住</div>
+              <div class="text-h5">{{ getStatusCount('occupied') }}</div>
+            </q-card-section>
+          </q-card>
+        </div>
+        <!-- 已预订房间统计卡片 -->
+        <div class="col-md col-sm-6 col-xs-6">
+          <q-card class="bg-blue-1 text-center cursor-pointer" @click="setStatusFilter('reserved')">
+            <q-card-section>
+              <div class="text-subtitle2">已预订</div>
+              <div class="text-h5">{{ getStatusCount('reserved') }}</div>
+            </q-card-section>
+          </q-card>
+        </div>
+        <!-- 清扫中房间统计卡片 -->
+        <div class="col-md col-sm-6 col-xs-6">
+          <q-card class="bg-orange-1 text-center cursor-pointer" @click="setStatusFilter('cleaning')">
+            <q-card-section>
+              <div class="text-subtitle2">清扫中</div>
+              <div class="text-h5">{{ getStatusCount('cleaning') }}</div>
+            </q-card-section>
+          </q-card>
+        </div>
+        <!-- 维修中房间统计卡片 -->
+        <div class="col-md col-sm-6 col-xs-6">
+          <q-card class="bg-grey-3 text-center cursor-pointer" @click="setStatusFilter('maintenance')">
+            <q-card-section>
+              <div class="text-subtitle2">维修中</div>
+              <div class="text-h5">{{ getStatusCount('maintenance') }}</div>
+            </q-card-section>
+          </q-card>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 房间网格视图部分 -->
+    <div class="room-grid">
+      <div class="row q-col-gutter-md">
+        <!-- 遍历过滤后的房间列表 -->
+        <div 
+          v-for="room in filteredRooms" 
+          :key="room.id" 
+          class="col-lg-3 col-md-4 col-sm-6 col-xs-12"
+        >
+          <!-- 房间卡片，根据状态设置不同背景色 -->
+          <q-card 
+            :class="{
+              'bg-green-1': room.status === 'available',  // 空闲房间为绿色
+              'bg-red-1': room.status === 'occupied',     // 已入住房间为红色
+              'bg-blue-1': room.status === 'reserved',    // 已预订房间为蓝色
+              'bg-orange-1': room.status === 'cleaning',  // 清扫中房间为橙色
+              'bg-grey-3': room.status === 'maintenance'  // 维修中房间为灰色
+            }"
+          >
+            <q-card-section class="room-header">
+              <!-- 房间号 -->
+              <div class="text-h5 text-center">{{ room.number }}</div>
+              <q-chip
+                :color="getStatusColor(room.status)"
+                text-color="white"
+                class="status-chip"
+              >
+                {{ getStatusText(room.status) }}
+              </q-chip>
+            </q-card-section>
+            
+            <q-separator />
+            
+            <q-card-section class="room-info">
+              <!-- 房间类型信息 -->
+              <div class="row q-mb-sm">
+                <div class="col-5">
+                  <div class="text-subtitle2 text-grey-7">类型:</div>
+                </div>
+                <div class="col-7">
+                  <div class="text-subtitle2 text-weight-bold">{{ getRoomTypeName(room.type) }}</div>
+                </div>
+              </div>
+              
+              <!-- 房间价格信息 -->
+              <div class="row q-mb-sm">
+                <div class="col-5">
+                  <div class="text-subtitle2 text-grey-7">价格:</div>
+                </div>
+                <div class="col-7">
+                  <div class="text-subtitle2 text-weight-bold text-primary">¥{{ room.price }}/晚</div>
+                </div>
+              </div>
+              
+              <!-- 已入住房间显示客人信息 -->
+              <div v-if="room.status === 'occupied'" class="row q-mb-sm">
+                <div class="col-5">
+                  <div class="text-subtitle2 text-grey-7">客人:</div>
+                </div>
+                <div class="col-7">
+                  <div class="text-subtitle2 text-weight-bold">{{ room.currentGuest }}</div>
+                </div>
+              </div>
+              
+              <!-- 已入住房间显示退房日期 -->
+              <div v-if="room.status === 'occupied'" class="row q-mb-sm">
+                <div class="col-5">
+                  <div class="text-subtitle2 text-grey-7">退房日期:</div>
+                </div>
+                <div class="col-7">
+                  <div class="text-subtitle2 text-weight-bold">{{ room.checkOutDate }}</div>
+                </div>
+              </div>
+            </q-card-section>
+            
+            <q-space />
+            
+            <!-- 房间操作按钮 -->
+            <q-card-actions align="center" class="q-pa-sm">
+              <q-btn-group flat>
+                <!-- 空闲房间可预订 -->
+                <q-btn v-if="room.status === 'available'" color="primary" icon="book_online" label="预订" size="sm" @click="bookRoom(room.id)" />
+                <!-- 空闲房间可入住 -->
+                <q-btn v-if="room.status === 'available'" color="positive" icon="login" label="入住" size="sm" @click="checkIn(room.id)" />
+                <!-- 已入住房间可退房 -->
+                <q-btn v-if="room.status === 'occupied'" color="negative" icon="logout" label="退房" size="sm" @click="checkOut(room.id)" />
+                <!-- 非维修中房间可设为维修 -->
+                <q-btn v-if="room.status !== 'maintenance'" color="grey" icon="build" label="维修" size="sm" @click="setMaintenance(room.id)" />
+                <!-- 维修中房间可完成维修 -->
+                <q-btn v-if="room.status === 'maintenance'" color="green" icon="check" label="完成维修" size="sm" @click="clearMaintenance(room.id)" />
+                <!-- 清扫中房间可完成清洁 -->
+                <q-btn v-if="room.status === 'cleaning'" color="green" icon="check" label="完成清洁" size="sm" @click="clearCleaning(room.id)" />
+              </q-btn-group>
+            </q-card-actions>
+          </q-card>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 无结果提示 - 当筛选后没有房间时显示 -->
+    <div v-if="filteredRooms.length === 0" class="text-center q-pa-lg">
+      <q-icon name="search_off" size="5rem" color="grey-5" />
+      <div class="text-h6 text-grey-7 q-mt-md">没有找到符合条件的房间</div>
+      <q-btn color="primary" label="重置筛选" @click="resetFilters" class="q-mt-md" />
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
+
+// 获取当前路由
+const route = useRoute()
+
+// 筛选条件状态变量
+const filterType = ref(null)    // 房间类型筛选，初始为null表示不筛选
+const filterStatus = ref(null)  // 房间状态筛选，初始为null表示不筛选
+
+// 监听路由变化，以便在URL参数变化时更新筛选条件
+watch(() => route.query, (newQuery) => {
+  console.log('路由参数变化:', newQuery)
+  if (newQuery.status) {
+    // 确保状态值是有效的
+    const statusValue = newQuery.status
+    console.log('尝试应用状态筛选:', statusValue)
+    
+    // 验证状态值是否有效
+    const validStatus = ['available', 'occupied', 'reserved', 'cleaning', 'maintenance'].includes(statusValue)
+    
+    if (validStatus) {
+      console.log('状态值有效，设置筛选:', statusValue)
+      filterStatus.value = statusValue
+    } else {
+      console.log('无效的状态值:', statusValue)
+    }
+  } else {
+    // 如果URL中没有状态参数，重置筛选
+    console.log('URL中无状态参数，重置筛选')
+    filterStatus.value = null
+  }
+}, { immediate: true, deep: true })
+
+// 添加对筛选条件变化的监听，用于调试
+watch(filterStatus, (newValue) => {
+  console.log('筛选状态变化为:', newValue)
+}, { immediate: true })
+
+// 房间类型选项数组，用于类型筛选下拉框
+const roomTypeOptions = [
+  { label: '所有房型', value: null },  // null值表示不筛选
+  { label: '标准间', value: 'standard' },
+  { label: '豪华间', value: 'deluxe' },
+  { label: '套房', value: 'suite' }
+]
+
+// 房间状态选项数组，用于状态筛选下拉框
+const statusOptions = [
+  { label: '所有状态', value: null },  // null值表示不筛选
+  { label: '空闲', value: 'available' },
+  { label: '已入住', value: 'occupied' },
+  { label: '已预订', value: 'reserved' },
+  { label: '清扫中', value: 'cleaning' },
+  { label: '维修中', value: 'maintenance' }
+]
+
+// 房间数据数组 - 实际应用中应从API获取
+const rooms = ref([
+  // 标准间
+  { id: 1, number: '101', type: 'standard', status: 'available', price: 288 },
+  { id: 2, number: '102', type: 'standard', status: 'occupied', currentGuest: '张三', checkOutDate: '2023-06-05', price: 288 },
+  { id: 3, number: '103', type: 'standard', status: 'cleaning', price: 288 },
+  { id: 4, number: '104', type: 'standard', status: 'reserved', price: 288 },
+  { id: 5, number: '105', type: 'standard', status: 'maintenance', price: 288 },
+  // 豪华间
+  { id: 6, number: '201', type: 'deluxe', status: 'available', price: 388 },
+  { id: 7, number: '202', type: 'deluxe', status: 'occupied', currentGuest: '李四', checkOutDate: '2023-06-07', price: 388 },
+  { id: 8, number: '203', type: 'deluxe', status: 'available', price: 388 },
+  { id: 9, number: '204', type: 'deluxe', status: 'reserved', price: 388 },
+  // 套房
+  { id: 10, number: '301', type: 'suite', status: 'available', price: 588 },
+  { id: 11, number: '302', type: 'suite', status: 'occupied', currentGuest: '王五', checkOutDate: '2023-06-10', price: 588 },
+  { id: 12, number: '303', type: 'suite', status: 'cleaning', price: 588 }
+])
+
+/**
+ * 计算属性：根据筛选条件过滤房间列表
+ * @returns {Array} 过滤后的房间数组
+ */
+const filteredRooms = computed(() => {
+  // 获取URL中的状态参数，优先于filterStatus变量
+  const urlStatus = route.query.status
+
+  console.log('重新计算筛选房间列表，条件:', { 
+    房型: filterType.value, 
+    状态变量: filterStatus.value,
+    URL状态: urlStatus
+  })
+  
+  return rooms.value.filter(room => {
+    // 如果URL中有状态参数，优先使用URL参数筛选
+    if (urlStatus && room.status !== urlStatus) return false
+    
+    // 如果没有URL参数，则使用筛选变量
+    // 如果没有设置筛选条件，返回所有房间
+    if (!filterType.value && !filterStatus.value && !urlStatus) return true
+    
+    // 筛选房型 - 如果设置了房型筛选且不匹配，则排除
+    if (filterType.value && room.type !== filterType.value) return false
+    
+    // 筛选状态 - 使用filterStatus变量，仅当URL中没有状态参数时
+    if (!urlStatus && filterStatus.value && room.status !== filterStatus.value) return false
+    
+    // 通过所有筛选条件，保留该房间
+    return true
+  })
+})
+
+/**
+ * 获取特定状态的房间数量
+ * @param {string} status - 房间状态
+ * @returns {number} 该状态的房间数量
+ */
+function getStatusCount(status) {
+  return rooms.value.filter(room => room.status === status).length
+}
+
+/**
+ * 获取房型的中文名称
+ * @param {string} type - 房间类型代码
+ * @returns {string} 房间类型的中文名称
+ */
+function getRoomTypeName(type) {
+  switch (type) {
+    case 'standard': return '标准间'
+    case 'deluxe': return '豪华间'
+    case 'suite': return '套房'
+    default: return type
+  }
+}
+
+/**
+ * 获取状态的中文文本
+ * @param {string} status - 房间状态代码
+ * @returns {string} 房间状态的中文文本
+ */
+function getStatusText(status) {
+  switch (status) {
+    case 'available': return '空闲'
+    case 'occupied': return '已入住'
+    case 'reserved': return '已预订'
+    case 'cleaning': return '清扫中'
+    case 'maintenance': return '维修中'
+    default: return status
+  }
+}
+
+/**
+ * 应用筛选按钮点击处理函数
+ * 注意：实际筛选逻辑已在computed属性中实现，此函数主要用于日志记录
+ */
+function applyFilters() {
+  console.log('应用筛选:', { 房型: filterType.value, 状态: filterStatus.value })
+}
+
+/**
+ * 重置筛选条件
+ */
+function resetFilters() {
+  filterType.value = null
+  filterStatus.value = null
+}
+
+/**
+ * 预订房间
+ * @param {number} roomId - 房间ID
+ */
+function bookRoom(roomId) {
+  console.log('预订房间:', roomId)
+  // 实际应用中，这里应该打开预订表单或导航到预订页面
+}
+
+/**
+ * 办理入住
+ * @param {number} roomId - 房间ID
+ */
+function checkIn(roomId) {
+  console.log('办理入住:', roomId)
+  // 实际应用中，这里应该导航到入住页面
+}
+
+/**
+ * 办理退房
+ * @param {number} roomId - 房间ID
+ */
+function checkOut(roomId) {
+  console.log('办理退房:', roomId)
+  // 实际应用中，这里应该导航到退房页面
+}
+
+/**
+ * 设置房间为维修状态
+ * @param {number} roomId - 房间ID
+ */
+function setMaintenance(roomId) {
+  console.log('设为维修:', roomId)
+  // 更新房间状态
+  const roomIndex = rooms.value.findIndex(room => room.id === roomId)
+  if (roomIndex !== -1) {
+    rooms.value[roomIndex].status = 'maintenance'
+  }
+}
+
+/**
+ * 完成房间维修，将状态改为可用
+ * @param {number} roomId - 房间ID
+ */
+function clearMaintenance(roomId) {
+  console.log('完成维修:', roomId)
+  // 更新房间状态
+  const roomIndex = rooms.value.findIndex(room => room.id === roomId)
+  if (roomIndex !== -1) {
+    rooms.value[roomIndex].status = 'available'
+  }
+}
+
+/**
+ * 完成房间清洁，将状态改为可用
+ * @param {number} roomId - 房间ID
+ */
+function clearCleaning(roomId) {
+  console.log('完成清洁:', roomId)
+  // 更新房间状态
+  const roomIndex = rooms.value.findIndex(room => room.id === roomId)
+  if (roomIndex !== -1) {
+    rooms.value[roomIndex].status = 'available'
+  }
+}
+
+/**
+ * 获取状态的颜色
+ * @param {string} status - 房间状态
+ * @returns {string} 状态对应的颜色
+ */
+function getStatusColor(status) {
+  switch (status) {
+    case 'available': return 'green'
+    case 'occupied': return 'red'
+    case 'reserved': return 'blue'
+    case 'cleaning': return 'orange'
+    case 'maintenance': return 'grey'
+    default: return 'grey'
+  }
+}
+
+/**
+ * 设置状态筛选
+ * @param {string} status - 房间状态
+ */
+function setStatusFilter(status) {
+  console.log('设置状态筛选:', status)
+  filterStatus.value = status
+}
+
+/**
+ * 组件挂载时的生命周期钩子
+ */
+onMounted(() => {
+  // 这里可以加载实际房间数据，例如从API获取
+  // fetchRooms()
+})
+</script>
+
+<style scoped>
+/* 设置页面最大宽度并居中 */
+.room-status {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* 状态统计卡片的悬停效果 */
+.status-summary .q-card {
+  transition: transform 0.3s, box-shadow 0.3s;  /* 添加过渡效果 */
+  height: 100px;  /* 固定高度 */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border-radius: 8px;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
+}
+
+/* 鼠标悬停时卡片上移效果 */
+.status-summary .q-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+/* 房间卡片样式 */
+.room-grid .q-card {
+  height: 250px;  /* 固定高度 */
+  transition: transform 0.3s, box-shadow 0.3s;
+  border-radius: 8px;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+/* 房间卡片悬停效果 */
+.room-grid .q-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+}
+
+/* 房间卡片头部样式 */
+.room-header {
+  position: relative;
+  padding-bottom: 8px;
+  padding-top: 8px;
+}
+
+/* 状态标签样式 */
+.status-chip {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 0.8rem;
+}
+
+/* 房间卡片内容区域 */
+.room-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding-top: 12px;
+  padding-bottom: 0;
+}
+
+/* 房间号样式 */
+.room-grid .text-h5 {
+  font-size: 1.5rem;
+  font-weight: bold;
+  margin-bottom: 0;
+}
+
+/* 分隔线样式 */
+.room-grid .q-separator {
+  margin: 0;
+}
+
+/* 按钮组样式 */
+.room-grid .q-btn-group {
+  width: 100%;
+  justify-content: center;
+}
+
+/* 按钮样式 */
+.room-grid .q-btn {
+  font-size: 0.8rem;
+}
+
+/* 筛选器样式 */
+.filters {
+  background-color: #f5f5f5;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+/* 状态统计卡片内容居中 */
+.status-summary .q-card-section {
+  padding: 8px;
+  text-align: center;
+}
+
+/* 状态统计数字样式 */
+.status-summary .text-h5 {
+  font-weight: bold;
+  margin-top: 4px;
+  font-size: 1.8rem;
+}
+</style>
