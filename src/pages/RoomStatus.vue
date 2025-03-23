@@ -190,6 +190,8 @@
                 <q-btn v-if="room.status === 'available'" color="primary" icon="book_online" label="预订" size="sm" @click="bookRoom(room.id)" />
                 <!-- 空闲房间可入住 -->
                 <q-btn v-if="room.status === 'available'" color="positive" icon="login" label="入住" size="sm" @click="checkIn(room.id)" />
+                <!-- 已预订房间可办理入住 -->
+                <q-btn v-if="room.status === 'reserved'" color="positive" icon="login" label="办理入住" size="sm" @click="checkInReservation(room.id)" />
                 <!-- 已入住房间可退房 -->
                 <q-btn v-if="room.status === 'occupied'" color="negative" icon="logout" label="退房" size="sm" @click="checkOut(room.id)" />
                 <!-- 非维修中房间可设为维修 -->
@@ -216,38 +218,47 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
-// 获取当前路由
+// 获取当前路由和路由器
 const route = useRoute()
+const router = useRouter()
 
 // 筛选条件状态变量
 const filterType = ref(null)    // 房间类型筛选，初始为null表示不筛选
 const filterStatus = ref(null)  // 房间状态筛选，初始为null表示不筛选
 
-// 监听路由变化，以便在URL参数变化时更新筛选条件
+/**
+ * 监听路由查询参数变化，用于同步URL参数和组件状态
+ * 当URL中的status参数变化时，更新filterStatus状态
+ * 支持从外部页面（例如仪表盘）跳转到此页面并应用筛选
+ */
 watch(() => route.query, (newQuery) => {
   console.log('路由参数变化:', newQuery)
-  if (newQuery.status) {
-    // 确保状态值是有效的
-    const statusValue = newQuery.status
-    console.log('尝试应用状态筛选:', statusValue)
-    
-    // 验证状态值是否有效
-    const validStatus = ['available', 'occupied', 'reserved', 'cleaning', 'maintenance'].includes(statusValue)
-    
-    if (validStatus) {
-      console.log('状态值有效，设置筛选:', statusValue)
-      filterStatus.value = statusValue
+  // 仅当新的查询参数中的status与当前filterStatus不同时才更新，避免无限循环
+  if (newQuery.status !== filterStatus.value) {
+    if (newQuery.status) {
+      // 确保状态值是有效的
+      const statusValue = newQuery.status
+      console.log('尝试应用状态筛选:', statusValue)
+      
+      // 验证状态值是否有效，防止非法值导致的筛选问题
+      const validStatus = ['available', 'occupied', 'reserved', 'cleaning', 'maintenance'].includes(statusValue)
+      
+      if (validStatus) {
+        console.log('状态值有效，设置筛选:', statusValue)
+        filterStatus.value = statusValue  // 更新内部状态
+      } else {
+        console.log('无效的状态值:', statusValue)
+        filterStatus.value = null  // 无效值时重置筛选
+      }
     } else {
-      console.log('无效的状态值:', statusValue)
+      // 如果URL中没有状态参数，重置筛选
+      console.log('URL中无状态参数，重置筛选')
+      filterStatus.value = null
     }
-  } else {
-    // 如果URL中没有状态参数，重置筛选
-    console.log('URL中无状态参数，重置筛选')
-    filterStatus.value = null
   }
-}, { immediate: true, deep: true })
+}, { immediate: true, deep: true })  // immediate确保组件初始化时立即执行一次，deep确保深度监听对象变化
 
 // 添加对筛选条件变化的监听，用于调试
 watch(filterStatus, (newValue) => {
@@ -293,6 +304,8 @@ const rooms = ref([
 
 /**
  * 计算属性：根据筛选条件过滤房间列表
+ * 同时考虑URL参数和本地筛选状态
+ * URL参数优先级高于本地状态，确保从其他页面跳转时筛选正常工作
  * @returns {Array} 过滤后的房间数组
  */
 const filteredRooms = computed(() => {
@@ -373,10 +386,19 @@ function applyFilters() {
 
 /**
  * 重置筛选条件
+ * 同时清除组件状态和URL参数，保持两者同步
  */
 function resetFilters() {
+  // 重置组件状态变量
   filterType.value = null
   filterStatus.value = null
+  
+  // 更新URL，移除status参数
+  // 使用replace而不是push可以避免产生新的浏览历史记录
+  router.replace({
+    path: route.path,
+    query: {}  // 清空所有查询参数
+  })
 }
 
 /**
@@ -394,7 +416,27 @@ function bookRoom(roomId) {
  */
 function checkIn(roomId) {
   console.log('办理入住:', roomId)
-  // 实际应用中，这里应该导航到入住页面
+  // 导航到入住页面，默认为无预订入住
+  router.push('/Check-in')
+}
+
+/**
+ * 办理预订入住
+ * @param {number} roomId - 房间ID
+ */
+function checkInReservation(roomId) {
+  console.log('办理预订入住:', roomId)
+  // 查找房间预订信息
+  const room = rooms.value.find(r => r.id === roomId)
+  
+  // 导航到入住页面，并选择预订入住选项卡
+  router.push({
+    path: '/Check-in',
+    query: { 
+      type: 'reservation',
+      roomId: roomId
+    }
+  })
 }
 
 /**
@@ -404,6 +446,16 @@ function checkIn(roomId) {
 function checkOut(roomId) {
   console.log('办理退房:', roomId)
   // 实际应用中，这里应该导航到退房页面
+  
+  // 找到房间并更新状态为清扫中
+  const roomIndex = rooms.value.findIndex(room => room.id === roomId)
+  if (roomIndex !== -1) {
+    // 显示确认对话框
+    if (confirm('确认办理退房？退房后房间将自动设置为"清扫中"状态。')) {
+      rooms.value[roomIndex].status = 'cleaning'
+      console.log('房间已更新为清扫中状态:', roomId)
+    }
+  }
 }
 
 /**
@@ -463,11 +515,31 @@ function getStatusColor(status) {
 
 /**
  * 设置状态筛选
- * @param {string} status - 房间状态
+ * 实现筛选切换功能：如果当前已经是选中状态，则清除筛选；否则应用新筛选
+ * 同时更新URL参数，保持URL状态与组件状态同步
+ * @param {string} status - 房间状态代码
  */
 function setStatusFilter(status) {
   console.log('设置状态筛选:', status)
-  filterStatus.value = status
+  
+  // 如果当前已经是这个状态筛选，则清除筛选（切换行为）
+  if (filterStatus.value === status) {
+    // 清除组件状态
+    filterStatus.value = null
+    // 更新URL，移除status参数
+    router.replace({
+      path: route.path,
+      query: { ...route.query, status: undefined }  // 保留其他查询参数
+    })
+  } else {
+    // 否则设置为新的状态筛选
+    filterStatus.value = status
+    // 更新URL，添加status参数
+    router.replace({
+      path: route.path,
+      query: { ...route.query, status: status }  // 保留其他查询参数，添加或更新status
+    })
+  }
 }
 
 /**

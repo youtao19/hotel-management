@@ -15,8 +15,10 @@
       <div class="col-md-3 col-sm-6 col-xs-12">
         <q-card class="dashboard-card">
           <q-card-section class="bg-positive text-white">
-            <div class="text-h6">今日入住</div>
-            <q-icon name="login" size="sm" class="q-mr-xs" />
+            <div class="text-h6">
+              <q-icon name="login" size="sm" class="q-mr-xs" />
+              今日入住
+            </div>
           </q-card-section>
           <q-card-section class="text-center">
             <div class="text-h3">{{ stats.checkInsToday }}</div>
@@ -78,80 +80,117 @@
 
       <!-- 房间状态概览 -->
       <div class="col-md-8 col-xs-12">
-        <q-card>
-          <q-card-section class="bg-secondary text-white">
-            <div class="text-h6">
-              <q-icon name="meeting_room" class="q-mr-xs" />
-              房间状态概览
-            </div>
-          </q-card-section>
-          <q-card-section>
-            <div class="row q-col-gutter-sm">
-              <div class="col-md-3 col-sm-6 col-xs-12">
-                <q-card class="text-center q-pa-sm bg-green-1 cursor-pointer" @click="goToRoomStatus('available')">
-                  <div class="text-subtitle2">空闲</div>
-                  <div class="text-h5">{{ roomStats.available }}</div>
-                </q-card>
-              </div>
-              <div class="col-md-3 col-sm-6 col-xs-12">
-                <q-card class="text-center q-pa-sm bg-red-1 cursor-pointer" @click="goToRoomStatus('occupied')">
-                  <div class="text-subtitle2">已入住</div>
-                  <div class="text-h5">{{ roomStats.occupied }}</div>
-                </q-card>
-              </div>
-              <div class="col-md-3 col-sm-6 col-xs-12">
-                <q-card class="text-center q-pa-sm bg-orange-1 cursor-pointer" @click="goToRoomStatus('cleaning')">
-                  <div class="text-subtitle2">待清洁</div>
-                  <div class="text-h5">{{ roomStats.cleaning }}</div>
-                </q-card>
-              </div>
-              <div class="col-md-3 col-sm-6 col-xs-12">
-                <q-card class="text-center q-pa-sm bg-grey-3 cursor-pointer" @click="goToRoomStatus('maintenance')">
-                  <div class="text-subtitle2">维修中</div>
-                  <div class="text-h5">{{ roomStats.maintenance }}</div>
-                </q-card>
-              </div>
-            </div>
-          </q-card-section>
-          <q-card-section>
-            <div class="text-subtitle2 q-mb-sm">房型分布</div>
-            <q-linear-progress
-              size="25px"
-              :value="roomStats.standardOccupancy"
-              color="primary"
-              class="q-mb-sm"
-            >
-              <div class="absolute-full flex flex-center">
-                <q-badge color="primary" text-color="white">
-                  标准间: {{ roomStats.standardOccupied }}/{{ roomStats.standardTotal }}
-                </q-badge>
-              </div>
-            </q-linear-progress>
-            <q-linear-progress
-              size="25px"
-              :value="roomStats.deluxeOccupancy"
-              color="secondary"
-              class="q-mb-sm"
-            >
-              <div class="absolute-full flex flex-center">
-                <q-badge color="secondary" text-color="white">
-                  豪华间: {{ roomStats.deluxeOccupied }}/{{ roomStats.deluxeTotal }}
-                </q-badge>
-              </div>
-            </q-linear-progress>
-            <q-linear-progress
-              size="25px"
-              :value="roomStats.suiteOccupancy"
-              color="accent"
-            >
-              <div class="absolute-full flex flex-center">
-                <q-badge color="accent" text-color="white">
-                  套房: {{ roomStats.suiteOccupied }}/{{ roomStats.suiteTotal }}
-                </q-badge>
-              </div>
-            </q-linear-progress>
-          </q-card-section>
-        </q-card>
+        <div class="row q-col-gutter-md">
+          <div class="col-12">
+            <q-card>
+              <q-card-section class="bg-secondary text-white">
+                <div class="text-h6">
+                  <q-icon name="meeting_room" class="q-mr-xs" />
+                  房间状态概览
+                </div>
+              </q-card-section>
+              <q-card-section>
+                <div class="row q-col-gutter-sm">
+                  <div class="col-md-3 col-sm-6 col-xs-12">
+                    <q-card class="text-center q-pa-sm bg-green-1 cursor-pointer" @click="goToRoomStatus('available')">
+                      <div class="text-subtitle2">空闲</div>
+                      <div class="text-h5">{{ roomStats.available }}</div>
+                    </q-card>
+                  </div>
+                  <div class="col-md-3 col-sm-6 col-xs-12">
+                    <q-card class="text-center q-pa-sm bg-red-1 cursor-pointer" @click="goToRoomStatus('occupied')">
+                      <div class="text-subtitle2">已入住</div>
+                      <div class="text-h5">{{ roomStats.occupied }}</div>
+                    </q-card>
+                  </div>
+                  <div class="col-md-3 col-sm-6 col-xs-12">
+                    <q-card class="text-center q-pa-sm bg-orange-1 cursor-pointer" @click="goToRoomStatus('cleaning')">
+                      <div class="text-subtitle2">待清洁</div>
+                      <div class="text-h5">{{ roomStats.cleaning }}</div>
+                    </q-card>
+                  </div>
+                  <div class="col-md-3 col-sm-6 col-xs-12">
+                    <q-card class="text-center q-pa-sm bg-grey-3 cursor-pointer" @click="goToRoomStatus('maintenance')">
+                      <div class="text-subtitle2">维修中</div>
+                      <div class="text-h5">{{ roomStats.maintenance }}</div>
+                    </q-card>
+                  </div>
+                </div>
+              </q-card-section>
+              <q-card-section>
+                <div class="text-subtitle2 q-mb-sm">房型分布</div>
+                <q-linear-progress
+                  size="25px"
+                  :value="roomStats.standardOccupancy"
+                  color="primary"
+                  class="q-mb-sm"
+                >
+                  <div class="absolute-full flex flex-center">
+                    <q-badge color="primary" text-color="white">
+                      标准间: {{ roomStats.standardOccupied }}/{{ roomStats.standardTotal }}
+                    </q-badge>
+                  </div>
+                </q-linear-progress>
+                <q-linear-progress
+                  size="25px"
+                  :value="roomStats.deluxeOccupancy"
+                  color="secondary"
+                  class="q-mb-sm"
+                >
+                  <div class="absolute-full flex flex-center">
+                    <q-badge color="secondary" text-color="white">
+                      豪华间: {{ roomStats.deluxeOccupied }}/{{ roomStats.deluxeTotal }}
+                    </q-badge>
+                  </div>
+                </q-linear-progress>
+                <q-linear-progress
+                  size="25px"
+                  :value="roomStats.suiteOccupancy"
+                  color="accent"
+                >
+                  <div class="absolute-full flex flex-center">
+                    <q-badge color="accent" text-color="white">
+                      套房: {{ roomStats.suiteOccupied }}/{{ roomStats.suiteTotal }}
+                    </q-badge>
+                  </div>
+                </q-linear-progress>
+              </q-card-section>
+            </q-card>
+          </div>
+          
+          <!-- 最近入住客人 -->
+          <div class="col-12">
+            <q-card>
+              <q-card-section class="bg-secondary text-white">
+                <div class="text-h6">
+                  <q-icon name="people" class="q-mr-xs" />
+                  最近入住客人
+                </div>
+              </q-card-section>
+              <q-table
+                :rows="recentGuests"
+                :columns="guestColumns"
+                row-key="id"
+                dense
+                hide-pagination
+                :pagination="{ rowsPerPage: 5 }"
+              >
+                <template v-slot:body-cell-status="props">
+                  <q-td :props="props">
+                    <q-chip
+                      :color="props.value === '入住中' ? 'positive' : 'grey'"
+                      text-color="white"
+                      dense
+                      size="sm"
+                    >
+                      {{ props.value }}
+                    </q-chip>
+                  </q-td>
+                </template>
+              </q-table>
+            </q-card>
+          </div>
+        </div>
       </div>
 
       <!-- 今日待办事项 -->
@@ -237,39 +276,6 @@
               </q-item-section>
             </q-item>
           </q-list>
-        </q-card>
-      </div>
-
-      <!-- 最近入住客人 -->
-      <div class="col-md-6 col-xs-12">
-        <q-card>
-          <q-card-section class="bg-secondary text-white">
-            <div class="text-h6">
-              <q-icon name="people" class="q-mr-xs" />
-              最近入住客人
-            </div>
-          </q-card-section>
-          <q-table
-            :rows="recentGuests"
-            :columns="guestColumns"
-            row-key="id"
-            dense
-            hide-pagination
-            :pagination="{ rowsPerPage: 5 }"
-          >
-            <template v-slot:body-cell-status="props">
-              <q-td :props="props">
-                <q-chip
-                  :color="props.value === '入住中' ? 'positive' : 'grey'"
-                  text-color="white"
-                  dense
-                  size="sm"
-                >
-                  {{ props.value }}
-                </q-chip>
-              </q-td>
-            </template>
-          </q-table>
         </q-card>
       </div>
     </div>
@@ -397,4 +403,8 @@ function goToRoomStatus(status) {
 .dashboard-card {
   height: 100%;
 }
-</style> 
+
+.guest-card {
+  margin-top: 0;
+}
+</style>
