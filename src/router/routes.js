@@ -9,9 +9,9 @@ const routes = [
     children: [
       { path: '', redirect: '/Dash-board' },
       { path: 'Dash-board', component: () => import('pages/Dash-board.vue') },
-      { path: 'check-in', component: () => import('pages/Check-in.vue') },
       { path: 'room-status', component: () => import('pages/RoomStatus.vue') },
-      
+      { path: 'ViewOrders', component: () => import('pages/ViewOrders.vue') },
+      { path: 'CreateOrder', component: () => import('pages/CreateOrder.vue') },
     ]
   },
 

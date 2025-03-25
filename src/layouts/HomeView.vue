@@ -45,8 +45,9 @@
         <!-- 导航标签栏 -->
         <q-tabs align="left">
           <q-route-tab to="/Dash-board" label="仪表盘" />
-          <q-route-tab to="/check-in" label="办理入住" />
+          <q-route-tab to="/CreateOrder" label="创建订单" />
           <q-route-tab to="/room-status" label="房间状态" />
+          <q-route-tab to="/ViewOrders" label="查看订单" />
         </q-tabs>
       </q-header>
   
