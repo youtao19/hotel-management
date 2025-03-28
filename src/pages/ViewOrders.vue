@@ -113,8 +113,15 @@
                   
                   <q-item>
                     <q-item-section>
-                      <q-item-label caption>创建时间</q-item-label>
+                      <q-item-label caption>订单创建时间</q-item-label>
                       <q-item-label>{{ currentOrder.createTime }}</q-item-label>
+                    </q-item-section>
+                  </q-item>
+                  
+                  <q-item>
+                    <q-item-section>
+                      <q-item-label caption>入住时间</q-item-label>
+                      <q-item-label>{{ currentOrder.actualCheckInTime || '未入住' }}</q-item-label>
                     </q-item-section>
                   </q-item>
                 </q-list>
@@ -143,6 +150,13 @@
                       <q-item-label>{{ currentOrder.idNumber }}</q-item-label>
                     </q-item-section>
                   </q-item>
+                  
+                  <q-item>
+                    <q-item-section>
+                      <q-item-label caption>退房时间</q-item-label>
+                      <q-item-label>{{ currentOrder.actualCheckOutTime || '未退房' }}</q-item-label>
+                    </q-item-section>
+                  </q-item>
                 </q-list>
               </div>
               
@@ -165,7 +179,7 @@
                   
                   <q-item>
                     <q-item-section>
-                      <q-item-label caption>入住日期</q-item-label>
+                      <q-item-label caption>预定入住日期</q-item-label>
                       <q-item-label>{{ currentOrder.checkInDate }} 至 {{ currentOrder.checkOutDate }}</q-item-label>
                     </q-item-section>
                   </q-item>
@@ -178,21 +192,21 @@
                   <q-item>
                     <q-item-section>
                       <q-item-label caption>支付方式</q-item-label>
-                      <q-item-label>{{ getPaymentMethodName(currentOrder.paymentMethod) }}</q-item-label>
+                      <q-item-label>{{ currentOrder.paymentMethod?.label || getPaymentMethodName(currentOrder.paymentMethod?.value) }}</q-item-label>
                     </q-item-section>
                   </q-item>
                   
                   <q-item>
                     <q-item-section>
                       <q-item-label caption>房间金额</q-item-label>
-                      <q-item-label>¥{{ currentOrder.roomPrice }}</q-item-label>
+                      <q-item-label class="text-primary text-weight-medium">¥{{ currentOrder.roomPrice }}</q-item-label>
                     </q-item-section>
                   </q-item>
                   
                   <q-item>
                     <q-item-section>
                       <q-item-label caption>押金</q-item-label>
-                      <q-item-label>¥{{ currentOrder.deposit }}</q-item-label>
+                      <q-item-label class="text-primary text-weight-medium">¥{{ currentOrder.deposit }}</q-item-label>
                     </q-item-section>
                   </q-item>
                 </q-list>
@@ -224,10 +238,55 @@
             <q-btn 
               v-if="currentOrder && currentOrder.status === '已入住'" 
               flat 
+              label="更改房间" 
+              color="warning" 
+              @click="showChangeRoomDialog = true" 
+            />
+            <q-btn 
+              v-if="currentOrder && currentOrder.status === '已入住'" 
+              flat 
               label="办理退房" 
               color="positive" 
               @click="checkoutOrderFromDetails" 
             />
+          </q-card-actions>
+        </q-card>
+      </q-dialog>
+      
+      <!-- 更改房间对话框 -->
+      <q-dialog v-model="showChangeRoomDialog" persistent>
+        <q-card style="min-width: 350px">
+          <q-card-section class="row items-center q-pb-none">
+            <div class="text-h6">更改房间</div>
+            <q-space />
+            <q-btn icon="close" flat round dense v-close-popup />
+          </q-card-section>
+          
+          <q-card-section>
+            <p>当前房间: {{ currentOrder ? currentOrder.roomNumber : '' }}</p>
+            <q-select
+              v-model="selectedRoomType"
+              :options="roomTypeOptions"
+              label="选择房型"
+              filled
+              emit-value
+              map-options
+              class="q-mb-md"
+            />
+            <q-select
+              v-model="newRoomNumber"
+              :options="filteredAvailableRooms"
+              label="选择新房间"
+              filled
+              emit-value
+              map-options
+              :disable="!selectedRoomType"
+            />
+          </q-card-section>
+          
+          <q-card-actions align="right">
+            <q-btn flat label="取消" color="primary" v-close-popup />
+            <q-btn flat label="确认更改" color="positive" @click="changeRoom" :disable="!newRoomNumber" />
           </q-card-actions>
         </q-card>
       </q-dialog>
@@ -309,6 +368,31 @@
   // 订单详情相关
   const showOrderDetails = ref(false)
   const currentOrder = ref(null)
+  const showChangeRoomDialog = ref(false)
+  const newRoomNumber = ref(null)
+  const selectedRoomType = ref(null)
+  
+  // 房型选项
+  const roomTypeOptions = [
+    { label: '标准间', value: 'standard' },
+    { label: '豪华间', value: 'deluxe' },
+    { label: '套房', value: 'suite' }
+  ]
+  
+  // 所有可用房间
+  const allAvailableRooms = ref([
+    { label: '101 - 标准间', value: '101', type: 'standard' },
+    { label: '102 - 标准间', value: '102', type: 'standard' },
+    { label: '201 - 豪华间', value: '201', type: 'deluxe' },
+    { label: '202 - 豪华间', value: '202', type: 'deluxe' },
+    { label: '301 - 套房', value: '301', type: 'suite' }
+  ])
+  
+  // 根据选择的房型筛选可用房间
+  const filteredAvailableRooms = computed(() => {
+    if (!selectedRoomType.value) return []
+    return allAvailableRooms.value.filter(room => room.type === selectedRoomType.value)
+  })
   
   // 查看订单详情
   function viewOrderDetails(order) {
@@ -339,13 +423,19 @@
     if (confirm(`确定要为订单 ${order.orderNumber} 办理退房吗？`)) {
       console.log('办理退房:', order)
       
-      // 更新订单状态
+      // 获取当前时间
+      const checkOutTime = new Date()
+      const formattedCheckOutTime = date.formatDate(checkOutTime, 'YYYY-MM-DD HH:mm')
+      
+      // 更新订单状态和退房时间
       orderStore.updateOrderStatus(order.orderNumber, '已退房')
+      orderStore.updateOrderCheckOut(order.orderNumber, formattedCheckOutTime)
       
       // 更新本地数据
       const index = allOrders.value.findIndex(o => o.orderNumber === order.orderNumber)
       if (index !== -1) {
         allOrders.value[index].status = '已退房'
+        allOrders.value[index].actualCheckOutTime = formattedCheckOutTime
       }
       
       alert('退房成功')
@@ -393,7 +483,7 @@
       case 'card':
         return '银行卡支付'
       default:
-        return method
+        return method || '未指定'
     }
   }
   
@@ -418,7 +508,7 @@
       
       // 获取当前时间
       const checkInTime = new Date()
-      const formattedCheckInTime = date.formatDate(checkInTime, 'YYYY-MM-DD HH:mm:ss')
+      const formattedCheckInTime = date.formatDate(checkInTime, 'YYYY-MM-DD HH:mm')
       
       // 更新订单状态和入住时间
       orderStore.updateOrderCheckIn(order.orderNumber, formattedCheckInTime)
@@ -439,6 +529,29 @@
     if (currentOrder.value) {
       checkInOrder(currentOrder.value)
       showOrderDetails.value = false
+    }
+  }
+  
+  // 更改房间
+  function changeRoom() {
+    if (currentOrder.value && newRoomNumber.value) {
+      console.log('更改房间:', currentOrder.value.roomNumber, '->', newRoomNumber.value)
+      
+      // 更新房间号和房型
+      const index = allOrders.value.findIndex(o => o.orderNumber === currentOrder.value.orderNumber)
+      if (index !== -1) {
+        allOrders.value[index].roomNumber = newRoomNumber.value
+        allOrders.value[index].roomType = selectedRoomType.value
+        currentOrder.value.roomNumber = newRoomNumber.value
+        currentOrder.value.roomType = selectedRoomType.value
+      }
+      
+      // 关闭对话框并重置
+      showChangeRoomDialog.value = false
+      newRoomNumber.value = null
+      selectedRoomType.value = null
+      
+      alert('房间更改成功')
     }
   }
   

@@ -2,7 +2,42 @@
   <!-- 主容器，使用 Quasar 的 padding 类 -->
   <div class="room-status q-pa-md">
     <!-- 页面标题 -->
-    <h1 class="text-h4 q-mb-md">房间状态</h1>
+    <!-- <h1 class="text-h4 q-mb-md">房间状态</h1> -->
+    
+    <!-- 房型统计卡片部分 -->
+    <div class="room-type-summary q-mb-md">
+      <div class="row q-col-gutter-sm">
+        <!-- 标准间统计卡片 -->
+        <div class="col-md-4 col-sm-4 col-xs-12">
+          <q-card class="bg-blue-1 text-center cursor-pointer" @click="setTypeFilter('standard')">
+            <q-card-section>
+              <div class="text-subtitle1 text-weight-bold">标准间</div>
+              <div class="text-h6 text-weight-bold">剩余：{{ getAvailableRoomCountByType('standard') }}</div>
+            </q-card-section>
+          </q-card>
+        </div>
+        
+        <!-- 豪华间统计卡片 -->
+        <div class="col-md-4 col-sm-4 col-xs-12">
+          <q-card class="bg-purple-1 text-center cursor-pointer" @click="setTypeFilter('deluxe')">
+            <q-card-section>
+              <div class="text-subtitle1 text-weight-bold">豪华间</div>
+              <div class="text-h6 text-weight-bold">剩余：{{ getAvailableRoomCountByType('deluxe') }}</div>
+            </q-card-section>
+          </q-card>
+        </div>
+        
+        <!-- 套房统计卡片 -->
+        <div class="col-md-4 col-sm-4 col-xs-12">
+          <q-card class="bg-teal-1 text-center cursor-pointer" @click="setTypeFilter('suite')">
+            <q-card-section>
+              <div class="text-subtitle1 text-weight-bold">套房</div>
+              <div class="text-h6 text-weight-bold">剩余：{{ getAvailableRoomCountByType('suite') }}</div>
+            </q-card-section>
+          </q-card>
+        </div>
+      </div>
+    </div>
     
     <!-- 筛选器部分 -->
     <div class="filters q-mb-md">
@@ -51,57 +86,6 @@
             label="重置"
             @click="resetFilters"
           />
-        </div>
-      </div>
-    </div>
-    
-    <!-- 状态统计卡片部分 -->
-    <div class="status-summary q-mb-md">
-      <div class="row q-col-gutter-sm">
-        <!-- 空闲房间统计卡片 -->
-        <div class="col-md col-sm-6 col-xs-6">
-          <q-card class="bg-green-1 text-center cursor-pointer" @click="setStatusFilter('available')">
-            <q-card-section>
-              <div class="text-subtitle2">空闲</div>
-              <div class="text-h5">{{ getStatusCount('available') }}</div>
-            </q-card-section>
-          </q-card>
-        </div>
-        <!-- 已入住房间统计卡片 -->
-        <div class="col-md col-sm-6 col-xs-6">
-          <q-card class="bg-red-1 text-center cursor-pointer" @click="setStatusFilter('occupied')">
-            <q-card-section>
-              <div class="text-subtitle2">已入住</div>
-              <div class="text-h5">{{ getStatusCount('occupied') }}</div>
-            </q-card-section>
-          </q-card>
-        </div>
-        <!-- 已预订房间统计卡片 -->
-        <div class="col-md col-sm-6 col-xs-6">
-          <q-card class="bg-blue-1 text-center cursor-pointer" @click="setStatusFilter('reserved')">
-            <q-card-section>
-              <div class="text-subtitle2">已预订</div>
-              <div class="text-h5">{{ getStatusCount('reserved') }}</div>
-            </q-card-section>
-          </q-card>
-        </div>
-        <!-- 清扫中房间统计卡片 -->
-        <div class="col-md col-sm-6 col-xs-6">
-          <q-card class="bg-orange-1 text-center cursor-pointer" @click="setStatusFilter('cleaning')">
-            <q-card-section>
-              <div class="text-subtitle2">清扫中</div>
-              <div class="text-h5">{{ getStatusCount('cleaning') }}</div>
-            </q-card-section>
-          </q-card>
-        </div>
-        <!-- 维修中房间统计卡片 -->
-        <div class="col-md col-sm-6 col-xs-6">
-          <q-card class="bg-grey-3 text-center cursor-pointer" @click="setStatusFilter('maintenance')">
-            <q-card-section>
-              <div class="text-subtitle2">维修中</div>
-              <div class="text-h5">{{ getStatusCount('maintenance') }}</div>
-            </q-card-section>
-          </q-card>
         </div>
       </div>
     </div>
@@ -543,6 +527,44 @@ function setStatusFilter(status) {
 }
 
 /**
+ * 获取特定房型的空余房间数量
+ * @param {string} type - 房间类型
+ * @returns {number} 该类型的空余房间数量
+ */
+function getAvailableRoomCountByType(type) {
+  return rooms.value.filter(room => room.type === type && room.status === 'available').length
+}
+
+/**
+ * 设置房型筛选
+ * 实现筛选切换功能：如果当前已经是选中房型，则清除筛选；否则应用新筛选
+ * 同时更新URL参数，保持URL状态与组件状态同步
+ * @param {string} type - 房间类型代码
+ */
+function setTypeFilter(type) {
+  console.log('设置房型筛选:', type)
+  
+  // 如果当前已经是这个房型筛选，则清除筛选（切换行为）
+  if (filterType.value === type) {
+    // 清除组件状态
+    filterType.value = null
+    // 更新URL，移除type参数
+    router.replace({
+      path: route.path,
+      query: { ...route.query, type: undefined }  // 保留其他查询参数
+    })
+  } else {
+    // 否则设置为新的房型筛选
+    filterType.value = type
+    // 更新URL，添加type参数
+    router.replace({
+      path: route.path,
+      query: { ...route.query, type: type }  // 保留其他查询参数，添加或更新type
+    })
+  }
+}
+
+/**
  * 组件挂载时的生命周期钩子
  */
 onMounted(() => {
@@ -556,6 +578,46 @@ onMounted(() => {
 .room-status {
   max-width: 1400px;
   margin: 0 auto;
+}
+
+/* 房型统计卡片样式 */
+.room-type-summary .q-card {
+  transition: transform 0.3s, box-shadow 0.3s;
+  border-radius: 8px;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
+  height: 120px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* 房型统计卡片悬停效果 */
+.room-type-summary .q-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+/* 房型统计卡片内容样式 */
+.room-type-summary .q-card-section {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 房型名称样式 */
+.room-type-summary .text-subtitle1 {
+  font-size: 1.3rem;
+  margin-bottom: 8px;
+}
+
+/* 房型空余数字样式 */
+.room-type-summary .text-h6 {
+  font-size: 1.2rem;
+  margin: 0;
+  color: #1976d2;
 }
 
 /* 状态统计卡片的悬停效果 */
