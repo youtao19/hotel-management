@@ -1,0 +1,49 @@
+services:
+  web:
+    build:
+      dockerfile: system_setup/web/Dockerfile
+      context: .
+    env_file: dev.env
+    #This ensures your containers are started with an init process which will then handle signal forwarding,
+    #reap zombie processes, and perform graceful shutdowns by signaling subprocesses.
+    init: true
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - postgres
+
+  redis:
+    image: redis:7.2.4
+    restart: unless-stopped
+    command:
+      [
+        "redis-server",
+        "--replica-read-only",
+        "no",
+        "--bind",
+        "redis",
+        "--port",
+        "6379",
+        "--requirepass",
+        "ghost@2023",
+      ]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis:/data
+
+  postgres:
+    image: postgres:16.2
+    restart: unless-stopped
+    env_file:
+      - dev.env
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg:/var/lib/postgresql/data
+
+volumes:
+  redis:
+  pg:

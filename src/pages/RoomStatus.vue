@@ -203,6 +203,12 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useRoomStore } from '../stores/roomStore'
+import { useViewStore } from '../stores/viewStore'
+
+// 获取房间store和视图store
+const roomStore = useRoomStore()
+const viewStore = useViewStore()
 
 // 获取当前路由和路由器
 const route = useRoute()
@@ -249,43 +255,6 @@ watch(filterStatus, (newValue) => {
   console.log('筛选状态变化为:', newValue)
 }, { immediate: true })
 
-// 房间类型选项数组，用于类型筛选下拉框
-const roomTypeOptions = [
-  { label: '所有房型', value: null },  // null值表示不筛选
-  { label: '标准间', value: 'standard' },
-  { label: '豪华间', value: 'deluxe' },
-  { label: '套房', value: 'suite' }
-]
-
-// 房间状态选项数组，用于状态筛选下拉框
-const statusOptions = [
-  { label: '所有状态', value: null },  // null值表示不筛选
-  { label: '空闲', value: 'available' },
-  { label: '已入住', value: 'occupied' },
-  { label: '已预订', value: 'reserved' },
-  { label: '清扫中', value: 'cleaning' },
-  { label: '维修中', value: 'maintenance' }
-]
-
-// 房间数据数组 - 实际应用中应从API获取
-const rooms = ref([
-  // 标准间
-  { id: 1, number: '101', type: 'standard', status: 'available', price: 288 },
-  { id: 2, number: '102', type: 'standard', status: 'occupied', currentGuest: '张三', checkOutDate: '2023-06-05', price: 288 },
-  { id: 3, number: '103', type: 'standard', status: 'cleaning', price: 288 },
-  { id: 4, number: '104', type: 'standard', status: 'reserved', price: 288 },
-  { id: 5, number: '105', type: 'standard', status: 'maintenance', price: 288 },
-  // 豪华间
-  { id: 6, number: '201', type: 'deluxe', status: 'available', price: 388 },
-  { id: 7, number: '202', type: 'deluxe', status: 'occupied', currentGuest: '李四', checkOutDate: '2023-06-07', price: 388 },
-  { id: 8, number: '203', type: 'deluxe', status: 'available', price: 388 },
-  { id: 9, number: '204', type: 'deluxe', status: 'reserved', price: 388 },
-  // 套房
-  { id: 10, number: '301', type: 'suite', status: 'available', price: 588 },
-  { id: 11, number: '302', type: 'suite', status: 'occupied', currentGuest: '王五', checkOutDate: '2023-06-10', price: 588 },
-  { id: 12, number: '303', type: 'suite', status: 'cleaning', price: 588 }
-])
-
 /**
  * 计算属性：根据筛选条件过滤房间列表
  * 同时考虑URL参数和本地筛选状态
@@ -302,63 +271,23 @@ const filteredRooms = computed(() => {
     URL状态: urlStatus
   })
   
-  return rooms.value.filter(room => {
-    // 如果URL中有状态参数，优先使用URL参数筛选
-    if (urlStatus && room.status !== urlStatus) return false
-    
-    // 如果没有URL参数，则使用筛选变量
-    // 如果没有设置筛选条件，返回所有房间
-    if (!filterType.value && !filterStatus.value && !urlStatus) return true
-    
-    // 筛选房型 - 如果设置了房型筛选且不匹配，则排除
-    if (filterType.value && room.type !== filterType.value) return false
-    
-    // 筛选状态 - 使用filterStatus变量，仅当URL中没有状态参数时
-    if (!urlStatus && filterStatus.value && room.status !== filterStatus.value) return false
-    
-    // 通过所有筛选条件，保留该房间
-    return true
-  })
+  // 使用roomStore的filterRooms方法替代本地过滤逻辑
+  const filters = {}
+  
+  // 设置房型筛选
+  if (filterType.value) {
+    filters.type = filterType.value
+  }
+  
+  // 设置状态筛选，优先使用URL中的状态
+  if (urlStatus) {
+    filters.status = urlStatus
+  } else if (filterStatus.value) {
+    filters.status = filterStatus.value
+  }
+  
+  return roomStore.filterRooms(filters)
 })
-
-/**
- * 获取特定状态的房间数量
- * @param {string} status - 房间状态
- * @returns {number} 该状态的房间数量
- */
-function getStatusCount(status) {
-  return rooms.value.filter(room => room.status === status).length
-}
-
-/**
- * 获取房型的中文名称
- * @param {string} type - 房间类型代码
- * @returns {string} 房间类型的中文名称
- */
-function getRoomTypeName(type) {
-  switch (type) {
-    case 'standard': return '标准间'
-    case 'deluxe': return '豪华间'
-    case 'suite': return '套房'
-    default: return type
-  }
-}
-
-/**
- * 获取状态的中文文本
- * @param {string} status - 房间状态代码
- * @returns {string} 房间状态的中文文本
- */
-function getStatusText(status) {
-  switch (status) {
-    case 'available': return '空闲'
-    case 'occupied': return '已入住'
-    case 'reserved': return '已预订'
-    case 'cleaning': return '清扫中'
-    case 'maintenance': return '维修中'
-    default: return status
-  }
-}
 
 /**
  * 应用筛选按钮点击处理函数
@@ -410,9 +339,6 @@ function checkIn(roomId) {
  */
 function checkInReservation(roomId) {
   console.log('办理预订入住:', roomId)
-  // 查找房间预订信息
-  const room = rooms.value.find(r => r.id === roomId)
-  
   // 导航到入住页面，并选择预订入住选项卡
   router.push({
     path: '/Check-in',
@@ -429,16 +355,12 @@ function checkInReservation(roomId) {
  */
 function checkOut(roomId) {
   console.log('办理退房:', roomId)
-  // 实际应用中，这里应该导航到退房页面
   
-  // 找到房间并更新状态为清扫中
-  const roomIndex = rooms.value.findIndex(room => room.id === roomId)
-  if (roomIndex !== -1) {
-    // 显示确认对话框
-    if (confirm('确认办理退房？退房后房间将自动设置为"清扫中"状态。')) {
-      rooms.value[roomIndex].status = 'cleaning'
-      console.log('房间已更新为清扫中状态:', roomId)
-    }
+  // 显示确认对话框
+  if (confirm('确认办理退房？退房后房间将自动设置为"清扫中"状态。')) {
+    // 使用roomStore的方法更新房间状态
+    roomStore.checkOutRoom(roomId)
+    console.log('房间已更新为清扫中状态:', roomId)
   }
 }
 
@@ -448,11 +370,8 @@ function checkOut(roomId) {
  */
 function setMaintenance(roomId) {
   console.log('设为维修:', roomId)
-  // 更新房间状态
-  const roomIndex = rooms.value.findIndex(room => room.id === roomId)
-  if (roomIndex !== -1) {
-    rooms.value[roomIndex].status = 'maintenance'
-  }
+  // 使用roomStore的方法设置房间维修状态
+  roomStore.setMaintenance(roomId)
 }
 
 /**
@@ -461,11 +380,8 @@ function setMaintenance(roomId) {
  */
 function clearMaintenance(roomId) {
   console.log('完成维修:', roomId)
-  // 更新房间状态
-  const roomIndex = rooms.value.findIndex(room => room.id === roomId)
-  if (roomIndex !== -1) {
-    rooms.value[roomIndex].status = 'available'
-  }
+  // 使用roomStore的方法完成房间维修
+  roomStore.clearMaintenance(roomId)
 }
 
 /**
@@ -474,56 +390,31 @@ function clearMaintenance(roomId) {
  */
 function clearCleaning(roomId) {
   console.log('完成清洁:', roomId)
-  // 更新房间状态
-  const roomIndex = rooms.value.findIndex(room => room.id === roomId)
-  if (roomIndex !== -1) {
-    rooms.value[roomIndex].status = 'available'
-  }
+  // 使用roomStore的方法完成房间清洁
+  roomStore.clearCleaning(roomId)
 }
 
 /**
- * 获取状态的颜色
+ * 组件挂载时的生命周期钩子
+ */
+onMounted(() => {
+  // 这里可以加载实际房间数据，例如从API获取
+  // fetchRooms()
+})
+
+// 使用计算属性获取各种状态的房间数量
+const statusCounts = computed(() => roomStore.countByStatus)
+
+// 使用计算属性获取各种类型的可用房间数量
+const availableRoomsByType = computed(() => roomStore.availableByType)
+
+/**
+ * 获取特定状态的房间数量
  * @param {string} status - 房间状态
- * @returns {string} 状态对应的颜色
+ * @returns {number} 该状态的房间数量
  */
-function getStatusColor(status) {
-  switch (status) {
-    case 'available': return 'green'
-    case 'occupied': return 'red'
-    case 'reserved': return 'blue'
-    case 'cleaning': return 'orange'
-    case 'maintenance': return 'grey'
-    default: return 'grey'
-  }
-}
-
-/**
- * 设置状态筛选
- * 实现筛选切换功能：如果当前已经是选中状态，则清除筛选；否则应用新筛选
- * 同时更新URL参数，保持URL状态与组件状态同步
- * @param {string} status - 房间状态代码
- */
-function setStatusFilter(status) {
-  console.log('设置状态筛选:', status)
-  
-  // 如果当前已经是这个状态筛选，则清除筛选（切换行为）
-  if (filterStatus.value === status) {
-    // 清除组件状态
-    filterStatus.value = null
-    // 更新URL，移除status参数
-    router.replace({
-      path: route.path,
-      query: { ...route.query, status: undefined }  // 保留其他查询参数
-    })
-  } else {
-    // 否则设置为新的状态筛选
-    filterStatus.value = status
-    // 更新URL，添加status参数
-    router.replace({
-      path: route.path,
-      query: { ...route.query, status: status }  // 保留其他查询参数，添加或更新status
-    })
-  }
+function getStatusCount(status) {
+  return roomStore.rooms.filter(room => room.status === status).length
 }
 
 /**
@@ -532,8 +423,27 @@ function setStatusFilter(status) {
  * @returns {number} 该类型的空余房间数量
  */
 function getAvailableRoomCountByType(type) {
-  return rooms.value.filter(room => room.type === type && room.status === 'available').length
+  return roomStore.rooms.filter(room => room.type === type && room.status === 'available').length
 }
+
+/**
+ * 获取房型的中文名称
+ */
+const getRoomTypeName = viewStore.getRoomTypeName
+
+/**
+ * 获取状态的中文文本
+ */
+const getStatusText = viewStore.getStatusText
+
+/**
+ * 获取状态的颜色
+ */
+const getStatusColor = viewStore.getStatusColor
+
+// 房间类型和状态选项
+const roomTypeOptions = viewStore.roomTypeOptions
+const statusOptions = viewStore.statusOptions
 
 /**
  * 设置房型筛选
@@ -563,14 +473,6 @@ function setTypeFilter(type) {
     })
   }
 }
-
-/**
- * 组件挂载时的生命周期钩子
- */
-onMounted(() => {
-  // 这里可以加载实际房间数据，例如从API获取
-  // fetchRooms()
-})
 </script>
 
 <style scoped>

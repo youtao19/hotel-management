@@ -36,6 +36,22 @@ export const useOrderStore = defineStore('order', () => {
       createTime: '2023-06-15 10:15:00',
       remarks: '客人需要加床'
     },
+    {
+      orderNumber: 'O20230615002',
+      guestName: '吴友桃',
+      phone: '19951339211',
+      idNumber: '310101199203034321',
+      roomType: 'deluxe',
+      roomNumber: '201',
+      checkInDate: '2023-06-15',
+      checkOutDate: '2023-06-18',
+      status: '待入住',
+      paymentMethod: 'wechat',
+      roomPrice: 1164,
+      deposit: 300,
+      createTime: '2023-06-15 10:15:00',
+      remarks: '客人需要加床'
+    },
     // ... 其他订单示例
   ])
 
@@ -81,11 +97,44 @@ export const useOrderStore = defineStore('order', () => {
     }
   }
 
+  // 更新订单状态并记录退房时间
+  function updateOrderCheckOut(orderNumber, checkOutTime) {
+    const index = orders.value.findIndex(o => o.orderNumber === orderNumber)
+    if (index !== -1) {
+      orders.value[index].status = '已退房'
+      orders.value[index].actualCheckOutTime = checkOutTime
+    }
+  }
+
+  // 更新订单房间信息
+  function updateOrderRoom(orderNumber, roomType, roomNumber, roomPrice) {
+    const index = orders.value.findIndex(o => o.orderNumber === orderNumber)
+    if (index !== -1) {
+      orders.value[index].roomType = roomType
+      orders.value[index].roomNumber = roomNumber
+      orders.value[index].roomPrice = roomPrice
+      // 添加房间变更记录
+      const changeRecord = {
+        time: new Date().toISOString(),
+        oldRoom: orders.value[index].roomNumber,
+        newRoom: roomNumber
+      }
+      if (!orders.value[index].roomChanges) {
+        orders.value[index].roomChanges = []
+      }
+      orders.value[index].roomChanges.push(changeRecord)
+      return true
+    }
+    return false
+  }
+
   return {
     orders,
     addOrder,
     getAllOrders,
     updateOrderStatus,
-    updateOrderCheckIn
+    updateOrderCheckIn,
+    updateOrderCheckOut,
+    updateOrderRoom
   }
 }) 

@@ -1,0 +1,6 @@
+use docker compose to bring up postgresql up.
+Once the server is up and running, use psql with dev.env credentials to login the database
+bash cmd: psql -h localhost -p 5432 -U web -d ghost_writer
+after typing the above cmd, use password in dev.env to login
+after login, type the following sql query to enable ltree datatype:
+CREATE EXTENSION ltree;
