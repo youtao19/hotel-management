@@ -53,8 +53,8 @@
             <q-icon name="hotel" size="sm" class="q-mr-xs" />
           </q-card-section>
           <q-card-section class="text-center">
-            <div class="text-h3">{{ stats.occupancyRate }}%</div>
-            <div class="text-caption">{{ stats.occupiedRooms }}/{{ stats.totalRooms }} 房间已入住</div>
+            <div class="text-h3">{{ occupancyStats.occupancyRate }}%</div>
+            <div class="text-caption">{{ occupancyStats.occupiedRooms }}/{{ occupancyStats.totalRooms }} 房间已入住</div>
           </q-card-section>
           <q-card-actions align="right">
             <q-btn flat color="info" label="查看详情" to="/Room-status" />
@@ -286,9 +286,13 @@
 import { ref, computed, onMounted } from 'vue'
 import { date } from 'quasar'
 import { useRouter } from 'vue-router'
+import { useRoomStore } from '../stores/roomStore'
+import { useOrderStore } from '../stores/orderStore'
 
-// 初始化路由
+// 初始化路由和 stores
 const router = useRouter()
+const roomStore = useRoomStore()
+const orderStore = useOrderStore()
 
 // 当前日期
 const currentDate = computed(() => {
@@ -301,28 +305,64 @@ const stats = ref({
   checkInsChange: 20,
   checkOutsToday: 8,
   checkOutsChange: -5,
-  occupiedRooms: 45,
-  totalRooms: 60,
-  occupancyRate: 75,
   revenueToday: 15800,
   revenueChange: 12
 })
 
-// 房间状态统计
-const roomStats = ref({
-  available: 15,
-  occupied: 45,
-  cleaning: 8,
-  maintenance: 2,
-  standardOccupied: 20,
-  standardTotal: 30,
-  standardOccupancy: 20/30,
-  deluxeOccupied: 18,
-  deluxeTotal: 20,
-  deluxeOccupancy: 18/20,
-  suiteOccupied: 7,
-  suiteTotal: 10,
-  suiteOccupancy: 7/10
+// 使用 roomStore 获取房间占用数据
+const occupancyStats = computed(() => {
+  const occupied = roomStore.countByStatus.occupied
+  const total = roomStore.totalRooms
+  const rate = total > 0 ? Math.round((occupied / total) * 100) : 0
+  
+  return {
+    occupiedRooms: occupied,
+    totalRooms: total,
+    occupancyRate: rate
+  }
+})
+
+// 使用 roomStore 获取房间状态统计
+const roomStats = computed(() => {
+  // 获取房间状态计数
+  const available = roomStore.countByStatus.available
+  const occupied = roomStore.countByStatus.occupied
+  const cleaning = roomStore.countByStatus.cleaning
+  const maintenance = roomStore.countByStatus.maintenance
+  
+  // 获取标准间数据
+  const standardRooms = roomStore.rooms.filter(room => room.type === 'standard')
+  const standardTotal = standardRooms.length
+  const standardOccupied = standardRooms.filter(room => room.status === 'occupied').length
+  const standardOccupancy = standardTotal > 0 ? standardOccupied / standardTotal : 0
+  
+  // 获取豪华间数据
+  const deluxeRooms = roomStore.rooms.filter(room => room.type === 'deluxe')
+  const deluxeTotal = deluxeRooms.length
+  const deluxeOccupied = deluxeRooms.filter(room => room.status === 'occupied').length
+  const deluxeOccupancy = deluxeTotal > 0 ? deluxeOccupied / deluxeTotal : 0
+  
+  // 获取套房数据
+  const suiteRooms = roomStore.rooms.filter(room => room.type === 'suite')
+  const suiteTotal = suiteRooms.length
+  const suiteOccupied = suiteRooms.filter(room => room.status === 'occupied').length
+  const suiteOccupancy = suiteTotal > 0 ? suiteOccupied / suiteTotal : 0
+  
+  return {
+    available,
+    occupied,
+    cleaning,
+    maintenance,
+    standardOccupied,
+    standardTotal,
+    standardOccupancy,
+    deluxeOccupied,
+    deluxeTotal,
+    deluxeOccupancy,
+    suiteOccupied,
+    suiteTotal,
+    suiteOccupancy
+  }
 })
 
 // 今日待办事项
@@ -375,18 +415,31 @@ const guestColumns = [
   { name: 'status', label: '状态', field: 'status', align: 'center' }
 ]
 
-// 最近入住客人数据
-const recentGuests = ref([
-  { id: 1, name: '张三', room: '201', checkIn: '2023-06-01', checkOut: '2023-06-03', status: '入住中' },
-  { id: 2, name: '李四', room: '302', checkIn: '2023-06-01', checkOut: '2023-06-05', status: '入住中' },
-  { id: 3, name: '王五', room: '105', checkIn: '2023-05-30', checkOut: '2023-06-02', status: '入住中' },
-  { id: 4, name: '赵六', room: '208', checkIn: '2023-05-29', checkOut: '2023-06-01', status: '已退房' },
-  { id: 5, name: '钱七', room: '401', checkIn: '2023-05-28', checkOut: '2023-06-01', status: '已退房' }
-])
+// 获取最近入住客人数据
+const recentGuests = computed(() => {
+  // 获取入住中和已退房的订单
+  return orderStore.orders
+    .filter(order => order.status === '已入住' || order.status === '已退房')
+    .sort((a, b) => {
+      // 按入住时间倒序排列
+      const dateA = a.actualCheckInTime || a.createTime
+      const dateB = b.actualCheckInTime || b.createTime
+      return new Date(dateB) - new Date(dateA)
+    })
+    .slice(0, 5) // 只取前5条
+    .map(order => ({
+      id: order.orderNumber,
+      name: order.guestName,
+      room: order.roomNumber,
+      checkIn: order.actualCheckInTime || order.checkInDate,
+      checkOut: order.actualCheckOutTime || order.checkOutDate,
+      status: order.status === '已入住' ? '入住中' : '已退房'
+    }))
+})
 
 // 组件挂载时初始化
 onMounted(() => {
-  // 这里可以加载实际数据
+  // 这里可以加载实际数据或执行其他初始化操作
 })
 
 // 跳转到房间状态页面并带上相应的状态筛选参数

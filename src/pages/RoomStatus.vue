@@ -12,7 +12,7 @@
           <q-card class="bg-blue-1 text-center cursor-pointer" @click="setTypeFilter('standard')">
             <q-card-section>
               <div class="text-subtitle1 text-weight-bold">标准间</div>
-              <div class="text-h6 text-weight-bold">剩余：{{ getAvailableRoomCountByType('standard') }}</div>
+              <div class="text-h6 text-weight-bold">剩余：{{ roomStore.getAvailableRoomCountByType('standard') }}</div>
             </q-card-section>
           </q-card>
         </div>
@@ -22,7 +22,7 @@
           <q-card class="bg-purple-1 text-center cursor-pointer" @click="setTypeFilter('deluxe')">
             <q-card-section>
               <div class="text-subtitle1 text-weight-bold">豪华间</div>
-              <div class="text-h6 text-weight-bold">剩余：{{ getAvailableRoomCountByType('deluxe') }}</div>
+              <div class="text-h6 text-weight-bold">剩余：{{ roomStore.getAvailableRoomCountByType('deluxe') }}</div>
             </q-card-section>
           </q-card>
         </div>
@@ -32,7 +32,7 @@
           <q-card class="bg-teal-1 text-center cursor-pointer" @click="setTypeFilter('suite')">
             <q-card-section>
               <div class="text-subtitle1 text-weight-bold">套房</div>
-              <div class="text-h6 text-weight-bold">剩余：{{ getAvailableRoomCountByType('suite') }}</div>
+              <div class="text-h6 text-weight-bold">剩余：{{ roomStore.getAvailableRoomCountByType('suite') }}</div>
             </q-card-section>
           </q-card>
         </div>
@@ -414,7 +414,7 @@ const availableRoomsByType = computed(() => roomStore.availableByType)
  * @returns {number} 该状态的房间数量
  */
 function getStatusCount(status) {
-  return roomStore.rooms.filter(room => room.status === status).length
+  return roomStore.filterRooms({ status }).length
 }
 
 /**
@@ -423,7 +423,7 @@ function getStatusCount(status) {
  * @returns {number} 该类型的空余房间数量
  */
 function getAvailableRoomCountByType(type) {
-  return roomStore.rooms.filter(room => room.type === type && room.status === 'available').length
+  return roomStore.getAvailableRoomCountByType(type);
 }
 
 /**

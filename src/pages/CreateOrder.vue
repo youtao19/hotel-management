@@ -1,15 +1,23 @@
 <template>
+    <!-- 整个创建订单页面的主容器，添加内边距 -->
     <div class="check-in q-pa-md">
+      <!-- 页面标题 -->
       <h1 class="text-h4 q-mb-md">创建订单</h1>
       
+      <!-- 主卡片容器，包含整个表单 -->
       <q-card>
         <q-card-section>
+          <!-- 表单组件，提交时调用submitOrder方法，各输入框之间有间距 -->
           <q-form @submit="submitOrder" class="q-gutter-md">
-            <!-- 订单信息 -->
+            <!-- 订单信息部分 -->
             <div class="form-section q-mb-md">
+              <!-- 分区标题 -->
               <div class="text-subtitle1 q-mb-sm">订单信息</div>
+              <!-- 栅格布局，各列之间有间距 -->
               <div class="row q-col-gutter-md">
+                <!-- 订单号输入框（中等屏幕占1/3宽度，小屏幕占满） -->
                 <div class="col-md-4 col-xs-12">
+                  <!-- 自动生成订单号的输入框，必填 -->
                   <q-input 
                     v-model="orderData.orderNumber" 
                     label="订单号" 
@@ -18,7 +26,9 @@
                     hint="自动生成，可手动修改"
                   />
                 </div>
+                <!-- 订单状态选择框（中等屏幕占1/3宽度，小屏幕占满） -->
                 <div class="col-md-4 col-xs-12">
+                  <!-- 订单状态下拉选择，默认为待入住，必填 -->
                   <q-select
                     v-model="orderData.status"
                     :options="statusOptions"
@@ -29,14 +39,40 @@
                     :rules="[val => !!val || '请选择订单状态']"
                   />
                 </div>
+                <!-- 订单来源选择框（中等屏幕占1/3宽度，小屏幕占满） -->
+                <div class="col-md-4 col-xs-12">
+                  <!-- 订单来源下拉选择 -->
+                  <q-select
+                    v-model="orderData.source"
+                    :options="sourceOptions"
+                    label="订单来源"
+                    filled
+                    emit-value
+                    map-options
+                  />
+                </div>
+                <!-- 来源编号输入框（中等屏幕占1/3宽度，小屏幕占满） -->
+                <div class="col-md-4 col-xs-12">
+                  <!-- 来源编号输入框 -->
+                  <q-input 
+                    v-model="orderData.sourceNumber" 
+                    label="来源编号" 
+                    filled 
+                    hint="OTA订单号/旅行社单号等"
+                  />
+                </div>
               </div>
             </div>
   
-            <!-- 客人信息 -->
+            <!-- 客人信息部分 -->
             <div class="form-section q-mb-md">
+              <!-- 分区标题 -->
               <div class="text-subtitle1 q-mb-sm">客人信息</div>
+              <!-- 栅格布局，各列之间有间距 -->
               <div class="row q-col-gutter-md">
+                <!-- 姓名输入框 -->
                 <div class="col-md-4 col-xs-12">
+                  <!-- 客人姓名输入框，必填 -->
                   <q-input 
                     v-model="orderData.guestName" 
                     label="姓名" 
@@ -44,7 +80,9 @@
                     :rules="[val => !!val || '请输入姓名']"
                   />
                 </div>
+                <!-- 身份证号输入框 -->
                 <div class="col-md-4 col-xs-12">
+                  <!-- 身份证号输入框，有格式验证，必填，最多18位 -->
                   <q-input 
                     v-model="orderData.idNumber" 
                     label="身份证号" 
@@ -58,12 +96,15 @@
                       val => /^[0-9X]+$/.test(val) || '身份证号只能包含数字和X'
                     ]"
                   >
+                    <!-- 提示文本 -->
                     <template v-slot:hint>
                       请输入18位身份证号，最后一位可以是数字或X
                     </template>
                   </q-input>
                 </div>
+                <!-- 手机号输入框 -->
                 <div class="col-md-4 col-xs-12">
+                  <!-- 手机号输入框，必填，11位数字 -->
                   <q-input 
                     v-model="orderData.phone" 
                     label="手机号" 
@@ -78,37 +119,76 @@
               </div>
             </div>
             
-            <!-- 房间信息 -->
+            <!-- 房间信息部分 -->
             <div class="form-section q-mb-md">
+              <!-- 分区标题 -->
               <div class="text-subtitle1 q-mb-sm">房间信息</div>
+              
+              <!-- 房间选择区域 - 水平布局 -->
               <div class="row q-col-gutter-md">
-                <div class="col-md-4 col-xs-12">
-                  <q-select
-                    v-model="orderData.roomType"
-                    :options="roomTypeOptions"
-                    label="房间类型"
-                    filled
-                    emit-value
-                    map-options
-                    @update:model-value="onRoomTypeChange"
-                    :rules="[val => !!val || '请选择房间类型']"
-                  />
+                <!-- 房间类型选择 -->
+                <div class="col-md-6 col-xs-12">
+                  <div class="row items-center">
+                    <!-- 房间类型下拉选择，必填，选择后会触发onRoomTypeChange方法 -->
+                    <div class="col">
+                      <q-select
+                        v-model="orderData.roomType"
+                        :options="roomTypeOptionsWithCount"
+                        label="房间类型"
+                        filled
+                        emit-value
+                        map-options
+                        @update:model-value="onRoomTypeChange"
+                        :rules="[val => !!val || '请选择房间类型']"
+                      >
+                        <!-- 在选项中显示房间数量徽章 -->
+                        <template v-slot:option="scope">
+                          <q-item v-bind="scope.itemProps">
+                            <q-item-section>
+                              <q-item-label>{{ scope.opt.label }}</q-item-label>
+                            </q-item-section>
+                            <q-item-section side>
+                              <q-badge 
+                                :color="getRoomCountColor(scope.opt.availableCount)" 
+                                :label="scope.opt.availableCount + '间'"
+                              />
+                            </q-item-section>
+                          </q-item>
+                        </template>
+                      </q-select>
+                    </div>
+                    <!-- 当前房型剩余房间信息 -->
+                    <div class="col-auto q-ml-md" v-if="orderData.roomType">
+                      <q-chip 
+                        :color="getRoomCountColor(availableRoomCount)" 
+                        text-color="white"
+                        icon="hotel"
+                      >
+                        剩余: {{ availableRoomCount }}间
+                      </q-chip>
+                    </div>
+                  </div>
                 </div>
-                <div class="col-md-4 col-xs-12">
+                
+                <!-- 房间号选择 -->
+                <div class="col-md-6 col-xs-12">
+                  <!-- 房间号下拉选择，根据房型筛选可用房间，必填 -->
                   <q-select
                     v-model="orderData.roomNumber"
                     :options="availableRoomOptions"
-                    label="房间号"
+                    :label="orderData.roomType ? `房间号` : '房间号'"
                     filled
                     emit-value
                     map-options
                     :rules="[val => !!val || '请选择房间号']"
                     :disable="!orderData.roomType"
                   >
+                    <!-- 没有可用房间时显示的内容 -->
                     <template v-slot:no-option>
                       <q-item>
-                        <q-item-section class="text-grey">
-                          无可用房间
+                        <q-item-section class="text-negative">
+                          <q-icon name="warning" color="negative" />
+                          当前没有可用的{{ orderData.roomType ? viewStore.getRoomTypeName(orderData.roomType) : '房间' }}
                         </q-item-section>
                       </q-item>
                     </template>
@@ -117,25 +197,26 @@
               </div>
             </div>
   
-            <!-- 支付信息 -->
+            <!-- 支付信息部分 -->
             <div class="form-section q-mb-md">
+              <!-- 分区标题 -->
               <div class="text-subtitle1 q-mb-sm">支付信息</div>
+              <!-- 栅格布局，各列之间有间距 -->
               <div class="row q-col-gutter-md">
+                <!-- 支付方式选择 -->
                 <div class="col-md-4 col-xs-12">
+                  <!-- 支付方式下拉选择，必填 -->
                   <q-select
                     v-model="orderData.paymentMethod"
-                    :options="[
-                      {label: '现金支付', value: 'cash'},
-                      {label: '微信支付', value: 'wechat'},
-                      {label: '支付宝支付', value: 'alipay'},
-                      {label: '银行卡支付', value: 'card'}
-                    ]"
+                    :options="viewStore.paymentMethodOptions"
                     label="支付方式"
                     filled
                     :rules="[val => !!val || '请选择支付方式']"
                   />
                 </div>
+                <!-- 房间金额输入 -->
                 <div class="col-md-4 col-xs-12">
+                  <!-- 房间金额输入框，数字类型，自动根据房型设置默认值 -->
                   <q-input
                     v-model.number="orderData.roomPrice"
                     label="房间金额"
@@ -145,7 +226,9 @@
                     :rules="[val => val > 0 || '房间金额必须大于0']"
                   />
                 </div>
+                <!-- 押金输入 -->
                 <div class="col-md-4 col-xs-12">
+                  <!-- 押金输入框，数字类型，默认100元 -->
                   <q-input
                     v-model.number="orderData.deposit"
                     label="押金"
@@ -158,11 +241,15 @@
               </div>
             </div>
             
-            <!-- 入住信息 -->
+            <!-- 入住信息部分 -->
             <div class="form-section q-mb-md">
+              <!-- 分区标题 -->
               <div class="text-subtitle1 q-mb-sm">入住时间</div>
+              <!-- 栅格布局 -->
               <div class="row">
+                <!-- 日期范围选择器，占满整行 -->
                 <div class="col-12">
+                  <!-- 横向日期范围选择器，可选择入住和离店日期 -->
                   <q-date
                     v-model="dateRange"
                     range
@@ -174,12 +261,15 @@
                     :options="dateOptions"
                     @update:model-value="updateDates"
                   >
+                    <!-- 底部确认按钮 -->
                     <div class="row items-center justify-end q-pr-sm q-pb-sm">
                       <q-btn label="确定" color="primary" flat v-close-popup />
                     </div>
                   </q-date>
                 </div>
+                <!-- 入住日期显示框 -->
                 <div class="col-md-6 col-xs-12 q-mt-md">
+                  <!-- 入住日期输入框，只读，显示选择的日期 -->
                   <q-input 
                     v-model="orderData.checkInDate" 
                     label="入住日期" 
@@ -187,14 +277,17 @@
                     readonly
                     :rules="[val => !!val || '请选择入住日期']"
                   >
+                    <!-- 日期选择图标和弹出日历 -->
                     <template v-slot:append>
                       <q-icon name="event" class="cursor-pointer">
                         <q-popup-proxy ref="qDateCheckInProxy" cover transition-show="scale" transition-hide="scale">
+                          <!-- 单独的入住日期选择器，最早可选今天 -->
                           <q-date 
                             v-model="orderData.checkInDate"
                             @update:model-value="updateCheckOutMinDate"
                             :options="date => date >= today"
                           >
+                            <!-- 底部确认按钮 -->
                             <div class="row items-center justify-end">
                               <q-btn label="确定" color="primary" flat v-close-popup />
                             </div>
@@ -204,7 +297,9 @@
                     </template>
                   </q-input>
                 </div>
+                <!-- 离店日期显示框 -->
                 <div class="col-md-6 col-xs-12 q-mt-md">
+                  <!-- 离店日期输入框，只读，显示选择的日期 -->
                   <q-input 
                     v-model="orderData.checkOutDate" 
                     label="离店日期" 
@@ -215,13 +310,16 @@
                       val => val > orderData.checkInDate || '离店日期必须晚于入住日期'
                     ]"
                   >
+                    <!-- 日期选择图标和弹出日历 -->
                     <template v-slot:append>
                       <q-icon name="event" class="cursor-pointer">
                         <q-popup-proxy ref="qDateCheckOutProxy" cover transition-show="scale" transition-hide="scale">
+                          <!-- 单独的离店日期选择器，最早可选入住日期后一天 -->
                           <q-date 
                             v-model="orderData.checkOutDate"
                             :options="date => date > orderData.checkInDate"
                           >
+                            <!-- 底部确认按钮 -->
                             <div class="row items-center justify-end">
                               <q-btn label="确定" color="primary" flat v-close-popup />
                             </div>
@@ -234,11 +332,15 @@
               </div>
             </div>
             
-            <!-- 备注信息 -->
+            <!-- 备注信息部分 -->
             <div class="form-section q-mb-md">
+              <!-- 分区标题 -->
               <div class="text-subtitle1 q-mb-sm">备注信息</div>
+              <!-- 栅格布局，各列之间有间距 -->
               <div class="row q-col-gutter-md">
+                <!-- 备注文本区域 -->
                 <div class="col-md-12 col-xs-12">
+                  <!-- 备注输入框，文本域，可自动增高 -->
                   <q-input
                     v-model="orderData.remarks"
                     label="备注"
@@ -250,8 +352,11 @@
               </div>
             </div>
             
+            <!-- 底部按钮区域 -->
             <div class="row justify-end q-mt-md">
+              <!-- 取消按钮，返回首页 -->
               <q-btn label="取消" flat class="q-mr-sm" to="/" />
+              <!-- 提交按钮，触发表单提交 -->
               <q-btn label="确认创建" type="submit" color="primary" />
             </div>
           </q-form>
@@ -265,12 +370,20 @@
   import { date } from 'quasar'
   import { useRouter } from 'vue-router'
   import { useOrderStore } from '../stores/orderStore' // 导入订单 store
+  import { useRoomStore } from '../stores/roomStore' // 导入房间 store
+  import { useViewStore } from '../stores/viewStore' // 导入视图 store
   
-  // 获取路由和订单 store
+  // 获取路由和store
   const router = useRouter()
   const orderStore = useOrderStore()
+  const roomStore = useRoomStore()
+  const viewStore = useViewStore()
   
-  // 生成订单号
+  /**
+   * 生成唯一的订单号
+   * 格式：O + 年月日 + 4位随机数
+   * @returns {string} 生成的订单号
+   */
   function generateOrderNumber() {
     const now = new Date()
     const year = now.getFullYear()
@@ -280,7 +393,10 @@
     return `O${year}${month}${day}${random}`
   }
   
-  // 获取当前时间精确到分钟
+  /**
+   * 获取当前时间，精确到分钟（秒和毫秒为0）
+   * @returns {Date} 当前时间（精确到分钟）
+   */
   function getCurrentTimeToMinute() {
     const now = new Date()
     // 重置秒和毫秒
@@ -289,47 +405,64 @@
     return now
   }
   
-  // 今天的日期字符串
+  // 今天的日期字符串，格式为YYYY-MM-DD
   const today = date.formatDate(new Date(), 'YYYY-MM-DD')
   
-  // 订单状态选项
-  const statusOptions = [
-    { label: '待入住', value: 'pending' },
-    { label: '已入住', value: 'checked-in' },
-    { label: '已退房', value: 'checked-out' },
-    { label: '已取消', value: 'cancelled' }
+  // 订单状态选项数组 - 从viewStore获取
+  const statusOptions = viewStore.orderStatusOptions.filter(option => option.value !== null)
+  
+  // 订单来源选项数组
+  const sourceOptions = [
+    { label: '前台录入', value: 'front_desk' },
+    { label: '电话预订', value: 'phone' },
+    { label: '携程', value: 'ctrip' },
+    { label: '飞猪', value: 'fliggy' },
+    { label: '美团', value: 'meituan' },
+    { label: '去哪儿', value: 'qunar' },
+    { label: '旅行社', value: 'agency' },
+    { label: '其他', value: 'other' }
   ]
   
-  // 订单表单数据 - 必须先定义这个，再定义dateRange
+  // 订单表单数据 - 使用响应式引用，包含所有订单字段
   const orderData = ref({
-    orderNumber: generateOrderNumber(),
-    status: 'pending', // 默认状态为"待入住"
-    guestName: '',
-    idNumber: '',
-    phone: '',
-    roomType: null,
-    roomNumber: null,
-    checkInDate: date.formatDate(getCurrentTimeToMinute(), 'YYYY-MM-DD'),
-    checkOutDate: date.formatDate(date.addToDate(getCurrentTimeToMinute(), { days: 1 }), 'YYYY-MM-DD'),
-    deposit: 100,
-    paymentMethod: null,
-    roomPrice: 0,
-    remarks: ''
+    orderNumber: generateOrderNumber(),  // 自动生成订单号
+    status: 'pending',                   // 默认状态为"待入住"
+    source: 'front_desk',                // 默认订单来源为前台录入
+    sourceNumber: '',                    // 来源编号
+    guestName: '',                       // 客人姓名
+    idNumber: '',                        // 身份证号
+    phone: '',                           // 手机号
+    roomType: null,                      // 房间类型
+    roomNumber: null,                    // 房间号
+    checkInDate: date.formatDate(getCurrentTimeToMinute(), 'YYYY-MM-DD'),        // 入住日期，默认今天
+    checkOutDate: date.formatDate(date.addToDate(getCurrentTimeToMinute(), { days: 1 }), 'YYYY-MM-DD'), // 离店日期，默认明天
+    deposit: 100,                        // 押金，默认100元
+    paymentMethod: null,                 // 支付方式
+    roomPrice: 0,                        // 房间价格
+    remarks: ''                          // 备注信息
   })
   
-  // 日期范围对象 - 需要在orderData之后定义
+  // 日期范围对象 - 用于日期选择器的范围选择模式
   const dateRange = ref({
-    from: orderData.value.checkInDate,
-    to: orderData.value.checkOutDate
+    from: orderData.value.checkInDate,   // 开始日期，默认为入住日期
+    to: orderData.value.checkOutDate     // 结束日期，默认为离店日期
   })
   
-  // 日期选项函数 - 只允许选择今天及以后的日期
+  /**
+   * 日期选项函数 - 控制日期选择器可选择的日期
+   * 只允许选择今天及以后的日期
+   * @param {string} dateStr - 日期字符串，格式为YYYY-MM-DD
+   * @returns {boolean} 如果日期可选则返回true，否则返回false
+   */
   const dateOptions = (dateStr) => {
     const currentDate = date.formatDate(new Date(), 'YYYY-MM-DD')
     return dateStr >= currentDate
   }
   
-  // 更新入住和离店日期
+  /**
+   * 更新入住和离店日期
+   * 在日期范围选择器中选择日期后调用
+   */
   function updateDates() {
     if (dateRange.value.from) {
       orderData.value.checkInDate = dateRange.value.from
@@ -339,7 +472,10 @@
     }
   }
   
-  // 更新离店日期的最小值
+  /**
+   * 更新离店日期的最小值
+   * 确保离店日期始终晚于入住日期
+   */
   function updateCheckOutMinDate() {
     // 如果离店日期小于等于入住日期，重置离店日期
     if (orderData.value.checkOutDate <= orderData.value.checkInDate) {
@@ -354,82 +490,95 @@
     }
   }
   
-  // 监听入住日期变化
+  // 监听入住日期变化，同步更新日期范围和离店日期
   watch(() => orderData.value.checkInDate, (newVal) => {
     dateRange.value.from = newVal
     updateCheckOutMinDate()
   })
   
-  // 监听离店日期变化
+  // 监听离店日期变化，同步更新日期范围
   watch(() => orderData.value.checkOutDate, (newVal) => {
     dateRange.value.to = newVal
   })
   
-  // 房间类型选项
-  const roomTypeOptions = [
-    { label: '标准间', value: 'standard' },
-    { label: '豪华间', value: 'deluxe' },
-    { label: '套房', value: 'suite' }
-  ]
-  
-  // 模拟可用房间数据
-  const availableRooms = ref([
-    // 标准间
-    { id: 1, number: '101', type: 'standard', status: 'available' },
-    { id: 2, number: '102', type: 'standard', status: 'available' },
-    { id: 3, number: '103', type: 'standard', status: 'available' },
-    // 豪华间
-    { id: 4, number: '201', type: 'deluxe', status: 'available' },
-    { id: 5, number: '202', type: 'deluxe', status: 'available' },
-    { id: 6, number: '203', type: 'deluxe', status: 'available' },
-    // 套房
-    { id: 7, number: '301', type: 'suite', status: 'available' },
-    { id: 8, number: '302', type: 'suite', status: 'available' },
-    { id: 9, number: '303', type: 'suite', status: 'available' }
-  ])
-  
-  // 根据选择的房型过滤可用房间
-  const availableRoomOptions = computed(() => {
-    if (!orderData.value.roomType) return []
-    
-    const filtered = availableRooms.value
-      .filter(room => room.type === orderData.value.roomType && room.status === 'available')
-    
-    return filtered.map(room => ({
-      label: `${room.number} (${room.type === 'standard' ? '标准间' : room.type === 'deluxe' ? '豪华间' : '套房'})`,
-      value: room.number
-    }))
+  // 监听房间号变化，更新房间价格
+  watch(() => orderData.value.roomNumber, (newVal) => {
+    if (newVal) {
+      const selectedRoom = roomStore.getRoomByNumber(newVal)
+      if (selectedRoom) {
+        orderData.value.roomPrice = selectedRoom.price
+      }
+    }
   })
   
-  // 当房型改变时的处理
+  // 计算当前选择房型的可用房间数量
+  const availableRoomCount = computed(() => {
+    if (!orderData.value.roomType) return 0;
+    return roomStore.getAvailableRoomCountByType(orderData.value.roomType);
+  })
+  
+  // 从roomStore获取房间类型选项数组和可用房间数量
+  const roomTypeOptionsWithCount = computed(() => roomStore.getRoomTypeOptionsWithCount());
+  
+  /**
+   * 根据房间数量获取对应的颜色
+   * @param {number} count - 房间数量
+   * @returns {string} 对应的颜色
+   */
+  const getRoomCountColor = roomStore.getRoomCountColor;
+  
+  // 计算可用房间的选项
+  const availableRoomOptions = computed(() => {
+    // 如果未选择房型，返回空数组
+    if (!orderData.value.roomType) return [];
+    
+    // 使用roomStore的getAvailableRoomOptions方法获取特定房型的可用房间
+    return roomStore.getAvailableRoomOptions(orderData.value.roomType);
+  })
+  
+  /**
+   * 当房型改变时的处理函数
+   * 1. 重置房间号
+   * 2. 根据新房型选择第一个可用房间
+   * 3. 根据房型设置房间金额
+   * @param {string} value - 选择的房型值
+   */
   function onRoomTypeChange(value) {
+    // 重置房间号
     orderData.value.roomNumber = null
     
-    // 强制计算属性更新
+    // 等待DOM更新完成后执行
     nextTick(() => {
-      // 如果有可用房间，自动选择第一个
-      if (availableRoomOptions.value.length > 0) {
+      // 获取当前房型的数量信息
+      const roomTypeText = viewStore.getRoomTypeName(value);
+      const count = availableRoomCount.value;
+      
+      // 检查当前房型是否有可用房间
+      if (count === 0) {
+        // 如果没有可用房间，显示提示信息
+        alert(`当前没有可用的${roomTypeText}，请联系管理员。`)
+      } else {
+        // 有可用房间，自动选择第一个
         orderData.value.roomNumber = availableRoomOptions.value[0].value
+        
+        // 根据选择的房间设置房间金额
+        const selectedRoom = roomStore.getRoomByNumber(orderData.value.roomNumber)
+        if (selectedRoom) {
+          orderData.value.roomPrice = selectedRoom.price
+        }
+        
+        // 当房间数量较少时提醒用户
+        if (count <= 3) {
+          console.log(`当前${roomTypeText}仅剩${count}间可用`)
+        }
       }
     })
-    
-    // 根据房型设置房间金额
-    switch(orderData.value.roomType) {
-      case 'standard':
-        orderData.value.roomPrice = 288;
-        break;
-      case 'deluxe':
-        orderData.value.roomPrice = 388;
-        break;
-      case 'suite':
-        orderData.value.roomPrice = 588;
-        break;
-      default:
-        orderData.value.roomPrice = 0;
-    }
   }
   
-  // 身份证号验证函数
+  /**
+   * 身份证号验证函数
+   * 确保身份证号只包含数字和最后一位的X
+   */
   function validateIdNumber() {
     // 移除非数字和X/x字符
     orderData.value.idNumber = orderData.value.idNumber.replace(/[^0-9X]/g, '');
@@ -440,38 +589,91 @@
     }
   }
   
-  // 提交订单
+  /**
+   * 提交订单函数
+   * 收集表单数据，添加到订单store，并导航到订单列表页面
+   */
   function submitOrder() {
-    // 入住时将时间优化到当前时间的分钟
-    const checkInTime = getCurrentTimeToMinute()
-    const orderToSubmit = { 
-      ...orderData.value,
-      actualCheckInTime: checkInTime
+    // 获取当前时间
+    const now = getCurrentTimeToMinute()
+    
+    // 判断是否选择了房间
+    if (!orderData.value.roomNumber) {
+      alert('请选择房间')
+      return
     }
     
-    console.log('提交订单:', orderToSubmit)
+    // 获取选择的房间
+    const selectedRoom = roomStore.getRoomByNumber(orderData.value.roomNumber)
+    if (!selectedRoom) {
+      alert('所选房间不可用，请重新选择')
+      return
+    }
     
-    // 在实际应用中，这里应该调用API保存订单数据
+    // 确认选择的房间确实是可用状态
+    if (selectedRoom.status !== 'available') {
+      alert(`房间 ${selectedRoom.number} 当前状态为 ${viewStore.getStatusText(selectedRoom.status)}，无法预订`)
+      return
+    }
+    
+    // 根据订单状态处理房间
+    if (orderData.value.status === 'pending') {
+      // 如果是待入住状态，将房间设为已预订
+      roomStore.reserveRoom(selectedRoom.id)
+    } else if (orderData.value.status === 'checked-in') {
+      // 如果是已入住状态，将房间设为已入住
+      roomStore.occupyRoom(
+        selectedRoom.id, 
+        orderData.value.guestName, 
+        orderData.value.checkOutDate
+      )
+    } else if (orderData.value.status === 'checked-out') {
+      // 如果是已退房状态，将房间设为清洁中
+      roomStore.checkOutRoom(selectedRoom.id)
+    } else if (orderData.value.status === 'cancelled') {
+      // 如果是已取消状态，保持房间可用状态
+      // 不需要改变房间状态
+    }
+    
+    // 创建包含所有字段的订单对象
+    const orderToSubmit = { 
+      ...orderData.value,
+      createTime: date.formatDate(now, 'YYYY-MM-DD HH:mm:ss'),
+      actualCheckInTime: orderData.value.status === 'checked-in' ? 
+        date.formatDate(now, 'YYYY-MM-DD HH:mm:ss') : null,
+      actualCheckOutTime: orderData.value.status === 'checked-out' ? 
+        date.formatDate(now, 'YYYY-MM-DD HH:mm:ss') : null,
+      // 确保支付方式是对象格式
+      paymentMethod: typeof orderData.value.paymentMethod === 'object' ? 
+        orderData.value.paymentMethod : 
+        { value: orderData.value.paymentMethod, label: viewStore.getPaymentMethodName(orderData.value.paymentMethod) }
+    }
     
     // 添加到订单 store
     orderStore.addOrder(orderToSubmit)
     
-    // 模拟API调用成功
-    setTimeout(() => {
-      // 显示成功提示
-      alert('订单创建成功！')
-      
-      // 修正路由路径 - 使用大写的ViewOrders路径
-      router.push('/ViewOrders')
-    }, 500)
+    // 显示成功提示
+    alert('订单创建成功！')
+    
+    // 导航到订单列表页面
+    router.push('/ViewOrders')
   }
   
+  // 组件挂载时执行的钩子函数
   onMounted(() => {
-    // 页面加载时的初始化操作
+    // 检查可用房间数量
+    const availableRoomsCount = roomStore.filterRooms({status: 'available'}).length
+    console.log('可用房间数量:', availableRoomsCount)
+    
+    // 如果没有可用房间，在控制台输出提示信息
+    if (availableRoomsCount === 0) {
+      console.warn('系统中没有可用房间，请联系管理员设置房间状态。')
+    }
   })
   </script>
   
   <style scoped>
+  /* 页面主容器样式，限制最大宽度并居中 */
   .check-in {
     max-width: 1200px;
     margin: 0 auto;
