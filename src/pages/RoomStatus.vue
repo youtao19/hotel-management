@@ -8,7 +8,7 @@
     <div class="room-type-summary q-mb-md">
       <div class="row q-col-gutter-sm">
         <!-- 标准间统计卡片 -->
-        <div class="col-md-4 col-sm-4 col-xs-12">
+        <div class="col-md col-sm-4 col-xs-12">
           <q-card class="bg-blue-1 text-center cursor-pointer" @click="setTypeFilter('standard')">
             <q-card-section>
               <div class="text-subtitle1 text-weight-bold">标准间</div>
@@ -18,7 +18,7 @@
         </div>
         
         <!-- 豪华间统计卡片 -->
-        <div class="col-md-4 col-sm-4 col-xs-12">
+        <div class="col-md col-sm-4 col-xs-12">
           <q-card class="bg-purple-1 text-center cursor-pointer" @click="setTypeFilter('deluxe')">
             <q-card-section>
               <div class="text-subtitle1 text-weight-bold">豪华间</div>
@@ -28,11 +28,31 @@
         </div>
         
         <!-- 套房统计卡片 -->
-        <div class="col-md-4 col-sm-4 col-xs-12">
+        <div class="col-md col-sm-4 col-xs-12">
           <q-card class="bg-teal-1 text-center cursor-pointer" @click="setTypeFilter('suite')">
             <q-card-section>
               <div class="text-subtitle1 text-weight-bold">套房</div>
               <div class="text-h6 text-weight-bold">剩余：{{ roomStore.getAvailableRoomCountByType('suite') }}</div>
+            </q-card-section>
+          </q-card>
+        </div>
+
+        <!-- 总统套房统计卡片 -->
+        <div class="col-md col-sm-4 col-xs-12">
+          <q-card class="bg-amber-1 text-center cursor-pointer" @click="setTypeFilter('presidential')">
+            <q-card-section>
+              <div class="text-subtitle1 text-weight-bold">总统套房</div>
+              <div class="text-h6 text-weight-bold">剩余：{{ roomStore.getAvailableRoomCountByType('presidential') }}</div>
+            </q-card-section>
+          </q-card>
+        </div>
+
+        <!-- 家庭房统计卡片 -->
+        <div class="col-md col-sm-4 col-xs-12">
+          <q-card class="bg-green-1 text-center cursor-pointer" @click="setTypeFilter('family')">
+            <q-card-section>
+              <div class="text-subtitle1 text-weight-bold">家庭房</div>
+              <div class="text-h6 text-weight-bold">剩余：{{ roomStore.getAvailableRoomCountByType('family') }}</div>
             </q-card-section>
           </q-card>
         </div>
@@ -43,7 +63,7 @@
     <div class="filters q-mb-md">
       <div class="row q-col-gutter-md">
         <!-- 房间类型筛选下拉框 -->
-        <div class="col-md-4 col-sm-6 col-xs-12">
+        <div class="col-md-3 col-sm-6 col-xs-12">
           <q-select
             v-model="filterType"
             :options="roomTypeOptions"
@@ -57,7 +77,7 @@
         </div>
         
         <!-- 房间状态筛选下拉框 -->
-        <div class="col-md-4 col-sm-6 col-xs-12">
+        <div class="col-md-3 col-sm-6 col-xs-12">
           <q-select
             v-model="filterStatus"
             :options="statusOptions"
@@ -69,9 +89,41 @@
             clear-icon="close"
           />
         </div>
+
+        <!-- 日期范围选择器 -->
+        <div class="col-md-4 col-sm-6 col-xs-12">
+          <q-input
+            outlined
+            label="可用日期范围"
+            readonly
+            :model-value="formattedDateRange || '请选择日期范围'"
+            placeholder="YYYY-MM-DD 至 YYYY-MM-DD"
+            class="date-range-input"
+            clearable
+            clear-icon="close"
+            @clear="clearDateRange"
+          >
+            <template v-slot:append>
+              <q-icon name="event" class="cursor-pointer">
+                <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+                  <q-date
+                    v-model="dateRange"
+                    range
+                    default-view="Calendar"
+                    today-btn
+                  >
+                    <div class="row items-center justify-end q-pa-sm">
+                      <q-btn v-close-popup label="确定" color="primary" flat/>
+                    </div>
+                  </q-date>
+                </q-popup-proxy>
+              </q-icon>
+            </template>
+          </q-input>
+        </div>
         
         <!-- 筛选操作按钮 -->
-        <div class="col-md-4 col-sm-12 col-xs-12 flex items-center">
+        <div class="col-md-2 col-sm-6 col-xs-12 flex items-center">
           <q-btn
             color="primary"
             icon="filter_alt"
@@ -205,6 +257,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useRoomStore } from '../stores/roomStore'
 import { useViewStore } from '../stores/viewStore'
+import { date } from 'quasar'
 
 // 获取房间store和视图store
 const roomStore = useRoomStore()
@@ -217,6 +270,33 @@ const router = useRouter()
 // 筛选条件状态变量
 const filterType = ref(null)    // 房间类型筛选，初始为null表示不筛选
 const filterStatus = ref(null)  // 房间状态筛选，初始为null表示不筛选
+const dateRange = ref(null)     // 日期范围筛选，初始为null表示不筛选
+
+/**
+ * 格式化日期范围显示
+ */
+const formattedDateRange = computed(() => {
+  if (!dateRange.value) return ''
+  
+  // 如果dateRange是对象形式
+  if (typeof dateRange.value === 'object') {
+    const { from, to } = dateRange.value
+    if (from && to) {
+      return `${from} 至 ${to}`
+    }
+  }
+  
+  // 如果dateRange是字符串形式 "YYYY-MM-DD to YYYY-MM-DD"
+  if (typeof dateRange.value === 'string' && dateRange.value.includes(' to ')) {
+    const [startDate, endDate] = dateRange.value.split(' to ')
+    if (startDate && endDate) {
+      return `${startDate} 至 ${endDate}`
+    }
+  }
+  
+  // 其他情况返回原值
+  return dateRange.value ? String(dateRange.value) : ''
+})
 
 /**
  * 监听路由查询参数变化，用于同步URL参数和组件状态
@@ -248,9 +328,26 @@ watch(() => route.query, (newQuery) => {
       filterStatus.value = null
     }
   }
+
+  // 同样处理type参数
+  if (newQuery.type !== filterType.value) {
+    filterType.value = newQuery.type || null
+  }
+
+  // 处理日期参数
+  if (newQuery.dateRange && newQuery.dateRange !== dateRange.value) {
+    dateRange.value = newQuery.dateRange
+  }
 }, { immediate: true, deep: true })  // immediate确保组件初始化时立即执行一次，deep确保深度监听对象变化
 
-// 添加对筛选条件变化的监听，用于调试
+// 监听日期范围变化
+watch(dateRange, (newValue) => {
+  console.log('日期范围变化:', newValue)
+}, { deep: true })
+
+/**
+ * 添加对筛选条件变化的监听，用于调试
+ */
 watch(filterStatus, (newValue) => {
   console.log('筛选状态变化为:', newValue)
 }, { immediate: true })
@@ -259,23 +356,28 @@ watch(filterStatus, (newValue) => {
  * 计算属性：根据筛选条件过滤房间列表
  * 同时考虑URL参数和本地筛选状态
  * URL参数优先级高于本地状态，确保从其他页面跳转时筛选正常工作
+ * 增加了日期范围筛选功能
  * @returns {Array} 过滤后的房间数组
  */
 const filteredRooms = computed(() => {
   // 获取URL中的状态参数，优先于filterStatus变量
   const urlStatus = route.query.status
+  const urlType = route.query.type
+  const urlDateRange = route.query.dateRange
 
   console.log('重新计算筛选房间列表，条件:', { 
-    房型: filterType.value, 
-    状态变量: filterStatus.value,
-    URL状态: urlStatus
+    房型: filterType.value || urlType, 
+    状态变量: filterStatus.value || urlStatus,
+    日期范围: dateRange.value || urlDateRange
   })
   
   // 使用roomStore的filterRooms方法替代本地过滤逻辑
   const filters = {}
   
   // 设置房型筛选
-  if (filterType.value) {
+  if (urlType) {
+    filters.type = urlType
+  } else if (filterType.value) {
     filters.type = filterType.value
   }
   
@@ -286,15 +388,60 @@ const filteredRooms = computed(() => {
     filters.status = filterStatus.value
   }
   
+  // 设置日期范围筛选
+  if (urlDateRange) {
+    filters.dateRange = urlDateRange
+  } else if (dateRange.value) {
+    // 如果是对象格式，转换为字符串
+    if (typeof dateRange.value === 'object') {
+      const { from, to } = dateRange.value
+      if (from && to) {
+        filters.dateRange = `${from} to ${to}`
+      }
+    } else if (typeof dateRange.value === 'string') {
+      filters.dateRange = dateRange.value
+    }
+  }
+  
   return roomStore.filterRooms(filters)
 })
 
 /**
  * 应用筛选按钮点击处理函数
- * 注意：实际筛选逻辑已在computed属性中实现，此函数主要用于日志记录
+ * 将筛选条件更新到URL参数
  */
 function applyFilters() {
-  console.log('应用筛选:', { 房型: filterType.value, 状态: filterStatus.value })
+  console.log('应用筛选:', { 房型: filterType.value, 状态: filterStatus.value, 日期范围: dateRange.value })
+  
+  // 构建查询参数对象
+  const query = {}
+  
+  if (filterType.value) {
+    query.type = filterType.value
+  }
+  
+  if (filterStatus.value) {
+    query.status = filterStatus.value
+  }
+  
+  // 处理日期范围
+  if (dateRange.value) {
+    // 如果是对象格式，转换为字符串
+    if (typeof dateRange.value === 'object') {
+      const { from, to } = dateRange.value
+      if (from && to) {
+        query.dateRange = `${from} to ${to}`
+      }
+    } else if (typeof dateRange.value === 'string' && dateRange.value.trim() !== '') {
+      query.dateRange = dateRange.value
+    }
+  }
+  
+  // 更新URL
+  router.replace({
+    path: route.path,
+    query
+  })
 }
 
 /**
@@ -305,12 +452,12 @@ function resetFilters() {
   // 重置组件状态变量
   filterType.value = null
   filterStatus.value = null
+  dateRange.value = null
   
-  // 更新URL，移除status参数
-  // 使用replace而不是push可以避免产生新的浏览历史记录
+  // 更新URL，移除所有筛选参数
   router.replace({
     path: route.path,
-    query: {}  // 清空所有查询参数
+    query: {}
   })
 }
 
@@ -392,6 +539,13 @@ function clearCleaning(roomId) {
   console.log('完成清洁:', roomId)
   // 使用roomStore的方法完成房间清洁
   roomStore.clearCleaning(roomId)
+}
+
+/**
+ * 清除日期范围
+ */
+function clearDateRange() {
+  dateRange.value = null
 }
 
 /**
@@ -480,6 +634,15 @@ function setTypeFilter(type) {
 .room-status {
   max-width: 1400px;
   margin: 0 auto;
+}
+
+/* 日期范围选择器样式 */
+.date-range-input {
+  font-weight: 500;
+}
+
+.date-range-input :deep(.q-field__native) {
+  color: #1976d2;
 }
 
 /* 房型统计卡片样式 */

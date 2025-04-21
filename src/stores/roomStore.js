@@ -40,8 +40,14 @@ export const useRoomStore = defineStore('room', () => {
     { id: 305, number: '305', type: 'suite', status: 'available', price: 588 },
     { id: 306, number: '306', type: 'suite', status: 'available', price: 588 },
     // 总统套房
-    { id: 401, number: '401', type: 'suite', status: 'available', price: 1288 },
-    { id: 402, number: '402', type: 'suite', status: 'available', price: 1288 }
+    { id: 401, number: '401', type: 'presidential', status: 'available', price: 1288 },
+    { id: 402, number: '402', type: 'presidential', status: 'available', price: 1288 },
+    { id: 403, number: '403', type: 'presidential', status: 'occupied', currentGuest: '赵六', checkOutDate: '2023-06-15', price: 1588 },
+    // 家庭房
+    { id: 501, number: '501', type: 'family', status: 'available', price: 688 },
+    { id: 502, number: '502', type: 'family', status: 'occupied', currentGuest: '孙七', checkOutDate: '2023-06-12', price: 688 },
+    { id: 503, number: '503', type: 'family', status: 'available', price: 688 },
+    { id: 504, number: '504', type: 'family', status: 'reserved', price: 688 }
   ])
 
   // 获取所有房间计数
@@ -71,7 +77,9 @@ export const useRoomStore = defineStore('room', () => {
     const counts = {
       standard: 0,
       deluxe: 0,
-      suite: 0
+      suite: 0,
+      presidential: 0,
+      family: 0
     }
     
     rooms.value.forEach(room => {
@@ -85,7 +93,7 @@ export const useRoomStore = defineStore('room', () => {
 
   /**
    * 根据条件筛选房间
-   * @param {Object} filters - 筛选条件对象 {type, status}
+   * @param {Object} filters - 筛选条件对象 {type, status, dateRange}
    * @returns {Array} 筛选后的房间数组
    */
   function filterRooms(filters = {}) {
@@ -98,6 +106,33 @@ export const useRoomStore = defineStore('room', () => {
       
       // 筛选状态
       if (filters.status && room.status !== filters.status) return false
+      
+      // 筛选日期范围
+      if (filters.dateRange) {
+        // 日期格式应该是 "YYYY-MM-DD to YYYY-MM-DD"
+        const [startDateStr, endDateStr] = filters.dateRange.split(' to ')
+        if (startDateStr && endDateStr) {
+          const startDate = new Date(startDateStr)
+          const endDate = new Date(endDateStr)
+          
+          // 检查日期是否有效
+          if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+            // 已入住房间，检查退房日期是否在查询开始日期之前
+            if (room.status === 'occupied' && room.checkOutDate) {
+              const checkOutDate = new Date(room.checkOutDate)
+              if (checkOutDate < startDate) {
+                return false // 房间在查询日期前已空出
+              }
+            }
+            
+            // 已预订房间，应检查预订日期范围，但目前数据没有预订日期范围
+            // 这里简化处理，将已预订的房间视为在选择的日期范围内不可用
+            if (room.status === 'reserved') {
+              return false
+            }
+          }
+        }
+      }
       
       // 通过所有筛选条件，保留该房间
       return true
@@ -278,12 +313,14 @@ export const useRoomStore = defineStore('room', () => {
   }
 
   /**
-   * 获取特定房型的空余房间数量
+   * 获取特定房型的可用房间数量
    * @param {string} type - 房间类型
-   * @returns {number} 该类型的空余房间数量
+   * @returns {number} 该类型的可用房间数量
    */
   function getAvailableRoomCountByType(type) {
-    return filterRooms({ type, status: 'available' }).length
+    return rooms.value.filter(room => 
+      room.type === type && room.status === 'available'
+    ).length
   }
 
   /**

@@ -7,7 +7,9 @@ export const useViewStore = defineStore('view', () => {
     { label: '所有房型', value: null },  // null值表示不筛选
     { label: '标准间', value: 'standard' },
     { label: '豪华间', value: 'deluxe' },
-    { label: '套房', value: 'suite' }
+    { label: '套房', value: 'suite' },
+    { label: '总统套房', value: 'presidential' },
+    { label: '家庭房', value: 'family' }
   ]
  
   // 房间状态选项数组，用于状态筛选下拉框
@@ -47,6 +49,8 @@ export const useViewStore = defineStore('view', () => {
       case 'standard': return '标准间'
       case 'deluxe': return '豪华间'
       case 'suite': return '套房'
+      case 'presidential': return '总统套房'
+      case 'family': return '家庭房'
       default: return type
     }
   }
