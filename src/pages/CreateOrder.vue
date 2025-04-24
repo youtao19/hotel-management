@@ -669,6 +669,38 @@
     if (availableRoomsCount === 0) {
       console.warn('系统中没有可用房间，请联系管理员设置房间状态。')
     }
+
+    // 获取URL查询参数
+    const query = router.currentRoute.value.query
+
+    // 如果有查询参数且包含房间信息，则自动填充表单
+    if (query && Object.keys(query).length > 0) {
+      console.log('检测到URL查询参数:', query)
+
+      // 设置房间类型
+      if (query.roomType) {
+        orderData.value.roomType = query.roomType
+
+        // 等待DOM更新完成后再设置房间号
+        nextTick(() => {
+          // 如果有指定房间号，则设置该房间
+          if (query.roomNumber) {
+            orderData.value.roomNumber = query.roomNumber
+
+            // 根据房间号获取房间信息，设置房间价格
+            const selectedRoom = roomStore.getRoomByNumber(query.roomNumber)
+            if (selectedRoom) {
+              orderData.value.roomPrice = selectedRoom.price
+            }
+          }
+        })
+      }
+
+      // 如果有指定订单状态，则设置状态
+      if (query.status) {
+        orderData.value.status = query.status
+      }
+    }
   })
   </script>
 
