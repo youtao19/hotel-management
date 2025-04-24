@@ -1,115 +1,60 @@
-//check if there is any missing env
-const env = [
-  "APP_NAME",
-  "APP_URL",
-  "OPENAI_KEY",
-  "OPENAI_HOST",
-  "OPENAI_CHAT_COMPLETION_PATH",
-  "NODE_ENV",
-  "NODE_PORT",
-  "POSTGRES_HOST",
-  "POSTGRES_PORT",
-  "POSTGRES_USER",
-  "POSTGRES_PASSWORD",
-  "POSTGRES_DB",
-  "REDIS_HOST",
-  "REDIS_PORT",
-  "REDIS_PW",
-  "ADMIN_EMAIL",
-  "EMAIL_HOST",
-  "EMAIL_PORT",
-  "EMAIL_USER",
-  "EMAIL_PW",
-];
+"use strict";
+require('dotenv').config({ path: './dev.env' }); // 加载 .env 文件中的环境变量
 
-for (let envName of env) {
-  if (!process.env[envName]) {
-    throw new Error(`Missing env : ${envName}`);
-  }
-}
-
+// 应用全局设置
 const setup = {
-  opanaiKey: process.env.OPENAI_O_KEY,
-  openaiHost: process.env.OPENAI_HOST,
-  openaiChatCompPath: process.env.OPENAI_CHAT_COMPLETION_PATH,
-  openaiImagePath: process.env.OPENAI_IMAGE_PATH,
-  env: process.env.NODE_ENV,
-  appName: process.env.APP_NAME,
-  sessionSecret: process.env.APP_NAME + "2023",
-  appUrl: process.env.APP_URL,
-  cookieMaxAge: 1000 * 60 * 60 * 24 * 7 * 2, //2 weeks
-  reqSizeLimit: "1mb",
-  errorCode: {
-    NO_Match: 450,
-    PW_INCORRECT: 451,
-    CODE_INVALID: 452,
-    content_filter: 453,
-    no_conv_name: 454,
-    email_not_verified: 457,
-    rate_limit: 429,
-    invalid_key: 430,
-  },
-  maxWrongAttemptsByIPperDay: 100,
-  maxConsecutiveFailsByUsernameAndIP: 6,
-  adminEmail: process.env.ADMIN_EMAIL,
-  email: {
-    host: process.env.EMAIL_HOST,
-    port: process.env.EMAIL_PORT,
-    user: process.env.EMAIL_USER,
-    pw: process.env.EMAIL_PW,
-  },
-  apiRetryTimeout: 3000,
-  maxRetries: 3,
-  lang: {
-    "zh-Hans": "zh-Hans",
-    en: "en",
-  },
-  port: process.env.NODE_PORT,
-  db: {
+    appName: process.env.APP_NAME || "酒店管理系统", // 应用名称
+    appUrl: process.env.APP_URL || "http://localhost:9000", // 前端应用 URL (Quasar dev server)
+    port: process.env.PORT || 3001, // 后端服务器端口
+    isProduction: process.env.NODE_ENV === 'production', // 是否为生产环境
+    adminEmail: process.env.ADMIN_EMAIL || "admin@example.com", // 管理员邮箱
+
+    // Session 设置
+    sessionSecret: process.env.SESSION_SECRET || "a_very_strong_secret_key", // Session 密钥，生产环境必须修改
+    sessionMaxAge: 1000 * 60 * 60 * 24 * 7, // Session 有效期 (7 天)
+
+    // PostgreSQL 数据库设置
+    pg: {
+        user: process.env.PG_USER || "postgres",
+        host: process.env.PG_HOST || "localhost",
+        database: process.env.PG_DATABASE || "hotel_management",
+        password: process.env.PG_PASSWORD || "your_db_password", // 生产环境必须修改
+        port: process.env.PG_PORT || 5432,
+    },
+
+    // Redis 设置
     redis: {
-      host: process.env.REDIS_HOST,
-      port: process.env.REDIS_PORT,
-      password: process.env.REDIS_PW,
+        host: process.env.REDIS_HOST || "localhost",
+        port: process.env.REDIS_PORT || 6379,
+        // password: process.env.REDIS_PASSWORD // 如果 Redis 需要密码
     },
-    postgres: {
-      host: process.env.POSTGRES_HOST,
-      port: process.env.POSTGRES_PORT,
-      user: process.env.POSTGRES_USER,
-      pw: process.env.POSTGRES_PASSWORD,
-      name: process.env.POSTGRES_DB,
+
+    // 邮件服务设置 (例如使用 Mailtrap 或真实 SMTP 服务商)
+    email: {
+        host: process.env.EMAIL_HOST || "sandbox.smtp.mailtrap.io",
+        port: process.env.EMAIL_PORT || 2525,
+        user: process.env.EMAIL_USER || "your_mailtrap_user", // 生产环境必须修改
+        pw: process.env.EMAIL_PW || "your_mailtrap_password", // 生产环境必须修改
     },
-  },
-  OPENAI_KEY: process.env.OPENAI_KEY,
-  models: {
-    gpt35: {
-      name: "gpt-3.5-turbo",
-      maxTokenCount: 2500,
+
+    // 速率限制设置
+    maxWrongAttemptsByIPperDay: process.env.MAX_WRONG_ATTEMPTS_IP_DAY || 100, // 单个 IP 每天最大错误尝试次数
+    maxConsecutiveFailsByUsernameAndIP: process.env.MAX_CONSECUTIVE_FAILS_USER_IP || 5, // 单个 用户名+IP 最大连续失败次数
+
+    // 错误代码定义 (可选，用于标准化错误响应)
+    errorCode: {
+        rate_limit: 429,
+        NO_Match: 401, // 邮箱或密码不匹配
+        PW_INCORRECT: 401, // 密码不正确 (与 NO_Match 合并)
+        CODE_INVALID: 400, // 验证码无效
+        EMAIL_NOT_VERIFIED: 403, // 邮箱未验证
     },
-    "gpt35-16k": {
-      name: "gpt-3.5-turbo-16k",
-      maxTokenCount: 10000,
-    },
-    gpt4: {
-      name: "gpt-4",
-      maxTokenCount: 6000,
-    },
-    "gpt-4-1106-preview": {
-      name: "gpt-4-1106-preview",
-      maxTokenCount: 70000,
-    },
-    "gpt-4-0125-preview": {
-      name: "gpt-4-0125-preview",
-      maxTokenCount: 120000,
-    },
-    latest: {
-      name: "gpt-4-0125-preview",
-      maxTokenCount: 120000,
-    },
-  },
-  task: {
-    sampleSizeMax: 22,
-  },
-  workers: [],
-  totalWorkerNum: 20,
+
+    // 语言设置 (示例)
+    lang: {
+        'zh-Hans': 'zh-Hans',
+        'en': 'en'
+    }
 };
-module.exports = setup;
+
+module.exports = setup; // 导出设置对象

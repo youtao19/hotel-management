@@ -1,99 +1,74 @@
 "use strict";
-const express = require("express");
-const { fork } = require('child_process');
-const setup = require("./appSettings/setup");
-const workerStatus = require("./backend/modules/workerStatus");
-let app = express();
-app.disable('x-powered-by');
-if (setup.env === "dev") {
-  //for development, we need this to serve index.html for non api url
-  //for production, we do not need this since front end is served by lb
-  //for production, we can not have this if we need to have mrsk healthcheck to work
-  const history = require('connect-history-api-fallback');
-  const cors = require('cors');
-  app.use(cors({
-    origin: 'http://localhost:8080', // Update with your frontend origin
-    credentials: true, 
-  }));
-  app.use(history());
-}
-const webServer = require("http").Server(app);
-const emailJob = require("./backend/modules/emailSetup");
-const path = require("path");
-const session = require("express-session");
+const express = require("express"); // 引入 Express 框架
+const cors = require("cors"); // 引入 CORS 中间件，用于处理跨域请求
+const helmet = require("helmet"); // 引入 Helmet 中间件，用于设置安全相关的 HTTP 头
+const morgan = require("morgan"); // 引入 Morgan 中间件，用于记录 HTTP 请求日志
+const path = require("path"); // 引入 Path 模块，用于处理文件路径
+const setup = require("./appSettings/setup"); // 引入应用设置
+const authentication = require("./backend/modules/authentication"); // 引入认证模块
+const pgDB = require("./backend/database/postgreDB/pg"); // 引入 PostgreSQL 数据库模块
+const redisDB = require("./backend/database/redis/redis"); // 引入 Redis 数据库模块
+const emailJob = require("./backend/modules/emailSetup"); // 引入邮件模块
 
-const posgreDB = require("./backend/database/postgreDB/pg");
-const redisDB = require("./backend/database/redis/redis");
-let RedisStore = require("connect-redis")(session);
-let staticFileRoot = path.join(__dirname, "front-end", "build");
-if (setup.env === "dev") {
-  staticFileRoot = path.join(__dirname, "front-end", "public");
-}
+// 引入路由文件
+const authRoute = require("./backend/routes/authRoute");
+const userRoute = require("./backend/routes/userRoute");
 
-async function bootup() {
-  redisDB.initialize();
-  const redisClient = redisDB.getClient();
-  //this session options is for production use
-  //we need to set express app to trust proxy with 1
-  //this means the app has one layer of reverse-proxy in front of it.
-  //for dev, we need to change cookie.secure to false
-  const sessionOptions = {
-    name: setup.appName + ".sid",
-    store: new RedisStore({ client: redisClient }),
-    secret: setup.sessionSecret,
-    resave: false,
-    rolling: false,
-    cookie: {
-      secure: false,
-      maxAge: setup.cookieMaxAge,
-      sameSite: "none"
-    },
-    saveUninitialized: false,
-  };
+// 创建 Express 应用实例
+const app = express();
 
- 
-  if (setup.env != "dev") {
-    sessionOptions.proxy = true;
-    app.set("trust proxy", true);
-    sessionOptions.cookie.sameSite = true;
-  }
+// --- 中间件设置 ---
 
-  app.use(session(sessionOptions));
-  const authtication = require("./backend/modules/authentication");
-  app.use(authtication.authenticationMiddleware);
-  app.use(express.json({
-    limit: setup.reqSizeLimit,
-    strict: false,
-  }));
-  app.use(express.urlencoded({ extended: true, limit: setup.reqSizeLimit }));
-  app.use(express.text({ limit: setup.reqSizeLimit }));
+// 启用 CORS (允许所有来源，在生产环境中应配置更严格的规则)
+app.use(cors());
 
-  const userRoute = require("./backend/routes/userRoute");
-  app.use("/api/user", userRoute);
+// 使用 Helmet 设置安全 HTTP 头
+app.use(helmet());
 
-  const authRoute = require("./backend/routes/authRoute");
-  app.use("/api/auth", authRoute);
+// 解析 JSON 请求体
+app.use(express.json());
+// 解析 URL 编码的请求体
+app.use(express.urlencoded({ extended: true }));
 
-  app.use(express.static(staticFileRoot));
+// 使用 Morgan 记录 HTTP 请求日志 (dev 格式)
+app.use(morgan("dev"));
 
-  app.get("/api/hup", (req, res) => {
-    return res.status(200).json({ ok: true });
-  });
-  //catch all other unknown url here.
-  app.all("/", function (req, res) {
-    console.log(`req route not found with url : ${req.originalUrl}\nreq ip is : ${req.ip}`);
-    res.status(404).json();
-  });
+// --- 数据库和认证初始化 ---
 
-  //setup posgreDB
-  //Comment tearDown if you want to persist database storage
-  //await emailJob.testConnection();
-  //await posgreDB.tearDownPostgreDB();
-  await posgreDB.initializePostgreDB();
-  const port = setup.port;
-  webServer.listen(port, "0.0.0.0", () => {
-    console.info(`The web server is running in ${setup.env} mode Listening on 0.0.0.0 with port ${port}`);
-  });
-}
+// 连接 Redis
+redisDB.connectRedis();
 
-bootup();
+// 初始化 Passport 和 Session
+authentication.initPassport(app);
+
+// --- 路由设置 ---
+
+// 挂载认证相关路由
+app.use("/api/auth", authRoute);
+// 挂载用户相关路由 (需要认证)
+app.use("/api/user", userRoute);
+
+// --- 静态文件服务 (可选，如果前端由 Quasar 开发服务器提供) ---
+// 如果需要 Node.js 服务器也提供前端静态文件
+// app.use(express.static(path.join(__dirname, "../dist/spa")));
+// app.get("*", (req, res) => {
+//   res.sendFile(path.join(__dirname, "../dist/spa", "index.html"));
+// });
+
+// --- 错误处理中间件 (示例) ---
+app.use((err, req, res, next) => {
+  console.error("全局错误处理:", err.stack);
+  res.status(500).send("服务器内部错误!");
+});
+
+// --- 启动服务器 ---
+
+const PORT = setup.port || 3001; // 从设置或环境变量获取端口，默认为 3001
+
+app.listen(PORT, async () => {
+  console.log(`后端服务器运行在 http://localhost:${PORT}`);
+  // 测试数据库连接
+  await pgDB.testConnection();
+  // 测试邮件连接
+  await emailJob.testConnection();
+});

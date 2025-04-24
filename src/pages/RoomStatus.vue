@@ -3,7 +3,7 @@
   <div class="room-status q-pa-md">
     <!-- 页面标题 -->
     <!-- <h1 class="text-h4 q-mb-md">房间状态</h1> -->
-    
+
     <!-- 房型统计卡片部分 -->
     <div class="room-type-summary q-mb-md">
       <div class="row q-col-gutter-sm">
@@ -16,7 +16,7 @@
             </q-card-section>
           </q-card>
         </div>
-        
+
         <!-- 豪华间统计卡片 -->
         <div class="col-md col-sm-4 col-xs-12">
           <q-card class="bg-purple-1 text-center cursor-pointer" @click="setTypeFilter('deluxe')">
@@ -26,7 +26,7 @@
             </q-card-section>
           </q-card>
         </div>
-        
+
         <!-- 套房统计卡片 -->
         <div class="col-md col-sm-4 col-xs-12">
           <q-card class="bg-teal-1 text-center cursor-pointer" @click="setTypeFilter('suite')">
@@ -58,7 +58,7 @@
         </div>
       </div>
     </div>
-    
+
     <!-- 筛选器部分 -->
     <div class="filters q-mb-md">
       <div class="row q-col-gutter-md">
@@ -69,13 +69,13 @@
             :options="roomTypeOptions"
             label="房间类型"
             outlined
-            emit-value        
-            map-options       
-            clearable         
+            emit-value
+            map-options
+            clearable
             clear-icon="close"
           />
         </div>
-        
+
         <!-- 房间状态筛选下拉框 -->
         <div class="col-md-3 col-sm-6 col-xs-12">
           <q-select
@@ -121,7 +121,7 @@
             </template>
           </q-input>
         </div>
-        
+
         <!-- 筛选操作按钮 -->
         <div class="col-md-2 col-sm-6 col-xs-12 flex items-center">
           <q-btn
@@ -141,18 +141,18 @@
         </div>
       </div>
     </div>
-    
+
     <!-- 房间网格视图部分 -->
     <div class="room-grid">
       <div class="row q-col-gutter-md">
         <!-- 遍历过滤后的房间列表 -->
-        <div 
-          v-for="room in filteredRooms" 
-          :key="room.id" 
+        <div
+          v-for="room in filteredRooms"
+          :key="room.id"
           class="col-lg-3 col-md-4 col-sm-6 col-xs-12"
         >
           <!-- 房间卡片，根据状态设置不同背景色 -->
-          <q-card 
+          <q-card
             :class="{
               'bg-green-1': room.status === 'available',  // 空闲房间为绿色
               'bg-red-1': room.status === 'occupied',     // 已入住房间为红色
@@ -172,9 +172,9 @@
                 {{ getStatusText(room.status) }}
               </q-chip>
             </q-card-section>
-            
+
             <q-separator />
-            
+
             <q-card-section class="room-info">
               <!-- 房间类型信息 -->
               <div class="row q-mb-sm">
@@ -185,7 +185,7 @@
                   <div class="text-subtitle2 text-weight-bold">{{ getRoomTypeName(room.type) }}</div>
                 </div>
               </div>
-              
+
               <!-- 房间价格信息 -->
               <div class="row q-mb-sm">
                 <div class="col-5">
@@ -195,7 +195,7 @@
                   <div class="text-subtitle2 text-weight-bold text-primary">¥{{ room.price }}/晚</div>
                 </div>
               </div>
-              
+
               <!-- 已入住房间显示客人信息 -->
               <div v-if="room.status === 'occupied'" class="row q-mb-sm">
                 <div class="col-5">
@@ -205,7 +205,7 @@
                   <div class="text-subtitle2 text-weight-bold">{{ room.currentGuest }}</div>
                 </div>
               </div>
-              
+
               <!-- 已入住房间显示退房日期 -->
               <div v-if="room.status === 'occupied'" class="row q-mb-sm">
                 <div class="col-5">
@@ -216,9 +216,9 @@
                 </div>
               </div>
             </q-card-section>
-            
+
             <q-space />
-            
+
             <!-- 房间操作按钮 -->
             <q-card-actions align="center" class="q-pa-sm">
               <q-btn-group flat>
@@ -242,7 +242,7 @@
         </div>
       </div>
     </div>
-    
+
     <!-- 无结果提示 - 当筛选后没有房间时显示 -->
     <div v-if="filteredRooms.length === 0" class="text-center q-pa-lg">
       <q-icon name="search_off" size="5rem" color="grey-5" />
@@ -253,7 +253,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useRoomStore } from '../stores/roomStore'
 import { useViewStore } from '../stores/viewStore'
@@ -277,7 +277,7 @@ const dateRange = ref(null)     // 日期范围筛选，初始为null表示不�
  */
 const formattedDateRange = computed(() => {
   if (!dateRange.value) return ''
-  
+
   // 如果dateRange是对象形式
   if (typeof dateRange.value === 'object') {
     const { from, to } = dateRange.value
@@ -285,7 +285,7 @@ const formattedDateRange = computed(() => {
       return `${from} 至 ${to}`
     }
   }
-  
+
   // 如果dateRange是字符串形式 "YYYY-MM-DD to YYYY-MM-DD"
   if (typeof dateRange.value === 'string' && dateRange.value.includes(' to ')) {
     const [startDate, endDate] = dateRange.value.split(' to ')
@@ -293,7 +293,7 @@ const formattedDateRange = computed(() => {
       return `${startDate} 至 ${endDate}`
     }
   }
-  
+
   // 其他情况返回原值
   return dateRange.value ? String(dateRange.value) : ''
 })
@@ -311,10 +311,10 @@ watch(() => route.query, (newQuery) => {
       // 确保状态值是有效的
       const statusValue = newQuery.status
       console.log('尝试应用状态筛选:', statusValue)
-      
+
       // 验证状态值是否有效，防止非法值导致的筛选问题
       const validStatus = ['available', 'occupied', 'reserved', 'cleaning', 'maintenance'].includes(statusValue)
-      
+
       if (validStatus) {
         console.log('状态值有效，设置筛选:', statusValue)
         filterStatus.value = statusValue  // 更新内部状态
@@ -365,29 +365,29 @@ const filteredRooms = computed(() => {
   const urlType = route.query.type
   const urlDateRange = route.query.dateRange
 
-  console.log('重新计算筛选房间列表，条件:', { 
-    房型: filterType.value || urlType, 
+  console.log('重新计算筛选房间列表，条件:', {
+    房型: filterType.value || urlType,
     状态变量: filterStatus.value || urlStatus,
     日期范围: dateRange.value || urlDateRange
   })
-  
+
   // 使用roomStore的filterRooms方法替代本地过滤逻辑
   const filters = {}
-  
+
   // 设置房型筛选
   if (urlType) {
     filters.type = urlType
   } else if (filterType.value) {
     filters.type = filterType.value
   }
-  
+
   // 设置状态筛选，优先使用URL中的状态
   if (urlStatus) {
     filters.status = urlStatus
   } else if (filterStatus.value) {
     filters.status = filterStatus.value
   }
-  
+
   // 设置日期范围筛选
   if (urlDateRange) {
     filters.dateRange = urlDateRange
@@ -402,7 +402,7 @@ const filteredRooms = computed(() => {
       filters.dateRange = dateRange.value
     }
   }
-  
+
   return roomStore.filterRooms(filters)
 })
 
@@ -412,18 +412,18 @@ const filteredRooms = computed(() => {
  */
 function applyFilters() {
   console.log('应用筛选:', { 房型: filterType.value, 状态: filterStatus.value, 日期范围: dateRange.value })
-  
+
   // 构建查询参数对象
   const query = {}
-  
+
   if (filterType.value) {
     query.type = filterType.value
   }
-  
+
   if (filterStatus.value) {
     query.status = filterStatus.value
   }
-  
+
   // 处理日期范围
   if (dateRange.value) {
     // 如果是对象格式，转换为字符串
@@ -436,7 +436,7 @@ function applyFilters() {
       query.dateRange = dateRange.value
     }
   }
-  
+
   // 更新URL
   router.replace({
     path: route.path,
@@ -453,7 +453,7 @@ function resetFilters() {
   filterType.value = null
   filterStatus.value = null
   dateRange.value = null
-  
+
   // 更新URL，移除所有筛选参数
   router.replace({
     path: route.path,
@@ -471,13 +471,18 @@ function bookRoom(roomId) {
 }
 
 /**
- * 办理入住
+ * 办理入住 (无预订)
  * @param {number} roomId - 房间ID
  */
 function checkIn(roomId) {
-  console.log('办理入住:', roomId)
-  // 导航到入住页面，默认为无预订入住
-  router.push('/Check-in')
+  console.log('办理入住 (无预订):', roomId)
+  // 导航到创建订单页面，并传递房间ID
+  router.push({
+    path: '/create-order', // 修改为创建订单页面的路由路径
+    query: {
+      roomId: roomId // 将房间ID作为查询参数传递
+    }
+  })
 }
 
 /**
@@ -489,7 +494,7 @@ function checkInReservation(roomId) {
   // 导航到入住页面，并选择预订入住选项卡
   router.push({
     path: '/Check-in',
-    query: { 
+    query: {
       type: 'reservation',
       roomId: roomId
     }
@@ -502,7 +507,7 @@ function checkInReservation(roomId) {
  */
 function checkOut(roomId) {
   console.log('办理退房:', roomId)
-  
+
   // 显示确认对话框
   if (confirm('确认办理退房？退房后房间将自动设置为"清扫中"状态。')) {
     // 使用roomStore的方法更新房间状态
@@ -607,7 +612,7 @@ const statusOptions = viewStore.statusOptions
  */
 function setTypeFilter(type) {
   console.log('设置房型筛选:', type)
-  
+
   // 如果当前已经是这个房型筛选，则清除筛选（切换行为）
   if (filterType.value === type) {
     // 清除组件状态

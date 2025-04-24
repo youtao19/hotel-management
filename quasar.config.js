@@ -68,7 +68,17 @@ export default defineConfig((/* ctx */) => {
     // Full list of options: https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#devserver
     devServer: {
       // https: true,
-      open: true // opens browser window automatically
+      open: true, // opens browser window automatically
+      proxy: {
+        // 将所有以 /api 开头的请求代理到后端服务器
+        // 假设你的后端服务器运行在 http://localhost:3001
+        '/api': {
+          target: 'http://localhost:9000', // 请确保这里的端口号与你的后端服务器端口一致
+          changeOrigin: true,
+          // 可选：如果你的后端路由没有 /api 前缀，可以用 rewrite
+          // rewrite: (path) => path.replace(/^\/api/, '') 
+        }
+      }
     },
 
     // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#framework
@@ -86,7 +96,7 @@ export default defineConfig((/* ctx */) => {
       // directives: [],
 
       // Quasar plugins
-      plugins: ['Notify']
+      plugins: ['Notify'] // 确保 Notify 插件已添加
     },
 
     // animations: 'all', // --- includes all animations
