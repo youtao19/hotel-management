@@ -18,7 +18,7 @@ const setup = {
         user: process.env.PG_USER || "postgres",
         host: process.env.PG_HOST || "localhost",
         database: process.env.PG_DATABASE || "hotel_management",
-        password: process.env.PG_PASSWORD || "your_db_password", // 生产环境必须修改
+        password: process.env.PG_PASSWORD || "1219", // 生产环境必须修改
         port: process.env.PG_PORT || 5432,
     },
 

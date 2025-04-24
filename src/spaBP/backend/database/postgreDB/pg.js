@@ -6,7 +6,7 @@ let pool = {}; // 初始化一个空对象，稍后将用于存储数据库连�
 // 连接选项对象 1: 用于连接到默认的 'postgres' 数据库，通常用于检查或创建目标数据库
 const connOpt1 = {
   user: setup.db.postgres.user, // 数据库用户名
-  database: "postgres", // 目标数据库名 (此处为 'postgres')
+  database: "hotel_management", // 目标数据库名 (此处为 'postgres')
   password: setup.db.postgres.pw, // 数据库密码
   port: setup.db.postgres.port, // 数据库端口
   host: setup.db.postgres.host, // 数据库主机地址
