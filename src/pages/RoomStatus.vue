@@ -467,7 +467,23 @@ function resetFilters() {
  */
 function bookRoom(roomId) {
   console.log('预订房间:', roomId)
-  // 实际应用中，这里应该打开预订表单或导航到预订页面
+  // 获取要预订的房间信息
+  const room = roomStore.getRoomById(roomId)
+  if (!room) {
+    alert('找不到房间信息')
+    return
+  }
+
+  // 导航到创建订单页面，并传递房间信息
+  router.push({
+    path: '/CreateOrder',
+    query: {
+      roomId: roomId,
+      roomType: room.type,
+      roomNumber: room.number,
+      status: 'pending' // 默认设置为"待入住"状态
+    }
+  })
 }
 
 /**
@@ -478,7 +494,7 @@ function checkIn(roomId) {
   console.log('办理入住 (无预订):', roomId)
   // 导航到创建订单页面，并传递房间ID
   router.push({
-    path: '/create-order', // 修改为创建订单页面的路由路径
+    path: '/CreateOrder', // 修改为正确的创建订单页面的路由路径
     query: {
       roomId: roomId // 将房间ID作为查询参数传递
     }
