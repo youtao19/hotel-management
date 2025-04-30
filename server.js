@@ -1,8 +1,8 @@
 "use strict"; // 严格模式
 const express = require("express"); // 引入Express框架
-const { fork } = require('child_process'); // 引入子进程模块，用于创建子进程
+// const { fork } = require('child_process'); // 引入子进程模块，用于创建子进程
 const setup = require("./appSettings/setup"); // 引入应用程序设置
-const workerStatus = require("./backend/modules/workerStatus"); // 引入工作状态模块
+// const workerStatus = require("./backend/modules/workerStatus"); // 引入工作状态模块
 let app = express(); // 创建Express应用实例
 app.disable('x-powered-by'); // 禁用X-Powered-By头，增强安全性
 if (setup.env === "dev") {
@@ -22,21 +22,26 @@ if (setup.env === "dev") {
   app.use(history()); // 使用history中间件
 }
 const webServer = require("http").Server(app); // 创建HTTP服务器
-const emailJob = require("./backend/modules/emailSetup"); // 引入邮件设置模块
+// const emailJob = require("./backend/modules/emailSetup"); // 引入邮件设置模块
 const path = require("path"); // 引入路径处理模块
 const session = require("express-session"); // 引入会话管理中间件
 
 const posgreDB = require("./backend/database/postgreDB/pg"); // 引入PostgreSQL数据库模块
-const redisDB = require("./backend/database/redis/redis"); // 引入Redis数据库模块
-let RedisStore = require("connect-redis")(session); // 创建Redis会话存储
+// const redisDB = require("./backend/database/redis/redis"); // 引入Redis数据库模块
+// let RedisStore = require("connect-redis")(session); // 创建Redis会话存储
 let staticFileRoot = path.join(__dirname, "front-end", "build"); // 设置静态文件根目录为生产环境构建目录
 if (setup.env === "dev") {
   staticFileRoot = path.join(__dirname, "front-end", "public"); // 开发环境使用public目录作为静态文件根目录
 }
 
 async function bootup() { // 启动函数
-  redisDB.initialize(); // 初始化Redis数据库
-  const redisClient = redisDB.getClient(); // 获取Redis客户端
+  // 初始化Redis数据库
+  // 暂不使用
+  // redisDB.initialize(); // 初始化Redis数据库
+  // const redisClient = redisDB.getClient(); // 获取Redis客户端
+
+
+
   //this session options is for production use
   //we need to set express app to trust proxy with 1
   //this means the app has one layer of reverse-proxy in front of it.
@@ -47,7 +52,7 @@ async function bootup() { // 启动函数
   // 对于开发环境，我们需要将cookie.secure设置为false
   const sessionOptions = {
     name: setup.appName + ".sid", // 会话ID名称
-    store: new RedisStore({ client: redisClient }), // 使用Redis存储会话数据
+    // store: new RedisStore({ client: redisClient }), // 使用Redis存储会话数据
     secret: setup.sessionSecret, // 会话密钥
     resave: false, // 不强制保存未修改的会话
     rolling: false, // 不更新会话到期时间
@@ -82,6 +87,15 @@ async function bootup() { // 启动函数
   const authRoute = require("./backend/routes/authRoute"); // 引入认证路由模块
   app.use("/api/auth", authRoute); // 挂载认证API路由
 
+  // 修改或添加酒店管理系统路由
+  // const hotelRoute = require("./backend/routes/hotelRoute");
+  // const roomRoute = require("./backend/routes/roomRoute");
+  // const bookingRoute = require("./backend/routes/bookingRoute");
+
+  // app.use("/api/hotel", hotelRoute);
+  // app.use("/api/room", roomRoute);
+  // app.use("/api/booking", bookingRoute);
+
   app.use(express.static(staticFileRoot)); // 配置静态文件服务
 
   app.get("/api/hup", (req, res) => { // 健康检查端点
@@ -100,7 +114,7 @@ async function bootup() { // 启动函数
   // 如果你想保留数据库存储，请注释掉tearDown
   //await emailJob.testConnection();
   //await posgreDB.tearDownPostgreDB();
-  await posgreDB.initializePostgreDB(); // 初始化PostgreSQL数据库
+  await posgreDB.initializeHotelDB(); // 初始化PostgreSQL数据库
   const port = setup.port; // 获取端口配置
   webServer.listen(port, "0.0.0.0", () => { // 启动Web服务器监听
     console.info(`The web server is running in ${setup.env} mode Listening on 0.0.0.0 with port ${port}`);

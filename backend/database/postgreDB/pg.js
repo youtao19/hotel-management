@@ -139,10 +139,25 @@ async function initializePostgreDB() {
   await createIndex();
 }
 
+// 初始化酒店数据库
+async function initializeHotelDB() {
+  //await createDatabase();
+  createPool();
+  // await dropTables();
+  await enableExtensions();
+  await createTables();
+}
+
+
+
+
+
 const db = {
   query,
   connect,
   initializePostgreDB,
+  // 初始化酒店数据库
+  initializeHotelDB,
   getClient,
   tearDownPostgreDB,
   createPool,

@@ -1,0 +1,12 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+该项目的管理工具使用的是: yarn
+
+
+
+
+数据库使用: postgresql

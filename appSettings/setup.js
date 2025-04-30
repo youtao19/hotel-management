@@ -1,3 +1,6 @@
+// 加载环境变量
+require('dotenv').config({ path: './dev.env' });
+
 //check if there is any missing env
 const env = [
   "APP_NAME",
