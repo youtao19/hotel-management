@@ -1,0 +1,20 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+前段使用 VUE.js
+后端使用 JavaScript
+使用 express 
+状态管理使用 pinia
+数据库使用 postgresql
+
+该项目的管理工具使用的是: npm
+
+
+页面路径 ./src/pages
+前段路由 ./src/router
+状态管理 ./src/stores
+
+
+
