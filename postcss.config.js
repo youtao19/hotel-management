@@ -1,9 +1,9 @@
 // https://github.com/michael-ciniawsky/postcss-load-config
 
-import autoprefixer from 'autoprefixer'
-// import rtlcss from 'postcss-rtlcss'
+const autoprefixer = require('autoprefixer')
+// const rtlcss = require('postcss-rtlcss')
 
-export default {
+module.exports = {
   plugins: [
     // https://github.com/postcss/autoprefixer
     autoprefixer({
