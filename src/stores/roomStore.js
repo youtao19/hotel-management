@@ -1,58 +1,51 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useViewStore } from './viewStore'
+import { roomApi } from '../api'
 
 export const useRoomStore = defineStore('room', () => {
   // 引入视图store以访问通用的状态文本和颜色
   const viewStore = useViewStore()
 
-  // 房间数据数组 - 整个应用的唯一数据源
-  const rooms = ref([
-    // 标准间
-    { id: 1, number: '101', type: 'standard', status: 'available', price: 288 },
-    { id: 2, number: '102', type: 'standard', status: 'occupied', currentGuest: '张三', checkOutDate: '2023-06-05', price: 288 },
-    { id: 3, number: '103', type: 'standard', status: 'cleaning', price: 288 },
-    { id: 4, number: '104', type: 'standard', status: 'reserved', price: 288 },
-    { id: 5, number: '105', type: 'standard', status: 'maintenance', price: 288 },
-    { id: 106, number: '106', type: 'standard', status: 'available', price: 288 },
-    { id: 107, number: '107', type: 'standard', status: 'available', price: 288 },
-    { id: 108, number: '108', type: 'standard', status: 'available', price: 288 },
-    { id: 109, number: '109', type: 'standard', status: 'available', price: 288 },
-    { id: 110, number: '110', type: 'standard', status: 'available', price: 288 },
-    // 豪华间
-    { id: 6, number: '201', type: 'deluxe', status: 'available', price: 388 },
-    { id: 7, number: '202', type: 'deluxe', status: 'occupied', currentGuest: '李四', checkOutDate: '2023-06-07', price: 388 },
-    { id: 8, number: '203', type: 'deluxe', status: 'available', price: 388 },
-    { id: 9, number: '204', type: 'deluxe', status: 'reserved', price: 388 },
-    { id: 205, number: '205', type: 'deluxe', status: 'available', price: 388 },
-    { id: 206, number: '206', type: 'deluxe', status: 'available', price: 388 },
-    { id: 207, number: '207', type: 'deluxe', status: 'available', price: 388 },
-    { id: 208, number: '208', type: 'deluxe', status: 'available', price: 388 },
-    // A 座高级豪华间
-    { id: 210, number: 'A201', type: 'deluxe', status: 'available', price: 428 },
-    { id: 211, number: 'A202', type: 'deluxe', status: 'available', price: 428 },
-    { id: 212, number: 'A203', type: 'deluxe', status: 'available', price: 428 },
-    // 套房
-    { id: 10, number: '301', type: 'suite', status: 'available', price: 588 },
-    { id: 11, number: '302', type: 'suite', status: 'occupied', currentGuest: '王五', checkOutDate: '2023-06-10', price: 588 },
-    { id: 12, number: '303', type: 'suite', status: 'cleaning', price: 588 },
-    { id: 304, number: '304', type: 'suite', status: 'available', price: 588 },
-    { id: 305, number: '305', type: 'suite', status: 'available', price: 588 },
-    { id: 306, number: '306', type: 'suite', status: 'available', price: 588 },
-    // 总统套房
-    { id: 401, number: '401', type: 'presidential', status: 'available', price: 1288 },
-    { id: 402, number: '402', type: 'presidential', status: 'available', price: 1288 },
-    { id: 403, number: '403', type: 'presidential', status: 'occupied', currentGuest: '赵六', checkOutDate: '2023-06-15', price: 1588 },
-    // 家庭房
-    { id: 501, number: '501', type: 'family', status: 'available', price: 688 },
-    { id: 502, number: '502', type: 'family', status: 'occupied', currentGuest: '孙七', checkOutDate: '2023-06-12', price: 688 },
-    { id: 503, number: '503', type: 'family', status: 'available', price: 688 },
-    { id: 504, number: '504', type: 'family', status: 'reserved', price: 688 }
-  ])
+  // 房间数据数组
+  const rooms = ref([])
+  // 房间类型
+  const roomTypes = ref([])
+  // 加载状态
+  const loading = ref(false)
+  // 错误信息
+  const error = ref(null)
+
+  // 获取所有房间数据
+  async function fetchAllRooms() {
+    try {
+      loading.value = true
+      error.value = null
+      const response = await roomApi.getAllRooms()
+      console.log('房间数据获取成功:', response)
+      rooms.value = response.data || []
+    } catch (err) {
+      console.error('获取房间数据失败:', err)
+      error.value = '获取房间数据失败'
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // 获取所有房间类型
+  async function fetchRoomTypes() {
+    try {
+      const response = await roomApi.getRoomTypes()
+      console.log('房间类型获取成功:', response)
+      roomTypes.value = response.data || []
+    } catch (err) {
+      console.error('获取房间类型失败:', err)
+    }
+  }
 
   // 获取所有房间计数
   const totalRooms = computed(() => rooms.value.length)
-  
+
   // 按状态获取房间数量
   const countByStatus = computed(() => {
     const counts = {
@@ -62,16 +55,16 @@ export const useRoomStore = defineStore('room', () => {
       cleaning: 0,
       maintenance: 0
     }
-    
+
     rooms.value.forEach(room => {
       if (counts[room.status] !== undefined) {
         counts[room.status]++
       }
     })
-    
+
     return counts
   })
-  
+
   // 按类型获取可用房间数量
   const availableByType = computed(() => {
     const counts = {
@@ -81,13 +74,13 @@ export const useRoomStore = defineStore('room', () => {
       presidential: 0,
       family: 0
     }
-    
+
     rooms.value.forEach(room => {
-      if (room.status === 'available' && counts[room.type] !== undefined) {
-        counts[room.type]++
+      if (room.status === 'available' && counts[room.type_code] !== undefined) {
+        counts[room.type_code]++
       }
     })
-    
+
     return counts
   })
 
@@ -100,13 +93,13 @@ export const useRoomStore = defineStore('room', () => {
     return rooms.value.filter(room => {
       // 如果没有筛选条件，返回所有房间
       if (Object.keys(filters).length === 0) return true
-      
+
       // 筛选房型
-      if (filters.type && room.type !== filters.type) return false
-      
+      if (filters.type && room.type_code !== filters.type) return false
+
       // 筛选状态
       if (filters.status && room.status !== filters.status) return false
-      
+
       // 筛选日期范围
       if (filters.dateRange) {
         // 日期格式应该是 "YYYY-MM-DD to YYYY-MM-DD"
@@ -114,17 +107,17 @@ export const useRoomStore = defineStore('room', () => {
         if (startDateStr && endDateStr) {
           const startDate = new Date(startDateStr)
           const endDate = new Date(endDateStr)
-          
+
           // 检查日期是否有效
           if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
             // 已入住房间，检查退房日期是否在查询开始日期之前
-            if (room.status === 'occupied' && room.checkOutDate) {
-              const checkOutDate = new Date(room.checkOutDate)
+            if (room.status === 'occupied' && room.check_out_date) {
+              const checkOutDate = new Date(room.check_out_date)
               if (checkOutDate < startDate) {
                 return false // 房间在查询日期前已空出
               }
             }
-            
+
             // 已预订房间，应检查预订日期范围，但目前数据没有预订日期范围
             // 这里简化处理，将已预订的房间视为在选择的日期范围内不可用
             if (room.status === 'reserved') {
@@ -133,7 +126,7 @@ export const useRoomStore = defineStore('room', () => {
           }
         }
       }
-      
+
       // 通过所有筛选条件，保留该房间
       return true
     })
@@ -144,8 +137,14 @@ export const useRoomStore = defineStore('room', () => {
    * @param {number} id - 房间ID
    * @returns {Object|null} 房间对象或null
    */
-  function getRoomById(id) {
-    return rooms.value.find(room => room.id === id) || null
+  async function getRoomById(id) {
+    try {
+      const response = await roomApi.getRoomById(id)
+      return response.data || null
+    } catch (err) {
+      console.error(`获取房间ID ${id} 失败:`, err)
+      return null
+    }
   }
 
   /**
@@ -153,8 +152,14 @@ export const useRoomStore = defineStore('room', () => {
    * @param {string} number - 房间号
    * @returns {Object|null} 房间对象或null
    */
-  function getRoomByNumber(number) {
-    return rooms.value.find(room => room.number === number) || null
+  async function getRoomByNumber(number) {
+    try {
+      const response = await roomApi.getRoomByNumber(number)
+      return response.data || null
+    } catch (err) {
+      console.error(`获取房间号 ${number} 失败:`, err)
+      return null
+    }
   }
 
   /**
@@ -163,13 +168,20 @@ export const useRoomStore = defineStore('room', () => {
    * @param {string} status - 新状态
    * @returns {boolean} 更新是否成功
    */
-  function updateRoomStatus(id, status) {
-    const roomIndex = rooms.value.findIndex(room => room.id === id)
-    if (roomIndex === -1) return false
-    
-    rooms.value[roomIndex].status = status
-    console.log(`房间 ${rooms.value[roomIndex].number} 状态已更新为: ${status}`)
-    return true
+  async function updateRoomStatus(id, status) {
+    try {
+      await roomApi.updateRoomStatus(id, status)
+      // 更新本地状态
+      const roomIndex = rooms.value.findIndex(room => room.room_id === id)
+      if (roomIndex !== -1) {
+        rooms.value[roomIndex].status = status
+      }
+      console.log(`房间 ID ${id} 状态已更新为: ${status}`)
+      return true
+    } catch (err) {
+      console.error(`更新房间状态失败:`, err)
+      return false
+    }
   }
 
   /**
@@ -177,12 +189,8 @@ export const useRoomStore = defineStore('room', () => {
    * @param {number} id - 房间ID
    * @returns {boolean} 操作是否成功
    */
-  function checkOutRoom(id) {
-    const room = getRoomById(id)
-    if (!room) return false
-    
-    console.log(`退房操作：房间 ${room.number} 从 ${room.status} 状态变为 cleaning`)
-    return updateRoomStatus(id, 'cleaning')
+  async function checkOutRoom(id) {
+    return await updateRoomStatus(id, 'cleaning')
   }
 
   /**
@@ -190,12 +198,8 @@ export const useRoomStore = defineStore('room', () => {
    * @param {number} id - 房间ID
    * @returns {boolean} 操作是否成功
    */
-  function setMaintenance(id) {
-    const room = getRoomById(id)
-    if (!room) return false
-    
-    console.log(`维修操作：房间 ${room.number} 从 ${room.status} 状态变为 maintenance`)
-    return updateRoomStatus(id, 'maintenance')
+  async function setMaintenance(id) {
+    return await updateRoomStatus(id, 'maintenance')
   }
 
   /**
@@ -203,12 +207,8 @@ export const useRoomStore = defineStore('room', () => {
    * @param {number} id - 房间ID
    * @returns {boolean} 操作是否成功
    */
-  function clearMaintenance(id) {
-    const room = getRoomById(id)
-    if (!room) return false
-    
-    console.log(`完成维修操作：房间 ${room.number} 从 maintenance 状态变为 available`)
-    return updateRoomStatus(id, 'available')
+  async function clearMaintenance(id) {
+    return await updateRoomStatus(id, 'available')
   }
 
   /**
@@ -216,12 +216,8 @@ export const useRoomStore = defineStore('room', () => {
    * @param {number} id - 房间ID
    * @returns {boolean} 操作是否成功
    */
-  function clearCleaning(id) {
-    const room = getRoomById(id)
-    if (!room) return false
-    
-    console.log(`完成清洁操作：房间 ${room.number} 从 cleaning 状态变为 available`)
-    return updateRoomStatus(id, 'available')
+  async function clearCleaning(id) {
+    return await updateRoomStatus(id, 'available')
   }
 
   /**
@@ -229,12 +225,8 @@ export const useRoomStore = defineStore('room', () => {
    * @param {number} id - 房间ID
    * @returns {boolean} 操作是否成功
    */
-  function reserveRoom(id) {
-    const room = getRoomById(id)
-    if (!room) return false
-    
-    console.log(`预订操作：房间 ${room.number} 从 ${room.status} 状态变为 reserved`)
-    return updateRoomStatus(id, 'reserved')
+  async function reserveRoom(id) {
+    return await updateRoomStatus(id, 'reserved')
   }
 
   /**
@@ -244,17 +236,21 @@ export const useRoomStore = defineStore('room', () => {
    * @param {string} checkOutDate - 预计退房日期
    * @returns {boolean} 操作是否成功
    */
-  function occupyRoom(id, guestName, checkOutDate) {
-    const roomIndex = rooms.value.findIndex(room => room.id === id)
-    if (roomIndex === -1) return false
-    
-    const oldStatus = rooms.value[roomIndex].status
-    rooms.value[roomIndex].status = 'occupied'
-    rooms.value[roomIndex].currentGuest = guestName
-    rooms.value[roomIndex].checkOutDate = checkOutDate
-    
-    console.log(`入住操作：房间 ${rooms.value[roomIndex].number} 从 ${oldStatus} 状态变为 occupied，客人: ${guestName}，预计退房日期: ${checkOutDate}`)
-    return true
+  async function occupyRoom(id, guestName, checkOutDate) {
+    try {
+      await roomApi.updateRoomStatus(id, 'occupied')
+      // 更新本地状态
+      const roomIndex = rooms.value.findIndex(room => room.room_id === id)
+      if (roomIndex !== -1) {
+        rooms.value[roomIndex].status = 'occupied'
+        rooms.value[roomIndex].current_guest = guestName
+        rooms.value[roomIndex].check_out_date = checkOutDate
+      }
+      return true
+    } catch (err) {
+      console.error('房间入住失败:', err)
+      return false
+    }
   }
 
   /**
@@ -262,15 +258,16 @@ export const useRoomStore = defineStore('room', () => {
    * @param {Object} room - 房间对象
    * @returns {boolean} 添加是否成功
    */
-  function addRoom(room) {
-    // 检查房间号是否已存在
-    const exists = rooms.value.some(r => r.number === room.number)
-    if (exists) return false
-    
-    // 添加新房间
-    rooms.value.push(room)
-    console.log(`添加新房间: ${room.number}，类型: ${room.type}，状态: ${room.status}，价格: ${room.price}`)
-    return true
+  async function addRoom(room) {
+    try {
+      const response = await roomApi.addRoom(room)
+      // 添加到本地状态
+      rooms.value.push(response.data)
+      return true
+    } catch (err) {
+      console.error('添加房间失败:', err)
+      return false
+    }
   }
 
   /**
@@ -279,16 +276,16 @@ export const useRoomStore = defineStore('room', () => {
    * @returns {Array} 房间选项数组 [{label, value, type, price}]
    */
   function getAvailableRoomOptions(type = null) {
-    const filtered = type 
+    const filtered = type
       ? filterRooms({ type, status: 'available' })
       : filterRooms({ status: 'available' })
-    
+
     return filtered.map(room => ({
-      label: `${room.number} (${viewStore.getRoomTypeName(room.type)})`,
-      value: room.number,
-      type: room.type,
+      label: `${room.room_number} (${viewStore.getRoomTypeName(room.type_code)})`,
+      value: room.room_number,
+      type: room.type_code,
       price: room.price,
-      id: room.id
+      id: room.room_id
     }))
   }
 
@@ -298,13 +295,13 @@ export const useRoomStore = defineStore('room', () => {
    */
   function getRoomTypeOptionsWithCount() {
     const typeOptions = viewStore.roomTypeOptions.filter(option => option.value !== null)
-    
+
     return typeOptions.map(option => {
       const availableCount = filterRooms({
         type: option.value,
         status: 'available'
       }).length
-      
+
       return {
         ...option,
         availableCount
@@ -318,8 +315,8 @@ export const useRoomStore = defineStore('room', () => {
    * @returns {number} 该类型的可用房间数量
    */
   function getAvailableRoomCountByType(type) {
-    return rooms.value.filter(room => 
-      room.type === type && room.status === 'available'
+    return rooms.value.filter(room =>
+      room.type_code === type && room.status === 'available'
     ).length
   }
 
@@ -335,11 +332,32 @@ export const useRoomStore = defineStore('room', () => {
     return 'positive'
   }
 
+  // 初始加载数据
+  function initialize() {
+    console.log('开始初始化房间数据...')
+    // 使用Promise.all同时加载房间数据和房间类型
+    Promise.all([fetchAllRooms(), fetchRoomTypes()])
+      .then(() => {
+        console.log('房间数据初始化完成')
+      })
+      .catch(err => {
+        console.error('房间数据初始化失败:', err)
+      })
+  }
+
+  // 立即初始化，不等待组件挂载
+  initialize()
+
   return {
     rooms,
+    roomTypes,
+    loading,
+    error,
     totalRooms,
     countByStatus,
     availableByType,
+    fetchAllRooms,
+    fetchRoomTypes,
     filterRooms,
     getRoomById,
     getRoomByNumber,
@@ -356,4 +374,4 @@ export const useRoomStore = defineStore('room', () => {
     getAvailableRoomCountByType,
     getRoomCountColor
   }
-}) 
+})
