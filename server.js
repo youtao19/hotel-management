@@ -16,8 +16,8 @@ if (setup.env === "dev") {
   const history = require('connect-history-api-fallback'); // 引入connect-history-api-fallback中间件，用于处理前端路由
   const cors = require('cors'); // 引入跨域资源共享中间件
   app.use(cors({
-    origin: 'http://localhost:8080', // Update with your frontend origin // 更新为您的前端源
-    credentials: true, // 允许跨域请求携带凭证
+    origin: '*', // 允许任何来源
+    credentials: false // 与通配符origin兼容需要设置为false
   }));
   app.use(history()); // 使用history中间件
 }
@@ -82,18 +82,25 @@ async function bootup() { // 启动函数
   app.use(express.text({ limit: setup.reqSizeLimit })); // 配置文本请求体解析
 
   const userRoute = require("./backend/routes/userRoute"); // 引入用户路由模块
-  app.use("/api/user", userRoute); // 挂载用户API路由
-
   const authRoute = require("./backend/routes/authRoute"); // 引入认证路由模块
+  const orderRoute = require("./backend/routes/orderRoute"); // 引入订单路由
+
+  // 添加房间和房型路由
+  const roomRoute = require("./backend/routes/roomRoute"); // 引入房间路由
+  const roomTypeRoute = require("./backend/routes/roomTypeRoute"); // 引入房型路由
+
+  app.use("/api/user", userRoute); // 挂载用户API路由
   app.use("/api/auth", authRoute); // 挂载认证API路由
+  app.use("/api/orders", orderRoute); // 使用订单路由
 
-  // 修改或添加酒店管理系统路由
+  // 注册房间和房型API路由
+  app.use("/api/rooms", roomRoute); // 挂载房间API路由
+  app.use("/api/room-types", roomTypeRoute); // 挂载房型API路由
+
+  // 其他酒店管理系统路由
   // const hotelRoute = require("./backend/routes/hotelRoute");
-  // const roomRoute = require("./backend/routes/roomRoute");
   // const bookingRoute = require("./backend/routes/bookingRoute");
-
   // app.use("/api/hotel", hotelRoute);
-  // app.use("/api/room", roomRoute);
   // app.use("/api/booking", bookingRoute);
 
   app.use(express.static(staticFileRoot)); // 配置静态文件服务

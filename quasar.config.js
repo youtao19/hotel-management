@@ -59,7 +59,7 @@ export default defineConfig((/* ctx */) => {
 
       // extendViteConf (viteConf) {},
       // viteVuePluginOptions: {},
-      
+
       // vitePlugins: [
       //   [ 'package-name', { ..pluginOptions.. }, { server: true, client: true } ]
       // ]
@@ -67,16 +67,16 @@ export default defineConfig((/* ctx */) => {
 
     // Full list of options: https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#devserver
     devServer: {
-      // https: true,
+      // https: true
       open: true, // opens browser window automatically
       proxy: {
-        // 将所有以 /api 开头的请求代理到后端服务器
-        // 假设你的后端服务器运行在 http://localhost:3001
+        // 代理所有 /api 请求到后端服务器
         '/api': {
-          target: 'http://localhost:9000', // 请确保这里的端口号与你的后端服务器端口一致
+          target: 'http://localhost:3000',
           changeOrigin: true,
-          // 可选：如果你的后端路由没有 /api 前缀，可以用 rewrite
-          // rewrite: (path) => path.replace(/^\/api/, '') 
+          pathRewrite: {
+            '^/api': '/api'
+          }
         }
       }
     },

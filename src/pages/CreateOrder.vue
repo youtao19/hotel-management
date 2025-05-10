@@ -367,17 +367,19 @@
 
   <script setup>
   import { ref, onMounted, computed, nextTick, watch } from 'vue'
-  import { date } from 'quasar'
+  import { date, useQuasar } from 'quasar'
   import { useRouter } from 'vue-router'
   import { useOrderStore } from '../stores/orderStore' // 导入订单 store
   import { useRoomStore } from '../stores/roomStore' // 导入房间 store
   import { useViewStore } from '../stores/viewStore' // 导入视图 store
+  import { api } from 'boot/axios' // Assuming api is exported from boot/axios.js
 
   // 获取路由和store
   const router = useRouter()
   const orderStore = useOrderStore()
   const roomStore = useRoomStore()
   const viewStore = useViewStore()
+  const $q = useQuasar() // For notifications
 
   /**
    * 生成唯一的订单号
@@ -409,7 +411,12 @@
   const today = date.formatDate(new Date(), 'YYYY-MM-DD')
 
   // 订单状态选项数组 - 从viewStore获取
-  const statusOptions = viewStore.orderStatusOptions.filter(option => option.value !== null)
+  const statusOptions = [
+    { label: '待入住', value: 'pending' },
+    { label: '已入住', value: 'checked-in' },
+    { label: '已退房', value: 'checked-out' },
+    { label: '已取消', value: 'cancelled' }
+  ]
 
   // 订单来源选项数组
   const sourceOptions = [
@@ -426,7 +433,7 @@
   // 订单表单数据 - 使用响应式引用，包含所有订单字段
   const orderData = ref({
     orderNumber: generateOrderNumber(),  // 自动生成订单号
-    status: 'pending',                   // 默认状态为"待入住"
+    status: 'pending',                   // 默认状态为"待入住"，使用英文代码
     source: 'front_desk',                // 默认订单来源为前台录入
     sourceNumber: '',                    // 来源编号
     guestName: '',                       // 客人姓名
@@ -437,7 +444,7 @@
     checkInDate: date.formatDate(getCurrentTimeToMinute(), 'YYYY-MM-DD'),        // 入住日期，默认今天
     checkOutDate: date.formatDate(date.addToDate(getCurrentTimeToMinute(), { days: 1 }), 'YYYY-MM-DD'), // 离店日期，默认明天
     deposit: 100,                        // 押金，默认100元
-    paymentMethod: null,                 // 支付方式
+    paymentMethod: 'cash',               // 支付方式，默认现金
     roomPrice: 0,                        // 房间价格
     remarks: ''                          // 备注信息
   })
@@ -591,72 +598,128 @@
 
   /**
    * 提交订单函数
-   * 收集表单数据，添加到订单store，并导航到订单列表页面
+   * 收集表单数据，调用后端API创建订单，并导航到订单列表页面
    */
-  function submitOrder() {
+  async function submitOrder() { // Made function async
     // 获取当前时间
     const now = getCurrentTimeToMinute()
 
     // 判断是否选择了房间
     if (!orderData.value.roomNumber) {
-      alert('请选择房间')
+      $q.notify({
+        type: 'negative',
+        message: '请选择房间',
+        position: 'top'
+      });
       return
     }
 
-    // 获取选择的房间
+    // 获取选择的房间 (client-side check before API call)
     const selectedRoom = roomStore.getRoomByNumber(orderData.value.roomNumber)
     if (!selectedRoom) {
-      alert('所选房间不可用，请重新选择')
+      $q.notify({
+        type: 'negative',
+        message: '所选房间数据不存在，请重新选择',
+        position: 'top'
+      });
       return
     }
 
-    // 确认选择的房间确实是可用状态
+    // 确认选择的房间确实是可用状态 (client-side check)
+    // Backend should also validate this, but good to have a client-side check
     if (selectedRoom.status !== 'available') {
-      alert(`房间 ${selectedRoom.number} 当前状态为 ${viewStore.getStatusText(selectedRoom.status)}，无法预订`)
+      $q.notify({
+        type: 'negative',
+        message: `房间 ${selectedRoom.number} 当前状态为 ${viewStore.getStatusText(selectedRoom.status)}，无法预订`,
+        position: 'top'
+      });
       return
     }
 
-    // 根据订单状态处理房间
-    if (orderData.value.status === 'pending') {
-      // 如果是待入住状态，将房间设为已预订
-      roomStore.reserveRoom(selectedRoom.id)
-    } else if (orderData.value.status === 'checked-in') {
-      // 如果是已入住状态，将房间设为已入住
-      roomStore.occupyRoom(
-        selectedRoom.id,
-        orderData.value.guestName,
-        orderData.value.checkOutDate
-      )
-    } else if (orderData.value.status === 'checked-out') {
-      // 如果是已退房状态，将房间设为清洁中
-      roomStore.checkOutRoom(selectedRoom.id)
-    } else if (orderData.value.status === 'cancelled') {
-      // 如果是已取消状态，保持房间可用状态
-      // 不需要改变房间状态
-    }
-
-    // 创建包含所有字段的订单对象
+    // 创建包含所有字段的订单对象，用于发送到后端
+    // Field names should match what backend `orderRoute.js` expects in `req.body`
     const orderToSubmit = {
       ...orderData.value,
+      // 确保状态值是英文代码，而不是中文显示文本
+      status: orderData.value.status,
+      // 确保日期格式正确 (YYYY-MM-DD)
+      checkInDate: date.formatDate(orderData.value.checkInDate, 'YYYY-MM-DD'),
+      checkOutDate: date.formatDate(orderData.value.checkOutDate, 'YYYY-MM-DD'),
       createTime: date.formatDate(now, 'YYYY-MM-DD HH:mm:ss'),
       actualCheckInTime: orderData.value.status === 'checked-in' ?
         date.formatDate(now, 'YYYY-MM-DD HH:mm:ss') : null,
       actualCheckOutTime: orderData.value.status === 'checked-out' ?
         date.formatDate(now, 'YYYY-MM-DD HH:mm:ss') : null,
-      // 确保支付方式是对象格式
+      // 确保支付方式是字符串
       paymentMethod: typeof orderData.value.paymentMethod === 'object' ?
-        orderData.value.paymentMethod :
-        { value: orderData.value.paymentMethod, label: viewStore.getPaymentMethodName(orderData.value.paymentMethod) }
+        orderData.value.paymentMethod.value :
+        (orderData.value.paymentMethod || 'cash'),
+      // 确保数值字段被转换为数字
+      roomPrice: Number(orderData.value.roomPrice),
+      deposit: Number(orderData.value.deposit),
+    };
+
+    // 打印提交的数据，用于调试
+    console.log('提交的订单数据:', orderToSubmit);
+
+    try {
+      // 调用后端API创建订单
+      const response = await api.post('/api/orders', orderToSubmit);
+
+      if (response.data && response.data.order) {
+        // 订单创建成功
+        // 可选：将后端返回的订单添加到本地store
+        orderStore.addOrder(response.data.order);
+
+        // 重要提示：房间状态的更新 (e.g., setting room to 'reserved' or 'occupied')
+        // 应该由后端处理，或者通过后续的API调用来完成。
+        // 当前的 /api/orders 端点仅创建订单，不修改房间状态。
+        // 原先的 roomStore.reserveRoom(), occupyRoom() 等调用已移除。
+
+        $q.notify({
+          type: 'positive',
+          message: response.data.message || '订单创建成功！',
+          position: 'top'
+        });
+
+        // 导航到订单列表页面
+        router.push('/ViewOrders');
+      } else {
+        // 响应成功但数据格式不符合预期
+        $q.notify({
+          type: 'warning',
+          message: '订单创建请求成功，但服务器响应异常。' + (response.data.message || ''),
+          position: 'top'
+        });
+      }
+    } catch (error) {
+      console.error('订单创建失败:', error);
+      let errorMessage = '订单创建失败，请稍后再试。';
+      if (error.response && error.response.data) {
+        console.log('服务器返回的详细错误:', error.response.data);
+
+        // 更清晰地展示错误信息
+        if (error.response.data.errors && Array.isArray(error.response.data.errors)) {
+          // 在控制台中显示每个验证错误
+          error.response.data.errors.forEach((err, index) => {
+            console.log(`错误 ${index + 1}:`, err);
+          });
+
+          // 格式化错误消息
+          errorMessage = '表单验证失败：\n' +
+            error.response.data.errors.map(e => `- ${e.msg}`).join('\n');
+        } else if (error.response.data.message) {
+          errorMessage = error.response.data.message;
+        }
+      }
+      $q.notify({
+        type: 'negative',
+        message: errorMessage,
+        position: 'top',
+        timeout: 10000, // 延长显示时间
+        multiLine: true // 允许多行显示
+      });
     }
-
-    // 添加到订单 store
-    orderStore.addOrder(orderToSubmit)
-
-    // 显示成功提示
-    alert('订单创建成功！')
-
-    // 导航到订单列表页面
-    router.push('/ViewOrders')
   }
 
   // 组件挂载时执行的钩子函数

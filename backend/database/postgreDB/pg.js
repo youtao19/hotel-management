@@ -1,165 +1,224 @@
 "use strict";
-const postgre = require("pg");
+const { Pool } = require("pg");
 const setup = require("../../../appSettings/setup");
-let pool = {};
+const fs = require('fs');
+const path = require('path');
 
-const connOpt1 = {
+// 数据库连接配置
+const dbConfig = {
   user: setup.db.postgres.user,
-  database: "postgres",
   password: setup.db.postgres.pw,
-  port: setup.db.postgres.port,
   host: setup.db.postgres.host,
-  // 扩展属性
-  max: 30, // 连接池最大连接数
-  idleTimeoutMillis: 5000, // 连接最大空闲时间 5s
+  port: setup.db.postgres.port,
+  database: setup.db.postgres.name,
+  max: 20, // 连接池最大连接数
+  idleTimeoutMillis: 30000, // 连接最大空闲时间 30s
+  connectionTimeoutMillis: 10000 // 连接超时时间 10s
 };
 
-const connOpt2 = { ...connOpt1 };
-connOpt2.database = setup.db.postgres.name;
+// 创建连接池实例
+let pool = null;
 
+/**
+ * 初始化连接池
+ */
+function createPool() {
+  if (!pool) {
+    pool = new Pool(dbConfig);
+
+    // 添加错误处理
+    pool.on('error', (err, client) => {
+      console.error('PostgreSQL连接池发生错误:', err);
+    });
+
+    console.log('PostgreSQL连接池已创建');
+  }
+  return pool;
+}
+
+/**
+ * 执行SQL查询
+ * @param {string} text - SQL语句
+ * @param {Array} params - 查询参数
+ * @returns {Promise<Object>} 查询结果
+ */
 async function query(text, params) {
+  if (!pool) createPool();
+  const start = Date.now();
   const res = await pool.query(text, params);
+  const duration = Date.now() - start;
+
+  // 记录较慢的查询以便优化
+  if (duration > 500) {
+    console.log('慢查询:', { text, duration, rows: res.rowCount });
+  }
+
   return res;
 }
 
-async function connect(){
-  const client = await pool.connect();
-  return client;
-}
-
+/**
+ * 获取客户端连接
+ * @returns {Promise<PoolClient>} 客户端连接
+ */
 async function getClient() {
+  if (!pool) createPool();
   const client = await pool.connect();
-  //in dev mode, we check to see if there is any client leak
-  //this should be disabled in production
-  //since sensitive data could leak through the log
-  if (env.runningMode === "dev") {
-    const query = client.query;
-    const release = client.release;
-    // set a timeout of 5 seconds, after which we will log this client's last query
-    const timeout = setTimeout(() => {
-      console.error("A client has been checked out for more than 5 seconds!");
-      console.error(
-        `The last executed query on this client was: ${client.lastQuery}`
-      );
-    }, 5000);
-    // monkey patch the query method to keep track of the last query executed
-    client.query = (...args) => {
-      client.lastQuery = args;
-      return query.apply(client, args);
-    };
-    client.release = () => {
-      // clear our timeout
-      clearTimeout(timeout);
-      // set the methods back to their old un-monkey-patched version
-      client.query = query;
-      client.release = release;
-      return release.apply(client);
-    };
-  }
+
+  // 添加查询方法封装，方便记录和管理
+  const originalQuery = client.query;
+  client.query = async (text, params) => {
+    try {
+      return await originalQuery.call(client, text, params);
+    } catch (err) {
+      console.error('查询出错:', err.message);
+      throw err;
+    }
+  };
+
   return client;
 }
-//createPool function is used when the postgres is running inside docker
-//if you install postgres natively inside os
-//use createDatabase
-function createPool() {
-  pool = new postgre.Pool(connOpt2);
-}
 
-//this createDatabase is deprecated
-async function createDatabase() {
-  const query = {
-    text: "select pg_database.datname from pg_database where pg_database.datname=$1",
-    values: [connOpt2.database],
-  };
-  const posgrePool = new postgre.Pool(connOpt1);
-  const dbFound = await posgrePool.query(query.text, query.values);
-  if (dbFound.rowCount === 0) {
-    //this means we need to create app database now
-    const createDBQuery = {
-      text: "create database " + connOpt2.database,
-    };
-    const createResult = await posgrePool.query(createDBQuery.text);
-  }
+// 定义酒店系统需要的表
+const tables = [
+  require('./tables/account'),    // 账户表
+  require('./tables/order'),      // 订单表
+  // 以下模块暂未创建，等需要时再添加
+  require('./tables/room'),     // 房间表
+  require('./tables/room_type'), // 房型表
+  // require('./tables/guest'),    // 客人信息表
+  // require('./tables/payment')   // 支付记录表
+].filter(Boolean); // 确保只加载存在的表
 
-  await posgrePool.end();
-  pool = new postgre.Pool(connOpt2);
-}
-
-const extentions = ["ltree", "pg_trgm"];
-const createExtensionQueries = extentions.map((extension) => {
-  return `CREATE EXTENSION IF NOT EXISTS ${extension};`;
-});
-async function enableExtensions() {
-  for (let query of createExtensionQueries) {
-    await pool.query(query);
-  }
-}
-
-const tables = [];
-const account = require("./tables/account.js");
-//table order here is important
-//since we have foreign key reference other table
-tables.push(account);
-
+/**
+ * 创建所有数据库表
+ */
 async function createTables() {
   for (let table of tables) {
-    console.log(`create table : ${table.tableName}`);
-    await pool.query(table.createQuery);
-  }
-}
+    if (table.createQuery) {
+      console.log(`创建表: ${table.tableName}`);
+      await query(table.createQuery);
 
-async function dropTables() {
-  for (let table of tables) {
-    await pool.query(table.dropQuery);
-  }
-}
-
-async function createIndex() {
-  for (let table of tables) {
-    if (table.createIndexQueryStrings) {
-      for (let indexQuery of table.createIndexQueryStrings) {
-        await pool.query(indexQuery);
+      // 创建索引
+      if (table.createIndexQueryStrings) {
+        for (let indexQuery of table.createIndexQueryStrings) {
+          await query(indexQuery);
+        }
       }
     }
   }
 }
-async function tearDownPostgreDB() {
-  createPool();
-  //await createDatabase();
-  await dropTables();
-  await pool.end();
+
+/**
+ * 启用数据库扩展
+ */
+async function enableExtensions() {
+  const extensions = ["ltree", "pg_trgm"]; // 常用的PostgreSQL扩展
+
+  for (let extension of extensions) {
+    try {
+      await query(`CREATE EXTENSION IF NOT EXISTS ${extension};`);
+      console.log(`扩展 ${extension} 已启用`);
+    } catch (err) {
+      console.warn(`启用扩展 ${extension} 失败:`, err.message);
+    }
+  }
 }
 
-async function initializePostgreDB() {
-  //await createDatabase();
-  createPool();
-  // await dropTables();
-  await enableExtensions();
-  await createTables();
-  await createIndex();
+/**
+ * 执行SQL脚本文件
+ * @param {string} filePath - SQL文件路径
+ */
+async function executeSqlFile(filePath) {
+  try {
+    console.log(`执行SQL文件: ${filePath}`);
+    const sqlContent = fs.readFileSync(filePath, 'utf8');
+
+    // 移除注释和将文件内容分割成单独的SQL语句
+    const cleanedSql = sqlContent
+      .replace(/--.*$/gm, '') // 移除单行注释
+      .replace(/\/\*[\s\S]*?\*\//g, ''); // 移除多行注释
+
+    // 按分号分割SQL语句
+    const statements = cleanedSql.split(';')
+      .map(stmt => stmt.trim())
+      .filter(stmt => stmt.length > 0 && !stmt.startsWith('\\'));
+
+    // 逐条执行SQL语句
+    for (let stmt of statements) {
+      // 跳过PostgreSQL特定命令
+      if (stmt.toLowerCase().includes('create database') ||
+          stmt.toLowerCase().includes('\\') ||
+          stmt.trim().startsWith('\\')) {
+        console.log('跳过不支持的命令:', stmt.substring(0, 50) + (stmt.length > 50 ? '...' : ''));
+        continue;
+      }
+
+      console.log('执行SQL语句:', stmt.substring(0, 100) + (stmt.length > 100 ? '...' : ''));
+      try {
+        await query(stmt);
+      } catch (err) {
+        console.error(`执行语句出错: ${err.message}`);
+        // 判断是否应该继续执行
+        // 如果是关键的创建表语句失败了，可能需要中断整个过程
+        if (stmt.toLowerCase().includes('create table') && !stmt.toLowerCase().includes('if not exists')) {
+          throw err;
+        }
+      }
+    }
+
+    console.log(`SQL文件 ${filePath} 执行完成`);
+  } catch (err) {
+    console.error(`执行SQL文件 ${filePath} 出错:`, err);
+    throw err;
+  }
 }
 
-// 初始化酒店数据库
+/**
+ * 初始化酒店管理系统数据库
+ */
 async function initializeHotelDB() {
-  //await createDatabase();
-  createPool();
-  // await dropTables();
-  await enableExtensions();
-  await createTables();
+  try {
+    createPool();
+    await enableExtensions();
+    await createTables();
+
+    // 执行初始化SQL文件
+    const dbInitFilePath = path.join(__dirname, '../../../hotel_db_init.sql');
+    if (fs.existsSync(dbInitFilePath)) {
+      try {
+        await executeSqlFile(dbInitFilePath);
+        console.log('酒店数据库初始化SQL文件执行成功');
+      } catch (sqlErr) {
+        console.error('执行初始化SQL文件失败，将继续使用基本表结构:', sqlErr);
+      }
+    } else {
+      console.log('未找到初始化SQL文件，将仅使用基本表结构');
+    }
+
+    console.log('酒店管理系统数据库初始化完成');
+    return true;
+  } catch (err) {
+    console.error('数据库初始化失败:', err);
+    return false;
+  }
 }
 
+/**
+ * 关闭连接池
+ */
+async function closePool() {
+  if (pool) {
+    await pool.end();
+    pool = null;
+    console.log('数据库连接池已关闭');
+  }
+}
 
-
-
-
-const db = {
-  query,
-  connect,
-  initializePostgreDB,
-  // 初始化酒店数据库
-  initializeHotelDB,
-  getClient,
-  tearDownPostgreDB,
-  createPool,
+// 导出数据库操作模块
+module.exports = {
+  query,           // 执行SQL查询
+  getClient,       // 获取客户端连接
+  createPool,      // 创建连接池
+  initializeHotelDB, // 初始化数据库
+  closePool        // 关闭连接池
 };
-module.exports = db;
