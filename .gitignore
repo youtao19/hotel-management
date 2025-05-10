@@ -33,3 +33,9 @@ yarn-error.log*
 .env.local*
 
 *.lock
+
+jsconfig.json 
+
+package-lock.json
+
+package.json
