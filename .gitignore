@@ -34,8 +34,4 @@ yarn-error.log*
 
 *.lock
 
-jsconfig.json 
 
-package-lock.json
-
-package.json
