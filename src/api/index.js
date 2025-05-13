@@ -24,6 +24,7 @@ api.interceptors.request.use(
 // 响应拦截器
 api.interceptors.response.use(
   response => {
+    // 直接返回响应数据，无需解析
     return response.data
   },
   error => {

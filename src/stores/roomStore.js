@@ -23,7 +23,7 @@ export const useRoomStore = defineStore('room', () => {
       error.value = null
       const response = await roomApi.getAllRooms()
       console.log('房间数据获取成功:', response)
-      rooms.value = response.data || []
+      rooms.value = response || []
     } catch (err) {
       console.error('获取房间数据失败:', err)
       error.value = '获取房间数据失败'
@@ -37,7 +37,7 @@ export const useRoomStore = defineStore('room', () => {
     try {
       const response = await roomApi.getRoomTypes()
       console.log('房间类型获取成功:', response)
-      roomTypes.value = response.data || []
+      roomTypes.value = response || []
     } catch (err) {
       console.error('获取房间类型失败:', err)
     }

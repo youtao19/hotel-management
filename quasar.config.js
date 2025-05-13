@@ -69,6 +69,7 @@ export default defineConfig((/* ctx */) => {
     devServer: {
       // https: true
       open: true, // opens browser window automatically
+      port: 9000, // 前端开发服务器端口
       proxy: {
         // 代理所有 /api 请求到后端服务器
         '/api': {

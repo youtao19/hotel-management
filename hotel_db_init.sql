@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS room_types (
 -- 房间表 (rooms)
 CREATE TABLE IF NOT EXISTS rooms (
     room_id INT PRIMARY KEY,
-    room_number VARCHAR(10) NOT NULL UNIQUE,
+    room_number VARCHAR(20) NOT NULL UNIQUE,
     type_code VARCHAR(20) NOT NULL,
     status VARCHAR(20) NOT NULL,
     price DECIMAL(10,2) NOT NULL,
@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS orders (
     phone VARCHAR(20) NOT NULL,
     id_number VARCHAR(30) NOT NULL,
     room_type VARCHAR(20) NOT NULL,
-    room_number VARCHAR(10) NOT NULL,
+    room_number VARCHAR(20) NOT NULL,
     check_in_date DATE NOT NULL,
     check_out_date DATE NOT NULL,
     status VARCHAR(20) NOT NULL,
@@ -51,7 +51,8 @@ VALUES
     ('deluxe', '豪华间', 388.00, '豪华装修双人间，配备高档设施', false),
     ('suite', '套房', 588.00, '独立客厅与卧室，尊享舒适空间', false),
     ('presidential', '总统套房', 1288.00, '顶级豪华套房，配备全套高端设施与服务', false),
-    ('family', '家庭房', 688.00, '适合家庭入住的宽敞房间，配备儿童设施', false);
+    ('family', '家庭房', 688.00, '适合家庭入住的宽敞房间，配备儿童设施', false)
+ON CONFLICT DO NOTHING;
 
 -- 插入房间数据
 INSERT INTO rooms (room_id, room_number, type_code, status, price)
@@ -100,7 +101,8 @@ VALUES
     (501, '501', 'family', 'available', 688.00),
     (502, '502', 'family', 'occupied', 688.00),
     (503, '503', 'family', 'available', 688.00),
-    (504, '504', 'family', 'reserved', 688.00);
+    (504, '504', 'family', 'reserved', 688.00)
+ON CONFLICT DO NOTHING;
 
 -- 插入订单数据
 INSERT INTO orders (
@@ -138,4 +140,11 @@ INSERT INTO orders (
         'family', '502', '2024-04-20', '2024-04-25', 'confirmed',
         'bank_transfer', 3440.00, 688.00, '2024-04-10 11:10:00',
         NULL, NULL, '家庭出游，需要儿童设施'
-    ); 
+    )
+ON CONFLICT DO NOTHING;
+
+-- 修改房间表的room_number字段长度
+ALTER TABLE rooms ALTER COLUMN room_number TYPE VARCHAR(20);
+
+-- 修改订单表的room_number字段长度
+ALTER TABLE orders ALTER COLUMN room_number TYPE VARCHAR(20); 

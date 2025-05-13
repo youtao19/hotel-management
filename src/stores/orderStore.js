@@ -18,7 +18,7 @@ export const useOrderStore = defineStore('order', () => {
       console.log('开始获取订单数据...')
       const response = await orderApi.getAllOrders()
       console.log('订单数据获取成功:', response)
-      orders.value = response.data || []
+      orders.value = response || []
     } catch (err) {
       console.error('获取订单数据失败:', err)
       error.value = '获取订单数据失败'

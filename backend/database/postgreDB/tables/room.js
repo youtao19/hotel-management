@@ -11,7 +11,7 @@ const tableName = "rooms";
 const createQuery = `
   CREATE TABLE IF NOT EXISTS ${tableName} (
     room_id INT PRIMARY KEY,
-    room_number VARCHAR(10) NOT NULL UNIQUE,
+    room_number VARCHAR(20) NOT NULL UNIQUE,
     type_code VARCHAR(20) NOT NULL,
     status VARCHAR(20) NOT NULL,
     price DECIMAL(10,2) NOT NULL,
