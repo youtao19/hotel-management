@@ -26,10 +26,10 @@ const webServer = require("http").Server(app); // 创建HTTP服务器
 const path = require("path"); // 引入路径处理模块
 const session = require("express-session"); // 引入会话管理中间件
 
-const posgreDB = require("./backend/database/postgreDB/pg"); // 引入PostgreSQL数据库模块
+const posgreDB = require("./backend/database/postgreDB/pg-test"); // 引入PostgreSQL数据库模块
 // const redisDB = require("./backend/database/redis/redis"); // 引入Redis数据库模块
 // let RedisStore = require("connect-redis")(session); // 创建Redis会话存储
-let staticFileRoot = path.join(__dirname, "front-end", "build"); // 设置静态文件根目录为生产环境构建目录
+let staticFileRoot = path.join(__dirname, "front-end", "dist"); // 设置静态文件根目录为生产环境构建目录
 if (setup.env === "dev") {
   staticFileRoot = path.join(__dirname, "front-end", "public"); // 开发环境使用public目录作为静态文件根目录
 }
@@ -57,9 +57,9 @@ async function bootup() { // 启动函数
     resave: false, // 不强制保存未修改的会话
     rolling: false, // 不更新会话到期时间
     cookie: {
-      secure: false, // 不要求使用HTTPS
+      secure: setup.env !== "dev", // 生产环境要求HTTPS，开发环境不要求
       maxAge: setup.cookieMaxAge, // Cookie最大存活时间
-      sameSite: "none" // 跨站点Cookie设置
+      sameSite: setup.env !== "dev" ? "lax" : "none" // 根据环境设置SameSite
     },
     saveUninitialized: false, // 不保存未初始化的会话
   };
@@ -68,7 +68,7 @@ async function bootup() { // 启动函数
   if (setup.env != "dev") { // 非开发环境的特殊配置
     sessionOptions.proxy = true; // 启用代理
     app.set("trust proxy", true); // 设置Express信任代理
-    sessionOptions.cookie.sameSite = true; // 设置SameSite为严格模式
+    sessionOptions.cookie.sameSite = "strict"; // 设置SameSite为严格模式
   }
 
   app.use(session(sessionOptions)); // 使用会话中间件
@@ -108,6 +108,10 @@ async function bootup() { // 启动函数
   app.get("/api/hup", (req, res) => { // 健康检查端点
     return res.status(200).json({ ok: true });
   });
+  // 添加来自 simple-api 的健康检查端点
+  app.get("/api/health", (req, res) => {
+    res.status(200).json({ status: 'ok', timestamp: new Date() });
+  });
   //catch all other unknown url here.
   // 捕获所有其他未知的URL请求
   app.all("/", function (req, res) {
@@ -120,7 +124,7 @@ async function bootup() { // 启动函数
   // 设置PostgreSQL数据库
   // 如果你想保留数据库存储，请注释掉tearDown
   //await emailJob.testConnection();
-  //await posgreDB.tearDownPostgreDB();
+  // await posgreDB.tearDownPostgreDB();
   await posgreDB.initializeHotelDB(); // 初始化PostgreSQL数据库
   const port = setup.port; // 获取端口配置
   webServer.listen(port, "0.0.0.0", () => { // 启动Web服务器监听

@@ -18,7 +18,28 @@ export const useOrderStore = defineStore('order', () => {
       console.log('开始获取订单数据...')
       const response = await orderApi.getAllOrders()
       console.log('订单数据获取成功:', response)
-      orders.value = response || []
+      // 确保从响应的 data 属性中获取数组
+      const rawOrders = response && response.data ? response.data : []
+      // 映射后端字段到前端期望的字段名
+      orders.value = rawOrders.map(order => ({
+        orderNumber: order.order_id, // 假设后端字段是 order_id
+        guestName: order.guest_name, // 假设后端字段是 guest_name
+        phone: order.phone,
+        idNumber: order.id_number, // 假设后端字段是 id_number
+        roomType: order.room_type, // 假设后端字段是 room_type
+        roomNumber: order.room_number, // 假设后端字段是 room_number
+        checkInDate: order.check_in_date, // 假设后端字段是 check_in_date
+        checkOutDate: order.check_out_date, // 假设后端字段是 check_out_date
+        status: order.status,
+        paymentMethod: order.payment_method, // 假设后端字段是 payment_method
+        roomPrice: order.room_price, // 假设后端字段是 room_price
+        deposit: order.deposit, // 假设后端字段是 deposit
+        createTime: order.create_time, // 假设后端字段是 create_time
+        remarks: order.remarks,
+        actualCheckInTime: order.actual_check_in_time, // 假设后端字段是 actual_check_in_time
+        actualCheckOutTime: order.actual_check_out_time, // 假设后端字段是 actual_check_out_time
+        // 添加其他需要的字段映射...
+      }))
     } catch (err) {
       console.error('获取订单数据失败:', err)
       error.value = '获取订单数据失败'

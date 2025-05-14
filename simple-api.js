@@ -17,7 +17,7 @@ app.use(express.json());
 const dbConfig = {
   user: 'postgres',
   password: '1219',
-  host: '192.168.23.177',
+  host: 'localhost',
   port: 5432,
   database: 'hotel_db',
   // 添加超时设置
@@ -50,20 +50,20 @@ async function initDb() {
     if (fs.existsSync(sqlFile)) {
       console.log('执行数据库初始化文件...');
       const sql = fs.readFileSync(sqlFile, 'utf8');
-      
+
       // 分割SQL语句并执行
       const statements = sql
         .replace(/--.*$/gm, '')
         .split(';')
         .map(s => s.trim())
         .filter(s => s.length > 0);
-      
+
       for (const stmt of statements) {
         if (stmt.toLowerCase().includes('create database')) {
           console.log('跳过创建数据库命令');
           continue;
         }
-        
+
         try {
           await pool.query(stmt);
         } catch (e) {
@@ -89,9 +89,9 @@ app.get('/api/room-types', async (req, res) => {
     res.json(result.rows);
   } catch (error) {
     console.error('获取房型错误:', error);
-    res.status(500).json({ 
-      message: '服务器错误', 
-      error: error.message 
+    res.status(500).json({
+      message: '服务器错误',
+      error: error.message
     });
   }
 });
@@ -101,7 +101,7 @@ app.get('/api/rooms', async (req, res) => {
   try {
     console.log('正在处理请求: 获取所有房间');
     const result = await pool.query(`
-      SELECT r.*, rt.type_name 
+      SELECT r.*, rt.type_name
       FROM rooms r
       JOIN room_types rt ON r.type_code = rt.type_code
     `);
@@ -109,9 +109,9 @@ app.get('/api/rooms', async (req, res) => {
     res.json(result.rows);
   } catch (error) {
     console.error('获取房间错误:', error);
-    res.status(500).json({ 
-      message: '服务器错误', 
-      error: error.message 
+    res.status(500).json({
+      message: '服务器错误',
+      error: error.message
     });
   }
 });
@@ -125,9 +125,9 @@ app.get('/api/orders', async (req, res) => {
     res.json(result.rows);
   } catch (error) {
     console.error('获取订单错误:', error);
-    res.status(500).json({ 
-      message: '服务器错误', 
-      error: error.message 
+    res.status(500).json({
+      message: '服务器错误',
+      error: error.message
     });
   }
 });
@@ -137,11 +137,11 @@ app.get('/api/rooms/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const result = await pool.query('SELECT * FROM rooms WHERE room_id = $1', [id]);
-    
+
     if (result.rows.length === 0) {
       return res.status(404).json({ message: '未找到房间' });
     }
-    
+
     res.json(result.rows[0]);
   } catch (error) {
     console.error('获取房间错误:', error);
@@ -154,22 +154,22 @@ app.patch('/api/rooms/:id/status', async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
-    
+
     // 验证状态值
     const validStatuses = ['available', 'occupied', 'cleaning', 'maintenance', 'reserved'];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ message: '无效的房间状态' });
     }
-    
+
     const result = await pool.query(
       'UPDATE rooms SET status = $1 WHERE room_id = $2 RETURNING *',
       [status, id]
     );
-    
+
     if (result.rows.length === 0) {
       return res.status(404).json({ message: '未找到房间' });
     }
-    
+
     res.json(result.rows[0]);
   } catch (error) {
     console.error('更新房间状态错误:', error);

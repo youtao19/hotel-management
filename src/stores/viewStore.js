@@ -11,7 +11,7 @@ export const useViewStore = defineStore('view', () => {
     { label: '总统套房', value: 'presidential' },
     { label: '家庭房', value: 'family' }
   ]
- 
+
   // 房间状态选项数组，用于状态筛选下拉框
   const statusOptions = [
     { label: '所有状态', value: null },  // null值表示不筛选
@@ -30,6 +30,25 @@ export const useViewStore = defineStore('view', () => {
     { label: '已退房', value: '已退房' },
     { label: '已取消', value: '已取消' }
   ]
+
+  // 订单状态中英文映射
+  const orderStatusMap = {
+    'confirmed': '待入住',
+    'reserved': '已预订',
+    'checked_in': '已入住',
+    'checked_out': '已退房',
+    'cancelled': '已取消'
+    // 添加其他可能的订单状态映射
+  };
+
+  /**
+   * 获取订单状态的中文文本
+   * @param {string} status - 订单状态代码 (英文)
+   * @returns {string} 订单状态的中文文本
+   */
+  function getOrderStatusText(status) {
+    return orderStatusMap[status] || status; // 如果没有映射，返回原始状态
+  }
 
   // 支付方式选项
   const paymentMethodOptions = [
@@ -119,7 +138,8 @@ export const useViewStore = defineStore('view', () => {
     getRoomTypeName,
     getStatusText,
     getStatusColor,
+    getOrderStatusText,
     getPaymentMethodName,
     getPaymentMethodIcon
   }
-}) 
+})
