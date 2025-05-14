@@ -8,30 +8,13 @@ router.get('/', async (req, res) => {
   try {
     console.log('获取所有房间请求');
 
-    // 检查rooms表是否存在
-    const tableCheck = await query(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables
-        WHERE table_schema = 'public'
-        AND table_name = 'rooms'
-      );
-    `);
-
-    if (!tableCheck.rows[0].exists) {
-      console.log('rooms表不存在，返回模拟数据');
-      // 返回一些模拟数据
-      return res.json({
-        data: [
-          { room_id: 1, room_number: '101', type_code: 'standard', status: 'available', price: 288 },
-          { room_id: 2, room_number: '102', type_code: 'standard', status: 'occupied', price: 288 },
-          { room_id: 3, room_number: '201', type_code: 'deluxe', status: 'available', price: 388 }
-        ]
-      });
-    }
-
-    const { rows } = await query('SELECT * FROM rooms');
+    const { rows } = await query('SELECT r.*, o.guest_name, o.check_out_date FROM rooms r LEFT JOIN orders o ON r.room_number = o.room_number AND o.status = \'已入住\'');
     console.log(`成功获取 ${rows.length} 条房间数据`);
-    res.json({ data: rows });
+    if (rows.length === 0) {
+      res.json({ data: [], message: '没有查询到房间数据' });
+    } else {
+      res.json({ data: rows });
+    }
   } catch (err) {
     console.error('获取房间数据错误:', err);
     res.status(500).json({

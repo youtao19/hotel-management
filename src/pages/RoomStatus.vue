@@ -148,28 +148,22 @@
         <!-- 遍历过滤后的房间列表 -->
         <div
           v-for="room in filteredRooms"
-          :key="room.id"
+          :key="room.room_id"
           class="col-lg-3 col-md-4 col-sm-6 col-xs-12"
         >
           <!-- 房间卡片，根据状态设置不同背景色 -->
           <q-card
-            :class="{
-              'bg-green-1': room.status === 'available',  // 空闲房间为绿色
-              'bg-red-1': room.status === 'occupied',     // 已入住房间为红色
-              'bg-blue-1': room.status === 'reserved',    // 已预订房间为蓝色
-              'bg-orange-1': room.status === 'cleaning',  // 清扫中房间为橙色
-              'bg-grey-3': room.status === 'maintenance'  // 维修中房间为灰色
-            }"
+            :class="roomStore.getRoomStatusClass(room)"
           >
             <q-card-section class="room-header">
               <!-- 房间号 -->
-              <div class="text-h5 text-center">{{ room.number }}</div>
+              <div class="text-h5 text-center">{{ room.room_number }}</div>
               <q-chip
-                :color="getStatusColor(room.status)"
+                :color="roomStore.getRoomStatusColor(room)"
                 text-color="white"
                 class="status-chip"
               >
-                {{ getStatusText(room.status) }}
+                {{ roomStore.getRoomStatusText(room) }}
               </q-chip>
             </q-card-section>
 
@@ -182,7 +176,7 @@
                   <div class="text-subtitle2 text-grey-7">类型:</div>
                 </div>
                 <div class="col-7">
-                  <div class="text-subtitle2 text-weight-bold">{{ getRoomTypeName(room.type) }}</div>
+                  <div class="text-subtitle2 text-weight-bold">{{ getRoomTypeName(room.type_code) }}</div>
                 </div>
               </div>
 
@@ -197,7 +191,7 @@
               </div>
 
               <!-- 已入住房间显示客人信息 -->
-              <div v-if="room.status === 'occupied'" class="row q-mb-sm">
+              <div v-if="roomStore.getRoomDisplayStatus(room) === 'occupied'" class="row q-mb-sm">
                 <div class="col-5">
                   <div class="text-subtitle2 text-grey-7">客人:</div>
                 </div>
@@ -207,7 +201,7 @@
               </div>
 
               <!-- 已入住房间显示退房日期 -->
-              <div v-if="room.status === 'occupied'" class="row q-mb-sm">
+              <div v-if="roomStore.getRoomDisplayStatus(room) === 'occupied'" class="row q-mb-sm">
                 <div class="col-5">
                   <div class="text-subtitle2 text-grey-7">退房日期:</div>
                 </div>
@@ -223,19 +217,68 @@
             <q-card-actions align="center" class="q-pa-sm">
               <q-btn-group flat>
                 <!-- 空闲房间可预订 -->
-                <q-btn v-if="room.status === 'available'" color="primary" icon="book_online" label="预订" size="sm" @click="bookRoom(room.id)" />
+                <q-btn
+                  v-if="roomStore.getRoomDisplayStatus(room) === 'available'"
+                  color="primary"
+                  icon="book_online"
+                  label="预订"
+                  size="sm"
+                  @click="bookRoom(room.room_id)"
+                />
                 <!-- 空闲房间可入住 -->
-                <q-btn v-if="room.status === 'available'" color="positive" icon="login" label="入住" size="sm" @click="checkIn(room.id)" />
+                <q-btn
+                  v-if="roomStore.getRoomDisplayStatus(room) === 'available'"
+                  color="positive"
+                  icon="login"
+                  label="入住"
+                  size="sm"
+                  @click="checkIn(room.room_id)"
+                />
                 <!-- 已预订房间可办理入住 -->
-                <q-btn v-if="room.status === 'reserved'" color="positive" icon="login" label="办理入住" size="sm" @click="checkInReservation(room.id)" />
+                <q-btn
+                  v-if="roomStore.getRoomDisplayStatus(room) === 'reserved'"
+                  color="positive"
+                  icon="login"
+                  label="办理入住"
+                  size="sm"
+                  @click="checkInReservation(room.room_id)"
+                />
                 <!-- 已入住房间可退房 -->
-                <q-btn v-if="room.status === 'occupied'" color="negative" icon="logout" label="退房" size="sm" @click="checkOut(room.id)" />
+                <q-btn
+                  v-if="roomStore.getRoomDisplayStatus(room) === 'occupied'"
+                  color="negative"
+                  icon="logout"
+                  label="退房"
+                  size="sm"
+                  @click="checkOut(room.room_id)"
+                />
                 <!-- 非维修中房间可设为维修 -->
-                <q-btn v-if="room.status !== 'maintenance'" color="grey" icon="build" label="维修" size="sm" @click="setMaintenance(room.id)" />
+                <q-btn
+                  v-if="roomStore.getRoomDisplayStatus(room) !== 'repair'"
+                  color="grey"
+                  icon="build"
+                  label="维修"
+                  size="sm"
+                  @click="setMaintenance(room.room_id)"
+                />
                 <!-- 维修中房间可完成维修 -->
-                <q-btn v-if="room.status === 'maintenance'" color="green" icon="check" label="完成维修" size="sm" @click="clearMaintenance(room.id)" />
+                <q-btn
+                  v-if="roomStore.getRoomDisplayStatus(room) === 'repair'"
+                  color="green"
+                  icon="check"
+                  label="完成维修"
+                  size="sm"
+                  @click="clearMaintenance(room.room_id)"
+                />
                 <!-- 清扫中房间可完成清洁 -->
-                <q-btn v-if="room.status === 'cleaning'" color="green" icon="check" label="完成清洁" size="sm" @click="clearCleaning(room.id)" />
+                <q-btn
+                  v-if="roomStore.getRoomDisplayStatus(room) === 'cleaning'"
+                  color="green"
+                  icon="check"
+                  label="完成清洁"
+                  size="sm"
+                  @click="clearCleaning(room.room_id)"
+                />
               </q-btn-group>
             </q-card-actions>
           </q-card>

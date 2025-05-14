@@ -634,7 +634,7 @@
   }
 
   // 确认办理入住
-  function confirmCheckIn() {
+  async function confirmCheckIn() {
     if (!checkInOrderData.value) {
       console.error('没有选择当前订单');
       alert('操作失败：没有找到当前订单');
@@ -687,10 +687,20 @@
     // 更新订单状态和入住时间
     orderStore.updateOrderCheckIn(checkInOrderData.value.orderNumber, formattedCheckInTime);
 
-    // 更新房间状态为已入住
-    const room = roomStore.getRoomByNumber(checkInRoomNumber.value);
-    if (room) {
-      roomStore.occupyRoom(room.id, checkInOrderData.value.guestName, checkInOrderData.value.checkOutDate);
+    // 使用选中的房间ID，并await异步操作
+    if (selectedRoom) {
+       const success = await roomStore.occupyRoom(
+         selectedRoom.id,
+         checkInOrderData.value.guestName,
+         checkInOrderData.value.checkOutDate
+       );
+       if (!success) {
+         alert('办理入住失败，请检查日志了解详情');
+         loadingOrders.value = false; // 停止加载状态
+         return; // 停止后续操作
+       }
+       // 入住成功后刷新房间列表，确保房间状态页面能显示最新的客人信息
+       await roomStore.fetchAllRooms();
     }
 
     // 直接更新当前订单对象 - 确保界面立即响应

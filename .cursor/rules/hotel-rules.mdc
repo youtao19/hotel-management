@@ -11,6 +11,16 @@ alwaysApply: true
 
 该项目的管理工具使用的是: npm
 
+数据库中订单状态： 待入住，已入住，已退房，已取消
+
+房间表说明：
+
+1.房间状态：表示房间是否可用。
+
+cleaning、repair 则 将is_closed 改为True。 supply 将is_closed 改为 True
+
+与订单表进行绑定，可以查看入住时间退房时间和客人信息
+
 
 页面路径 ./src/pages
 前段路由 ./src/router
