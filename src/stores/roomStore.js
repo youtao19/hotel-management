@@ -39,6 +39,8 @@ const STATUS_DISPLAY_CONFIG = {
 };
 
 export const useRoomStore = defineStore('room', () => {
+  // 导出状态常量，使其可以在组件中访问
+  const STATES = ROOM_STATES;
   // 引入视图store以访问通用的状态文本和颜色
   const viewStore = useViewStore()
   const orderStore = useOrderStore()
@@ -694,6 +696,9 @@ export const useRoomStore = defineStore('room', () => {
   initialize()
 
   return {
+    // 状态常量 - 导出给组件使用
+    ROOM_STATES,
+
     // 数据
     rooms,
     roomTypes,

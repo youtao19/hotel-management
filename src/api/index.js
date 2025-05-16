@@ -2,8 +2,9 @@ import axios from 'axios'
 
 // 创建axios实例
 const api = axios.create({
-  baseURL: '/api', // 假设后端API的基础URL是/api
-  timeout: 10000, // 请求超时时间
+  baseURL: 'http://localhost:3000/api', // 后端API运行在3000端口
+  timeout: 10000, // 请求超时时间,
+  withCredentials: false // 避免CORS预检请求
 })
 
 // 请求拦截器
@@ -57,7 +58,10 @@ export const roomApi = {
   getRoomByNumber: (number) => api.get(`/rooms/number/${number}`),
 
   // 更新房间状态
-  updateRoomStatus: (id, status) => api.patch(`/rooms/${id}/status`, { status }),
+  updateRoomStatus: (id, status) => {
+    console.log(`前端发送更新房间状态请求: ID=${id}, 状态=${status}`);
+    return api.patch(`/rooms/${id}/status`, { status });
+  },
 
   // 添加新房间
   addRoom: (roomData) => api.post('/rooms', roomData),

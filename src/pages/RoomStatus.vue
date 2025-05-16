@@ -254,7 +254,7 @@
                 />
                 <!-- 非维修中房间可设为维修 -->
                 <q-btn
-                  v-if="roomStore.getRoomDisplayStatus(room) !== 'repair'"
+                  v-if="roomStore.getRoomDisplayStatus(room) !== roomStore.ROOM_STATES.REPAIR"
                   color="grey"
                   icon="build"
                   label="维修"
@@ -263,7 +263,7 @@
                 />
                 <!-- 维修中房间可完成维修 -->
                 <q-btn
-                  v-if="roomStore.getRoomDisplayStatus(room) === 'repair'"
+                  v-if="roomStore.getRoomDisplayStatus(room) === roomStore.ROOM_STATES.REPAIR"
                   color="green"
                   icon="check"
                   label="完成维修"

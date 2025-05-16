@@ -59,28 +59,83 @@ router.get('/number/:number', async (req, res) => {
   }
 });
 
-// 更新房间状态
-router.patch('/:id/status', async (req, res) => {
+// 测试维修端点
+router.get('/test-repair/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    console.log(`尝试设置房间 ${id} 为维修状态`);
 
-    // 验证状态值
-    const validStatuses = ['available', 'occupied', 'cleaning', 'maintenance', 'reserved'];
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({ message: '无效的房间状态' });
-    }
-
+    // 直接执行SQL更新，同时更新is_closed字段
     const { rows } = await query(
-      'UPDATE rooms SET status = $1 WHERE room_id = $2 RETURNING *',
-      [status, id]
+      'UPDATE rooms SET status = $1, is_closed = $2 WHERE room_id = $3 RETURNING *',
+      ['repair', true, id]
     );
 
     if (rows.length === 0) {
       return res.status(404).json({ message: '未找到房间' });
     }
 
-    res.json({ data: rows[0] });
+    return res.json({
+      message: '房间状态已更新为维修',
+      data: rows[0]
+    });
+  } catch (err) {
+    console.error('测试维修功能出错:', err);
+    return res.status(500).json({ message: '服务器错误', error: err.message });
+  }
+});
+
+// 更新房间状态
+router.patch('/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // 详细日志
+    console.log('====== 房间状态更新请求 ======');
+    console.log('请求参数ID:', id);
+    console.log('请求体:', req.body);
+    console.log('Content-Type:', req.get('Content-Type'));
+
+    // 检查请求体是否为空
+    if (!req.body || Object.keys(req.body).length === 0) {
+      console.log('请求体为空');
+      return res.status(400).json({ message: '请求体为空' });
+    }
+
+    const { status } = req.body;
+
+    // 检查状态是否存在
+    if (status === undefined) {
+      console.log('状态值未提供');
+      return res.status(400).json({ message: '状态值未提供' });
+    }
+
+    console.log('请求的状态值:', status);
+
+    // 验证状态值 - 使用统一的状态常量
+    const VALID_ROOM_STATES = ['available', 'occupied', 'cleaning', 'repair', 'reserved'];
+    if (!VALID_ROOM_STATES.includes(status)) {
+      console.log('无效的状态值:', status);
+      console.log('有效的状态值:', VALID_ROOM_STATES);
+      return res.status(400).json({
+        message: '无效的房间状态',
+        requestedStatus: status,
+        validStatuses: VALID_ROOM_STATES
+      });
+    }
+
+        // 这里改用尝试导入房间表模块的updateRoomStatus方法，绕过直接SQL查询
+    const roomModule = require('../database/postgreDB/tables/room');
+    console.log('尝试使用房间模块的updateRoomStatus方法');
+    const result = await roomModule.updateRoomStatus(id, status);
+
+    if (!result) {
+      console.log('房间未找到:', id);
+      return res.status(404).json({ message: '未找到房间' });
+    }
+
+    console.log('更新成功:', result);
+    return res.json({ data: result });
   } catch (err) {
     console.error('更新房间状态错误:', err);
     res.status(500).json({ message: '服务器错误' });

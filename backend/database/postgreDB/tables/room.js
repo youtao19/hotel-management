@@ -15,6 +15,7 @@ const createQuery = `
     type_code VARCHAR(20) NOT NULL,
     status VARCHAR(20) NOT NULL,
     price DECIMAL(10,2) NOT NULL,
+    is_closed BOOLEAN DEFAULT FALSE,
     FOREIGN KEY (type_code) REFERENCES room_types(type_code)
   );
 `;
@@ -131,25 +132,38 @@ async function getRoomByNumber(number) {
 }
 
 /**
- * 更新房间状态
+ * 更新房间状态并自动处理房间可用性
  * @param {number} id - 房间ID
  * @param {string} status - 新状态
  * @returns {Promise<Object|null>} 更新后的房间对象或null
  */
 async function updateRoomStatus(id, status) {
   try {
-    // 标准化状态名称
-    let normalizedStatus = status;
+    console.log(`更新房间(ID: ${id})状态为: ${status}`);
 
-    // 如果status是supply，转换为available
-    if (normalizedStatus === 'supply') {
-      normalizedStatus = 'available';
+    // 直接使用传入的状态值，不做转换
+    let isClosed = false;
+
+    // 根据状态自动设置房间的is_closed字段
+    if (status === 'repair' || status === 'cleaning') {
+      console.log(`设置房间 ${id} 为关闭状态(is_closed=true)`);
+      isClosed = true; // 维修中或清洁中的房间设为关闭状态
+    } else {
+      console.log(`设置房间 ${id} 为开放状态(is_closed=false)`);
     }
 
+    // 执行房间状态更新，同时更新is_closed字段
+    console.log(`执行SQL: UPDATE rooms SET status = '${status}', is_closed = ${isClosed} WHERE room_id = ${id}`);
     const { rows } = await query(
-      'UPDATE rooms SET status = $1 WHERE room_id = $2 RETURNING *',
-      [normalizedStatus, id]
+      'UPDATE rooms SET status = $1, is_closed = $2 WHERE room_id = $3 RETURNING *',
+      [status, isClosed, id]
     );
+
+    if (rows.length > 0) {
+      console.log(`更新成功，结果:`, rows[0]);
+    } else {
+      console.log(`未找到ID为 ${id} 的房间`);
+    }
     return rows.length > 0 ? rows[0] : null;
   } catch (error) {
     console.error(`更新房间(ID: ${id})状态失败:`, error);

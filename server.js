@@ -16,8 +16,10 @@ if (setup.env === "dev") {
   const history = require('connect-history-api-fallback'); // 引入connect-history-api-fallback中间件，用于处理前端路由
   const cors = require('cors'); // 引入跨域资源共享中间件
   app.use(cors({
-    origin: '*', // 允许任何来源
-    credentials: false // 与通配符origin兼容需要设置为false
+    origin: ['http://localhost:9000', 'http://localhost:9001'], // 允许前端应用的来源
+    credentials: false, // 与通配符origin兼容需要设置为false
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'], // 允许的HTTP方法
+    allowedHeaders: ['Content-Type', 'Authorization'] // 允许的请求头
   }));
   app.use(history()); // 使用history中间件
 }
