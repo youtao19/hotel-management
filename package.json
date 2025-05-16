@@ -28,6 +28,7 @@
         "nodemailer": "^7.0.3",
         "pg": "^8.15.6",
         "pinia": "^3.0.1",
+        "postgres-mcp": "^1.0.4",
         "quasar": "^2.16.0",
         "rate-limiter-flexible": "^7.1.0",
         "vue": "^3.4.18",

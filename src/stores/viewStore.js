@@ -19,8 +19,7 @@ export const useViewStore = defineStore('view', () => {
     { label: '已入住', value: 'occupied' },
     { label: '已预订', value: 'reserved' },
     { label: '清扫中', value: 'cleaning' },
-    { label: '维修中', value: 'maintenance' },
-    { label: '可供', value: 'supply' }
+    { label: '维修中', value: 'repair' }
   ]
 
   // 订单状态选项
@@ -86,8 +85,8 @@ export const useViewStore = defineStore('view', () => {
       case 'occupied': return '已入住'
       case 'reserved': return '已预订'
       case 'cleaning': return '清扫中'
-      case 'maintenance': return '维修中'
-      case 'supply': return '可供'
+      case 'repair': return '维修中'
+      case 'maintenance': return '维修中' // 兼容旧状态
       default: return status
     }
   }
@@ -103,8 +102,8 @@ export const useViewStore = defineStore('view', () => {
       case 'occupied': return 'red'
       case 'reserved': return 'blue'
       case 'cleaning': return 'orange'
-      case 'maintenance': return 'grey'
-      case 'supply': return 'green'
+      case 'repair': return 'grey'
+      case 'maintenance': return 'grey' // 兼容旧状态
       case '待入住': return 'blue'
       case '已入住': return 'red'
       case '已退房': return 'green'

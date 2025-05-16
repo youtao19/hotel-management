@@ -1,11 +1,47 @@
 import { defineStore } from 'pinia'
 import { ref, computed, onMounted } from 'vue'
 import { useViewStore } from './viewStore'
+import { useOrderStore } from './orderStore'
 import { roomApi } from '../api'
+import { orderApi } from '../api'
+
+// 在文件开头添加状态常量，使状态定义集中化
+const ROOM_STATES = {
+  AVAILABLE: 'available',
+  OCCUPIED: 'occupied',
+  RESERVED: 'reserved',
+  CLEANING: 'cleaning',
+  REPAIR: 'repair'
+};
+
+const ORDER_STATES = {
+  PENDING: '待入住',
+  CHECKED_IN: '已入住',
+  CHECKED_OUT: '已退房',
+  CANCELLED: '已取消'
+};
+
+// 状态映射关系定义
+const ORDER_TO_ROOM_STATE_MAP = {
+  [ORDER_STATES.CHECKED_IN]: ROOM_STATES.OCCUPIED,
+  [ORDER_STATES.PENDING]: ROOM_STATES.RESERVED,
+  [ORDER_STATES.CHECKED_OUT]: ROOM_STATES.CLEANING,
+  [ORDER_STATES.CANCELLED]: ROOM_STATES.AVAILABLE
+};
+
+// 定义状态颜色和文本映射
+const STATUS_DISPLAY_CONFIG = {
+  [ROOM_STATES.AVAILABLE]: { color: 'green', text: '空闲', cssClass: 'bg-green-1' },
+  [ROOM_STATES.OCCUPIED]: { color: 'red', text: '已入住', cssClass: 'bg-red-1' },
+  [ROOM_STATES.RESERVED]: { color: 'blue', text: '待入住', cssClass: 'bg-blue-1' },
+  [ROOM_STATES.CLEANING]: { color: 'orange', text: '清扫中', cssClass: 'bg-orange-1' },
+  [ROOM_STATES.REPAIR]: { color: 'grey', text: '维修中', cssClass: 'bg-grey-3' }
+};
 
 export const useRoomStore = defineStore('room', () => {
   // 引入视图store以访问通用的状态文本和颜色
   const viewStore = useViewStore()
+  const orderStore = useOrderStore()
 
   // 房间数据数组
   const rooms = ref([])
@@ -15,63 +51,119 @@ export const useRoomStore = defineStore('room', () => {
   const loading = ref(false)
   // 错误信息
   const error = ref(null)
+  const activeOrders = ref([])
 
-  // 获取所有房间数据
+  // 获取所有订单数据并筛选活跃订单
+  async function fetchActiveOrders() {
+    try {
+      loading.value = true
+      console.log('获取活跃订单数据...')
+
+      // 使用orderStore的方法获取所有订单
+      await orderStore.fetchAllOrders()
+      const allOrders = orderStore.orders
+
+      // 筛选活跃订单（待入住和已入住）
+      activeOrders.value = allOrders.filter(order =>
+        order.status === ORDER_STATES.PENDING ||
+        order.status === ORDER_STATES.CHECKED_IN
+      )
+
+      console.log(`获取到 ${activeOrders.value.length} 个活跃订单`)
+      return activeOrders.value
+    } catch (err) {
+      console.error('获取订单数据失败:', err)
+      return []
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // 获取所有房间数据并关联订单状态
   async function fetchAllRooms() {
     try {
       loading.value = true
       error.value = null
+
+      // 先确保有最新的订单数据
+      await fetchActiveOrders()
+
+      // 获取所有房间数据
       const response = await roomApi.getAllRooms()
-      console.log('房间数据获取成功:', response)
-      rooms.value = response.data.map(room => {
-        // 处理房间状态与订单状态的关联
-        let displayStatus = room.status;
-        let orderStatus = room.order_status; // 假设API返回了关联的订单状态
+      console.log('房间数据获取成功')
 
-        // 设置房间显示状态的优先级：订单状态 > 房间状态
-        if (orderStatus) {
-          // 订单状态优先
-          if (orderStatus === '已入住') {
-            displayStatus = 'occupied'; // 已入住
-          } else if (orderStatus === '待入住') {
-            displayStatus = 'reserved'; // 待入住
-          } else if (orderStatus === '已退房') {
-            displayStatus = 'cleaning'; // 退房后自动设为清扫中
-          } else if (orderStatus === '已取消') {
-            displayStatus = 'available'; // 订单取消则恢复为空闲
-          }
-        } else {
-          // 如果没有订单状态，根据房间状态设置
-          if (room.status === 'cleaning') {
-            displayStatus = 'cleaning'; // 清扫中
-          } else if (room.status === 'repair') {
-            displayStatus = 'repair'; // 维修中
-          } else if (room.status === 'supply') {
-            displayStatus = 'available'; // 可供应视为空闲
-          }
+      if (!response || !response.data) {
+        throw new Error('房间数据获取失败或格式错误')
+      }
+
+      // 创建房间号到订单的映射，优化查找效率
+      const roomToOrderMap = {}
+      activeOrders.value.forEach(order => {
+        if (order.roomNumber) {
+          roomToOrderMap[order.roomNumber] = order
         }
+      })
 
-        return {
-          ...room,
-          currentGuest: room.guest_name,
-          checkOutDate: room.check_out_date,
-          orderStatus: orderStatus,
-          displayStatus: displayStatus // 新增一个显示状态字段
-        };
-      });
+      // 处理房间数据，设置显示状态
+      rooms.value = response.data.map(room => {
+        return processRoomData(room, roomToOrderMap)
+      })
 
-      console.log('房间状态处理后数据:', rooms.value.map(room => ({
-        id: room.room_id,
-        number: room.room_number,
-        status: room.status,
-        orderStatus: room.orderStatus,
-        displayStatus: room.displayStatus
-      })));
+      // 统计显示状态
+      const statusCounts = {}
+      rooms.value.forEach(room => {
+        const status = room.displayStatus
+        statusCounts[status] = (statusCounts[status] || 0) + 1
+      })
+      console.log('房间状态统计:', statusCounts)
+
+      return rooms.value
     } catch (err) {
       console.error('获取房间数据失败:', err)
-      error.value = '获取房间数据失败'
+      error.value = '获取房间数据失败: ' + (err.message || String(err))
+      return []
     } finally {
       loading.value = false
+    }
+  }
+
+  // 处理单个房间数据，设置显示状态
+  function processRoomData(room, roomToOrderMap = {}) {
+    // 查找与该房间关联的订单
+    const relatedOrder = roomToOrderMap[room.room_number]
+
+    // 初始化默认值
+    let displayStatus = room.status
+    let orderStatus = room.order_status || null
+    let guestName = room.guest_name || null
+    let checkOutDate = room.check_out_date || null
+
+    // 如果找到关联订单，更新房间信息
+    if (relatedOrder) {
+      orderStatus = relatedOrder.status
+      guestName = relatedOrder.guestName
+      checkOutDate = relatedOrder.checkOutDate
+
+      // 根据订单状态确定房间显示状态
+      const mappedStatus = ORDER_TO_ROOM_STATE_MAP[orderStatus]
+      if (mappedStatus) {
+        displayStatus = mappedStatus
+      }
+    } else {
+      // 没有关联订单，根据房间自身状态处理
+      if (room.status === ROOM_STATES.CLEANING || room.status === ROOM_STATES.REPAIR) {
+        displayStatus = room.status
+      } else {
+        displayStatus = ROOM_STATES.AVAILABLE
+      }
+    }
+
+    return {
+      ...room,
+      currentGuest: guestName,
+      checkOutDate: checkOutDate,
+      orderStatus: orderStatus,
+      displayStatus: displayStatus
     }
   }
 
@@ -79,10 +171,12 @@ export const useRoomStore = defineStore('room', () => {
   async function fetchRoomTypes() {
     try {
       const response = await roomApi.getRoomTypes()
-      console.log('房间类型获取成功:', response)
+      console.log('房间类型获取成功')
       roomTypes.value = response.data
+      return roomTypes.value
     } catch (err) {
       console.error('获取房间类型失败:', err)
+      return []
     }
   }
 
@@ -101,13 +195,11 @@ export const useRoomStore = defineStore('room', () => {
 
     rooms.value.forEach(room => {
       // 使用getRoomDisplayStatus获取综合状态
-      const displayStatus = getRoomDisplayStatus(room);
-
-      if (displayStatus === 'supply') {
-        // 将supply状态归为available
-        counts['available']++;
-      } else if (counts[displayStatus] !== undefined) {
-        counts[displayStatus]++;
+      const displayStatus = getRoomDisplayStatus(room)
+      if (counts[displayStatus] !== undefined) {
+        counts[displayStatus]++
+      } else {
+        counts['available']++
       }
     })
 
@@ -126,8 +218,8 @@ export const useRoomStore = defineStore('room', () => {
 
     // 使用getAvailableRoomCountByType方法计算每种类型的可用房间数
     Object.keys(counts).forEach(type => {
-      counts[type] = getAvailableRoomCountByType(type);
-    });
+      counts[type] = getAvailableRoomCountByType(type)
+    })
 
     return counts
   })
@@ -138,15 +230,19 @@ export const useRoomStore = defineStore('room', () => {
    * @returns {Array} 筛选后的房间数组
    */
   function filterRooms(filters = {}) {
+    if (Object.keys(filters).length === 0) {
+      return rooms.value
+    }
+
     return rooms.value.filter(room => {
-      // 如果没有筛选条件，返回所有房间
-      if (Object.keys(filters).length === 0) return true
+      // 获取房间的显示状态
+      const displayStatus = getRoomDisplayStatus(room)
 
       // 筛选房型
       if (filters.type && room.type_code !== filters.type) return false
 
-      // 筛选状态
-      if (filters.status && room.status !== filters.status) return false
+      // 筛选状态 - 使用显示状态而不是原始状态
+      if (filters.status && displayStatus !== filters.status) return false
 
       // 筛选日期范围
       if (filters.dateRange) {
@@ -159,23 +255,21 @@ export const useRoomStore = defineStore('room', () => {
           // 检查日期是否有效
           if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
             // 已入住房间，检查退房日期是否在查询开始日期之前
-            if (room.status === 'occupied' && room.check_out_date) {
+            if (displayStatus === ROOM_STATES.OCCUPIED && room.check_out_date) {
               const checkOutDate = new Date(room.check_out_date)
               if (checkOutDate < startDate) {
                 return false // 房间在查询日期前已空出
               }
             }
 
-            // 已预订房间，应检查预订日期范围，但目前数据没有预订日期范围
-            // 这里简化处理，将已预订的房间视为在选择的日期范围内不可用
-            if (room.status === 'reserved') {
+            // 已预订房间默认在选择的日期范围内不可用
+            if (displayStatus === ROOM_STATES.RESERVED) {
               return false
             }
           }
         }
       }
 
-      // 通过所有筛选条件，保留该房间
       return true
     })
   }
@@ -188,7 +282,27 @@ export const useRoomStore = defineStore('room', () => {
   async function getRoomById(id) {
     try {
       const response = await roomApi.getRoomById(id)
-      return response.data || null
+      const roomData = response.data || null
+
+      // 如果找到房间，处理显示状态
+      if (roomData) {
+        // 确保已获取活跃订单
+        if (activeOrders.value.length === 0) {
+          await fetchActiveOrders()
+        }
+
+        // 创建映射
+        const roomToOrderMap = {}
+        activeOrders.value.forEach(order => {
+          if (order.roomNumber) {
+            roomToOrderMap[order.roomNumber] = order
+          }
+        })
+
+        return processRoomData(roomData, roomToOrderMap)
+      }
+
+      return null
     } catch (err) {
       console.error(`获取房间ID ${id} 失败:`, err)
       return null
@@ -203,7 +317,27 @@ export const useRoomStore = defineStore('room', () => {
   async function getRoomByNumber(number) {
     try {
       const response = await roomApi.getRoomByNumber(number)
-      return response.data || null
+      const roomData = response.data || null
+
+      // 如果找到房间，处理显示状态
+      if (roomData) {
+        // 确保已获取活跃订单
+        if (activeOrders.value.length === 0) {
+          await fetchActiveOrders()
+        }
+
+        // 创建映射
+        const roomToOrderMap = {}
+        activeOrders.value.forEach(order => {
+          if (order.roomNumber) {
+            roomToOrderMap[order.roomNumber] = order
+          }
+        })
+
+        return processRoomData(roomData, roomToOrderMap)
+      }
+
+      return null
     } catch (err) {
       console.error(`获取房间号 ${number} 失败:`, err)
       return null
@@ -223,12 +357,41 @@ export const useRoomStore = defineStore('room', () => {
       const roomIndex = rooms.value.findIndex(room => room.room_id === id)
       if (roomIndex !== -1) {
         rooms.value[roomIndex].status = status
+
+        // 更新房间的显示状态
+        updateRoomDisplayStatus(rooms.value[roomIndex])
       }
+
       console.log(`房间 ID ${id} 状态已更新为: ${status}`)
       return true
     } catch (err) {
       console.error(`更新房间状态失败:`, err)
       return false
+    }
+  }
+
+  /**
+   * 更新单个房间的显示状态
+   * @param {Object} room - 房间对象
+   */
+  function updateRoomDisplayStatus(room) {
+    // 获取关联的订单
+    const relatedOrder = activeOrders.value.find(order => order.roomNumber === room.room_number)
+
+    if (relatedOrder) {
+      // 如果有关联订单，根据订单状态设置房间显示状态
+      if (relatedOrder.status === ORDER_STATES.PENDING) {
+        room.displayStatus = ROOM_STATES.RESERVED
+      } else if (relatedOrder.status === ORDER_STATES.CHECKED_IN) {
+        room.displayStatus = ROOM_STATES.OCCUPIED
+      }
+    } else {
+      // 没有关联订单，使用房间自身状态
+      if (room.status === ROOM_STATES.CLEANING || room.status === ROOM_STATES.REPAIR) {
+        room.displayStatus = room.status
+      } else {
+        room.displayStatus = ROOM_STATES.AVAILABLE
+      }
     }
   }
 
@@ -247,7 +410,7 @@ export const useRoomStore = defineStore('room', () => {
    * @returns {boolean} 操作是否成功
    */
   async function setMaintenance(id) {
-    return await updateRoomStatus(id, 'maintenance')
+    return await updateRoomStatus(id, 'repair')
   }
 
   /**
@@ -286,29 +449,26 @@ export const useRoomStore = defineStore('room', () => {
    */
   async function occupyRoom(id, guestName, checkOutDate) {
     try {
-      // 确保将客人姓名和退房日期传递给后端API进行保存
-      // 假设 roomApi.updateRoomStatus 或其他相关接口支持接收这些额外参数
-      // 您可能需要根据您的后端API实际情况调整这里的调用方式
-      await roomApi.updateRoomStatus(id, 'occupied', { guestName, checkOutDate }); // 示例：传递额外数据
-      // 根据房间 ID 找到本地房间索引
-      const roomIndex = rooms.value.findIndex(room => room.room_id === id);
+      await roomApi.updateRoomStatus(id, 'occupied', { guestName, checkOutDate })
 
+      const roomIndex = rooms.value.findIndex(room => room.room_id === id)
       if (roomIndex !== -1) {
-        rooms.value[roomIndex].status = 'occupied';
-        // 直接使用传入的参数更新本地状态，确保信息被设置
-        rooms.value[roomIndex].current_guest = guestName;
-        rooms.value[roomIndex].check_out_date = checkOutDate;
-        console.log(`房间 ID ${id} 入住成功，本地状态已更新。客人: ${guestName}, 退房日期: ${checkOutDate}`);
+        rooms.value[roomIndex].status = 'occupied'
+        rooms.value[roomIndex].currentGuest = guestName
+        rooms.value[roomIndex].checkOutDate = checkOutDate
+        rooms.value[roomIndex].displayStatus = ROOM_STATES.OCCUPIED
+
+        console.log(`房间 ID ${id} 入住成功，状态已更新`)
       } else {
-        // 如果本地没找到房间，可能需要重新加载所有房间数据
-        console.warn(`本地未找到房间 ID ${id}，尝试重新加载所有房间数据。`);
-        await fetchAllRooms(); // 重新加载所有房间以确保数据一致性
+        // 如果找不到房间，重新加载数据
+        await fetchAllRooms()
       }
-      return true;
+
+      return true
     } catch (err) {
-      console.error('房间入住失败:', err);
-      error.value = '办理入住失败，请稍后再试。';
-      return false;
+      console.error('房间入住失败:', err)
+      error.value = '办理入住失败，请稍后再试'
+      return false
     }
   }
 
@@ -321,7 +481,8 @@ export const useRoomStore = defineStore('room', () => {
     try {
       const response = await roomApi.addRoom(room)
       // 添加到本地状态
-      rooms.value.push(response.data)
+      const newRoom = processRoomData(response.data)
+      rooms.value.push(newRoom)
       return true
     } catch (err) {
       console.error('添加房间失败:', err)
@@ -376,10 +537,10 @@ export const useRoomStore = defineStore('room', () => {
   function getAvailableRoomCountByType(type) {
     return rooms.value.filter(room => {
       // 获取房间的综合状态，考虑orderStatus和status
-      const displayStatus = getRoomDisplayStatus(room);
-      // 统计状态为available或supply的房间
-      return room.type_code === type && (displayStatus === 'available' || displayStatus === 'supply');
-    }).length;
+      const displayStatus = getRoomDisplayStatus(room)
+      // 只统计状态为available的房间
+      return room.type_code === type && displayStatus === ROOM_STATES.AVAILABLE
+    }).length
   }
 
   /**
@@ -400,24 +561,27 @@ export const useRoomStore = defineStore('room', () => {
    * @returns {string} 房间显示状态
    */
   function getRoomDisplayStatus(room) {
-    // 如果有displayStatus字段，直接返回
+    // 如果有预计算的displayStatus，直接返回
     if (room.displayStatus) {
-      return room.displayStatus;
+      return room.displayStatus
     }
 
-    // 否则根据orderStatus和status计算
-    if (room.orderStatus === '已入住') {
-      return 'occupied';
-    } else if (room.orderStatus === '待入住') {
-      return 'reserved';
-    } else if (room.orderStatus === '已退房') {
-      return 'cleaning';
-    } else if (room.orderStatus === '已取消') {
-      return 'available';
+    // 订单状态优先
+    if (room.orderStatus) {
+      // 使用映射获取对应的房间状态
+      const mappedStatus = ORDER_TO_ROOM_STATE_MAP[room.orderStatus]
+      if (mappedStatus) {
+        return mappedStatus
+      }
     }
 
-    // 如果没有订单状态，返回房间状态
-    return room.status;
+    // 如果是维修或清扫状态，保持原样
+    if (room.status === ROOM_STATES.REPAIR || room.status === ROOM_STATES.CLEANING) {
+      return room.status
+    }
+
+    // 其他任何状态均视为可用
+    return ROOM_STATES.AVAILABLE
   }
 
   /**
@@ -426,17 +590,8 @@ export const useRoomStore = defineStore('room', () => {
    * @returns {string} CSS类名
    */
   function getRoomStatusClass(room) {
-    const status = getRoomDisplayStatus(room);
-
-    switch (status) {
-      case 'occupied': return 'bg-red-1'; // 已入住 - 红色
-      case 'reserved': return 'bg-blue-1'; // 待入住 - 蓝色
-      case 'cleaning': return 'bg-orange-1'; // 清扫中 - 橙色
-      case 'repair': return 'bg-grey-3'; // 维修中 - 灰色
-      case 'available':
-      case 'supply': return 'bg-green-1'; // 空闲/可供应 - 绿色
-      default: return 'bg-green-1'; // 默认绿色
-    }
+    const status = getRoomDisplayStatus(room)
+    return STATUS_DISPLAY_CONFIG[status]?.cssClass || 'bg-green-1'
   }
 
   /**
@@ -445,17 +600,8 @@ export const useRoomStore = defineStore('room', () => {
    * @returns {string} 状态描述文本
    */
   function getRoomStatusText(room) {
-    const status = getRoomDisplayStatus(room);
-
-    switch (status) {
-      case 'occupied': return '已入住';
-      case 'reserved': return '待入住';
-      case 'cleaning': return '清扫中';
-      case 'repair': return '维修中';
-      case 'available': return '空闲';
-      case 'supply': return '可供应';
-      default: return status;
-    }
+    const status = getRoomDisplayStatus(room)
+    return STATUS_DISPLAY_CONFIG[status]?.text || '未知'
   }
 
   /**
@@ -464,45 +610,108 @@ export const useRoomStore = defineStore('room', () => {
    * @returns {string} 状态颜色
    */
   function getRoomStatusColor(room) {
-    const status = getRoomDisplayStatus(room);
+    const status = getRoomDisplayStatus(room)
+    return STATUS_DISPLAY_CONFIG[status]?.color || 'grey'
+  }
 
-    switch (status) {
-      case 'occupied': return 'red';
-      case 'reserved': return 'blue';
-      case 'cleaning': return 'orange';
-      case 'repair': return 'grey';
-      case 'available':
-      case 'supply': return 'green';
-      default: return 'grey';
+  /**
+   * 同步所有房间的显示状态
+   */
+  function syncAllRoomStatus() {
+    // 确保已获取最新订单数据
+    if (activeOrders.value.length === 0) {
+      return fetchActiveOrders().then(() => {
+        // 为所有房间更新显示状态
+        rooms.value.forEach(room => {
+          updateRoomDisplayStatus(room)
+        })
+        return true
+      })
+    } else {
+      // 直接更新所有房间状态
+      rooms.value.forEach(room => {
+        updateRoomDisplayStatus(room)
+      })
+      return Promise.resolve(true)
     }
   }
 
-  // 初始加载数据
+  /**
+   * 同步特定房间的状态
+   * @param {number} roomId - 房间ID
+   */
+  function syncRoomStatus(roomId) {
+    const room = rooms.value.find(r => r.room_id === roomId)
+    if (room) {
+      updateRoomDisplayStatus(room)
+      return true
+    }
+    return false
+  }
+
+  /**
+   * 刷新数据
+   */
+  async function refreshData() {
+    try {
+      await fetchActiveOrders()
+      await fetchAllRooms()
+      console.log('所有数据已刷新')
+      return true
+    } catch (err) {
+      console.error('刷新数据失败:', err)
+      return false
+    }
+  }
+
+  // 监听订单变化
+  function watchOrderChanges() {
+    // 使用 orderStore.orders 来监听订单变化
+    orderStore.$subscribe((mutation, state) => {
+      console.log('订单状态发生变化，同步房间状态')
+      syncAllRoomStatus()
+    })
+  }
+
+  // 初始化函数
   function initialize() {
-    console.log('开始初始化房间数据...')
-    // 使用Promise.all同时加载房间数据和房间类型
-    Promise.all([fetchAllRooms(), fetchRoomTypes()])
+    console.log('初始化房间数据...')
+
+    // 先获取订单，再加载房间数据
+    fetchActiveOrders()
+      .then(() => fetchAllRooms())
+      .then(() => fetchRoomTypes())
       .then(() => {
-        console.log('房间数据初始化完成')
+        console.log('初始化完成')
+        watchOrderChanges() // 设置订单变化监听
       })
       .catch(err => {
-        console.error('房间数据初始化失败:', err)
+        console.error('初始化失败:', err)
       })
   }
 
-  // 立即初始化，不等待组件挂载
+  // 立即初始化
   initialize()
 
   return {
+    // 数据
     rooms,
     roomTypes,
+    activeOrders,
     loading,
     error,
+
+    // 计算属性
     totalRooms,
     countByStatus,
     availableByType,
+
+    // 数据获取方法
     fetchAllRooms,
     fetchRoomTypes,
+    fetchActiveOrders,
+
+    // 房间操作方法
     filterRooms,
     getRoomById,
     getRoomByNumber,
@@ -514,6 +723,8 @@ export const useRoomStore = defineStore('room', () => {
     reserveRoom,
     occupyRoom,
     addRoom,
+
+    // 房间状态方法
     getAvailableRoomOptions,
     getRoomTypeOptionsWithCount,
     getAvailableRoomCountByType,
@@ -521,6 +732,11 @@ export const useRoomStore = defineStore('room', () => {
     getRoomDisplayStatus,
     getRoomStatusClass,
     getRoomStatusText,
-    getRoomStatusColor
+    getRoomStatusColor,
+
+    // 同步方法
+    syncAllRoomStatus,
+    syncRoomStatus,
+    refreshData
   }
 })

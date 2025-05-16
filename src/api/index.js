@@ -24,6 +24,17 @@ api.interceptors.request.use(
 // 响应拦截器
 api.interceptors.response.use(
   response => {
+    // 为房间API添加日志
+    if (response.config.url.includes('/rooms') && !response.config.url.includes('/rooms/')) {
+      console.log('API响应房间数据:', response.data);
+      // 特别检查是否有订单状态
+      if (response.data.data) {
+        const room102 = response.data.data.find(room => room.room_number === '102');
+        if (room102) {
+          console.log('API返回的房间102数据:', room102);
+        }
+      }
+    }
     // 直接返回响应数据，无需解析
     return response.data
   },

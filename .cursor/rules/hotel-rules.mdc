@@ -3,6 +3,7 @@ description:
 globs: 
 alwaysApply: true
 ---
+## 技术栈
 前段使用 VUE.js
 后端使用 JavaScript
 使用 express 
@@ -11,20 +12,36 @@ alwaysApply: true
 
 该项目的管理工具使用的是: npm
 
+
+## 对数据库中信息的说明
 数据库中订单状态： 待入住，已入住，已退房，已取消
 
 房间表说明：
 
 1.房间状态：表示房间是否可用。
 
-cleaning、repair 则 将is_closed 改为True。 supply 将is_closed 改为 True
+cleaning、repair 则 将is_closed 改为True。 available 将is_closed 改为 True
 
 与订单表进行绑定，可以查看入住时间退房时间和客人信息
 
+我已经为你添加了postgresql的MCP服务
 
+
+在某个数据有bug时，不要单独处理一个数据，需要整体的处理。
+例如：我给你102房间有bug。你不能用逻辑单独去处理102，你需要处理所有与他相关的数据。
+
+## 项目结构
 页面路径 ./src/pages
-前段路由 ./src/router
+前端路由 ./src/router
 状态管理 ./src/stores
+后端管理 ./backend
+
+## 数据库信息
+host : localhost
+port : 5432
+user : postgres
+password : 1219
+
 
 
 

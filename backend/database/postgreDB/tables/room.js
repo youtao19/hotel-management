@@ -32,8 +32,68 @@ const createIndexQueryStrings = [
  */
 async function getAllRooms() {
   try {
-    const { rows } = await query('SELECT * FROM rooms');
-    return rows;
+    // 使用两次查询，先获取全部房间，然后获取已有订单的房间，最后合并数据
+    // 这样可以确保不会漏掉任何房间
+
+    // 1. 获取所有房间的基本信息
+    const roomsResult = await query('SELECT * FROM rooms ORDER BY room_number');
+    const allRooms = roomsResult.rows;
+
+    // 2. 获取房间与当前有效订单的关联信息
+    const ordersSQL = `
+      SELECT DISTINCT ON (o.room_number)
+        o.room_number,
+        o.guest_name,
+        o.check_out_date,
+        o.status as order_status,
+        o.order_id
+      FROM orders o
+      WHERE o.status IN ('待入住', '已入住')
+      ORDER BY o.room_number, o.create_time DESC
+    `;
+
+    const ordersResult = await query(ordersSQL);
+    const ordersByRoom = {};
+
+    // 创建房间号到订单的映射
+    ordersResult.rows.forEach(order => {
+      ordersByRoom[order.room_number] = order;
+    });
+
+    // 合并房间数据和订单数据
+    const mergedRooms = allRooms.map(room => {
+      const order = ordersByRoom[room.room_number];
+      if (order) {
+        return {
+          ...room,
+          guest_name: order.guest_name,
+          check_out_date: order.check_out_date,
+          order_status: order.order_status,
+          order_id: order.order_id
+        };
+      }
+      return room;
+    });
+
+    // 添加调试日志
+    console.log('总房间数量:', allRooms.length);
+    console.log('有订单的房间数量:', ordersResult.rows.length);
+    console.log('合并后的房间数据示例:', mergedRooms.slice(0, 3));
+
+    // 记录有订单状态的房间
+    const roomsWithOrders = mergedRooms.filter(room => room.order_status);
+    if (roomsWithOrders.length > 0) {
+      console.log('已关联订单的房间示例:',
+        roomsWithOrders.slice(0, 3).map(room => ({
+          room_number: room.room_number,
+          status: room.status,
+          order_status: room.order_status,
+          guest_name: room.guest_name
+        }))
+      );
+    }
+
+    return mergedRooms;
   } catch (error) {
     console.error('获取所有房间失败:', error);
     throw error;
@@ -78,9 +138,17 @@ async function getRoomByNumber(number) {
  */
 async function updateRoomStatus(id, status) {
   try {
+    // 标准化状态名称
+    let normalizedStatus = status;
+
+    // 如果status是supply，转换为available
+    if (normalizedStatus === 'supply') {
+      normalizedStatus = 'available';
+    }
+
     const { rows } = await query(
       'UPDATE rooms SET status = $1 WHERE room_id = $2 RETURNING *',
-      [status, id]
+      [normalizedStatus, id]
     );
     return rows.length > 0 ? rows[0] : null;
   } catch (error) {
