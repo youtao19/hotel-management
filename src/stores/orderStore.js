@@ -1,8 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { orderApi } from '../api'
+import { useViewStore } from './viewStore'
 
 export const useOrderStore = defineStore('order', () => {
+  // 引入视图store以使用日期格式化函数
+  const viewStore = useViewStore()
+
   // 订单列表
   const orders = ref([])
   // 加载状态
@@ -20,7 +24,7 @@ export const useOrderStore = defineStore('order', () => {
       console.log('订单数据获取成功:', response)
       // 确保从响应的 data 属性中获取数组
       const rawOrders = response && response.data ? response.data : []
-      // 映射后端字段到前端期望的字段名
+      // 映射后端字段到前端期望的字段名并处理日期格式
       orders.value = rawOrders.map(order => ({
         orderNumber: order.order_id, // 假设后端字段是 order_id
         guestName: order.guest_name, // 假设后端字段是 guest_name
@@ -40,12 +44,29 @@ export const useOrderStore = defineStore('order', () => {
         actualCheckOutTime: order.actual_check_out_time, // 假设后端字段是 actual_check_out_time
         // 添加其他需要的字段映射...
       }))
+
+      // 日期检查和处理
+      for (const order of orders.value) {
+        // 记录不规范的日期格式以便调试
+        if (order.checkOutDate && order.checkOutDate.includes('T')) {
+          console.log(`订单 ${order.orderNumber} 退房日期格式: ${order.checkOutDate}`)
+        }
+      }
     } catch (err) {
       console.error('获取订单数据失败:', err)
       error.value = '获取订单数据失败'
     } finally {
       loading.value = false
     }
+  }
+
+  /**
+   * 格式化订单中的日期
+   * @param {string} dateString - 日期字符串
+   * @returns {string} 格式化后的日期
+   */
+  function formatOrderDate(dateString) {
+    return viewStore.formatDate(dateString)
   }
 
   // 添加新订单
@@ -190,6 +211,19 @@ export const useOrderStore = defineStore('order', () => {
     }
   }
 
+  // 获取特定订单
+  function getOrderByNumber(orderNumber) {
+    return orders.value.find(order => order.orderNumber === orderNumber)
+  }
+
+  // 获取特定房间号的活跃订单（待入住或已入住状态）
+  function getActiveOrderByRoomNumber(roomNumber) {
+    return orders.value.find(order =>
+      order.roomNumber === roomNumber &&
+      (order.status === '待入住' || order.status === '已入住')
+    )
+  }
+
   // 初始加载数据
   function initialize() {
     console.log('开始初始化订单数据...')
@@ -215,6 +249,9 @@ export const useOrderStore = defineStore('order', () => {
     updateOrderStatus,
     updateOrderCheckIn,
     updateOrderCheckOut,
-    updateOrderRoom
+    updateOrderRoom,
+    formatOrderDate,
+    getOrderByNumber,
+    getActiveOrderByRoomNumber
   }
 })

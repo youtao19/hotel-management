@@ -132,6 +132,45 @@ export const useViewStore = defineStore('view', () => {
     return option ? option.icon : 'mdi-help-circle'
   }
 
+  /**
+   * 格式化日期时间显示
+   * @param {string} dateString - 日期时间字符串，如 ISO 格式
+   * @param {boolean} includeTime - 是否包含时间部分
+   * @returns {string} 格式化后的日期时间字符串 (YYYY-MM-DD 或 YYYY-MM-DD HH:MM)
+   */
+  function formatDate(dateString, includeTime = false) {
+    if (!dateString) return '';
+
+    try {
+      const date = new Date(dateString);
+
+      // 如果日期无效，直接返回原始字符串
+      if (isNaN(date.getTime())) {
+        return dateString;
+      }
+
+      // 获取年月日
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+
+      // 基本日期格式
+      let formattedDate = `${year}-${month}-${day}`;
+
+      // 如果需要显示时间
+      if (includeTime) {
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        formattedDate += ` ${hours}:${minutes}`;
+      }
+
+      return formattedDate;
+    } catch (err) {
+      console.error('日期格式化错误:', err);
+      return dateString;
+    }
+  }
+
   return {
     roomTypeOptions,
     statusOptions,
@@ -142,6 +181,7 @@ export const useViewStore = defineStore('view', () => {
     getStatusColor,
     getOrderStatusText,
     getPaymentMethodName,
-    getPaymentMethodIcon
+    getPaymentMethodIcon,
+    formatDate
   }
 })

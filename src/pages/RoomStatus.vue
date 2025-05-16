@@ -206,7 +206,7 @@
                   <div class="text-subtitle2 text-grey-7">退房日期:</div>
                 </div>
                 <div class="col-7">
-                  <div class="text-subtitle2 text-weight-bold">{{ room.checkOutDate }}</div>
+                  <div class="text-subtitle2 text-weight-bold">{{ viewStore.formatDate(room.checkOutDate) }}</div>
                 </div>
               </div>
             </q-card-section>

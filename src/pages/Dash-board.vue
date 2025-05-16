@@ -91,35 +91,42 @@
               </q-card-section>
               <q-card-section>
                 <div class="row q-col-gutter-sm">
-                  <div class="col-md-3 col-sm-6 col-xs-12">
-                    <q-card class="text-center q-pa-sm bg-green-1 cursor-pointer" @click="goToRoomStatus('available')">
-                      <div class="text-subtitle2">空闲</div>
-                      <div class="text-h5">{{ roomStats.available }}</div>
-                    </q-card>
+                  <div v-if="roomStore.loading" class="col-12 text-center q-pa-md">
+                    <q-spinner color="primary" size="2em" />
+                    <div class="q-mt-sm">加载房间数据中...</div>
                   </div>
-                  <div class="col-md-3 col-sm-6 col-xs-12">
-                    <q-card class="text-center q-pa-sm bg-red-1 cursor-pointer" @click="goToRoomStatus('occupied')">
-                      <div class="text-subtitle2">已入住</div>
-                      <div class="text-h5">{{ roomStats.occupied }}</div>
-                    </q-card>
-                  </div>
-                  <div class="col-md-3 col-sm-6 col-xs-12">
-                    <q-card class="text-center q-pa-sm bg-orange-1 cursor-pointer" @click="goToRoomStatus('cleaning')">
-                      <div class="text-subtitle2">待清洁</div>
-                      <div class="text-h5">{{ roomStats.cleaning }}</div>
-                    </q-card>
-                  </div>
-                  <div class="col-md-3 col-sm-6 col-xs-12">
-                    <q-card class="text-center q-pa-sm bg-grey-3 cursor-pointer" @click="goToRoomStatus('maintenance')">
-                      <div class="text-subtitle2">维修中</div>
-                      <div class="text-h5">{{ roomStats.maintenance }}</div>
-                    </q-card>
-                  </div>
+                  <template v-else>
+                    <div class="col-md-3 col-sm-6 col-xs-12">
+                      <q-card class="text-center q-pa-sm bg-green-1 cursor-pointer" @click="goToRoomStatus('available')">
+                        <div class="text-subtitle2">空闲</div>
+                        <div class="text-h5">{{ roomStats.available }}</div>
+                      </q-card>
+                    </div>
+                    <div class="col-md-3 col-sm-6 col-xs-12">
+                      <q-card class="text-center q-pa-sm bg-red-1 cursor-pointer" @click="goToRoomStatus('occupied')">
+                        <div class="text-subtitle2">已入住</div>
+                        <div class="text-h5">{{ roomStats.occupied }}</div>
+                      </q-card>
+                    </div>
+                    <div class="col-md-3 col-sm-6 col-xs-12">
+                      <q-card class="text-center q-pa-sm bg-orange-1 cursor-pointer" @click="goToRoomStatus('cleaning')">
+                        <div class="text-subtitle2">待清洁</div>
+                        <div class="text-h5">{{ roomStats.cleaning }}</div>
+                      </q-card>
+                    </div>
+                    <div class="col-md-3 col-sm-6 col-xs-12">
+                      <q-card class="text-center q-pa-sm bg-grey-3 cursor-pointer" @click="goToRoomStatus('repair')">
+                        <div class="text-subtitle2">维修中</div>
+                        <div class="text-h5">{{ roomStats.maintenance }}</div>
+                      </q-card>
+                    </div>
+                  </template>
                 </div>
               </q-card-section>
               <q-card-section>
                 <div class="text-subtitle2 q-mb-sm">房型分布</div>
                 <q-linear-progress
+                  v-if="!roomStore.loading"
                   size="25px"
                   :value="roomStats.standardOccupancy"
                   color="primary"
@@ -132,6 +139,7 @@
                   </div>
                 </q-linear-progress>
                 <q-linear-progress
+                  v-if="!roomStore.loading"
                   size="25px"
                   :value="roomStats.deluxeOccupancy"
                   color="secondary"
@@ -144,6 +152,7 @@
                   </div>
                 </q-linear-progress>
                 <q-linear-progress
+                  v-if="!roomStore.loading"
                   size="25px"
                   :value="roomStats.suiteOccupancy"
                   color="accent"
@@ -154,10 +163,19 @@
                     </q-badge>
                   </div>
                 </q-linear-progress>
+
+                <div v-if="roomStore.loading" class="text-center q-pa-md">
+                  <q-spinner color="primary" size="2em" />
+                  <div class="q-mt-sm">加载房间数据中...</div>
+                </div>
+
+                <div v-if="!roomStore.loading && roomStore.rooms.length === 0" class="text-center q-pa-md text-grey">
+                  未找到房间数据
+                </div>
               </q-card-section>
             </q-card>
           </div>
-          
+
           <!-- 最近入住客人 -->
           <div class="col-12">
             <q-card>
@@ -187,6 +205,22 @@
                     </q-chip>
                   </q-td>
                 </template>
+
+                <!-- 自定义入住日期列显示 -->
+                <template v-slot:body-cell-checkIn="props">
+                  <q-td :props="props">
+                    <q-tooltip>{{ props.row.checkInFull }}</q-tooltip>
+                    {{ props.value }}
+                  </q-td>
+                </template>
+
+                <!-- 自定义预计离店列显示 -->
+                <template v-slot:body-cell-checkOut="props">
+                  <q-td :props="props">
+                    <q-tooltip>{{ props.row.checkOutFull }}</q-tooltip>
+                    {{ props.value }}
+                  </q-td>
+                </template>
               </q-table>
             </q-card>
           </div>
@@ -212,12 +246,12 @@
                 <q-item-label caption>{{ task.time }}</q-item-label>
               </q-item-section>
               <q-item-section side>
-                <q-select 
-                  v-model="task.priority" 
+                <q-select
+                  v-model="task.priority"
                   :options="priorityOptions"
-                  dense 
+                  dense
                   options-dense
-                  emit-value 
+                  emit-value
                   map-options
                   style="min-width: 80px"
                 >
@@ -246,12 +280,12 @@
               <q-item-section>
                 <q-input v-model="newTaskForm.title" dense placeholder="添加新任务..." @keyup.enter="addTask">
                   <template v-slot:after>
-                    <q-select 
-                      v-model="newTaskForm.priority" 
-                      :options="priorityOptions" 
-                      dense 
-                      options-dense 
-                      emit-value 
+                    <q-select
+                      v-model="newTaskForm.priority"
+                      :options="priorityOptions"
+                      dense
+                      options-dense
+                      emit-value
                       map-options
                       style="min-width: 80px"
                     >
@@ -288,16 +322,28 @@ import { date } from 'quasar'
 import { useRouter } from 'vue-router'
 import { useRoomStore } from '../stores/roomStore'
 import { useOrderStore } from '../stores/orderStore'
+import { useViewStore } from '../stores/viewStore'
 
 // 初始化路由和 stores
 const router = useRouter()
 const roomStore = useRoomStore()
 const orderStore = useOrderStore()
+const viewStore = useViewStore()
 
 // 当前日期
 const currentDate = computed(() => {
   return date.formatDate(new Date(), 'YYYY年MM月DD日 dddd')
 })
+
+/**
+ * 格式化日期时间辅助函数
+ * @param {string} dateString - 日期时间字符串
+ * @param {boolean} includeTime - 是否包含时间
+ * @returns {string} 格式化后的日期时间
+ */
+function formatDateDisplay(dateString, includeTime = false) {
+  return viewStore.formatDate(dateString, includeTime)
+}
 
 // 统计数据
 const stats = ref({
@@ -314,7 +360,7 @@ const occupancyStats = computed(() => {
   const occupied = roomStore.countByStatus.occupied
   const total = roomStore.totalRooms
   const rate = total > 0 ? Math.round((occupied / total) * 100) : 0
-  
+
   return {
     occupiedRooms: occupied,
     totalRooms: total,
@@ -328,26 +374,26 @@ const roomStats = computed(() => {
   const available = roomStore.countByStatus.available
   const occupied = roomStore.countByStatus.occupied
   const cleaning = roomStore.countByStatus.cleaning
-  const maintenance = roomStore.countByStatus.maintenance
-  
-  // 获取标准间数据
-  const standardRooms = roomStore.rooms.filter(room => room.type === 'standard')
+  const maintenance = roomStore.countByStatus.repair || 0
+
+  // 获取标准间数据 - 修正字段名称为 type_code
+  const standardRooms = roomStore.rooms.filter(room => room.type_code === 'standard')
   const standardTotal = standardRooms.length
-  const standardOccupied = standardRooms.filter(room => room.status === 'occupied').length
+  const standardOccupied = standardRooms.filter(room => roomStore.getRoomDisplayStatus(room) === 'occupied').length
   const standardOccupancy = standardTotal > 0 ? standardOccupied / standardTotal : 0
-  
-  // 获取豪华间数据
-  const deluxeRooms = roomStore.rooms.filter(room => room.type === 'deluxe')
+
+  // 获取豪华间数据 - 修正字段名称为 type_code
+  const deluxeRooms = roomStore.rooms.filter(room => room.type_code === 'deluxe')
   const deluxeTotal = deluxeRooms.length
-  const deluxeOccupied = deluxeRooms.filter(room => room.status === 'occupied').length
+  const deluxeOccupied = deluxeRooms.filter(room => roomStore.getRoomDisplayStatus(room) === 'occupied').length
   const deluxeOccupancy = deluxeTotal > 0 ? deluxeOccupied / deluxeTotal : 0
-  
-  // 获取套房数据
-  const suiteRooms = roomStore.rooms.filter(room => room.type === 'suite')
+
+  // 获取套房数据 - 修正字段名称为 type_code
+  const suiteRooms = roomStore.rooms.filter(room => room.type_code === 'suite')
   const suiteTotal = suiteRooms.length
-  const suiteOccupied = suiteRooms.filter(room => room.status === 'occupied').length
+  const suiteOccupied = suiteRooms.filter(room => roomStore.getRoomDisplayStatus(room) === 'occupied').length
   const suiteOccupancy = suiteTotal > 0 ? suiteOccupied / suiteTotal : 0
-  
+
   return {
     available,
     occupied,
@@ -431,23 +477,41 @@ const recentGuests = computed(() => {
       id: order.orderNumber,
       name: order.guestName,
       room: order.roomNumber,
-      checkIn: order.actualCheckInTime || order.checkInDate,
-      checkOut: order.actualCheckOutTime || order.checkOutDate,
-      status: order.status === '已入住' ? '入住中' : '已退房'
+      checkIn: viewStore.formatDate(order.actualCheckInTime || order.checkInDate),
+      checkOut: viewStore.formatDate(order.actualCheckOutTime || order.checkOutDate),
+      status: order.status === '已入住' ? '入住中' : '已退房',
+      checkInFull: viewStore.formatDate(order.actualCheckInTime || order.checkInDate, true),
+      checkOutFull: viewStore.formatDate(order.actualCheckOutTime || order.checkOutDate, true)
     }))
 })
 
 // 组件挂载时初始化
 onMounted(() => {
   // 这里可以加载实际数据或执行其他初始化操作
+  console.log('仪表盘初始化，房间数据:', {
+    总房间数: roomStore.rooms.length,
+    房型分布: roomStore.rooms.reduce((acc, room) => {
+      acc[room.type_code] = (acc[room.type_code] || 0) + 1;
+      return acc;
+    }, {}),
+    房间状态: roomStore.countByStatus
+  });
+
+  // 确保房间数据已加载
+  if (roomStore.rooms.length === 0) {
+    roomStore.fetchAllRooms();
+  }
 })
 
 // 跳转到房间状态页面并带上相应的状态筛选参数
 function goToRoomStatus(status) {
   console.log('跳转到房间状态页面，状态参数:', status)
+  // 确保状态参数是有效的
+  const validStatus = ['available', 'occupied', 'reserved', 'cleaning', 'repair'].includes(status)
+
   router.replace({
     path: '/room-status',
-    query: { status: status }
+    query: validStatus ? { status: status } : {}
   })
 }
 </script>
