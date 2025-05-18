@@ -1,19 +1,21 @@
 const express = require('express');
 const router = express.Router();
-// 使用统一的数据库连接模块
-const { query } = require('../database/postgreDB/pg');
+const { body, validationResult } = require('express-validator');
+const roomModule = require('../modules/roomModule');
+
+const VALID_ROOM_STATES = ['available', 'occupied', 'cleaning', 'repair', 'reserved'];
 
 // 获取所有房间
 router.get('/', async (req, res) => {
   try {
     console.log('获取所有房间请求');
+    const rooms = await roomModule.getAllRooms();
+    console.log(`成功获取 ${rooms.length} 条房间数据`);
 
-    const { rows } = await query('SELECT r.*, o.guest_name, o.check_out_date FROM rooms r LEFT JOIN orders o ON r.room_number = o.room_number AND o.status = \'已入住\'');
-    console.log(`成功获取 ${rows.length} 条房间数据`);
-    if (rows.length === 0) {
+    if (rooms.length === 0) {
       res.json({ data: [], message: '没有查询到房间数据' });
     } else {
-      res.json({ data: rows });
+      res.json({ data: rooms });
     }
   } catch (err) {
     console.error('获取房间数据错误:', err);
@@ -29,13 +31,13 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { rows } = await query('SELECT * FROM rooms WHERE room_id = $1', [id]);
+    const room = await roomModule.getRoomById(id);
 
-    if (rows.length === 0) {
+    if (!room) {
       return res.status(404).json({ message: '未找到房间' });
     }
 
-    res.json({ data: rows[0] });
+    res.json({ data: room });
   } catch (err) {
     console.error('获取房间数据错误:', err);
     res.status(500).json({ message: '服务器错误' });
@@ -46,13 +48,13 @@ router.get('/:id', async (req, res) => {
 router.get('/number/:number', async (req, res) => {
   try {
     const { number } = req.params;
-    const { rows } = await query('SELECT * FROM rooms WHERE room_number = $1', [number]);
+    const room = await roomModule.getRoomByNumber(number);
 
-    if (rows.length === 0) {
+    if (!room) {
       return res.status(404).json({ message: '未找到房间' });
     }
 
-    res.json({ data: rows[0] });
+    res.json({ data: room });
   } catch (err) {
     console.error('获取房间数据错误:', err);
     res.status(500).json({ message: '服务器错误' });
@@ -66,18 +68,15 @@ router.get('/test-repair/:id', async (req, res) => {
     console.log(`尝试设置房间 ${id} 为维修状态`);
 
     // 直接执行SQL更新，同时更新is_closed字段
-    const { rows } = await query(
-      'UPDATE rooms SET status = $1, is_closed = $2 WHERE room_id = $3 RETURNING *',
-      ['repair', true, id]
-    );
+    const room = await roomModule.updateRoomStatus(id, 'repair');
 
-    if (rows.length === 0) {
+    if (!room) {
       return res.status(404).json({ message: '未找到房间' });
     }
 
     return res.json({
       message: '房间状态已更新为维修',
-      data: rows[0]
+      data: room
     });
   } catch (err) {
     console.error('测试维修功能出错:', err);
@@ -113,7 +112,7 @@ router.patch('/:id/status', async (req, res) => {
     console.log('请求的状态值:', status);
 
     // 验证状态值 - 使用统一的状态常量
-    const VALID_ROOM_STATES = ['available', 'occupied', 'cleaning', 'repair', 'reserved'];
+
     if (!VALID_ROOM_STATES.includes(status)) {
       console.log('无效的状态值:', status);
       console.log('有效的状态值:', VALID_ROOM_STATES);
@@ -124,8 +123,7 @@ router.patch('/:id/status', async (req, res) => {
       });
     }
 
-        // 这里改用尝试导入房间表模块的updateRoomStatus方法，绕过直接SQL查询
-    const roomModule = require('../database/postgreDB/tables/room');
+    // 这里改用尝试导入房间表模块的updateRoomStatus方法，绕过直接SQL查询
     console.log('尝试使用房间模块的updateRoomStatus方法');
     const result = await roomModule.updateRoomStatus(id, status);
 

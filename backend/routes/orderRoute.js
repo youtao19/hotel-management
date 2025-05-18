@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const orderTable = require('../database/postgreDB/tables/order'); // 路径相对于当前文件
 const { body, validationResult } = require('express-validator');
-const { query } = require('../database/postgreDB/pg');
+const orderModule = require('../modules/orderModule');
+
 
 // GET /api/orders - 获取所有订单
 router.get('/', async (req, res) => {
@@ -10,62 +10,16 @@ router.get('/', async (req, res) => {
     console.log('获取所有订单请求');
 
     // 检查orders表是否存在
-    const tableCheck = await query(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables
-        WHERE table_schema = 'public'
-        AND table_name = 'orders'
-      );
-    `);
+    const tableCheck = await orderModule.checkTableExists();
 
     if (!tableCheck.rows[0].exists) {
-      console.log('orders表不存在，返回模拟数据');
-      // 返回一些模拟数据
-      return res.json({
-        data: [
-          {
-            order_id: 'ORD20240001',
-            order_source: 'online',
-            guest_name: '张三',
-            phone: '13800138000',
-            id_number: '110101199001011234',
-            room_type: 'standard',
-            room_number: '101',
-            check_in_date: '2024-04-10',
-            check_out_date: '2024-04-12',
-            status: 'confirmed',
-            payment_method: 'wechat',
-            room_price: 576.00,
-            deposit: 200.00,
-            create_time: '2024-04-08T10:30:00',
-            remarks: '需要安静的房间'
-          },
-          {
-            order_id: 'ORD20240002',
-            order_source: 'phone',
-            guest_name: '李四',
-            phone: '13900139000',
-            id_number: '310101199102023456',
-            room_type: 'deluxe',
-            room_number: '201',
-            check_in_date: '2024-04-15',
-            check_out_date: '2024-04-18',
-            status: 'checked_in',
-            payment_method: 'alipay',
-            room_price: 1164.00,
-            deposit: 300.00,
-            create_time: '2024-04-09T14:15:00',
-            actual_check_in_time: '2024-04-15T14:00:00',
-            remarks: '商务客人，需要提供发票'
-          }
-        ]
-      });
+      console.log('orders表不存在！');
     }
 
     // 查询所有订单
-    const { rows } = await query('SELECT * FROM orders ORDER BY create_time DESC');
-    console.log(`成功获取 ${rows.length} 条订单数据`);
-    res.json({ data: rows });
+    const orders = await orderModule.getAllOrders();
+    console.log(`成功获取 ${orders.length} 条订单数据`);
+    res.json({ data: orders });
   } catch (err) {
     console.error('获取订单数据错误:', err);
     res.status(500).json({
@@ -82,13 +36,13 @@ router.get('/:id', async (req, res) => {
     const { id } = req.params;
     console.log(`获取订单ID: ${id}`);
 
-    const { rows } = await query('SELECT * FROM orders WHERE order_id = $1', [id]);
+    const order = await orderModule.getOrderById(id);
 
-    if (rows.length === 0) {
+    if (!order) {
       return res.status(404).json({ message: '未找到订单' });
     }
 
-    res.json({ data: rows[0] });
+    res.json({ data: order });
   } catch (err) {
     console.error('获取订单数据错误:', err);
     res.status(500).json({

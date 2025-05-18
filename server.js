@@ -28,7 +28,7 @@ const webServer = require("http").Server(app); // 创建HTTP服务器
 const path = require("path"); // 引入路径处理模块
 const session = require("express-session"); // 引入会话管理中间件
 
-const posgreDB = require("./backend/database/postgreDB/pg-test"); // 引入PostgreSQL数据库模块
+const posgreDB = require("./backend/database/postgreDB/pg"); // 引入PostgreSQL数据库模块
 // const redisDB = require("./backend/database/redis/redis"); // 引入Redis数据库模块
 // let RedisStore = require("connect-redis")(session); // 创建Redis会话存储
 let staticFileRoot = path.join(__dirname, "front-end", "dist"); // 设置静态文件根目录为生产环境构建目录
