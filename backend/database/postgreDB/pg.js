@@ -25,7 +25,6 @@ let pool = null;
 function createPool() {
   if (!pool) {
     pool = new Pool(dbConfig);
-
     // 添加错误处理
     pool.on('error', (err, client) => {
       console.error('PostgreSQL连接池发生错误:', err);

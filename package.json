@@ -10,8 +10,8 @@
         "dev": "quasar dev",
         "build": "quasar build",
         "postinstall": "quasar prepare",
-        "server": "node simple-api.js",
-        "start": "concurrently \"npm run server\" \"npm run dev\""
+        "start": "concurrently \"npm run devStart\" \"npm run dev\"",
+        "devStart": "nodemon server.js"
     },
     "dependencies": {
         "@quasar/extras": "^1.16.4",
