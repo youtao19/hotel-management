@@ -314,6 +314,8 @@ const router = useRouter()
 const filterType = ref(null)    // 房间类型筛选，初始为null表示不筛选
 const filterStatus = ref(null)  // 房间状态筛选，初始为null表示不筛选
 const dateRange = ref(null)     // 日期范围筛选，初始为null表示不筛选
+const loading = ref(false)      // 加载状态
+const error = ref(null)         // 错误信息
 
 /**
  * 格式化日期范围显示
@@ -451,57 +453,107 @@ const filteredRooms = computed(() => {
 
 /**
  * 应用筛选按钮点击处理函数
- * 将筛选条件更新到URL参数
+ * 将筛选条件更新到URL参数并执行筛选
  */
-function applyFilters() {
-  console.log('应用筛选:', { 房型: filterType.value, 状态: filterStatus.value, 日期范围: dateRange.value })
+async function applyFilters() {
+  try {
+    loading.value = true;
+    error.value = null;
+    console.log('应用筛选:', { 房型: filterType.value, 状态: filterStatus.value, 日期范围: dateRange.value });
 
-  // 构建查询参数对象
-  const query = {}
+    // 构建查询参数对象
+    const query = {};
 
-  if (filterType.value) {
-    query.type = filterType.value
-  }
-
-  if (filterStatus.value) {
-    query.status = filterStatus.value
-  }
-
-  // 处理日期范围
-  if (dateRange.value) {
-    // 如果是对象格式，转换为字符串
-    if (typeof dateRange.value === 'object') {
-      const { from, to } = dateRange.value
-      if (from && to) {
-        query.dateRange = `${from} to ${to}`
-      }
-    } else if (typeof dateRange.value === 'string' && dateRange.value.trim() !== '') {
-      query.dateRange = dateRange.value
+    if (filterType.value) {
+      query.type = filterType.value;
     }
-  }
 
-  // 更新URL
-  router.replace({
-    path: route.path,
-    query
-  })
+    if (filterStatus.value) {
+      query.status = filterStatus.value;
+    }
+
+    // 处理日期范围
+    if (dateRange.value) {
+      let startDate, endDate;
+
+      // 如果是对象格式，转换为字符串
+      if (typeof dateRange.value === 'object') {
+        const { from, to } = dateRange.value;
+        if (from && to) {
+          startDate = from;
+          endDate = to;
+          query.dateRange = `${from} to ${to}`;
+        }
+      } else if (typeof dateRange.value === 'string' && dateRange.value.includes(' to ')) {
+        [startDate, endDate] = dateRange.value.split(' to ');
+        query.dateRange = dateRange.value;
+      }
+
+      // 如果有有效的日期范围，查询可用房间
+      if (startDate && endDate) {
+        try {
+          // 直接使用后端返回的结果
+          const availableRooms = await roomStore.getAvailableRoomsByDate(
+            startDate,
+            endDate,
+            filterType.value
+          );
+          rooms.value = availableRooms;
+        } catch (err) {
+          console.error('查询可用房间失败:', err);
+          error.value = '查询可用房间失败: ' + err.message;
+        }
+      }
+    } else {
+      // 如果没有日期范围，使用常规筛选
+      const filteredRooms = await roomStore.fetchAllRooms();
+      rooms.value = roomStore.filterRooms({
+        type: filterType.value,
+        status: filterStatus.value
+      });
+    }
+
+    // 更新URL
+    router.replace({
+      path: route.path,
+      query
+    });
+  } catch (err) {
+    console.error('应用筛选失败:', err);
+    error.value = '应用筛选失败: ' + err.message;
+  } finally {
+    loading.value = false;
+  }
 }
 
 /**
  * 重置筛选条件
- * 同时清除组件状态和URL参数，保持两者同步
  */
-function resetFilters() {
-  // 重置组件状态变量
-  filterType.value = null
-  filterStatus.value = null
-  dateRange.value = null
+async function resetFilters() {
+  try {
+    loading.value = true;
+    error.value = null;
 
-  // 更新URL，移除所有筛选参数
-  router.replace({
-    path: route.path,
-    query: {}
-  })
+    // 重置组件状态变量
+    filterType.value = null;
+    filterStatus.value = null;
+    dateRange.value = null;
+
+    // 重新加载所有房间
+    await roomStore.fetchAllRooms();
+    rooms.value = roomStore.rooms;
+
+    // 更新URL，移除所有筛选参数
+    router.replace({
+      path: route.path,
+      query: {}
+    });
+  } catch (err) {
+    console.error('重置筛选失败:', err);
+    error.value = '重置筛选失败: ' + err.message;
+  } finally {
+    loading.value = false;
+  }
 }
 
 /**

@@ -198,6 +198,57 @@ async function getAllRoomTypes() {
   }
 }
 
+/**
+ * 检查指定日期范围内的可用房间
+ * @param {string} startDate - 入住日期 YYYY-MM-DD
+ * @param {string} endDate - 退房日期 YYYY-MM-DD
+ * @param {string} [typeCode] - 可选的房型代码
+ * @returns {Promise<Array>} 可用房间列表
+ */
+async function getAvailableRooms(startDate, endDate, typeCode = null) {
+  try {
+    console.log('查询可用房间:', { startDate, endDate, typeCode });
+
+    // 构建基础查询
+    let baseQuery = `
+      SELECT DISTINCT r.*
+      FROM rooms r
+      WHERE r.is_closed = false
+      AND r.status NOT IN ('repair', 'cleaning')
+      AND NOT EXISTS (
+        SELECT 1
+        FROM orders o
+        WHERE o.room_number = r.room_number
+        AND o.status IN ('pending', 'checked-in')
+        AND $1 < o.check_out_date
+        AND $2 > o.check_in_date
+      )
+    `;
+
+    const queryParams = [startDate, endDate];
+
+    // 如果指定了房型，添加房型过滤条件
+    if (typeCode) {
+      baseQuery += ' AND r.type_code = $3';
+      queryParams.push(typeCode);
+    }
+
+    // 按房间号排序
+    baseQuery += ' ORDER BY r.room_number';
+
+    console.log('执行SQL查询:', baseQuery);
+    console.log('查询参数:', queryParams);
+
+    const result = await query(baseQuery, queryParams);
+    console.log(`找到 ${result.rows.length} 个可用房间`);
+
+    return result.rows;
+  } catch (error) {
+    console.error('查询可用房间失败:', error);
+    throw error;
+  }
+}
+
 // 导出表定义和功能函数
 module.exports = {
   getAllRooms,
@@ -205,5 +256,6 @@ module.exports = {
   getRoomByNumber,
   updateRoomStatus,
   addRoom,
-  getAllRoomTypes
+  getAllRoomTypes,
+  getAvailableRooms
 };

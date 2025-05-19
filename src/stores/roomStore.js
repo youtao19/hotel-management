@@ -719,6 +719,42 @@ export const useRoomStore = defineStore('room', () => {
   // 立即初始化
   initialize()
 
+  /**
+   * 获取指定日期范围内的可用房间
+   * @param {string} startDate - 入住日期 YYYY-MM-DD
+   * @param {string} endDate - 退房日期 YYYY-MM-DD
+   * @param {string} [typeCode] - 可选的房型代码
+   * @returns {Promise<Array>} 可用房间列表
+   */
+  async function getAvailableRoomsByDate(startDate, endDate, typeCode = null) {
+    try {
+      console.log('查询可用房间:', { startDate, endDate, typeCode });
+
+      // 构建查询参数
+      const params = new URLSearchParams({
+        startDate,
+        endDate
+      });
+
+      if (typeCode) {
+        params.append('typeCode', typeCode);
+      }
+
+      const response = await roomApi.getAvailableRooms(params.toString());
+
+      if (!response || !response.data) {
+        throw new Error('获取可用房间失败');
+      }
+
+      // 直接返回后端处理好的数据
+      console.log(`找到 ${response.data.length} 个可用房间`);
+      return response.data;
+    } catch (error) {
+      console.error('获取可用房间失败:', error);
+      throw error;
+    }
+  }
+
   return {
     // 状态常量 - 导出给组件使用
     ROOM_STATES,
@@ -766,6 +802,7 @@ export const useRoomStore = defineStore('room', () => {
     // 同步方法
     syncAllRoomStatus,
     syncRoomStatus,
-    refreshData
+    refreshData,
+    getAvailableRoomsByDate
   }
 })
