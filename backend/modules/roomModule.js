@@ -10,10 +10,14 @@ async function getAllRooms() {
     // 这样可以确保不会漏掉任何房间
 
     // 1. 获取所有房间的基本信息
+    console.log('开始获取房间基本信息...');
     const roomsResult = await query('SELECT * FROM rooms ORDER BY room_number');
+    console.log(`查询到 ${roomsResult.rows.length} 个房间`);
+
     const allRooms = roomsResult.rows;
 
     // 2. 获取房间与当前有效订单的关联信息
+    console.log('开始获取房间关联的订单信息...');
     const ordersSQL = `
       SELECT DISTINCT ON (o.room_number)
         o.room_number,
@@ -22,11 +26,13 @@ async function getAllRooms() {
         o.status as order_status,
         o.order_id
       FROM orders o
-      WHERE o.status IN ('待入住', '已入住')
+      WHERE o.status IN ('pending', 'checked-in')
       ORDER BY o.room_number, o.create_time DESC
     `;
 
     const ordersResult = await query(ordersSQL);
+    console.log(`查询到 ${ordersResult.rows.length} 个活跃订单`);
+
     const ordersByRoom = {};
 
     // 创建房间号到订单的映射
@@ -50,9 +56,11 @@ async function getAllRooms() {
     });
 
     // 添加调试日志
-    console.log('总房间数量:', allRooms.length);
-    console.log('有订单的房间数量:', ordersResult.rows.length);
-    console.log('合并后的房间数据示例:', mergedRooms.slice(0, 3));
+    console.log('房间数据处理完成:');
+    console.log('- 总房间数量:', allRooms.length);
+    console.log('- 有订单的房间数量:', ordersResult.rows.length);
+    console.log('- 合并后的房间数量:', mergedRooms.length);
+    console.log('- 可用房间数量:', mergedRooms.filter(r => r.status === 'available' && !r.order_status).length);
 
     // 记录有订单状态的房间
     const roomsWithOrders = mergedRooms.filter(room => room.order_status);

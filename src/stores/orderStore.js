@@ -75,11 +75,11 @@ export const useOrderStore = defineStore('order', () => {
       loading.value = true
       error.value = null
 
-      // 将状态翻译为中文
-      let statusText = '待入住'
-      if (order.status === 'checked-in') statusText = '已入住'
-      else if (order.status === 'checked-out') statusText = '已退房'
-      else if (order.status === 'cancelled') statusText = '已取消'
+      // 将状态翻译为英文
+      let statusText = 'pending'
+      if (order.status === 'checked-in') statusText = 'checked-in'
+      else if (order.status === 'checked-out') statusText = 'checked-out'
+      else if (order.status === 'cancelled') statusText = 'cancelled'
 
       const orderData = {
         // 适配数据库字段名
@@ -145,7 +145,7 @@ export const useOrderStore = defineStore('order', () => {
       // 更新本地状态
       const index = orders.value.findIndex(o => o.order_id === orderNumber)
       if (index !== -1) {
-        orders.value[index].status = '已入住'
+        orders.value[index].status = 'checked-in'
         orders.value[index].actual_check_in_time = checkInTime
       }
       return true
@@ -163,7 +163,7 @@ export const useOrderStore = defineStore('order', () => {
       // 更新本地状态
       const index = orders.value.findIndex(o => o.order_id === orderNumber)
       if (index !== -1) {
-        orders.value[index].status = '已退房'
+        orders.value[index].status = 'checked-out'
         orders.value[index].actual_check_out_time = checkOutTime
       }
       return true
@@ -220,7 +220,7 @@ export const useOrderStore = defineStore('order', () => {
   function getActiveOrderByRoomNumber(roomNumber) {
     return orders.value.find(order =>
       order.roomNumber === roomNumber &&
-      (order.status === '待入住' || order.status === '已入住')
+      (order.status === 'pending' || order.status === 'checked-in')
     )
   }
 

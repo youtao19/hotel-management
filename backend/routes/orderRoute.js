@@ -3,6 +3,8 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const orderModule = require('../modules/orderModule');
 
+// 定义有效的订单状态
+const VALID_ORDER_STATES = ['pending', 'checked-in', 'checked-out', 'cancelled'];
 
 // GET /api/orders - 获取所有订单
 router.get('/', async (req, res) => {
@@ -66,7 +68,15 @@ router.post('/',
     body('roomNumber').notEmpty().withMessage('房间号不能为空').isString(),
     body('checkInDate').notEmpty().withMessage('入住日期不能为空').isISO8601().toDate(),
     body('checkOutDate').notEmpty().withMessage('离店日期不能为空').isISO8601().toDate(),
-    body('status').notEmpty().withMessage('订单状态不能为空').isString(),
+    body('status')
+      .notEmpty().withMessage('订单状态不能为空')
+      .isString()
+      .custom(value => {
+        if (!VALID_ORDER_STATES.includes(value)) {
+          throw new Error(`无效的订单状态。有效状态: ${VALID_ORDER_STATES.join(', ')}`);
+        }
+        return true;
+      }),
     body('paymentMethod').optional({ checkFalsy: true }).isString(), // 支付方式可以为空或字符串
     body('roomPrice').notEmpty().withMessage('房间金额不能为空').isDecimal(),
     body('deposit').optional({ checkFalsy: true }).isDecimal(), // 押金可以为空或数字
@@ -115,7 +125,7 @@ router.post('/',
     };
 
     try {
-      const newOrder = await orderTable.createOrder(orderDataForDb);
+      const newOrder = await orderModule.createOrder(orderDataForDb);
       // 实际应用中，创建订单后可能还需要更新房间状态等操作，这里简化处理
       // 例如，调用 roomStore.reserveRoom 或 roomStore.occupyRoom 的后端等效逻辑
       res.status(201).json({ message: '订单创建成功', order: newOrder });

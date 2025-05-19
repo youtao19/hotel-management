@@ -78,9 +78,10 @@
 
             <template v-slot:body-cell-status="props">
               <q-td :props="props">
-                <q-badge :color="getStatusColor(props.row.status)">
-                  {{ viewStore.getOrderStatusText(props.row.status) }}
-                </q-badge>
+                <q-badge
+                  :color="getStatusColor(props.row.status)"
+                  :label="viewStore.getOrderStatusText(props.row.status)"
+                />
               </q-td>
             </template>
           </q-table>
@@ -112,9 +113,10 @@
                     <q-item-section>
                       <q-item-label caption>状态</q-item-label>
                       <q-item-label>
-                        <q-badge :color="getStatusColor(currentOrder.status)">
-                          {{ currentOrder.status }}
-                        </q-badge>
+                        <q-badge
+                          :color="getStatusColor(currentOrder.status)"
+                          :label="viewStore.getOrderStatusText(currentOrder.status)"
+                        />
                       </q-item-label>
                     </q-item-section>
                   </q-item>
@@ -400,7 +402,12 @@
   const loadingOrders = ref(false)
 
   // 订单状态选项
-  const statusOptions = viewStore.orderStatusOptions
+  const statusOptions = [
+    { label: '待入住', value: 'pending' },
+    { label: '已入住', value: 'checked-in' },
+    { label: '已退房', value: 'checked-out' },
+    { label: '已取消', value: 'cancelled' }
+  ]
 
   // 订单表格列定义
   const orderColumns = [
@@ -421,7 +428,7 @@
       label: '入住日期',
       field: 'checkInDate',
       sortable: true,
-      format: val => date.formatDate(val, 'YYYY-MM-DD') // 格式化日期
+      format: val => date.formatDate(val, 'YYYY-MM-DD')
     },
     {
       name: 'checkOutDate',
@@ -429,13 +436,13 @@
       label: '离店日期',
       field: 'checkOutDate',
       sortable: true,
-      format: val => date.formatDate(val, 'YYYY-MM-DD') // 格式化日期
+      format: val => date.formatDate(val, 'YYYY-MM-DD')
     },
     {
       name: 'status',
       align: 'left',
       label: '状态',
-      field: 'status', // 保留 field 方便排序/过滤，渲染使用 slot
+      field: 'status',
       sortable: true
     },
     { name: 'actions', align: 'center', label: '操作', field: 'actions' }

@@ -4,6 +4,40 @@
       <!-- 页面标题 -->
       <h1 class="text-h4 q-mb-md">创建订单</h1>
 
+      <!-- 添加测试数据按钮 -->
+      <div class="row q-mb-md">
+        <q-btn
+          label="填充测试数据"
+          color="orange"
+          icon="bug_report"
+          @click="fillTestData"
+          class="q-mr-sm"
+        />
+        <q-btn
+          v-if="isDev"
+          label="随机数据"
+          color="purple"
+          icon="auto_awesome"
+          @click="fillRandomData"
+          class="q-mr-sm"
+        />
+        <q-btn
+          v-if="isDev && roomStore.rooms.length === 0"
+          label="创建测试房间"
+          color="negative"
+          icon="add_home"
+          @click="createTestRooms"
+        />
+      </div>
+
+      <!-- 警告信息显示 -->
+      <q-banner v-if="roomStore.rooms.length === 0" class="bg-red text-white q-mb-md">
+        <template v-slot:avatar>
+          <q-icon name="warning" />
+        </template>
+        系统中没有房间数据，无法创建订单。请先添加房间，或点击"创建测试房间"按钮初始化测试数据。
+      </q-banner>
+
       <!-- 主卡片容器，包含整个表单 -->
       <q-card>
         <q-card-section>
@@ -373,6 +407,7 @@
   import { useRoomStore } from '../stores/roomStore' // 导入房间 store
   import { useViewStore } from '../stores/viewStore' // 导入视图 store
   import { api } from 'boot/axios' // Assuming api is exported from boot/axios.js
+  import { roomApi } from '../api' // 导入房间API模块
 
   // 获取路由和store
   const router = useRouter()
@@ -380,6 +415,12 @@
   const roomStore = useRoomStore()
   const viewStore = useViewStore()
   const $q = useQuasar() // For notifications
+
+  // 检查是否为开发环境
+  const isDev = ref(process.env.NODE_ENV === 'development')
+
+  // 使用roomStore中的状态常量
+  const { ROOM_STATES } = roomStore
 
   /**
    * 生成唯一的订单号
@@ -411,12 +452,7 @@
   const today = date.formatDate(new Date(), 'YYYY-MM-DD')
 
   // 订单状态选项数组 - 从viewStore获取
-  const statusOptions = [
-    { label: '待入住', value: 'pending' },
-    { label: '已入住', value: 'checked-in' },
-    { label: '已退房', value: 'checked-out' },
-    { label: '已取消', value: 'cancelled' }
-  ]
+  const statusOptions = viewStore.statusOptions
 
   // 订单来源选项数组
   const sourceOptions = [
@@ -527,11 +563,7 @@
   // 从roomStore获取房间类型选项数组和可用房间数量
   const roomTypeOptionsWithCount = computed(() => roomStore.getRoomTypeOptionsWithCount());
 
-  /**
-   * 根据房间数量获取对应的颜色
-   * @param {number} count - 房间数量
-   * @returns {string} 对应的颜色
-   */
+  // 根据房间数量获取对应的颜色
   const getRoomCountColor = roomStore.getRoomCountColor;
 
   // 计算可用房间的选项
@@ -600,7 +632,7 @@
    * 提交订单函数
    * 收集表单数据，调用后端API创建订单，并导航到订单列表页面
    */
-  async function submitOrder() { // Made function async
+  async function submitOrder() {
     // 获取当前时间
     const now = getCurrentTimeToMinute()
 
@@ -616,33 +648,38 @@
 
     // 获取选择的房间 (client-side check before API call)
     const selectedRoom = roomStore.getRoomByNumber(orderData.value.roomNumber)
+
+    // 添加更详细的调试信息
+    console.log('提交订单前的房间信息:', {
+      roomNumber: orderData.value.roomNumber,
+      selectedRoom: selectedRoom
+    })
+
+    // 改进房间检查逻辑
     if (!selectedRoom) {
       $q.notify({
         type: 'negative',
-        message: '所选房间数据不存在，请重新选择',
+        message: `房间 ${orderData.value.roomNumber} 数据不存在，请重新选择`,
         position: 'top'
       });
       return
     }
 
     // 确认选择的房间确实是可用状态 (client-side check)
-    // Backend should also validate this, but good to have a client-side check
-    if (selectedRoom.status !== 'available') {
+    const displayStatus = roomStore.getRoomDisplayStatus(selectedRoom)
+    if (displayStatus !== ROOM_STATES.AVAILABLE) {
       $q.notify({
         type: 'negative',
-        message: `房间 ${selectedRoom.number} 当前状态为 ${viewStore.getStatusText(selectedRoom.status)}，无法预订`,
+        message: `房间 ${orderData.value.roomNumber} 当前状态为 ${roomStore.getRoomStatusText(selectedRoom)}，无法预订`,
         position: 'top'
       });
       return
     }
 
     // 创建包含所有字段的订单对象，用于发送到后端
-    // Field names should match what backend `orderRoute.js` expects in `req.body`
     const orderToSubmit = {
       ...orderData.value,
-      // 确保状态值是英文代码，而不是中文显示文本
       status: orderData.value.status,
-      // 确保日期格式正确 (YYYY-MM-DD)
       checkInDate: date.formatDate(orderData.value.checkInDate, 'YYYY-MM-DD'),
       checkOutDate: date.formatDate(orderData.value.checkOutDate, 'YYYY-MM-DD'),
       createTime: date.formatDate(now, 'YYYY-MM-DD HH:mm:ss'),
@@ -650,16 +687,13 @@
         date.formatDate(now, 'YYYY-MM-DD HH:mm:ss') : null,
       actualCheckOutTime: orderData.value.status === 'checked-out' ?
         date.formatDate(now, 'YYYY-MM-DD HH:mm:ss') : null,
-      // 确保支付方式是字符串
       paymentMethod: typeof orderData.value.paymentMethod === 'object' ?
         orderData.value.paymentMethod.value :
         (orderData.value.paymentMethod || 'cash'),
-      // 确保数值字段被转换为数字
       roomPrice: Number(orderData.value.roomPrice),
       deposit: Number(orderData.value.deposit),
     };
 
-    // 打印提交的数据，用于调试
     console.log('提交的订单数据:', orderToSubmit);
 
     try {
@@ -668,13 +702,10 @@
 
       if (response.data && response.data.order) {
         // 订单创建成功
-        // 可选：将后端返回的订单添加到本地store
         orderStore.addOrder(response.data.order);
 
-        // 重要提示：房间状态的更新 (e.g., setting room to 'reserved' or 'occupied')
-        // 应该由后端处理，或者通过后续的API调用来完成。
-        // 当前的 /api/orders 端点仅创建订单，不修改房间状态。
-        // 原先的 roomStore.reserveRoom(), occupyRoom() 等调用已移除。
+        // 刷新房间状态
+        await roomStore.refreshData();
 
         $q.notify({
           type: 'positive',
@@ -685,7 +716,6 @@
         // 导航到订单列表页面
         router.push('/ViewOrders');
       } else {
-        // 响应成功但数据格式不符合预期
         $q.notify({
           type: 'warning',
           message: '订单创建请求成功，但服务器响应异常。' + (response.data.message || ''),
@@ -698,14 +728,11 @@
       if (error.response && error.response.data) {
         console.log('服务器返回的详细错误:', error.response.data);
 
-        // 更清晰地展示错误信息
         if (error.response.data.errors && Array.isArray(error.response.data.errors)) {
-          // 在控制台中显示每个验证错误
           error.response.data.errors.forEach((err, index) => {
             console.log(`错误 ${index + 1}:`, err);
           });
 
-          // 格式化错误消息
           errorMessage = '表单验证失败：\n' +
             error.response.data.errors.map(e => `- ${e.msg}`).join('\n');
         } else if (error.response.data.message) {
@@ -716,55 +743,333 @@
         type: 'negative',
         message: errorMessage,
         position: 'top',
-        timeout: 10000, // 延长显示时间
-        multiLine: true // 允许多行显示
+        timeout: 10000,
+        multiLine: true
       });
     }
   }
 
-  // 组件挂载时执行的钩子函数
-  onMounted(() => {
-    // 检查可用房间数量
-    const availableRoomsCount = roomStore.filterRooms({status: 'available'}).length
-    console.log('可用房间数量:', availableRoomsCount)
+  /**
+   * 填充测试数据
+   */
+  function fillTestData() {
+    // 填充基本订单数据
+    orderData.value.guestName = '张测试'
+    orderData.value.idNumber = '110101199001011234'
+    orderData.value.phone = '13800138000'
+    orderData.value.remarks = '测试订单，请勿处理'
 
-    // 如果没有可用房间，在控制台输出提示信息
-    if (availableRoomsCount === 0) {
-      console.warn('系统中没有可用房间，请联系管理员设置房间状态。')
-    }
+    // 获取第一个可用的房间类型
+    const availableRoomTypes = roomTypeOptionsWithCount.value
+      .filter(type => type.availableCount > 0)
 
-    // 获取URL查询参数
-    const query = router.currentRoute.value.query
-
-    // 如果有查询参数且包含房间信息，则自动填充表单
-    if (query && Object.keys(query).length > 0) {
-      console.log('检测到URL查询参数:', query)
-
+    if (availableRoomTypes.length > 0) {
       // 设置房间类型
-      if (query.roomType) {
-        orderData.value.roomType = query.roomType
+      orderData.value.roomType = availableRoomTypes[0].value
 
-        // 等待DOM更新完成后再设置房间号
-        nextTick(() => {
-          // 如果有指定房间号，则设置该房间
-          if (query.roomNumber) {
-            orderData.value.roomNumber = query.roomNumber
+      // 等待DOM更新
+      nextTick(() => {
+        // 设置第一个可用房间
+        if (availableRoomOptions.value.length > 0) {
+          orderData.value.roomNumber = availableRoomOptions.value[0].value
 
-            // 根据房间号获取房间信息，设置房间价格
-            const selectedRoom = roomStore.getRoomByNumber(query.roomNumber)
-            if (selectedRoom) {
-              orderData.value.roomPrice = selectedRoom.price
-            }
+          // 根据选择的房间直接设置房间价格
+          const selectedRoom = roomStore.getRoomByNumber(orderData.value.roomNumber)
+          if (selectedRoom) {
+            console.log('设置房间价格:', selectedRoom.price)
+            orderData.value.roomPrice = Number(selectedRoom.price)
+          } else {
+            console.error('无法获取选择房间的价格信息')
+            // 设置一个默认价格
+            orderData.value.roomPrice = 299
           }
-        })
+        }
+      })
+    }
+
+    // 设置支付信息
+    orderData.value.paymentMethod = 'cash'
+    orderData.value.deposit = 200
+
+    // 显示通知
+    $q.notify({
+      type: 'positive',
+      message: '测试数据已填充',
+      position: 'top'
+    })
+
+    // 添加验证
+    nextTick(() => {
+      // 验证房间是否正确选择
+      const room = roomStore.getRoomByNumber(orderData.value.roomNumber)
+      if (!room) {
+        console.error('测试数据填充后，无法找到选择的房间')
+      } else {
+        console.log('测试数据填充后，房间状态:', room.status)
+        console.log('测试数据填充后，房间价格:', room.price)
+      }
+    })
+  }
+
+  /**
+   * 填充随机测试数据
+   */
+  function fillRandomData() {
+    // 随机名字
+    const firstNames = ['张', '王', '李', '赵', '刘', '陈', '杨', '黄']
+    const lastNames = ['明', '芳', '军', '华', '英', '伟', '强', '勇', '静', '敏']
+    const randomName = firstNames[Math.floor(Math.random() * firstNames.length)] +
+                      lastNames[Math.floor(Math.random() * lastNames.length)]
+
+    // 随机身份证
+    const randomIdPrefix = '1101011990'
+    const randomMonth = String(Math.floor(Math.random() * 12) + 1).padStart(2, '0')
+    const randomDay = String(Math.floor(Math.random() * 28) + 1).padStart(2, '0')
+    const randomSuffix = String(Math.floor(Math.random() * 10000)).padStart(4, '0')
+    const randomId = `${randomIdPrefix}${randomMonth}${randomDay}${randomSuffix}`
+
+    // 随机手机号
+    const phonePrefix = ['138', '139', '186', '187', '158', '159']
+    const randomPhone = phonePrefix[Math.floor(Math.random() * phonePrefix.length)] +
+                        String(Math.floor(Math.random() * 100000000)).padStart(8, '0')
+
+    // 填充数据
+    orderData.value.guestName = randomName
+    orderData.value.idNumber = randomId
+    orderData.value.phone = randomPhone
+    orderData.value.remarks = `随机生成的测试订单 - ${new Date().toLocaleString()}`
+
+    // 随机选择一个可用房型
+    const availableRoomTypes = roomTypeOptionsWithCount.value
+      .filter(type => type.availableCount > 0)
+
+    if (availableRoomTypes.length > 0) {
+      const randomRoomType = availableRoomTypes[Math.floor(Math.random() * availableRoomTypes.length)]
+      orderData.value.roomType = randomRoomType.value
+
+      // 等待DOM更新
+      nextTick(() => {
+        // 随机选择一个可用房间
+        if (availableRoomOptions.value.length > 0) {
+          const randomIndex = Math.floor(Math.random() * availableRoomOptions.value.length)
+          orderData.value.roomNumber = availableRoomOptions.value[randomIndex].value
+
+          // 根据选择的房间直接设置房间价格
+          const selectedRoom = roomStore.getRoomByNumber(orderData.value.roomNumber)
+          if (selectedRoom) {
+            console.log('设置随机房间价格:', selectedRoom.price)
+            orderData.value.roomPrice = Number(selectedRoom.price)
+          } else {
+            // 设置一个随机默认价格 (200-800)
+            orderData.value.roomPrice = Math.floor(Math.random() * 601) + 200
+          }
+        }
+      })
+    }
+
+    // 随机支付方式
+    const paymentMethods = viewStore.paymentMethodOptions
+    orderData.value.paymentMethod = paymentMethods[Math.floor(Math.random() * paymentMethods.length)].value
+
+    // 随机押金 (100-500)
+    orderData.value.deposit = Math.floor(Math.random() * 401) + 100
+
+    // 显示通知
+    $q.notify({
+      type: 'positive',
+      message: '随机测试数据已填充',
+      position: 'top'
+    })
+
+    // 添加随机数据的验证
+    setTimeout(() => {
+      console.log('房间价格设置情况:', {
+        roomNumber: orderData.value.roomNumber,
+        roomPrice: orderData.value.roomPrice,
+        selectedRoom: roomStore.getRoomByNumber(orderData.value.roomNumber)
+      })
+    }, 500)
+  }
+
+  /**
+   * 创建测试房间数据
+   */
+  async function createTestRooms() {
+    try {
+      $q.loading.show({
+        message: '正在创建测试房间数据...'
+      })
+
+      // 测试房型数据
+      const roomTypes = [
+        { type_code: 'standard', name: '标准间', price: 288 },
+        { type_code: 'deluxe', name: '豪华间', price: 388 },
+        { type_code: 'suite', name: '套房', price: 588 }
+      ]
+
+      // 为每种房型创建测试房间
+      const createdRooms = []
+      let roomIdCounter = 1
+
+      for (const type of roomTypes) {
+        // 每种类型创建2个房间
+        for (let i = 1; i <= 2; i++) {
+          const floorNum = type.type_code === 'standard' ? 1 : (type.type_code === 'deluxe' ? 2 : 3)
+          const roomNumber = `${floorNum}0${i}`
+
+          const room = {
+            room_id: roomIdCounter++,
+            room_number: roomNumber,
+            type_code: type.type_code,
+            status: 'available',
+            price: type.price
+          }
+
+          try {
+            // 调用API添加房间
+            await roomApi.addRoom(room)
+            createdRooms.push(room)
+            console.log(`创建测试房间成功: ${roomNumber}`)
+          } catch (err) {
+            console.error(`创建房间 ${roomNumber} 失败:`, err)
+          }
+        }
       }
 
-      // 如果有指定订单状态，则设置状态
-      if (query.status) {
-        orderData.value.status = query.status
-      }
+      // 重新加载房间数据
+      await roomStore.fetchAllRooms()
+
+      $q.loading.hide()
+      $q.notify({
+        type: 'positive',
+        message: `已成功创建 ${createdRooms.length} 个测试房间`,
+        position: 'top',
+        timeout: 3000
+      })
+
+      console.log('创建的测试房间:', createdRooms)
+    } catch (err) {
+      $q.loading.hide()
+      console.error('创建测试房间失败:', err)
+      $q.notify({
+        type: 'negative',
+        message: '创建测试房间失败: ' + (err.message || String(err)),
+        position: 'top',
+        timeout: 5000
+      })
     }
-  })
+  }
+
+  // 组件挂载时执行的钩子函数
+  onMounted(async () => {
+    try {
+      // 检查房间数据和状态
+      console.log('开始加载房间数据...');
+
+      // 先尝试获取房间数据
+      await roomStore.fetchAllRooms();
+
+      console.log('房间数据加载状态:', {
+        总房间数: roomStore.totalRooms,
+        所有房间: roomStore.rooms.map(r => ({
+          房间号: r.room_number,
+          状态: roomStore.getRoomStatusText(r)
+        }))
+      });
+
+      // 检查可用房间数量
+      const availableRoomsCount = roomStore.countByStatus.available;
+      console.log('可用房间数量:', availableRoomsCount);
+
+      // 如果房间数量为0，尝试重新加载
+      if (roomStore.totalRooms === 0) {
+        console.log('尝试重新加载房间数据...');
+        await roomStore.refreshData();
+        const newCount = roomStore.countByStatus.available;
+        console.log('重新加载后的可用房间数量:', newCount);
+      }
+
+      // 如果没有可用房间，在页面显示提示信息并记录日志
+      if (availableRoomsCount === 0) {
+        console.warn('系统中没有可用房间，请联系管理员设置房间状态。');
+        $q.notify({
+          type: 'warning',
+          message: '系统中没有可用房间，请联系管理员设置房间状态。',
+          position: 'top',
+          timeout: 10000
+        });
+
+        // 显示所有房间的状态，方便排查问题
+        const allRooms = roomStore.rooms;
+        if (allRooms.length > 0) {
+          console.log('系统中所有房间状态:');
+          const roomStatusMap = {};
+          allRooms.forEach(room => {
+            const status = roomStore.getRoomStatusText(room);
+            roomStatusMap[status] = (roomStatusMap[status] || 0) + 1;
+          });
+          console.table(roomStatusMap);
+        } else {
+          console.error('系统中没有任何房间数据，请检查数据库或API连接');
+          $q.notify({
+            type: 'negative',
+            message: '系统中没有任何房间数据，请检查数据库或API连接',
+            position: 'top',
+            timeout: 0
+          });
+        }
+      }
+
+      // 获取URL查询参数
+      const query = router.currentRoute.value.query;
+
+      // 检查是否自动填充测试数据
+      if (query.autofill === 'true') {
+        console.log('检测到autofill参数，自动填充测试数据');
+        fillTestData();
+      } else if (query.autofill === 'random') {
+        console.log('检测到autofill=random参数，自动填充随机测试数据');
+        fillRandomData();
+      }
+
+      // 如果有查询参数且包含房间信息，则自动填充表单
+      if (query && Object.keys(query).length > 0) {
+        console.log('检测到URL查询参数:', query);
+
+        // 设置房间类型
+        if (query.roomType) {
+          orderData.value.roomType = query.roomType;
+
+          // 等待DOM更新完成后再设置房间号
+          nextTick(() => {
+            // 如果有指定房间号，则设置该房间
+            if (query.roomNumber) {
+              orderData.value.roomNumber = query.roomNumber;
+
+              // 根据房间号获取房间信息，设置房间价格
+              const selectedRoom = roomStore.getRoomByNumber(query.roomNumber);
+              if (selectedRoom) {
+                orderData.value.roomPrice = selectedRoom.price;
+              }
+            }
+          });
+        }
+
+        // 如果有指定订单状态，则设置状态
+        if (query.status) {
+          orderData.value.status = query.status;
+        }
+      }
+    } catch (error) {
+      console.error('组件初始化失败:', error);
+      $q.notify({
+        type: 'negative',
+        message: '加载房间数据失败，请刷新页面重试',
+        position: 'top',
+        timeout: 0
+      });
+    }
+  });
   </script>
 
   <style scoped>

@@ -2,6 +2,9 @@ const { query } = require('../database/postgreDB/pg');
 
 const tableName = "orders";
 
+// 定义有效的订单状态
+const VALID_ORDER_STATES = ['pending', 'checked-in', 'checked-out', 'cancelled'];
+
 /**
  * 检查orders表是否存在
  * @returns {Promise<Object>} 返回检查结果
@@ -22,6 +25,14 @@ async function checkTableExists() {
   }
 }
 
+/**
+ * 验证订单状态是否有效
+ * @param {string} status - 订单状态
+ * @returns {boolean} 状态是否有效
+ */
+function isValidOrderStatus(status) {
+  return VALID_ORDER_STATES.includes(status);
+}
 
 /**
  * 创建新订单
@@ -47,6 +58,11 @@ async function checkTableExists() {
  * @returns {Promise<Object>} 返回创建的订单对象
  */
 async function createOrder(orderData) {
+  // 验证订单状态
+  if (!isValidOrderStatus(orderData.status)) {
+    throw new Error(`无效的订单状态: ${orderData.status}。有效状态: ${VALID_ORDER_STATES.join(', ')}`);
+  }
+
   const {
     order_id, id_source, order_source, guest_name, phone, id_number,
     room_type, room_number, check_in_date, check_out_date, status,
@@ -136,6 +152,11 @@ async function getOrderById(orderId) {
  * @returns {Promise<Object|null>} 更新后的订单对象或null
  */
 async function updateOrderStatus(orderId, newStatus) {
+  // 验证订单状态
+  if (!isValidOrderStatus(newStatus)) {
+    throw new Error(`无效的订单状态: ${newStatus}。有效状态: ${VALID_ORDER_STATES.join(', ')}`);
+  }
+
   try {
     const result = await query(
       'UPDATE orders SET status = $1 WHERE order_id = $2 RETURNING *',

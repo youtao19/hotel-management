@@ -25,20 +25,26 @@ export const useViewStore = defineStore('view', () => {
   // 订单状态选项
   const orderStatusOptions = [
     { label: '所有状态', value: null },
-    { label: '待入住', value: '待入住' },
-    { label: '已入住', value: '已入住' },
-    { label: '已退房', value: '已退房' },
-    { label: '已取消', value: '已取消' }
+    { label: '待入住', value: 'pending' },
+    { label: '已入住', value: 'checked-in' },
+    { label: '已退房', value: 'checked-out' },
+    { label: '已取消', value: 'cancelled' }
   ]
 
-  // 订单状态中英文映射
-  const orderStatusMap = {
-    'confirmed': '待入住',
-    'reserved': '已预订',
-    'checked_in': '已入住',
-    'checked_out': '已退房',
+  // 订单状态颜色映射
+  const ORDER_STATUS_COLORS = {
+    'pending': 'blue',      // 待入住
+    'checked-in': 'green',  // 已入住
+    'checked-out': 'grey',  // 已退房
+    'cancelled': 'red'      // 已取消
+  };
+
+  // 订单状态文本映射
+  const ORDER_STATUS_TEXT = {
+    'pending': '待入住',
+    'checked-in': '已入住',
+    'checked-out': '已退房',
     'cancelled': '已取消'
-    // 添加其他可能的订单状态映射
   };
 
   /**
@@ -47,7 +53,7 @@ export const useViewStore = defineStore('view', () => {
    * @returns {string} 订单状态的中文文本
    */
   function getOrderStatusText(status) {
-    return orderStatusMap[status] || status; // 如果没有映射，返回原始状态
+    return ORDER_STATUS_TEXT[status] || status;
   }
 
   // 支付方式选项
@@ -97,19 +103,8 @@ export const useViewStore = defineStore('view', () => {
    * @returns {string} 状态对应的颜色
    */
   function getStatusColor(status) {
-    switch (status) {
-      case 'available': return 'green'
-      case 'occupied': return 'red'
-      case 'reserved': return 'blue'
-      case 'cleaning': return 'orange'
-      case 'repair': return 'grey'
-      case 'maintenance': return 'grey' // 兼容旧状态
-      case '待入住': return 'blue'
-      case '已入住': return 'red'
-      case '已退房': return 'green'
-      case '已取消': return 'grey'
-      default: return 'grey'
-    }
+    console.log('获取状态颜色:', status, ORDER_STATUS_COLORS[status]);
+    return ORDER_STATUS_COLORS[status] || 'grey';
   }
 
   /**
