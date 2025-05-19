@@ -153,6 +153,98 @@
               </div>
             </div>
 
+            <!-- 入住信息部分 - 移到房间信息之前 -->
+            <div class="form-section q-mb-md">
+              <!-- 分区标题 -->
+              <div class="text-subtitle1 q-mb-sm">入住时间</div>
+              <!-- 栅格布局 -->
+              <div class="row">
+                <!-- 日期范围选择器，占满整行 -->
+                <div class="col-12">
+                  <!-- 横向日期范围选择器，可选择入住和离店日期 -->
+                  <q-date
+                    v-model="dateRange"
+                    range
+                    filled
+                    emit-value
+                    landscape
+                    today-btn
+                    color="primary"
+                    :options="dateOptions"
+                    @update:model-value="updateDatesAndRooms"
+                  >
+                    <!-- 底部确认按钮 -->
+                    <div class="row items-center justify-end q-pr-sm q-pb-sm">
+                      <q-btn label="确定" color="primary" flat v-close-popup />
+                    </div>
+                  </q-date>
+                </div>
+                <!-- 入住日期显示框 -->
+                <div class="col-md-6 col-xs-12 q-mt-md">
+                  <!-- 入住日期输入框，只读，显示选择的日期 -->
+                  <q-input
+                    v-model="orderData.checkInDate"
+                    label="入住日期"
+                    filled
+                    readonly
+                    :rules="[val => !!val || '请选择入住日期']"
+                  >
+                    <!-- 日期选择图标和弹出日历 -->
+                    <template v-slot:append>
+                      <q-icon name="event" class="cursor-pointer">
+                        <q-popup-proxy ref="qDateCheckInProxy" cover transition-show="scale" transition-hide="scale">
+                          <!-- 单独的入住日期选择器，最早可选今天 -->
+                          <q-date
+                            v-model="orderData.checkInDate"
+                            @update:model-value="updateCheckOutMinDateAndRooms"
+                            :options="date => date >= today"
+                          >
+                            <!-- 底部确认按钮 -->
+                            <div class="row items-center justify-end">
+                              <q-btn label="确定" color="primary" flat v-close-popup />
+                            </div>
+                          </q-date>
+                        </q-popup-proxy>
+                      </q-icon>
+                    </template>
+                  </q-input>
+                </div>
+                <!-- 离店日期显示框 -->
+                <div class="col-md-6 col-xs-12 q-mt-md">
+                  <!-- 离店日期输入框，只读，显示选择的日期 -->
+                  <q-input
+                    v-model="orderData.checkOutDate"
+                    label="离店日期"
+                    filled
+                    readonly
+                    :rules="[
+                      val => !!val || '请选择离店日期',
+                      val => val > orderData.checkInDate || '离店日期必须晚于入住日期'
+                    ]"
+                  >
+                    <!-- 日期选择图标和弹出日历 -->
+                    <template v-slot:append>
+                      <q-icon name="event" class="cursor-pointer">
+                        <q-popup-proxy ref="qDateCheckOutProxy" cover transition-show="scale" transition-hide="scale">
+                          <!-- 单独的离店日期选择器，最早可选入住日期后一天 -->
+                          <q-date
+                            v-model="orderData.checkOutDate"
+                            :options="date => date > orderData.checkInDate"
+                            @update:model-value="updateAvailableRooms"
+                          >
+                            <!-- 底部确认按钮 -->
+                            <div class="row items-center justify-end">
+                              <q-btn label="确定" color="primary" flat v-close-popup />
+                            </div>
+                          </q-date>
+                        </q-popup-proxy>
+                      </q-icon>
+                    </template>
+                  </q-input>
+                </div>
+              </div>
+            </div>
+
             <!-- 房间信息部分 -->
             <div class="form-section q-mb-md">
               <!-- 分区标题 -->
@@ -271,97 +363,6 @@
                     prefix="¥"
                     :rules="[val => val >= 0 || '押金不能为负数']"
                   />
-                </div>
-              </div>
-            </div>
-
-            <!-- 入住信息部分 -->
-            <div class="form-section q-mb-md">
-              <!-- 分区标题 -->
-              <div class="text-subtitle1 q-mb-sm">入住时间</div>
-              <!-- 栅格布局 -->
-              <div class="row">
-                <!-- 日期范围选择器，占满整行 -->
-                <div class="col-12">
-                  <!-- 横向日期范围选择器，可选择入住和离店日期 -->
-                  <q-date
-                    v-model="dateRange"
-                    range
-                    filled
-                    emit-value
-                    landscape
-                    today-btn
-                    color="primary"
-                    :options="dateOptions"
-                    @update:model-value="updateDates"
-                  >
-                    <!-- 底部确认按钮 -->
-                    <div class="row items-center justify-end q-pr-sm q-pb-sm">
-                      <q-btn label="确定" color="primary" flat v-close-popup />
-                    </div>
-                  </q-date>
-                </div>
-                <!-- 入住日期显示框 -->
-                <div class="col-md-6 col-xs-12 q-mt-md">
-                  <!-- 入住日期输入框，只读，显示选择的日期 -->
-                  <q-input
-                    v-model="orderData.checkInDate"
-                    label="入住日期"
-                    filled
-                    readonly
-                    :rules="[val => !!val || '请选择入住日期']"
-                  >
-                    <!-- 日期选择图标和弹出日历 -->
-                    <template v-slot:append>
-                      <q-icon name="event" class="cursor-pointer">
-                        <q-popup-proxy ref="qDateCheckInProxy" cover transition-show="scale" transition-hide="scale">
-                          <!-- 单独的入住日期选择器，最早可选今天 -->
-                          <q-date
-                            v-model="orderData.checkInDate"
-                            @update:model-value="updateCheckOutMinDate"
-                            :options="date => date >= today"
-                          >
-                            <!-- 底部确认按钮 -->
-                            <div class="row items-center justify-end">
-                              <q-btn label="确定" color="primary" flat v-close-popup />
-                            </div>
-                          </q-date>
-                        </q-popup-proxy>
-                      </q-icon>
-                    </template>
-                  </q-input>
-                </div>
-                <!-- 离店日期显示框 -->
-                <div class="col-md-6 col-xs-12 q-mt-md">
-                  <!-- 离店日期输入框，只读，显示选择的日期 -->
-                  <q-input
-                    v-model="orderData.checkOutDate"
-                    label="离店日期"
-                    filled
-                    readonly
-                    :rules="[
-                      val => !!val || '请选择离店日期',
-                      val => val > orderData.checkInDate || '离店日期必须晚于入住日期'
-                    ]"
-                  >
-                    <!-- 日期选择图标和弹出日历 -->
-                    <template v-slot:append>
-                      <q-icon name="event" class="cursor-pointer">
-                        <q-popup-proxy ref="qDateCheckOutProxy" cover transition-show="scale" transition-hide="scale">
-                          <!-- 单独的离店日期选择器，最早可选入住日期后一天 -->
-                          <q-date
-                            v-model="orderData.checkOutDate"
-                            :options="date => date > orderData.checkInDate"
-                          >
-                            <!-- 底部确认按钮 -->
-                            <div class="row items-center justify-end">
-                              <q-btn label="确定" color="primary" flat v-close-popup />
-                            </div>
-                          </q-date>
-                        </q-popup-proxy>
-                      </q-icon>
-                    </template>
-                  </q-input>
                 </div>
               </div>
             </div>
@@ -503,56 +504,102 @@
   }
 
   /**
-   * 更新入住和离店日期
-   * 在日期范围选择器中选择日期后调用
+   * 更新入住和离店日期，并刷新可用房间列表
    */
-  function updateDates() {
+  async function updateDatesAndRooms() {
     if (dateRange.value.from) {
-      orderData.value.checkInDate = dateRange.value.from
+      orderData.value.checkInDate = dateRange.value.from;
     }
     if (dateRange.value.to) {
-      orderData.value.checkOutDate = dateRange.value.to
+      orderData.value.checkOutDate = dateRange.value.to;
     }
+    await updateAvailableRooms();
   }
 
   /**
-   * 更新离店日期的最小值
-   * 确保离店日期始终晚于入住日期
+   * 更新离店日期的最小值并刷新可用房间列表
    */
-  function updateCheckOutMinDate() {
+  async function updateCheckOutMinDateAndRooms() {
     // 如果离店日期小于等于入住日期，重置离店日期
     if (orderData.value.checkOutDate <= orderData.value.checkInDate) {
       // 设置为入住日期后一天
       orderData.value.checkOutDate = date.formatDate(
         date.addToDate(new Date(orderData.value.checkInDate), { days: 1 }),
         'YYYY-MM-DD'
-      )
+      );
 
       // 同步更新日期范围
-      dateRange.value.to = orderData.value.checkOutDate
+      dateRange.value.to = orderData.value.checkOutDate;
+    }
+    await updateAvailableRooms();
+  }
+
+  /**
+   * 更新可用房间列表
+   */
+  async function updateAvailableRooms() {
+    try {
+      if (!orderData.value.checkInDate || !orderData.value.checkOutDate) {
+        return;
+      }
+
+      // 重置房间选择
+      orderData.value.roomNumber = null;
+      orderData.value.roomType = null;
+      orderData.value.roomPrice = 0;
+
+      // 获取指定日期范围内的可用房间
+      const availableRooms = await roomStore.getAvailableRoomsByDate(
+        orderData.value.checkInDate,
+        orderData.value.checkOutDate
+      );
+
+      // 更新房间状态
+      await roomStore.refreshData();
+
+      // 如果没有可用房间，显示提示
+      if (availableRooms.length === 0) {
+        $q.notify({
+          type: 'warning',
+          message: '所选日期范围内没有可用房间',
+          position: 'top'
+        });
+      }
+    } catch (error) {
+      console.error('获取可用房间失败:', error);
+      $q.notify({
+        type: 'negative',
+        message: '获取可用房间失败: ' + error.message,
+        position: 'top'
+      });
     }
   }
 
-  // 监听入住日期变化，同步更新日期范围和离店日期
-  watch(() => orderData.value.checkInDate, (newVal) => {
-    dateRange.value.from = newVal
-    updateCheckOutMinDate()
-  })
+  // 监听日期变化
+  watch(() => orderData.value.checkInDate, async () => {
+    dateRange.value.from = orderData.value.checkInDate;
+    await updateAvailableRooms();
+  });
 
-  // 监听离店日期变化，同步更新日期范围
-  watch(() => orderData.value.checkOutDate, (newVal) => {
-    dateRange.value.to = newVal
-  })
+  watch(() => orderData.value.checkOutDate, async () => {
+    dateRange.value.to = orderData.value.checkOutDate;
+    await updateAvailableRooms();
+  });
 
-  // 监听房间号变化，更新房间价格
-  watch(() => orderData.value.roomNumber, (newVal) => {
-    if (newVal) {
-      const selectedRoom = roomStore.getRoomByNumber(newVal)
-      if (selectedRoom) {
-        orderData.value.roomPrice = selectedRoom.price
-      }
+  // 修改计算可用房间的选项
+  const availableRoomOptions = computed(() => {
+    // 如果未选择房型或未选择日期，返回空数组
+    if (!orderData.value.roomType || !orderData.value.checkInDate || !orderData.value.checkOutDate) {
+      return [];
     }
-  })
+
+    // 使用roomStore的getAvailableRoomOptions方法获取特定房型和日期范围的可用房间
+    return roomStore.getAvailableRoomOptions(
+      orderData.value.roomType,
+      orderData.value.checkInDate,
+      orderData.value.checkOutDate
+    );
+  });
 
   // 计算当前选择房型的可用房间数量
   const availableRoomCount = computed(() => {
@@ -565,15 +612,6 @@
 
   // 根据房间数量获取对应的颜色
   const getRoomCountColor = roomStore.getRoomCountColor;
-
-  // 计算可用房间的选项
-  const availableRoomOptions = computed(() => {
-    // 如果未选择房型，返回空数组
-    if (!orderData.value.roomType) return [];
-
-    // 使用roomStore的getAvailableRoomOptions方法获取特定房型的可用房间
-    return roomStore.getAvailableRoomOptions(orderData.value.roomType);
-  })
 
   /**
    * 当房型改变时的处理函数
