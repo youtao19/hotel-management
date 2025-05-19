@@ -63,13 +63,37 @@
                   <q-btn flat round dense color="primary" icon="visibility" @click="viewOrderDetails(props.row)">
                     <q-tooltip>查看详情</q-tooltip>
                   </q-btn>
-                  <q-btn flat round dense color="info" icon="hotel" @click="checkInOrder(props.row)" v-if="props.row.status === '待入住'">
+                  <q-btn
+                    flat
+                    round
+                    dense
+                    color="info"
+                    icon="hotel"
+                    @click="checkInOrder(props.row)"
+                    v-if="props.row.status === 'pending'"
+                  >
                     <q-tooltip>办理入住</q-tooltip>
                   </q-btn>
-                  <q-btn flat round dense color="negative" icon="cancel" @click="cancelOrder(props.row)" v-if="props.row.status === '已入住' || props.row.status === '待入住'">
+                  <q-btn
+                    flat
+                    round
+                    dense
+                    color="negative"
+                    icon="cancel"
+                    @click="cancelOrder(props.row)"
+                    v-if="props.row.status === 'checked-in' || props.row.status === 'pending'"
+                  >
                     <q-tooltip>取消订单</q-tooltip>
                   </q-btn>
-                  <q-btn flat round dense color="positive" icon="check_circle" @click="checkoutOrder(props.row)" v-if="props.row.status === '已入住'">
+                  <q-btn
+                    flat
+                    round
+                    dense
+                    color="positive"
+                    icon="check_circle"
+                    @click="checkoutOrder(props.row)"
+                    v-if="props.row.status === 'checked-in'"
+                  >
                     <q-tooltip>办理退房</q-tooltip>
                   </q-btn>
                 </q-btn-group>
@@ -124,14 +148,14 @@
                   <q-item>
                     <q-item-section>
                       <q-item-label caption>订单创建时间</q-item-label>
-                      <q-item-label>{{ currentOrder.createTime }}</q-item-label>
+                      <q-item-label>{{ formatDateTime(currentOrder.createTime) }}</q-item-label>
                     </q-item-section>
                   </q-item>
 
                   <q-item>
                     <q-item-section>
                       <q-item-label caption>入住时间</q-item-label>
-                      <q-item-label>{{ currentOrder.actualCheckInTime || '未入住' }}</q-item-label>
+                      <q-item-label>{{ currentOrder.actualCheckInTime ? formatDateTime(currentOrder.actualCheckInTime) : '未入住' }}</q-item-label>
                     </q-item-section>
                   </q-item>
                 </q-list>
@@ -190,7 +214,7 @@
                   <q-item>
                     <q-item-section>
                       <q-item-label caption>预定入住日期</q-item-label>
-                      <q-item-label>{{ currentOrder.checkInDate }} 至 {{ currentOrder.checkOutDate }}</q-item-label>
+                      <q-item-label>{{ formatDate(currentOrder.checkInDate) }} 至 {{ formatDate(currentOrder.checkOutDate) }}</q-item-label>
                     </q-item-section>
                   </q-item>
                 </q-list>
@@ -409,6 +433,12 @@
     { label: '已取消', value: 'cancelled' }
   ]
 
+  // 根据状态获取显示文本
+  function getStatusText(status) {
+    const option = statusOptions.find(opt => opt.value === status)
+    return option ? option.label : status
+  }
+
   // 订单表格列定义
   const orderColumns = [
     { name: 'orderNumber', align: 'left', label: '订单号', field: 'orderNumber', sortable: true },
@@ -428,7 +458,11 @@
       label: '入住日期',
       field: 'checkInDate',
       sortable: true,
-      format: val => date.formatDate(val, 'YYYY-MM-DD')
+      format: val => {
+        if (!val) return ''
+        // 移除时区信息，只显示日期
+        return val.split('T')[0]
+      }
     },
     {
       name: 'checkOutDate',
@@ -436,16 +470,27 @@
       label: '离店日期',
       field: 'checkOutDate',
       sortable: true,
-      format: val => date.formatDate(val, 'YYYY-MM-DD')
+      format: val => {
+        if (!val) return ''
+        // 移除时区信息，只显示日期
+        return val.split('T')[0]
+      }
     },
     {
       name: 'status',
       align: 'left',
       label: '状态',
       field: 'status',
-      sortable: true
+      sortable: true,
+      format: val => getStatusText(val)
     },
-    { name: 'actions', align: 'center', label: '操作', field: 'actions' }
+    {
+      name: 'actions',
+      align: 'center',
+      label: '操作',
+      field: 'actions',
+      required: true
+    }
   ]
 
   // 根据搜索和过滤条件筛选订单
@@ -471,13 +516,21 @@
   })
 
   // 获取所有订单数据
-  function fetchAllOrders() {
-    loadingOrders.value = true
-
-    // 模拟加载延迟
-    setTimeout(() => {
+  async function fetchAllOrders() {
+    try {
+      loadingOrders.value = true
+      await orderStore.fetchOrders() // 确保orderStore中有这个方法
+      console.log('获取到的订单数据:', orderStore.orders)
+    } catch (error) {
+      console.error('获取订单数据失败:', error)
+      $q.notify({
+        type: 'negative',
+        message: '获取订单数据失败，请刷新页面重试',
+        position: 'top'
+      })
+    } finally {
       loadingOrders.value = false
-    }, 500)
+    }
   }
 
   // 订单详情相关
@@ -851,9 +904,43 @@
     }
   }
 
-  onMounted(() => {
-    // 获取所有订单
-    fetchAllOrders()
+  /**
+   * 格式化日期时间
+   * @param {string} dateTimeStr - 日期时间字符串
+   * @returns {string} 格式化后的日期时间
+   */
+  function formatDateTime(dateTimeStr) {
+    if (!dateTimeStr) return '';
+    // 如果是ISO格式的时间戳
+    if (dateTimeStr.includes('T')) {
+      const date = new Date(dateTimeStr);
+      return date.toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      }).replace(/\//g, '-');
+    }
+    return dateTimeStr;
+  }
+
+  /**
+   * 格式化日期（仅显示年月日）
+   * @param {string} dateStr - 日期字符串
+   * @returns {string} 格式化后的日期
+   */
+  function formatDate(dateStr) {
+    if (!dateStr) return '';
+    // 如果是ISO格式的时间戳
+    if (dateStr.includes('T')) {
+      return dateStr.split('T')[0];
+    }
+    return dateStr;
+  }
+
+  onMounted(async () => {
+    await fetchAllOrders()
   })
   </script>
 

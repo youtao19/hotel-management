@@ -209,6 +209,10 @@ async function getAvailableRooms(startDate, endDate, typeCode = null) {
   try {
     console.log('查询可用房间:', { startDate, endDate, typeCode });
 
+    // 确保日期格式正确（去除可能的时区信息）
+    startDate = startDate.split('T')[0];
+    endDate = endDate.split('T')[0];
+
     // 构建基础查询
     let baseQuery = `
       SELECT DISTINCT r.*
@@ -220,8 +224,8 @@ async function getAvailableRooms(startDate, endDate, typeCode = null) {
         FROM orders o
         WHERE o.room_number = r.room_number
         AND o.status IN ('pending', 'checked-in')
-        AND $1 < o.check_out_date
-        AND $2 > o.check_in_date
+        AND $1::date < o.check_out_date::date
+        AND $2::date > o.check_in_date::date
       )
     `;
 
