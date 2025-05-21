@@ -358,68 +358,6 @@
           </q-card-actions>
         </q-card>
       </q-dialog>
-
-      <!-- 入住选择房间对话框 -->
-      <q-dialog v-model="showCheckInDialog" persistent>
-        <q-card style="min-width: 350px">
-          <q-card-section class="row items-center q-pb-none">
-            <div class="text-h6">选择入住房间</div>
-            <q-space />
-            <q-btn icon="close" flat round dense v-close-popup />
-          </q-card-section>
-
-          <q-card-section>
-            <div class="q-mb-md">
-              <div class="text-subtitle2">订单房间信息:</div>
-              <div class="text-bold">
-                房间类型: {{ checkInOrderData ? getRoomTypeName(checkInOrderData.roomType) : '' }}
-              </div>
-              <div class="text-bold q-mb-md">
-                预订房间: {{ checkInOrderData ? checkInOrderData.roomNumber : '' }}
-              </div>
-            </div>
-
-            <div class="row items-center">
-              <div class="col">
-                <q-select
-                  v-model="checkInRoomNumber"
-                  :options="availableRooms"
-                  label="选择入住房间"
-                  filled
-                  emit-value
-                  map-options
-                >
-                  <!-- 没有可用房间时显示的内容 -->
-                  <template v-slot:no-option>
-                    <q-item>
-                      <q-item-section class="text-negative">
-                        <q-icon name="warning" color="negative" />
-                        没有可用房间
-                      </q-item-section>
-                    </q-item>
-                  </template>
-                </q-select>
-              </div>
-
-              <!-- 可用房间数量提示 -->
-              <div class="col-auto q-ml-md">
-                <q-chip
-                  :color="availableRooms.length > 0 ? (availableRooms.length <= 3 ? 'warning' : 'positive') : 'negative'"
-                  text-color="white"
-                  icon="hotel"
-                >
-                  可用: {{ availableRooms.length }}间
-                </q-chip>
-              </div>
-            </div>
-          </q-card-section>
-
-          <q-card-actions align="right">
-            <q-btn flat label="取消" color="primary" v-close-popup />
-            <q-btn flat label="确认入住" color="positive" @click="confirmCheckIn" :disable="!checkInRoomNumber" />
-          </q-card-actions>
-        </q-card>
-      </q-dialog>
     </div>
   </template>
 
@@ -555,11 +493,6 @@
   const showChangeRoomDialog = ref(false)
   const newRoomNumber = ref(null)
 
-  // 入住选择房间相关
-  const showCheckInDialog = ref(false)
-  const checkInOrderData = ref(null)
-  const checkInRoomNumber = ref(null)
-
   // 房型选项
   const roomTypeOptions = viewStore.roomTypeOptions.filter(option => option.value !== null)  // 使用roomStore获取可用房间
   const availableRooms = computed(() => {
@@ -688,109 +621,90 @@
   const getStatusColor = viewStore.getStatusColor
 
   // 办理入住
-  function checkInOrder(order) {
-    // 设置当前入住订单
-    checkInOrderData.value = order;
-
-    // 默认选择原房间（如果可用）
-    const originalRoom = availableRooms.value.find(r => r.value === order.roomNumber);
-    if (originalRoom) {
-      checkInRoomNumber.value = order.roomNumber;
-    } else {
-      checkInRoomNumber.value = null;
-    }
-
-    // 显示入住选择对话框
-    showCheckInDialog.value = true;
-  }
-
-  // 确认办理入住
-  async function confirmCheckIn() {
-    if (!checkInOrderData.value) {
-      console.error('没有选择当前订单');
-      alert('操作失败：没有找到当前订单');
+  async function checkInOrder(order) {
+    if (!order) {
+      console.error('订单信息不存在');
+      $q.notify({ type: 'negative', message: '操作失败：订单信息不存在', position: 'top' });
       return;
     }
 
-    if (!checkInRoomNumber.value) {
-      console.error('未选择房间号');
-      alert('请选择入住房间');
+    // 确认办理入住
+    if (!confirm(`确定要为订单 ${order.orderNumber} (房间: ${order.roomNumber}) 办理入住吗？`)) {
       return;
     }
 
-    console.log('办理入住:', checkInOrderData.value.orderNumber, '房间:', checkInRoomNumber.value);
+    loadingOrders.value = true;
+    try {
+      console.log('办理入住:', order.orderNumber, '房间:', order.roomNumber);
 
-    // 找到新房间
-    const selectedRoom = availableRooms.value.find(r => r.value === checkInRoomNumber.value);
-    if (!selectedRoom) {
-      console.error('所选房间不可用');
-      alert('所选房间不可用');
-      return;
-    }
+      // 获取当前时间用于入住时间
+      const checkInTime = new Date().toISOString();
 
-    // 确认入住
-    if (!confirm(`确定要为订单 ${checkInOrderData.value.orderNumber} 办理入住到房间 ${checkInRoomNumber.value} 吗？`)) {
-      return;
-    }
+      // 调用新的 store action 更新订单状态和入住时间
+      const updatedOrderFromApi = await orderStore.updateOrderStatusViaApi(order.orderNumber, 'checked-in', { checkInTime });
 
-    // 获取当前时间
-    const checkInTime = new Date();
-    const formattedCheckInTime = date.formatDate(checkInTime, 'YYYY-MM-DD HH:mm');
-
-    // 原房间号与选择的房间号不同，需要先更新订单房间信息
-    if (checkInOrderData.value.roomNumber !== checkInRoomNumber.value) {      // 获取旧房间
-      const oldRoom = roomStore.getRoomByNumber(checkInOrderData.value.roomNumber);
-      if (oldRoom && oldRoom.status === 'reserved') {
-        // 释放原预订的房间
-        roomStore.updateRoomStatus(oldRoom.room_id, 'available');
+      if (!updatedOrderFromApi) {
+        // store action 应该会抛出错误，但以防万一
+        $q.notify({ type: 'negative', message: '办理入住失败，API未返回更新后的订单', position: 'top' });
+        loadingOrders.value = false;
+        return;
       }
 
-      // 更新订单房间信息
-      orderStore.updateOrderRoom(
-        checkInOrderData.value.orderNumber,
-        selectedRoom.type,
-        checkInRoomNumber.value,
-        selectedRoom.price
+      // 获取房间信息 (主要为了拿到 room_id)
+      const room = roomStore.getRoomByNumber(order.roomNumber);
+      if (!room) {
+        console.error('预订房间未找到:', order.roomNumber);
+        // 注意：此时订单状态可能已经更新，但房间状态未更新。需要考虑回滚或提示用户手动处理。
+        $q.notify({ type: 'warning', message: '订单已更新为入住，但预订的房间信息未找到，请检查房间状态！', position: 'top', multiLine: true });
+        loadingOrders.value = false;
+        // 刷新订单列表以显示最新状态
+        fetchAllOrders();
+        return;
+      }
+
+      // 更新房间状态为已入住
+      const roomUpdateSuccess = await roomStore.occupyRoom(
+        room.room_id,
+        order.guestName,
+        order.checkOutDate // 确保传递的是预计退房日期
       );
-    }
 
-    // 更新订单状态和入住时间
-    orderStore.updateOrderCheckIn(checkInOrderData.value.orderNumber, formattedCheckInTime);    // 使用选中的房间ID，并await异步操作
-    if (selectedRoom) {
-       const success = await roomStore.occupyRoom(
-         selectedRoom.room_id,
-         checkInOrderData.value.guestName,
-         checkInOrderData.value.checkOutDate
-       );
-       if (!success) {
-         alert('办理入住失败，请检查日志了解详情');
-         loadingOrders.value = false; // 停止加载状态
-         return; // 停止后续操作
-       }
-       // 入住成功后刷新房间列表，确保房间状态页面能显示最新的客人信息
-       await roomStore.fetchAllRooms();
-    }
-
-    // 直接更新当前订单对象 - 确保界面立即响应
-    const updatedOrder = orderStore.orders.find(o => o.orderNumber === checkInOrderData.value.orderNumber);
-    if (updatedOrder) {
-      // 如果当前订单是正在查看的订单，则更新它
-      if (currentOrder.value && currentOrder.value.orderNumber === checkInOrderData.value.orderNumber) {
-        currentOrder.value = { ...updatedOrder };
+      if (!roomUpdateSuccess) {
+        // 订单状态已更新，但房间状态更新失败。这是一个关键问题。
+        // 尝试回滚订单状态或强烈建议用户检查数据一致性。
+        $q.notify({ type: 'negative', message: '房间状态更新失败！订单已标记为入住，但房间可能仍显示为可用。请立即核实！', position: 'top', multiLine: true, timeout: 0, actions: [{ label: '关闭', color: 'white' }] });
+        // 理想情况下，这里应该有回滚订单状态的逻辑
+        // await orderStore.updateOrderStatusViaApi(order.orderNumber, 'pending', { checkInTime: null });
+        loadingOrders.value = false;
+        fetchAllOrders(); // 刷新确保用户看到潜在的不一致
+        return;
       }
 
-      // 更新入住订单对象
-      checkInOrderData.value = { ...updatedOrder };
+      // 入住成功后刷新房间列表，确保房间状态页面能显示最新的客人信息
+      await roomStore.fetchAllRooms();
+
+      // 本地订单列表已由 orderStore.updateOrderStatusViaApi 更新，
+      // 但如果 currentOrder 正在显示此订单，也需要更新它
+      if (currentOrder.value && currentOrder.value.orderNumber === order.orderNumber) {
+        currentOrder.value = { ...orderStore.getOrderByNumber(order.orderNumber) }; // 从store获取最新数据
+      }
+
+      $q.notify({ type: 'positive', message: '入住成功', position: 'top' });
+
+    } catch (error) {
+      console.error('办理入住操作失败:', error);
+      const errorMessage = error.response?.data?.message || error.message || '未知错误';
+      $q.notify({
+        type: 'negative',
+        message: `办理入住失败: ${errorMessage}`,
+        position: 'top',
+        multiLine: true
+      });
+    } finally {
+      loadingOrders.value = false;
+      // 确保订单列表刷新以反映任何变化（即使是失败的情况）
+      fetchAllOrders();
     }
-
-    // 关闭对话框并重置
-    showCheckInDialog.value = false;
-    checkInRoomNumber.value = null;
-
-    // 强制重新计算过滤后的订单列表
-    searchOrders();
-
-    alert('入住成功');
   }
 
   // 从详情页办理入住

@@ -149,22 +149,58 @@ async function getOrderById(orderId) {
  * 更新订单状态
  * @param {string} orderId - 订单ID
  * @param {string} newStatus - 新状态
+ * @param {Object} [options] - 可选参数
+ * @param {string} [options.checkInTime] - 实际入住时间 (YYYY-MM-DD HH:mm:ss)
+ * @param {string} [options.checkOutTime] - 实际退房时间 (YYYY-MM-DD HH:mm:ss)
  * @returns {Promise<Object|null>} 更新后的订单对象或null
  */
-async function updateOrderStatus(orderId, newStatus) {
+async function updateOrderStatus(orderId, newStatus, options = {}) {
   // 验证订单状态
   if (!isValidOrderStatus(newStatus)) {
     throw new Error(`无效的订单状态: ${newStatus}。有效状态: ${VALID_ORDER_STATES.join(', ')}`);
   }
 
+  const setClauses = ['status = $1'];
+  const queryParams = [newStatus];
+  let paramCounter = 1;
+
+  if (newStatus === 'checked-in') {
+    paramCounter++;
+    if (options.checkInTime) {
+      setClauses.push(`actual_check_in_time = $${paramCounter}`);
+      queryParams.push(options.checkInTime);
+    } else {
+      setClauses.push('actual_check_in_time = CURRENT_TIMESTAMP');
+    }
+    // Optionally, ensure other time fields are reset or set appropriately
+    // For example, when checking in, actual_check_out_time should ideally be NULL
+    setClauses.push('actual_check_out_time = NULL');
+  } else if (newStatus === 'checked-out') {
+    paramCounter++;
+    if (options.checkOutTime) {
+      setClauses.push(`actual_check_out_time = $${paramCounter}`);
+      queryParams.push(options.checkOutTime);
+    } else {
+      setClauses.push('actual_check_out_time = CURRENT_TIMESTAMP');
+    }
+    // If checking out, actual_check_in_time should already exist.
+    // If it doesn't, and a checkout is happening, it might indicate a data issue or a need for CURRENT_TIMESTAMP for check-in as well.
+    // For simplicity, we assume actual_check_in_time is either set or not managed by this specific status change if not 'checked-in'.
+  } else if (newStatus === 'pending' || newStatus === 'cancelled') {
+    // If reverting to pending or cancelling, clear both actual times
+    setClauses.push('actual_check_in_time = NULL');
+    setClauses.push('actual_check_out_time = NULL');
+  }
+
+  paramCounter++;
+  const updateQuery = `UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE order_id = $${paramCounter} RETURNING *`;
+  queryParams.push(orderId);
+
   try {
-    const result = await query(
-      'UPDATE orders SET status = $1 WHERE order_id = $2 RETURNING *',
-      [newStatus, orderId]
-    );
+    const result = await query(updateQuery, queryParams);
     return result.rows.length > 0 ? result.rows[0] : null;
   } catch (error) {
-    console.error(`更新订单(ID: ${orderId})状态失败:`, error);
+    console.error(`更新订单(ID: ${orderId})状态为 '${newStatus}' 失败:`, error);
     throw error;
   }
 }

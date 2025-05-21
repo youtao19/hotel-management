@@ -742,13 +742,18 @@ export const useRoomStore = defineStore('room', () => {
 
       const response = await roomApi.getAvailableRooms(params.toString());
 
-      if (!response || !response.data) {
-        throw new Error('获取可用房间失败');
+      // The response from roomApi.getAvailableRooms is already the backend's JSON response
+      // { data: availableRoomsArray, query: queryObj }
+      // So, response.data should be the array of rooms.
+      const availableRoomsArray = response.data;
+
+      if (!Array.isArray(availableRoomsArray)) {
+        console.error('获取可用房间数据格式不正确，期望数组但得到:', availableRoomsArray);
+        throw new Error('获取可用房间数据格式不正确');
       }
 
-      // 直接返回后端处理好的数据
-      console.log(`找到 ${response.data.length} 个可用房间`);
-      return response.data;
+      console.log(`Store: 找到 ${availableRoomsArray.length} 个可用房间`);
+      return availableRoomsArray;
     } catch (error) {
       console.error('获取可用房间失败:', error);
       throw error;

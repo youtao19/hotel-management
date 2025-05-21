@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { orderApi } from '../api'
+import api from '../api' // 确保导入的是默认导出的api实例
 import { useViewStore } from './viewStore'
 
 export const useOrderStore = defineStore('order', () => {
@@ -20,41 +20,46 @@ export const useOrderStore = defineStore('order', () => {
       loading.value = true
       error.value = null
       console.log('开始获取订单数据...')
-      const response = await orderApi.getAllOrders()
-      console.log('订单数据获取成功:', response)
-      // 确保从响应的 data 属性中获取数组
-      const rawOrders = response && response.data ? response.data : []
+      const response = await api.get('/orders') // 移除 /api 前缀
+      console.log('订单数据获取成功:', response) // response 本身就是拦截器处理后的数据
+      // 确保从响应的 data 属性中获取数组 (如果后端直接返回 { data: [...] } 结构)
+      // 如果后端直接返回数组，则不需要 .data.data
+      const rawOrders = response && response.data ? response.data : (Array.isArray(response) ? response : [])
       // 映射后端字段到前端期望的字段名并处理日期格式
       orders.value = rawOrders.map(order => ({
-        orderNumber: order.order_id, // 假设后端字段是 order_id
-        guestName: order.guest_name, // 假设后端字段是 guest_name
+        orderNumber: order.order_id,
+        guestName: order.guest_name,
         phone: order.phone,
-        idNumber: order.id_number, // 假设后端字段是 id_number
-        roomType: order.room_type, // 假设后端字段是 room_type
-        roomNumber: order.room_number, // 假设后端字段是 room_number
-        checkInDate: order.check_in_date, // 假设后端字段是 check_in_date
-        checkOutDate: order.check_out_date, // 假设后端字段是 check_out_date
+        idNumber: order.id_number,
+        roomType: order.room_type,
+        roomNumber: order.room_number,
+        checkInDate: order.check_in_date,
+        checkOutDate: order.check_out_date,
         status: order.status,
-        paymentMethod: order.payment_method, // 假设后端字段是 payment_method
-        roomPrice: order.room_price, // 假设后端字段是 room_price
-        deposit: order.deposit, // 假设后端字段是 deposit
-        createTime: order.create_time, // 假设后端字段是 create_time
+        paymentMethod: order.payment_method,
+        roomPrice: order.room_price,
+        deposit: order.deposit,
+        createTime: order.create_time,
         remarks: order.remarks,
-        actualCheckInTime: order.actual_check_in_time, // 假设后端字段是 actual_check_in_time
-        actualCheckOutTime: order.actual_check_out_time, // 假设后端字段是 actual_check_out_time
-        // 添加其他需要的字段映射...
+        actualCheckInTime: order.actual_check_in_time,
+        actualCheckOutTime: order.actual_check_out_time,
+        source: order.order_source,
+        sourceNumber: order.id_source
       }))
 
-      // 日期检查和处理
       for (const order of orders.value) {
-        // 记录不规范的日期格式以便调试
         if (order.checkOutDate && order.checkOutDate.includes('T')) {
           console.log(`订单 ${order.orderNumber} 退房日期格式: ${order.checkOutDate}`)
         }
       }
     } catch (err) {
-      console.error('获取订单数据失败:', err)
-      error.value = '获取订单数据失败'
+      console.error('获取订单数据失败:', err.response ? err.response.data : err.message)
+      // 检查 err.message 是否已经是 HTML 字符串
+      const errorMessage = typeof err.message === 'string' && err.message.startsWith('<!DOCTYPE html>')
+                          ? '获取订单数据失败: 后端返回HTML错误页面'
+                          : (err.response?.data?.message || err.message || '获取订单数据失败');
+      error.value = errorMessage;
+      orders.value = []; // 获取失败时清空订单
     } finally {
       loading.value = false
     }
@@ -75,101 +80,147 @@ export const useOrderStore = defineStore('order', () => {
       loading.value = true
       error.value = null
 
-      // 将状态翻译为英文
-      let statusText = 'pending'
-      if (order.status === 'checked-in') statusText = 'checked-in'
-      else if (order.status === 'checked-out') statusText = 'checked-out'
-      else if (order.status === 'cancelled') statusText = 'cancelled'
+      // 确保status是有效的，如果前端传递的是中文，需要转换
+      let statusValue = order.status;
+      if (statusValue === '待入住') statusValue = 'pending';
+      else if (statusValue === '已入住') statusValue = 'checked-in';
+      else if (statusValue === '已退房') statusValue = 'checked-out';
+      else if (statusValue === '已取消') statusValue = 'cancelled';
 
       const orderData = {
-        // 适配数据库字段名
-        guest_name: order.guestName,
+        orderNumber: order.orderNumber,
+        guestName: order.guestName,
         phone: order.phone,
-        id_number: order.idNumber,
-        room_type: order.roomType,
-        room_number: order.roomNumber,
-        check_in_date: order.checkInDate,
-        check_out_date: order.checkOutDate,
-        status: statusText,
-        payment_method: order.paymentMethod,
-        room_price: order.roomPrice,
+        idNumber: order.idNumber,
+        roomType: order.roomType,
+        roomNumber: order.roomNumber,
+        checkInDate: order.checkInDate,
+        checkOutDate: order.checkOutDate,
+        status: statusValue,
+        paymentMethod: typeof order.paymentMethod === 'object' ? order.paymentMethod.value : order.paymentMethod,
+        roomPrice: order.roomPrice,
         deposit: order.deposit,
         remarks: order.remarks,
-        id_source: order.idSource || '前台',
-        order_source: order.orderSource || '线下'
+        source: order.source || '线下',
+        sourceNumber: order.sourceNumber || '前台',
+        createTime: order.createTime || new Date().toISOString(),
+        actualCheckInTime: order.actualCheckInTime || null,
+        actualCheckOutTime: order.actualCheckOutTime || null,
       }
 
       console.log('正在添加新订单:', orderData)
-      const response = await orderApi.addOrder(orderData)
-      console.log('订单添加成功:', response)
+      const response = await api.post('/orders', orderData) // 移除 /api 前缀
+      console.log('订单添加成功:', response) // response 是拦截器处理后的数据
 
-      // 添加到本地状态
-      orders.value.unshift(response.data)
-      return response.data
+      // 添加到本地状态，确保字段名一致
+      // 后端返回的可能是 { message: '...', order: { ... } }
+      const newOrderFromApi = response.order || response; // 取决于后端确切的响应结构
+      const newOrderMapped = {
+        orderNumber: newOrderFromApi.order_id,
+        guestName: newOrderFromApi.guest_name,
+        phone: newOrderFromApi.phone,
+        idNumber: newOrderFromApi.id_number,
+        roomType: newOrderFromApi.room_type,
+        roomNumber: newOrderFromApi.room_number,
+        checkInDate: newOrderFromApi.check_in_date,
+        checkOutDate: newOrderFromApi.check_out_date,
+        status: newOrderFromApi.status,
+        paymentMethod: newOrderFromApi.payment_method,
+        roomPrice: newOrderFromApi.room_price,
+        deposit: newOrderFromApi.deposit,
+        createTime: newOrderFromApi.create_time,
+        remarks: newOrderFromApi.remarks,
+        actualCheckInTime: newOrderFromApi.actual_check_in_time,
+        actualCheckOutTime: newOrderFromApi.actual_check_out_time,
+        source: newOrderFromApi.order_source,
+        sourceNumber: newOrderFromApi.id_source,
+      };
+      orders.value.unshift(newOrderMapped)
+      return newOrderMapped;
     } catch (err) {
-      console.error('添加订单失败:', err)
-      error.value = '添加订单失败'
-      return null
+      console.error('添加订单失败:', err.response ? err.response.data : err.message);
+      error.value = err.response?.data?.errors?.[0]?.msg || err.response?.data?.message || '添加订单失败';
+      throw err;
     } finally {
       loading.value = false
     }
   }
 
-  // 获取所有订单
-  function getAllOrders() {
+  // 获取所有订单 (本地)
+  function getAllOrdersLocal() {
     return orders.value
   }
 
-  // 更新订单状态
-  async function updateOrderStatus(orderNumber, status) {
+  /**
+   * 更新订单状态 (通过API)
+   * @param {string} orderNumber - 订单号
+   * @param {string} newStatus - 新状态 ('pending', 'checked-in', 'checked-out', 'cancelled')
+   * @param {object} [options] - 其他选项
+   * @param {string} [options.checkInTime] - 入住时间 (ISO string)
+   * @param {string} [options.checkOutTime] - 退房时间 (ISO string)
+   */
+  async function updateOrderStatusViaApi(orderNumber, newStatus, options = {}) {
     try {
-      console.log(`更新订单 ${orderNumber} 状态为: ${status}`)
-      await orderApi.updateOrderStatus(orderNumber, status)
-      // 更新本地状态
-      const index = orders.value.findIndex(o => o.order_id === orderNumber)
-      if (index !== -1) {
-        orders.value[index].status = status
+      loading.value = true;
+      error.value = null;
+      console.log(`通过API更新订单 ${orderNumber} 状态为: ${newStatus}, 选项:`, options);
+
+      const payload = { newStatus, ...options };
+      if (payload.checkInTime && !(payload.checkInTime instanceof String)) {
+        payload.checkInTime = new Date(payload.checkInTime).toISOString();
       }
-      return true
+      if (payload.checkOutTime && !(payload.checkOutTime instanceof String)){
+        payload.checkOutTime = new Date(payload.checkOutTime).toISOString();
+      }
+
+      const response = await api.put(`/orders/${orderNumber}/status`, payload); // 移除 /api 前缀
+      console.log('订单状态API更新成功:', response); // response 是拦截器处理后的数据
+
+      // 更新本地状态
+      // 后端返回的可能是 { message: '...', order: { ... } }
+      const updatedOrderFromApi = response.order || response;
+      const index = orders.value.findIndex(o => o.orderNumber === orderNumber);
+      if (index !== -1) {
+        orders.value[index].status = updatedOrderFromApi.status;
+        if (updatedOrderFromApi.actual_check_in_time) {
+          orders.value[index].actualCheckInTime = updatedOrderFromApi.actual_check_in_time;
+        }
+        if (updatedOrderFromApi.actual_check_out_time) {
+          orders.value[index].actualCheckOutTime = updatedOrderFromApi.actual_check_out_time;
+        }
+        // 你可能还想更新其他从API返回的字段
+        orders.value[index] = { ...orders.value[index], ...orders.value[index], actualCheckInTime: updatedOrderFromApi.actual_check_in_time, actualCheckOutTime: updatedOrderFromApi.actual_check_out_time, status: updatedOrderFromApi.status };
+
+      }
+      return updatedOrderFromApi;
     } catch (err) {
-      console.error('更新订单状态失败:', err)
-      return false
+      console.error('通过API更新订单状态失败:', err.response ? err.response.data : err.message);
+      error.value = err.response?.data?.errors?.[0]?.msg || err.response?.data?.message || '更新订单状态失败';
+      throw err;
+    } finally {
+      loading.value = false;
     }
   }
 
-  // 更新订单状态并记录入住时间
-  async function updateOrderCheckIn(orderNumber, checkInTime) {
-    try {
-      console.log(`订单 ${orderNumber} 办理入住, 时间: ${checkInTime}`)
-      await orderApi.checkIn(orderNumber, { checkInTime })
-      // 更新本地状态
-      const index = orders.value.findIndex(o => o.order_id === orderNumber)
-      if (index !== -1) {
-        orders.value[index].status = 'checked-in'
-        orders.value[index].actual_check_in_time = checkInTime
+
+  // 更新订单状态 (本地, 主要用于前端快速反馈，如取消)
+  function updateOrderStatusLocally(orderNumber, status) {
+    const index = orders.value.findIndex(o => o.orderNumber === orderNumber)
+    if (index !== -1) {
+      orders.value[index].status = status
+      if (status === 'cancelled' || status === 'pending') {
+        orders.value[index].actualCheckInTime = null;
+        orders.value[index].actualCheckOutTime = null;
       }
-      return true
-    } catch (err) {
-      console.error('更新订单入住信息失败:', err)
-      return false
     }
   }
 
-  // 更新订单状态并记录退房时间
-  async function updateOrderCheckOut(orderNumber, checkOutTime) {
-    try {
-      console.log(`订单 ${orderNumber} 办理退房, 时间: ${checkOutTime}`)
-      await orderApi.checkOut(orderNumber, { checkOutTime })
-      // 更新本地状态
-      const index = orders.value.findIndex(o => o.order_id === orderNumber)
-      if (index !== -1) {
-        orders.value[index].status = 'checked-out'
-        orders.value[index].actual_check_out_time = checkOutTime
-      }
-      return true
-    } catch (err) {
-      console.error('更新订单退房信息失败:', err)
-      return false
+  // 更新订单退房信息 (本地)
+  function updateOrderCheckOutLocally(orderNumber, checkOutTime) {
+    const index = orders.value.findIndex(o => o.orderNumber === orderNumber)
+    if (index !== -1) {
+      orders.value[index].status = 'checked-out'
+      orders.value[index].actualCheckOutTime = checkOutTime
     }
   }
 
@@ -178,35 +229,24 @@ export const useOrderStore = defineStore('order', () => {
     try {
       console.log(`更新订单 ${orderNumber} 房间信息:`, { roomType, roomNumber, roomPrice })
       const roomData = {
-        roomType,
-        roomNumber,
-        roomPrice
+        newRoomType: roomType,
+        newRoomNumber: roomNumber,
+        newRoomPrice: roomPrice
       }
+      // 移除 /api 前缀, 并确保后端API路径正确
+      // const response = await api.put(`/orders/${orderNumber}/room`, roomData);
+      // console.log('订单房间信息更新成功:', response.data);
 
-      await orderApi.updateOrderRoom(orderNumber, roomData)
-
-      // 更新本地状态
-      const index = orders.value.findIndex(o => o.order_id === orderNumber)
+      const index = orders.value.findIndex(o => o.orderNumber === orderNumber)
       if (index !== -1) {
-        orders.value[index].room_type = roomType
-        orders.value[index].room_number = roomNumber
-        orders.value[index].room_price = roomPrice
-
-        // 添加房间变更记录
-        const changeRecord = {
-          time: new Date().toISOString(),
-          oldRoom: orders.value[index].room_number,
-          newRoom: roomNumber
-        }
-        if (!orders.value[index].room_changes) {
-          orders.value[index].room_changes = []
-        }
-        orders.value[index].room_changes.push(changeRecord)
-        return true
+        orders.value[index].roomType = roomType
+        orders.value[index].roomNumber = roomNumber
+        orders.value[index].roomPrice = roomPrice
       }
-      return false
+      return true;
     } catch (err) {
-      console.error('更新订单房间信息失败:', err)
+      console.error('更新订单房间信息失败:', err.response ? err.response.data : err.message)
+      error.value = '更新订单房间信息失败'
       return false
     }
   }
@@ -244,14 +284,14 @@ export const useOrderStore = defineStore('order', () => {
     loading,
     error,
     addOrder,
-    getAllOrders,
+    getAllOrdersLocal,
     fetchAllOrders,
-    updateOrderStatus,
-    updateOrderCheckIn,
-    updateOrderCheckOut,
+    updateOrderStatusLocally,
+    updateOrderStatusViaApi,
+    updateOrderCheckOutLocally,
     updateOrderRoom,
-    formatOrderDate,
     getOrderByNumber,
-    getActiveOrderByRoomNumber
+    getActiveOrderByRoomNumber,
+    formatOrderDate
   }
 })

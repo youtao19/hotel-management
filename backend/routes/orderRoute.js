@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const orderModule = require('../modules/orderModule');
+const { authenticationMiddleware } = require('../modules/authentication'); // Correctly import authenticationMiddleware
 
 // 定义有效的订单状态
 const VALID_ORDER_STATES = ['pending', 'checked-in', 'checked-out', 'cancelled'];
@@ -56,7 +57,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /api/orders - 创建新订单
-router.post('/',
+router.post('/', authenticationMiddleware,
   [
     // 基本的输入验证 - 根据您的 db_schema.sql 和 CreateOrder.vue 进行调整
     body('orderNumber').notEmpty().withMessage('订单号不能为空').isString().trim(),
@@ -135,5 +136,39 @@ router.post('/',
     }
   }
 );
+
+// PUT /api/orders/:orderNumber/status - 更新订单状态
+router.put('/:orderNumber/status', authenticationMiddleware, [
+    body('newStatus')
+        .notEmpty().withMessage('新状态不能为空')
+        .isString()
+        .custom(value => {
+            if (!VALID_ORDER_STATES.includes(value)) {
+                throw new Error(`无效的订单状态。有效状态: ${VALID_ORDER_STATES.join(', ')}`);
+            }
+            return true;
+        }),
+    body('checkInTime').optional({ checkFalsy: true }).isISO8601().withMessage('入住时间格式无效').toDate(),
+    body('checkOutTime').optional({ checkFalsy: true }).isISO8601().withMessage('退房时间格式无效').toDate(),
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { orderNumber } = req.params;
+    const { newStatus, checkInTime, checkOutTime } = req.body;
+
+    try {
+        const updatedOrder = await orderModule.updateOrderStatus(orderNumber, newStatus, { checkInTime, checkOutTime });
+        if (!updatedOrder) {
+            return res.status(404).json({ message: '未找到订单或更新失败' });
+        }
+        res.json({ message: '订单状态更新成功', order: updatedOrder });
+    } catch (error) {
+        console.error(`更新订单 ${orderNumber} 状态为 ${newStatus} 失败:`, error);
+        res.status(500).json({ message: '更新订单状态失败', error: error.message });
+    }
+});
 
 module.exports = router;
