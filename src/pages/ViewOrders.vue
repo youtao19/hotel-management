@@ -276,14 +276,14 @@
           <q-card-actions align="right">
             <q-btn flat label="关闭" color="primary" v-close-popup />
             <q-btn
-              v-if="currentOrder && currentOrder.status === '待入住'"
+              v-if="currentOrder && currentOrder.status === 'pending'"
               flat
               label="办理入住"
               color="info"
               @click="checkInOrderFromDetails"
             />
             <q-btn
-              v-if="currentOrder && currentOrder.status === '已入住'"
+              v-if="currentOrder && currentOrder.status === 'checked-in'"
               flat
               label="更改房间"
               color="warning"
@@ -292,7 +292,7 @@
               <q-tooltip>更换房间</q-tooltip>
             </q-btn>
             <q-btn
-              v-if="currentOrder && currentOrder.status === '已入住'"
+              v-if="currentOrder && currentOrder.status === 'checked-in'"
               flat
               label="办理退房"
               color="positive"
