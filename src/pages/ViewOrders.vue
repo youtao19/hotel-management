@@ -207,7 +207,20 @@
                   <q-item>
                     <q-item-section>
                       <q-item-label caption>房间号</q-item-label>
-                      <q-item-label>{{ currentOrder.roomNumber }}</q-item-label>
+                      <!-- Debug: {{ currentOrder ? currentOrder.status : 'N/A' }} -->
+                      <div class="row items-center">
+                        <q-item-label class="q-mr-sm">{{ currentOrder.roomNumber }}</q-item-label>
+                        <q-btn
+                          v-if="currentOrder && currentOrder.status === 'pending'"
+                          flat
+                          dense
+                          color="primary"
+                          icon="swap_horiz"
+                          @click="openChangeRoomDialog"
+                        >
+                          <q-tooltip>更换房间</q-tooltip>
+                        </q-btn>
+                      </div>
                     </q-item-section>
                   </q-item>
 
@@ -274,8 +287,10 @@
               flat
               label="更改房间"
               color="warning"
-              @click="showChangeRoomDialog = true"
-            />
+              @click="openChangeRoomDialog"
+            >
+              <q-tooltip>更换房间</q-tooltip>
+            </q-btn>
             <q-btn
               v-if="currentOrder && currentOrder.status === '已入住'"
               flat
@@ -306,7 +321,7 @@
               <div class="col">
                 <q-select
                   v-model="newRoomNumber"
-                  :options="availableRooms"
+                  :options="availableRoomOptions"
                   label="选择新房间"
                   filled
                   emit-value
@@ -327,11 +342,11 @@
               <!-- 可用房间数量提示 -->
               <div class="col-auto q-ml-md">
                 <q-chip
-                  :color="availableRooms.length > 0 ? (availableRooms.length <= 3 ? 'warning' : 'positive') : 'negative'"
+                  :color="availableRoomOptions.length > 0 ? (availableRoomOptions.length <= 3 ? 'warning' : 'positive') : 'negative'"
                   text-color="white"
                   icon="hotel"
                 >
-                  可用: {{ availableRooms.length }}间
+                  可用: {{ availableRoomOptions.length }}间
                 </q-chip>
               </div>
             </div>
@@ -410,7 +425,7 @@
 
   <script setup>
   import { ref, computed, onMounted } from 'vue'
-  import { date } from 'quasar'
+  import { date, useQuasar } from 'quasar'
   import { useOrderStore } from '../stores/orderStore' // 导入订单 store
   import { useRoomStore } from '../stores/roomStore' // 导入房间 store
   import { useViewStore } from '../stores/viewStore' // 导入视图 store
@@ -419,6 +434,7 @@
   const orderStore = useOrderStore()
   const roomStore = useRoomStore()
   const viewStore = useViewStore()
+  const $q = useQuasar() // 初始化 $q 对象
 
   // 搜索和过滤
   const searchQuery = ref('')
@@ -518,18 +534,18 @@
   // 获取所有订单数据
   async function fetchAllOrders() {
     try {
-      loadingOrders.value = true
-      await orderStore.fetchOrders() // 确保orderStore中有这个方法
-      console.log('获取到的订单数据:', orderStore.orders)
+      loadingOrders.value = true;
+      await orderStore.fetchAllOrders(); // <--- 修改这里的函数名为 fetchAllOrders
+      console.log('获取到的订单数据:', orderStore.orders);
     } catch (error) {
-      console.error('获取订单数据失败:', error)
+      console.error('获取订单数据失败:', error);
       $q.notify({
         type: 'negative',
         message: '获取订单数据失败，请刷新页面重试',
         position: 'top'
-      })
+      });
     } finally {
-      loadingOrders.value = false
+      loadingOrders.value = false;
     }
   }
 
@@ -545,30 +561,29 @@
   const checkInRoomNumber = ref(null)
 
   // 房型选项
-  const roomTypeOptions = viewStore.roomTypeOptions.filter(option => option.value !== null)
-
-  // 使用roomStore获取可用房间
+  const roomTypeOptions = viewStore.roomTypeOptions.filter(option => option.value !== null)  // 使用roomStore获取可用房间
   const availableRooms = computed(() => {
     return roomStore.rooms
       .filter(room => room.status === 'available')
       .map(room => ({
-        label: `${room.number} - ${viewStore.getRoomTypeName(room.type)}`,
-        value: room.number,
-        type: room.type,
-        price: room.price
+        label: `${room.room_number} - ${viewStore.getRoomTypeName(room.type_code)}`,
+        value: room.room_number,
+        type: room.type_code,
+        price: room.price,
+        room_id: room.room_id
       }))
   })
+  // 当前选择的房型（用于筛选可用房间）
+  const selectedRoomType = ref(null)
 
-  // 根据选择的房型筛选可用房间
-  const filteredAvailableRooms = computed(() => {
-    if (!selectedRoomType.value) return []
-    return availableRooms.value.filter(room => room.type === selectedRoomType.value)
-  })
+  // 在 script 部分添加相关变量和方法
+  const availableRoomOptions = ref([]); // 用于存储从API获取的可用房间选项
 
   // 查看订单详情
   function viewOrderDetails(order) {
-    currentOrder.value = order
-    showOrderDetails.value = true
+    currentOrder.value = order;
+    console.log('Viewing order details. Status:', currentOrder.value ? currentOrder.value.status : 'currentOrder is null');
+    showOrderDetails.value = true;
   }
 
   // 取消订单
@@ -577,13 +592,11 @@
       console.log('取消订单:', order);
 
       // 使用orderStore更新订单状态
-      orderStore.updateOrderStatus(order.orderNumber, '已取消');
-
-      // 如果房间已预订但未入住，释放房间
+      orderStore.updateOrderStatus(order.orderNumber, '已取消');      // 如果房间已预订但未入住，释放房间
       if (order.status === '待入住') {
         const room = roomStore.getRoomByNumber(order.roomNumber);
         if (room && room.status === 'reserved') {
-          roomStore.updateRoomStatus(room.id, 'available');
+          roomStore.updateRoomStatus(room.room_id, 'available');
         }
       }
 
@@ -613,12 +626,10 @@
       const formattedCheckOutTime = date.formatDate(checkOutTime, 'YYYY-MM-DD HH:mm');
 
       // 更新订单状态和退房时间
-      orderStore.updateOrderCheckOut(order.orderNumber, formattedCheckOutTime);
-
-      // 获取房间并将状态更改为清洁中
+      orderStore.updateOrderCheckOut(order.orderNumber, formattedCheckOutTime);      // 获取房间并将状态更改为清洁中
       const room = roomStore.getRoomByNumber(order.roomNumber);
       if (room) {
-        roomStore.checkOutRoom(room.id);
+        roomStore.checkOutRoom(room.room_id);
       }
 
       // 直接更新当前订单对象 - 确保界面立即响应
@@ -727,12 +738,11 @@
     const formattedCheckInTime = date.formatDate(checkInTime, 'YYYY-MM-DD HH:mm');
 
     // 原房间号与选择的房间号不同，需要先更新订单房间信息
-    if (checkInOrderData.value.roomNumber !== checkInRoomNumber.value) {
-      // 获取旧房间
+    if (checkInOrderData.value.roomNumber !== checkInRoomNumber.value) {      // 获取旧房间
       const oldRoom = roomStore.getRoomByNumber(checkInOrderData.value.roomNumber);
       if (oldRoom && oldRoom.status === 'reserved') {
         // 释放原预订的房间
-        roomStore.updateRoomStatus(oldRoom.id, 'available');
+        roomStore.updateRoomStatus(oldRoom.room_id, 'available');
       }
 
       // 更新订单房间信息
@@ -745,12 +755,10 @@
     }
 
     // 更新订单状态和入住时间
-    orderStore.updateOrderCheckIn(checkInOrderData.value.orderNumber, formattedCheckInTime);
-
-    // 使用选中的房间ID，并await异步操作
+    orderStore.updateOrderCheckIn(checkInOrderData.value.orderNumber, formattedCheckInTime);    // 使用选中的房间ID，并await异步操作
     if (selectedRoom) {
        const success = await roomStore.occupyRoom(
-         selectedRoom.id,
+         selectedRoom.room_id,
          checkInOrderData.value.guestName,
          checkInOrderData.value.checkOutDate
        );
@@ -829,15 +837,13 @@
       if (newRoom.status !== 'available') {
         console.error('新房间不可用:', roomNum, newRoom.status)
         return false
-      }
-
-      // 根据订单状态更新房间状态
+      }      // 根据订单状态更新房间状态
       if (order.status === '已入住') {
-        roomStore.updateRoomStatus(oldRoom.id, 'cleaning')
-        roomStore.occupyRoom(newRoom.id, order.guestName, order.checkOutDate)
+        roomStore.updateRoomStatus(oldRoom.room_id, 'cleaning')
+        roomStore.occupyRoom(newRoom.room_id, order.guestName, order.checkOutDate)
       } else if (order.status === '待入住') {
-        roomStore.updateRoomStatus(oldRoom.id, 'available')
-        roomStore.reserveRoom(newRoom.id)
+        roomStore.updateRoomStatus(oldRoom.room_id, 'available')
+        roomStore.reserveRoom(newRoom.room_id)
       }
 
       // 更新订单信息
@@ -851,56 +857,103 @@
   }
 
   // 更改房间
-  function changeRoom() {
+  async function changeRoom() {
+    if (!currentOrder.value || !newRoomNumber.value) {
+      return;
+    }
+
+    try {
+      // 调用API更换房间
+      const response = await api.post('/api/rooms/change-room', {
+        orderNumber: currentOrder.value.orderNumber,
+        oldRoomNumber: currentOrder.value.roomNumber,
+        newRoomNumber: newRoomNumber.value
+      });
+
+      if (response.data.success) {
+        // 更新当前订单信息
+        currentOrder.value.roomNumber = newRoomNumber.value;
+        currentOrder.value.roomType = response.data.newRoom.type_code;
+        currentOrder.value.roomPrice = response.data.newRoom.price;
+
+        // 刷新房间状态
+        await roomStore.refreshData();
+
+        // 刷新订单列表
+        await fetchAllOrders();
+
+        // 显示成功消息
+        $q.notify({
+          type: 'positive',
+          message: '房间更换成功',
+          position: 'top'
+        });
+
+        // 关闭对话框
+        showChangeRoomDialog.value = false;
+        newRoomNumber.value = null;
+      }
+    } catch (error) {
+      console.error('更换房间失败:', error);
+      $q.notify({
+        type: 'negative',
+        message: error.response?.data?.message || '更换房间失败',
+        position: 'top'
+      });
+    }
+  }
+
+  // 打开更换房间对话框时获取可用房间
+  async function openChangeRoomDialog() {
+    console.log('openChangeRoomDialog function called'); // 确认函数被调用
+
     if (!currentOrder.value) {
-      console.error('没有选择当前订单');
-      alert('操作失败：没有找到当前订单');
+      console.error('currentOrder is null or undefined in openChangeRoomDialog');
       return;
     }
+    console.log('currentOrder in openChangeRoomDialog:', JSON.parse(JSON.stringify(currentOrder.value))); // 打印当前订单信息
 
-    if (!newRoomNumber.value) {
-      console.error('未选择房间号');
-      alert('请选择新房间');
-      return;
-    }
+    try {
+      // 从订单中获取入住和离店日期
+      const startDate = formatDate(currentOrder.value.checkInDate);
+      const endDate = formatDate(currentOrder.value.checkOutDate);
+      console.log('Formatted dates for API call:', { startDate, endDate }); // 打印格式化后的日期
 
-    console.log('更改房间:', currentOrder.value.roomNumber, '->', newRoomNumber.value);
-
-    // 找到新房间
-    const newRoom = availableRooms.value.find(r => r.value === newRoomNumber.value);
-    if (!newRoom) {
-      console.error('所选房间不可用');
-      alert('所选房间不可用');
-      return;
-    }
-
-    // 确认更改
-    if (!confirm(`确定要将订单 ${currentOrder.value.orderNumber} 的房间从 ${currentOrder.value.roomNumber} 更改为 ${newRoomNumber.value} 吗？`)) {
-      return;
-    }
-
-    // 使用集成的updateRoomInfo方法更新房间信息
-    const success = updateRoomInfo(
-      currentOrder.value.orderNumber,
-      newRoom.type,
-      newRoomNumber.value,
-      newRoom.price
-    );
-
-    if (success) {
-      // 关闭对话框并重置
-      showChangeRoomDialog.value = false;
-      newRoomNumber.value = null;
-
-      // 更新当前订单的显示
-      const updatedOrder = orderStore.orders.find(o => o.orderNumber === currentOrder.value.orderNumber);
-      if (updatedOrder) {
-        currentOrder.value = updatedOrder;
+      if (!startDate || !endDate) {
+        console.error('Start date or end date is missing after formatting.');
+        $q.notify({
+          type: 'negative',
+          message: '无法获取订单的入住或离店日期',
+          position: 'top'
+        });
+        return;
       }
 
-      alert('房间更改成功');
-    } else {
-      alert('房间更改失败，请检查日志了解详情');
+      // 调用 roomStore 中的方法获取可用房间
+      console.log('Calling roomStore.getAvailableRoomsByDate...');
+      const rooms = await roomStore.getAvailableRoomsByDate(startDate, endDate);
+      console.log('Rooms received from API:', rooms); // 打印从API获取的房间
+
+      // 更新 availableRoomOptions
+      availableRoomOptions.value = rooms
+        .filter(room => room.room_number !== currentOrder.value.roomNumber)
+        .map(room => ({
+          label: `${room.room_number} - ${viewStore.getRoomTypeName(room.type_code)} (${room.price}元)`,
+          value: room.room_number,
+          type: room.type_code,
+          price: room.price
+        }));
+      console.log('Processed availableRoomOptions:', availableRoomOptions.value); // 打印处理后的可用房间选项
+
+      showChangeRoomDialog.value = true;
+      console.log('showChangeRoomDialog set to true'); // 确认对话框状态已改变
+    } catch (error) {
+      console.error('获取可用房间失败 (Error in openChangeRoomDialog):', error);
+      $q.notify({
+        type: 'negative',
+        message: '获取可用房间列表失败: ' + (error.message || '未知错误'), // 提供更详细的错误信息
+        position: 'top'
+      });
     }
   }
 

@@ -27,6 +27,48 @@ router.get('/', async (req, res) => {
   }
 });
 
+// 获取指定日期范围内的可用房间
+router.get('/available', async (req, res) => {
+  try {
+    const { startDate, endDate, typeCode } = req.query;
+
+    // 验证日期参数
+    if (!startDate || !endDate) {
+      return res.status(400).json({ message: '必须提供入住日期和退房日期' });
+    }
+
+    // 验证日期格式
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(startDate) || !dateRegex.test(endDate)) {
+      return res.status(400).json({ message: '日期格式必须为 YYYY-MM-DD' });
+    }
+
+    // 验证日期逻辑
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return res.status(400).json({ message: '无效的日期' });
+    }
+    if (start >= end) {
+      return res.status(400).json({ message: '退房日期必须晚于入住日期' });
+    }
+
+    console.log('查询可用房间:', { startDate, endDate, typeCode });
+    const availableRooms = await roomModule.getAvailableRooms(startDate, endDate, typeCode);
+
+    res.json({
+      data: availableRooms,
+      query: { startDate, endDate, typeCode }
+    });
+  } catch (err) {
+    console.error('查询可用房间失败:', err);
+    res.status(500).json({
+      message: '服务器错误',
+      error: err.message
+    });
+  }
+});
+
 // 获取特定ID的房间
 router.get('/:id', async (req, res) => {
   try {
@@ -169,48 +211,6 @@ router.post('/', async (req, res) => {
   } catch (err) {
     console.error('添加房间错误:', err);
     res.status(500).json({ message: '服务器错误' });
-  }
-});
-
-// 获取指定日期范围内的可用房间
-router.get('/available', async (req, res) => {
-  try {
-    const { startDate, endDate, typeCode } = req.query;
-
-    // 验证日期参数
-    if (!startDate || !endDate) {
-      return res.status(400).json({ message: '必须提供入住日期和退房日期' });
-    }
-
-    // 验证日期格式
-    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-    if (!dateRegex.test(startDate) || !dateRegex.test(endDate)) {
-      return res.status(400).json({ message: '日期格式必须为 YYYY-MM-DD' });
-    }
-
-    // 验证日期逻辑
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      return res.status(400).json({ message: '无效的日期' });
-    }
-    if (start >= end) {
-      return res.status(400).json({ message: '退房日期必须晚于入住日期' });
-    }
-
-    console.log('查询可用房间:', { startDate, endDate, typeCode });
-    const availableRooms = await roomModule.getAvailableRooms(startDate, endDate, typeCode);
-
-    res.json({
-      data: availableRooms,
-      query: { startDate, endDate, typeCode }
-    });
-  } catch (err) {
-    console.error('查询可用房间失败:', err);
-    res.status(500).json({
-      message: '服务器错误',
-      error: err.message
-    });
   }
 });
 

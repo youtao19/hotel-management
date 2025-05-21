@@ -68,6 +68,9 @@ export const roomApi = {
 
   // 获取房间类型
   getRoomTypes: () => api.get('/room-types'),
+
+  getAvailableRooms: (params) => api.get(`/rooms/available?${params}`),
+  changePendingRoom: (data) => api.post(`/rooms/change-room`, data),
 }
 
 // 订单相关接口
