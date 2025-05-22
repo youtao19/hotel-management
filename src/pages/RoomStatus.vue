@@ -225,24 +225,6 @@
                   size="sm"
                   @click="bookRoom(room.room_id)"
                 />
-                <!-- 空闲房间可入住 -->
-                <q-btn
-                  v-if="roomStore.getRoomDisplayStatus(room) === 'available'"
-                  color="positive"
-                  icon="login"
-                  label="入住"
-                  size="sm"
-                  @click="checkIn(room.room_id)"
-                />
-                <!-- 已预订房间可办理入住 -->
-                <q-btn
-                  v-if="roomStore.getRoomDisplayStatus(room) === 'reserved'"
-                  color="positive"
-                  icon="login"
-                  label="办理入住"
-                  size="sm"
-                  @click="checkInReservation(room.room_id)"
-                />
                 <!-- 已入住房间可退房 -->
                 <q-btn
                   v-if="roomStore.getRoomDisplayStatus(room) === 'occupied'"
@@ -252,9 +234,18 @@
                   size="sm"
                   @click="checkOut(room.room_id)"
                 />
+                <!-- 所有非清洁中和非维修中的房间都可以设置为清理状态 -->
+                <q-btn
+                  v-if="roomStore.getRoomDisplayStatus(room) !== ROOM_STATES.CLEANING && roomStore.getRoomDisplayStatus(room) !== ROOM_STATES.REPAIR"
+                  color="warning"
+                  icon="cleaning_services"
+                  label="清理"
+                  size="sm"
+                  @click="setRoomCleaning(room.room_id)"
+                />
                 <!-- 非维修中房间可设为维修 -->
                 <q-btn
-                  v-if="roomStore.getRoomDisplayStatus(room) !== roomStore.ROOM_STATES.REPAIR"
+                  v-if="roomStore.getRoomDisplayStatus(room) !== ROOM_STATES.REPAIR"
                   color="grey"
                   icon="build"
                   label="维修"
@@ -263,7 +254,7 @@
                 />
                 <!-- 维修中房间可完成维修 -->
                 <q-btn
-                  v-if="roomStore.getRoomDisplayStatus(room) === roomStore.ROOM_STATES.REPAIR"
+                  v-if="roomStore.getRoomDisplayStatus(room) === ROOM_STATES.REPAIR"
                   color="green"
                   icon="check"
                   label="完成维修"
@@ -300,15 +291,21 @@ import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useRoomStore } from '../stores/roomStore'
 import { useViewStore } from '../stores/viewStore'
-import { date } from 'quasar'
+import { useOrderStore } from '../stores/orderStore'
+import { useQuasar, date } from 'quasar'
 
 // 获取房间store和视图store
 const roomStore = useRoomStore()
 const viewStore = useViewStore()
+const orderStore = useOrderStore()
+const $q = useQuasar()
 
 // 获取当前路由和路由器
 const route = useRoute()
 const router = useRouter()
+
+// 导入房间状态常量
+const ROOM_STATES = roomStore.ROOM_STATES
 
 // 筛选条件状态变量
 const filterType = ref(null)    // 房间类型筛选，初始为null表示不筛选
@@ -358,7 +355,7 @@ watch(() => route.query, (newQuery) => {
       console.log('尝试应用状态筛选:', statusValue)
 
       // 验证状态值是否有效，防止非法值导致的筛选问题
-      const validStatus = ['available', 'occupied', 'reserved', 'cleaning', 'maintenance'].includes(statusValue)
+      const validStatus = ['available', 'occupied', 'pending', 'cleaning', 'repair'].includes(statusValue)
 
       if (validStatus) {
         console.log('状态值有效，设置筛选:', statusValue)
@@ -448,7 +445,16 @@ const filteredRooms = computed(() => {
     }
   }
 
-  return roomStore.filterRooms(filters)
+  // 如果没有任何筛选条件，确保返回所有房间
+  if (Object.keys(filters).length === 0) {
+    console.log('没有筛选条件，返回所有房间:', roomStore.rooms.length)
+  } else {
+    console.log('应用筛选条件:', filters)
+  }
+
+  const result = roomStore.filterRooms(filters)
+  console.log(`筛选结果: ${result.length} 个房间`)
+  return result
 })
 
 /**
@@ -493,24 +499,19 @@ async function applyFilters() {
       if (startDate && endDate) {
         try {
           // 直接使用后端返回的结果
-          const availableRooms = await roomStore.getAvailableRoomsByDate(
+          await roomStore.getAvailableRoomsByDate(
             startDate,
             endDate,
             filterType.value
           );
-          rooms.value = availableRooms;
         } catch (err) {
           console.error('查询可用房间失败:', err);
           error.value = '查询可用房间失败: ' + err.message;
         }
       }
     } else {
-      // 如果没有日期范围，使用常规筛选
-      const filteredRooms = await roomStore.fetchAllRooms();
-      rooms.value = roomStore.filterRooms({
-        type: filterType.value,
-        status: filterStatus.value
-      });
+      // 如果没有日期范围，刷新所有房间数据
+      await roomStore.fetchAllRooms();
     }
 
     // 更新URL
@@ -521,6 +522,12 @@ async function applyFilters() {
   } catch (err) {
     console.error('应用筛选失败:', err);
     error.value = '应用筛选失败: ' + err.message;
+    // 确保出错时也刷新数据
+    try {
+      await roomStore.fetchAllRooms();
+    } catch (refreshErr) {
+      console.error('刷新房间数据失败:', refreshErr);
+    }
   } finally {
     loading.value = false;
   }
@@ -533,6 +540,7 @@ async function resetFilters() {
   try {
     loading.value = true;
     error.value = null;
+    console.log('重置筛选条件...');
 
     // 重置组件状态变量
     filterType.value = null;
@@ -540,8 +548,12 @@ async function resetFilters() {
     dateRange.value = null;
 
     // 重新加载所有房间
+    console.log('正在重新加载所有房间数据...');
     await roomStore.fetchAllRooms();
-    rooms.value = roomStore.rooms;
+    console.log('房间数据已重新加载，共 ' + roomStore.rooms.length + ' 个房间');
+
+    // 确认filteredRooms计算属性现在会显示所有房间
+    console.log('重置后filteredRooms将显示:', roomStore.filterRooms({}));
 
     // 更新URL，移除所有筛选参数
     router.replace({
@@ -551,6 +563,19 @@ async function resetFilters() {
   } catch (err) {
     console.error('重置筛选失败:', err);
     error.value = '重置筛选失败: ' + err.message;
+
+    // 显示错误提示
+    try {
+      if ($q && $q.notify && typeof $q.notify === 'function') {
+        $q.notify({
+          type: 'negative',
+          message: `重置失败: ${err.message || '未知错误'}`,
+          position: 'top'
+        });
+      }
+    } catch (notifyError) {
+      console.warn('显示错误提示失败:', notifyError);
+    }
   } finally {
     loading.value = false;
   }
@@ -560,70 +585,187 @@ async function resetFilters() {
  * 预订房间
  * @param {number} roomId - 房间ID
  */
-function bookRoom(roomId) {
-  console.log('预订房间:', roomId)
-  // 获取要预订的房间信息
-  const room = roomStore.getRoomById(roomId)
-  if (!room) {
-    alert('找不到房间信息')
-    return
+async function bookRoom(roomId) {
+  console.log('预订房间:', roomId);
+
+  try {
+    // 获取要预订的房间信息
+    const room = await roomStore.getRoomById(roomId);
+    if (!room) {
+      throw new Error('找不到房间信息');
+    }
+
+    // 确认是否预订房间
+    if (!confirm(`确定预订房间 ${room.room_number} (${getRoomTypeName(room.type_code)}) 吗？将跳转到订单创建页面。`)) {
+      return;
+    }
+
+    // 导航到创建订单页面，并传递房间信息
+    router.push({
+      path: '/CreateOrder',
+      query: {
+        roomId: roomId,
+        roomType: room.type_code,
+        roomNumber: room.room_number,
+        status: 'pending' // 默认设置为"待入住"状态
+      }
+    });
+  } catch (error) {
+    console.error('预订房间操作失败:', error);
+
+    // 显示错误提示
+    try {
+      if ($q && $q.notify && typeof $q.notify === 'function') {
+        $q.notify({
+          type: 'negative',
+          message: `预订失败: ${error.message || '未知错误'}`,
+          position: 'top'
+        });
+      } else {
+        alert(`预订失败: ${error.message || '未知错误'}`);
+      }
+    } catch (notifyError) {
+      console.warn('显示错误提示失败:', notifyError);
+      alert(`预订失败: ${error.message || '未知错误'}`);
+    }
   }
-
-  // 导航到创建订单页面，并传递房间信息
-  router.push({
-    path: '/CreateOrder',
-    query: {
-      roomId: roomId,
-      roomType: room.type,
-      roomNumber: room.number,
-      status: 'pending' // 默认设置为"待入住"状态
-    }
-  })
-}
-
-/**
- * 办理入住 (无预订)
- * @param {number} roomId - 房间ID
- */
-function checkIn(roomId) {
-  console.log('办理入住 (无预订):', roomId)
-  // 导航到创建订单页面，并传递房间ID
-  router.push({
-    path: '/CreateOrder', // 修改为正确的创建订单页面的路由路径
-    query: {
-      roomId: roomId // 将房间ID作为查询参数传递
-    }
-  })
-}
-
-/**
- * 办理预订入住
- * @param {number} roomId - 房间ID
- */
-function checkInReservation(roomId) {
-  console.log('办理预订入住:', roomId)
-  // 导航到入住页面，并选择预订入住选项卡
-  router.push({
-    path: '/Check-in',
-    query: {
-      type: 'reservation',
-      roomId: roomId
-    }
-  })
 }
 
 /**
  * 办理退房
  * @param {number} roomId - 房间ID
  */
-function checkOut(roomId) {
-  console.log('办理退房:', roomId)
+async function checkOut(roomId) {
+  console.log('办理退房:', roomId);
 
-  // 显示确认对话框
-  if (confirm('确认办理退房？退房后房间将自动设置为"清扫中"状态。')) {
-    // 使用roomStore的方法更新房间状态
-    roomStore.checkOutRoom(roomId)
-    console.log('房间已更新为清扫中状态:', roomId)
+  try {
+    // 获取房间信息
+    const room = await roomStore.getRoomById(roomId);
+    if (!room) {
+      throw new Error('找不到房间信息');
+    }
+
+    // 获取关联的订单信息
+    if (!room.room_number) {
+      throw new Error('房间号信息不完整');
+    }
+
+    const order = orderStore.getActiveOrderByRoomNumber(room.room_number);
+    if (!order) {
+      throw new Error('找不到该房间的入住订单');
+    }
+
+    // 确认是否办理退房
+    if (!confirm(`确定为房间 ${room.room_number} 的客人 ${order.guestName || '未知'} 办理退房吗？退房后房间将自动设置为"清扫中"状态。`)) {
+      return;
+    }
+
+    // 显示加载提示
+    try {
+      if ($q && $q.loading && typeof $q.loading.show === 'function') {
+        $q.loading.show({
+          message: '正在处理退房...'
+        });
+      } else {
+        console.log('$q.loading.show 不可用，使用备用方法');
+      }
+    } catch (loadingError) {
+      console.warn('显示加载提示失败:', loadingError);
+    }
+
+    // 获取当前时间用于退房时间
+    const checkOutTime = new Date().toISOString();
+
+    // 调用orderStore的方法更新订单状态
+    try {
+      console.log(`准备更新订单 ${order.orderNumber} 状态为 checked-out`);
+      await orderStore.updateOrderStatusViaApi(order.orderNumber, 'checked-out', { checkOutTime });
+      console.log(`订单 ${order.orderNumber} 状态已更新为 checked-out`);
+    } catch (orderError) {
+      console.error('更新订单状态失败:', orderError);
+      throw new Error('更新订单状态失败: ' + (orderError.message || '未知错误'));
+    }
+
+    // 调用API更新房间状态为清扫中
+    try {
+      console.log(`准备将房间 ${roomId} 状态更新为 cleaning`);
+      const roomUpdateSuccess = await roomStore.checkOutRoom(roomId);
+
+      if (!roomUpdateSuccess) {
+        throw new Error('房间状态更新失败');
+      }
+
+      console.log(`房间 ${roomId} 状态已更新为 cleaning`);
+    } catch (roomUpdateError) {
+      console.error('更新房间状态失败:', roomUpdateError);
+      // 这里不抛出错误，因为订单已经更新，房间状态更新失败不应影响整个流程
+      // 但需要警告用户
+      try {
+        if ($q && $q.notify && typeof $q.notify === 'function') {
+          $q.notify({
+            type: 'warning',
+            message: '订单已退房，但更新房间状态失败，请手动检查房间状态',
+            position: 'top',
+            timeout: 5000
+          });
+        }
+      } catch (notifyError) {
+        console.warn('显示警告提示失败:', notifyError);
+      }
+    }
+
+    // 刷新房间列表
+    try {
+      console.log('刷新房间列表...');
+      await roomStore.fetchAllRooms();
+      console.log('房间列表已刷新');
+    } catch (refreshError) {
+      console.error('刷新房间列表失败:', refreshError);
+    }
+
+    // 显示成功提示
+    try {
+      if ($q && $q.notify && typeof $q.notify === 'function') {
+        $q.notify({
+          type: 'positive',
+          message: '退房成功',
+          position: 'top'
+        });
+      } else {
+        alert('退房成功');
+      }
+    } catch (notifyError) {
+      console.warn('显示成功提示失败:', notifyError);
+      alert('退房成功');
+    }
+
+  } catch (error) {
+    console.error('退房操作失败:', error);
+
+    // 显示错误提示
+    try {
+      if ($q && $q.notify && typeof $q.notify === 'function') {
+        $q.notify({
+          type: 'negative',
+          message: `退房失败: ${error.message || '未知错误'}`,
+          position: 'top'
+        });
+      } else {
+        alert(`退房失败: ${error.message || '未知错误'}`);
+      }
+    } catch (notifyError) {
+      console.warn('显示错误提示失败:', notifyError);
+      alert(`退房失败: ${error.message || '未知错误'}`);
+    }
+  } finally {
+    // 隐藏加载提示
+    try {
+      if ($q && $q.loading && typeof $q.loading.hide === 'function') {
+        $q.loading.hide();
+      }
+    } catch (hideError) {
+      console.warn('隐藏加载提示失败:', hideError);
+    }
   }
 }
 
@@ -631,30 +773,359 @@ function checkOut(roomId) {
  * 设置房间为维修状态
  * @param {number} roomId - 房间ID
  */
-function setMaintenance(roomId) {
-  console.log('设为维修:', roomId)
-  // 使用roomStore的方法设置房间维修状态
-  roomStore.setMaintenance(roomId)
+async function setMaintenance(roomId) {
+  console.log('设为维修:', roomId);
+
+  try {
+    // 获取房间信息
+    const room = await roomStore.getRoomById(roomId);
+    if (!room) {
+      throw new Error('找不到房间信息');
+    }
+
+    // 检查房间当前状态
+    const roomStatus = roomStore.getRoomDisplayStatus(room);
+
+    // 确认是否将房间设为维修状态
+    let confirmMessage = `确定将房间 ${room.room_number} 设置为维修状态吗？`;
+
+    // 如果房间有预订或入住，需要特别提醒
+    if (roomStatus === 'reserved') {
+      const order = orderStore.getActiveOrderByRoomNumber(room.room_number);
+      if (order) {
+        confirmMessage = `房间 ${room.room_number} 目前有预订订单(${order.orderNumber})，将订单取消并设置房间为维修状态？`;
+      }
+    } else if (roomStatus === 'occupied') {
+      const order = orderStore.getActiveOrderByRoomNumber(room.room_number);
+      if (order) {
+        confirmMessage = `房间 ${room.room_number} 目前有客人入住(${order.guestName})，将订单设为退房并设置房间为维修状态？`;
+      }
+    }
+
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    // 显示加载提示
+    try {
+      if ($q && $q.loading && typeof $q.loading.show === 'function') {
+        $q.loading.show({
+          message: '正在处理...'
+        });
+      } else {
+        console.log('$q.loading.show 不可用，使用备用方法');
+      }
+    } catch (loadingError) {
+      console.warn('显示加载提示失败:', loadingError);
+    }
+
+    // 处理订单状态
+    if (roomStatus === 'reserved' || roomStatus === 'occupied') {
+      try {
+        // 检查房间号是否存在
+        if (!room.room_number) {
+          console.warn('房间号不存在，无法处理相关订单');
+        } else {
+          const order = orderStore.getActiveOrderByRoomNumber(room.room_number);
+
+          if (order) {
+            console.log(`找到房间 ${room.room_number} 的活跃订单:`, order);
+
+            let newStatus = 'cancelled';
+            let updateData = { cancelTime: new Date().toISOString() };
+
+            if (roomStatus === 'occupied') {
+              newStatus = 'checked-out';
+              updateData = { checkOutTime: new Date().toISOString() };
+            }
+
+            // 更新订单状态
+            console.log(`准备更新订单 ${order.orderNumber} 状态为 ${newStatus}`, updateData);
+            await orderStore.updateOrderStatusViaApi(order.orderNumber, newStatus, updateData);
+            console.log(`订单 ${order.orderNumber} 状态已更新为 ${newStatus}`);
+          } else {
+            console.log(`房间 ${room.room_number} 没有找到活跃订单`);
+          }
+        }
+      } catch (orderError) {
+        console.error('处理订单状态时出错:', orderError);
+        // 继续执行，尽管订单处理失败，我们仍然尝试更新房间状态
+      }
+    }
+
+    // 调用API更新房间状态为维修中
+    try {
+      console.log(`准备将房间 ${roomId} 状态更新为 repair`);
+      const roomUpdateSuccess = await roomStore.setMaintenance(roomId);
+
+      if (!roomUpdateSuccess) {
+        throw new Error('房间状态更新失败');
+      }
+
+      console.log(`房间 ${roomId} 状态已更新为 repair`);
+    } catch (roomUpdateError) {
+      console.error('更新房间状态失败:', roomUpdateError);
+      throw roomUpdateError; // 重新抛出错误以便外层catch捕获
+    }
+
+    // 刷新房间列表
+    try {
+      console.log('刷新房间列表...');
+      await roomStore.fetchAllRooms();
+      console.log('房间列表已刷新');
+    } catch (refreshError) {
+      console.error('刷新房间列表失败:', refreshError);
+      // 继续执行，即使刷新失败也不影响主流程
+    }
+
+    // 显示成功提示
+    try {
+      if ($q && $q.notify && typeof $q.notify === 'function') {
+        $q.notify({
+          type: 'positive',
+          message: '房间已设置为维修状态',
+          position: 'top'
+        });
+      } else {
+        alert('房间已设置为维修状态');
+      }
+    } catch (notifyError) {
+      console.warn('显示成功提示失败:', notifyError);
+      alert('房间已设置为维修状态');
+    }
+
+  } catch (error) {
+    console.error('设置房间维修状态失败:', error);
+
+    // 显示错误提示
+    try {
+      if ($q && $q.notify && typeof $q.notify === 'function') {
+        $q.notify({
+          type: 'negative',
+          message: `操作失败: ${error.message || '未知错误'}`,
+          position: 'top'
+        });
+      } else {
+        alert(`操作失败: ${error.message || '未知错误'}`);
+      }
+    } catch (notifyError) {
+      console.warn('显示错误提示失败:', notifyError);
+      alert(`操作失败: ${error.message || '未知错误'}`);
+    }
+  } finally {
+    // 隐藏加载提示
+    try {
+      if ($q && $q.loading && typeof $q.loading.hide === 'function') {
+        $q.loading.hide();
+      }
+    } catch (hideError) {
+      console.warn('隐藏加载提示失败:', hideError);
+    }
+  }
 }
 
 /**
  * 完成房间维修，将状态改为可用
  * @param {number} roomId - 房间ID
  */
-function clearMaintenance(roomId) {
-  console.log('完成维修:', roomId)
-  // 使用roomStore的方法完成房间维修
-  roomStore.clearMaintenance(roomId)
+async function clearMaintenance(roomId) {
+  console.log('完成维修:', roomId);
+
+  try {
+    // 获取房间信息
+    const room = await roomStore.getRoomById(roomId);
+    if (!room) {
+      throw new Error('找不到房间信息');
+    }
+
+    // 确认是否完成维修
+    if (!confirm(`确定将房间 ${room.room_number} 的维修标记为已完成吗？房间将恢复为可用状态。`)) {
+      return;
+    }
+
+    // 显示加载提示
+    try {
+      if ($q && $q.loading && typeof $q.loading.show === 'function') {
+        $q.loading.show({
+          message: '正在处理...'
+        });
+      } else {
+        console.log('$q.loading.show 不可用，使用备用方法');
+      }
+    } catch (loadingError) {
+      console.warn('显示加载提示失败:', loadingError);
+    }
+
+    // 调用API更新房间状态为可用
+    try {
+      console.log(`准备将房间 ${roomId} 状态从维修恢复为可用`);
+      const roomUpdateSuccess = await roomStore.clearMaintenance(roomId);
+
+      if (!roomUpdateSuccess) {
+        throw new Error('房间状态更新失败');
+      }
+
+      console.log(`房间 ${roomId} 状态已更新为可用`);
+    } catch (roomUpdateError) {
+      console.error('更新房间状态失败:', roomUpdateError);
+      throw roomUpdateError;
+    }
+
+    // 刷新房间列表
+    try {
+      console.log('刷新房间列表...');
+      await roomStore.fetchAllRooms();
+      console.log('房间列表已刷新');
+    } catch (refreshError) {
+      console.error('刷新房间列表失败:', refreshError);
+    }
+
+    // 显示成功提示
+    try {
+      if ($q && $q.notify && typeof $q.notify === 'function') {
+        $q.notify({
+          type: 'positive',
+          message: '房间维修已完成，状态已更新为可用',
+          position: 'top'
+        });
+      } else {
+        alert('房间维修已完成，状态已更新为可用');
+      }
+    } catch (notifyError) {
+      console.warn('显示成功提示失败:', notifyError);
+      alert('房间维修已完成，状态已更新为可用');
+    }
+
+  } catch (error) {
+    console.error('完成房间维修失败:', error);
+
+    // 显示错误提示
+    try {
+      if ($q && $q.notify && typeof $q.notify === 'function') {
+        $q.notify({
+          type: 'negative',
+          message: `操作失败: ${error.message || '未知错误'}`,
+          position: 'top'
+        });
+      } else {
+        alert(`操作失败: ${error.message || '未知错误'}`);
+      }
+    } catch (notifyError) {
+      console.warn('显示错误提示失败:', notifyError);
+      alert(`操作失败: ${error.message || '未知错误'}`);
+    }
+  } finally {
+    // 隐藏加载提示
+    try {
+      if ($q && $q.loading && typeof $q.loading.hide === 'function') {
+        $q.loading.hide();
+      }
+    } catch (hideError) {
+      console.warn('隐藏加载提示失败:', hideError);
+    }
+  }
 }
 
 /**
  * 完成房间清洁，将状态改为可用
  * @param {number} roomId - 房间ID
  */
-function clearCleaning(roomId) {
-  console.log('完成清洁:', roomId)
-  // 使用roomStore的方法完成房间清洁
-  roomStore.clearCleaning(roomId)
+async function clearCleaning(roomId) {
+  console.log('完成清洁:', roomId);
+
+  try {
+    // 获取房间信息
+    const room = await roomStore.getRoomById(roomId);
+    if (!room) {
+      throw new Error('找不到房间信息');
+    }
+
+    // 确认是否完成清洁
+    if (!confirm(`确定将房间 ${room.room_number} 的清洁工作标记为已完成吗？房间将恢复为可用状态。`)) {
+      return;
+    }
+
+    // 显示加载提示
+    try {
+      if ($q && $q.loading && typeof $q.loading.show === 'function') {
+        $q.loading.show({
+          message: '正在处理...'
+        });
+      } else {
+        console.log('$q.loading.show 不可用，使用备用方法');
+      }
+    } catch (loadingError) {
+      console.warn('显示加载提示失败:', loadingError);
+    }
+
+    // 调用API更新房间状态为可用
+    try {
+      console.log(`准备将房间 ${roomId} 状态从清洁中恢复为可用`);
+      const roomUpdateSuccess = await roomStore.clearCleaning(roomId);
+
+      if (!roomUpdateSuccess) {
+        throw new Error('房间状态更新失败');
+      }
+
+      console.log(`房间 ${roomId} 状态已更新为可用`);
+    } catch (roomUpdateError) {
+      console.error('更新房间状态失败:', roomUpdateError);
+      throw roomUpdateError;
+    }
+
+    // 刷新房间列表
+    try {
+      console.log('刷新房间列表...');
+      await roomStore.fetchAllRooms();
+      console.log('房间列表已刷新');
+    } catch (refreshError) {
+      console.error('刷新房间列表失败:', refreshError);
+    }
+
+    // 显示成功提示
+    try {
+      if ($q && $q.notify && typeof $q.notify === 'function') {
+        $q.notify({
+          type: 'positive',
+          message: '房间清洁已完成，状态已更新为可用',
+          position: 'top'
+        });
+      } else {
+        alert('房间清洁已完成，状态已更新为可用');
+      }
+    } catch (notifyError) {
+      console.warn('显示成功提示失败:', notifyError);
+      alert('房间清洁已完成，状态已更新为可用');
+    }
+
+  } catch (error) {
+    console.error('完成房间清洁失败:', error);
+
+    // 显示错误提示
+    try {
+      if ($q && $q.notify && typeof $q.notify === 'function') {
+        $q.notify({
+          type: 'negative',
+          message: `操作失败: ${error.message || '未知错误'}`,
+          position: 'top'
+        });
+      } else {
+        alert(`操作失败: ${error.message || '未知错误'}`);
+      }
+    } catch (notifyError) {
+      console.warn('显示错误提示失败:', notifyError);
+      alert(`操作失败: ${error.message || '未知错误'}`);
+    }
+  } finally {
+    // 隐藏加载提示
+    try {
+      if ($q && $q.loading && typeof $q.loading.hide === 'function') {
+        $q.loading.hide();
+      }
+    } catch (hideError) {
+      console.warn('隐藏加载提示失败:', hideError);
+    }
+  }
 }
 
 /**
@@ -741,6 +1212,161 @@ function setTypeFilter(type) {
       path: route.path,
       query: { ...route.query, type: type }  // 保留其他查询参数，添加或更新type
     })
+  }
+}
+
+/**
+ * 设置房间为清理状态
+ * @param {number} roomId - 房间ID
+ */
+async function setRoomCleaning(roomId) {
+  console.log('设置房间为清理状态:', roomId);
+
+  try {
+    // 获取房间信息 - 使用await因为getRoomById是异步的
+    const room = await roomStore.getRoomById(roomId);
+    if (!room) {
+      throw new Error('找不到房间信息');
+    }
+
+    // 检查房间当前状态
+    const roomStatus = roomStore.getRoomDisplayStatus(room);
+
+    // 确认是否将房间设为清理状态
+    let confirmMessage = `确定将房间 ${room.room_number} 设置为清理状态吗？`;
+
+    // 如果房间有预订或入住，需要特别提醒
+    if (roomStatus === 'reserved') {
+      const order = orderStore.getActiveOrderByRoomNumber(room.room_number);
+      if (order) {
+        confirmMessage = `房间 ${room.room_number} 目前有预订订单(${order.orderNumber})，将订单取消并设置房间为清理状态？`;
+      }
+    } else if (roomStatus === 'occupied') {
+      const order = orderStore.getActiveOrderByRoomNumber(room.room_number);
+      if (order) {
+        confirmMessage = `房间 ${room.room_number} 目前有客人入住(${order.guestName})，将订单设为退房并设置房间为清理状态？`;
+      }
+    }
+
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    // 显示加载提示（使用普通alert作为后备）
+    try {
+      if ($q && $q.loading && typeof $q.loading.show === 'function') {
+        $q.loading.show({
+          message: '正在处理...'
+        });
+      } else {
+        console.log('$q.loading.show 不可用，使用备用方法');
+      }
+    } catch (loadingError) {
+      console.warn('显示加载提示失败:', loadingError);
+    }
+
+    // 处理订单状态
+    if (roomStatus === 'reserved' || roomStatus === 'occupied') {
+      try {
+        // 检查房间号是否存在
+        if (!room.room_number) {
+          console.warn('房间号不存在，无法处理相关订单');
+        } else {
+          const order = orderStore.getActiveOrderByRoomNumber(room.room_number);
+
+          if (order) {
+            console.log(`找到房间 ${room.room_number} 的活跃订单:`, order);
+
+            let newStatus = 'cancelled';
+            let updateData = { cancelTime: new Date().toISOString() };
+
+            if (roomStatus === 'occupied') {
+              newStatus = 'checked-out';
+              updateData = { checkOutTime: new Date().toISOString() };
+            }
+
+            // 更新订单状态
+            console.log(`准备更新订单 ${order.orderNumber} 状态为 ${newStatus}`, updateData);
+            await orderStore.updateOrderStatusViaApi(order.orderNumber, newStatus, updateData);
+            console.log(`订单 ${order.orderNumber} 状态已更新为 ${newStatus}`);
+          } else {
+            console.log(`房间 ${room.room_number} 没有找到活跃订单`);
+          }
+        }
+      } catch (orderError) {
+        console.error('处理订单状态时出错:', orderError);
+        // 继续执行，尽管订单处理失败，我们仍然尝试更新房间状态
+      }
+    }
+
+    // 调用API更新房间状态为清理中
+    try {
+      console.log(`准备将房间 ${roomId} 状态更新为 cleaning`);
+      const roomUpdateSuccess = await roomStore.updateRoomStatus(roomId, 'cleaning');
+
+      if (!roomUpdateSuccess) {
+        throw new Error('房间状态更新失败');
+      }
+
+      console.log(`房间 ${roomId} 状态已更新为 cleaning`);
+    } catch (roomUpdateError) {
+      console.error('更新房间状态失败:', roomUpdateError);
+      throw roomUpdateError; // 重新抛出错误以便外层catch捕获
+    }
+
+    // 刷新房间列表
+    try {
+      console.log('刷新房间列表...');
+      await roomStore.fetchAllRooms();
+      console.log('房间列表已刷新');
+    } catch (refreshError) {
+      console.error('刷新房间列表失败:', refreshError);
+      // 继续执行，即使刷新失败也不影响主流程
+    }
+
+    // 显示成功提示
+    try {
+      if ($q && $q.notify && typeof $q.notify === 'function') {
+        $q.notify({
+          type: 'positive',
+          message: '房间已设置为清理状态',
+          position: 'top'
+        });
+      } else {
+        alert('房间已设置为清理状态');
+      }
+    } catch (notifyError) {
+      console.warn('显示成功提示失败:', notifyError);
+      alert('房间已设置为清理状态');
+    }
+
+  } catch (error) {
+    console.error('设置房间清理状态失败:', error);
+
+    // 显示错误提示
+    try {
+      if ($q && $q.notify && typeof $q.notify === 'function') {
+        $q.notify({
+          type: 'negative',
+          message: `操作失败: ${error.message || '未知错误'}`,
+          position: 'top'
+        });
+      } else {
+        alert(`操作失败: ${error.message || '未知错误'}`);
+      }
+    } catch (notifyError) {
+      console.warn('显示错误提示失败:', notifyError);
+      alert(`操作失败: ${error.message || '未知错误'}`);
+    }
+  } finally {
+    // 隐藏加载提示
+    try {
+      if ($q && $q.loading && typeof $q.loading.hide === 'function') {
+        $q.loading.hide();
+      }
+    } catch (hideError) {
+      console.warn('隐藏加载提示失败:', hideError);
+    }
   }
 }
 </script>

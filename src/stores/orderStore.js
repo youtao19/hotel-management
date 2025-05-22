@@ -87,6 +87,23 @@ export const useOrderStore = defineStore('order', () => {
       else if (statusValue === '已退房') statusValue = 'checked-out';
       else if (statusValue === '已取消') statusValue = 'cancelled';
 
+      // 确保日期是 ISO8601 格式
+      let checkInDateISO = order.checkInDate;
+      if (order.checkInDate && typeof order.checkInDate === 'string' && !order.checkInDate.includes('T')) {
+        // 假设 YYYY-MM-DD，转为 UTC 午夜
+        checkInDateISO = new Date(order.checkInDate + 'T00:00:00.000Z').toISOString();
+      } else if (order.checkInDate) { // 如果已经是 Date 对象或带时间的字符串
+        checkInDateISO = new Date(order.checkInDate).toISOString();
+      }
+
+      let checkOutDateISO = order.checkOutDate;
+      if (order.checkOutDate && typeof order.checkOutDate === 'string' && !order.checkOutDate.includes('T')) {
+        // 假设 YYYY-MM-DD，转为 UTC 午夜
+        checkOutDateISO = new Date(order.checkOutDate + 'T00:00:00.000Z').toISOString();
+      } else if (order.checkOutDate) { // 如果已经是 Date 对象或带时间的字符串
+        checkOutDateISO = new Date(order.checkOutDate).toISOString();
+      }
+
       const orderData = {
         orderNumber: order.orderNumber,
         guestName: order.guestName,
@@ -94,8 +111,8 @@ export const useOrderStore = defineStore('order', () => {
         idNumber: order.idNumber,
         roomType: order.roomType,
         roomNumber: order.roomNumber,
-        checkInDate: order.checkInDate,
-        checkOutDate: order.checkOutDate,
+        checkInDate: checkInDateISO,
+        checkOutDate: checkOutDateISO,
         status: statusValue,
         paymentMethod: typeof order.paymentMethod === 'object' ? order.paymentMethod.value : order.paymentMethod,
         roomPrice: order.roomPrice,
@@ -103,12 +120,12 @@ export const useOrderStore = defineStore('order', () => {
         remarks: order.remarks,
         source: order.source || '线下',
         sourceNumber: order.sourceNumber || '前台',
-        createTime: order.createTime || new Date().toISOString(),
-        actualCheckInTime: order.actualCheckInTime || null,
-        actualCheckOutTime: order.actualCheckOutTime || null,
+        createTime: order.createTime ? new Date(order.createTime).toISOString() : new Date().toISOString(),
+        actualCheckInTime: order.actualCheckInTime ? new Date(order.actualCheckInTime).toISOString() : null,
+        actualCheckOutTime: order.actualCheckOutTime ? new Date(order.actualCheckOutTime).toISOString() : null,
       }
 
-      console.log('正在添加新订单:', orderData)
+      console.log('正在添加新订单 (确保日期为ISO):', orderData)
       const response = await api.post('/orders', orderData) // 移除 /api 前缀
       console.log('订单添加成功:', response) // response 是拦截器处理后的数据
 

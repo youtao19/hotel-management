@@ -246,6 +246,13 @@ async function getAvailableRooms(startDate, endDate, typeCode = null) {
     const result = await query(baseQuery, queryParams);
     console.log(`找到 ${result.rows.length} 个可用房间`);
 
+    // 添加日志：打印可用房间的房间号
+    if (result.rows.length > 0) {
+      console.log('可用房间号列表:', result.rows.map(room => room.room_number));
+    } else {
+      console.log('没有找到符合条件的可用房间。');
+    }
+
     return result.rows;
   } catch (error) {
     console.error('查询可用房间失败:', error);

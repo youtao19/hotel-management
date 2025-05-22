@@ -884,12 +884,16 @@
       console.error('currentOrder is null or undefined in openChangeRoomDialog');
       return;
     }
-    console.log('currentOrder in openChangeRoomDialog:', JSON.parse(JSON.stringify(currentOrder.value))); // 打印当前订单信息
+    console.log('Current order for date check:', JSON.parse(JSON.stringify(currentOrder.value))); // 打印当前订单信息
 
     try {
       // 从订单中获取入住和离店日期
-      const startDate = formatDate(currentOrder.value.checkInDate);
-      const endDate = formatDate(currentOrder.value.checkOutDate);
+      const rawCheckInDate = currentOrder.value.checkInDate;
+      const rawCheckOutDate = currentOrder.value.checkOutDate;
+      console.log('Raw dates from order:', { rawCheckInDate, rawCheckOutDate });
+
+      const startDate = formatDate(rawCheckInDate);
+      const endDate = formatDate(rawCheckOutDate);
       console.log('Formatted dates for API call:', { startDate, endDate }); // 打印格式化后的日期
 
       if (!startDate || !endDate) {
