@@ -453,7 +453,11 @@
   const today = date.formatDate(new Date(), 'YYYY-MM-DD')
 
   // 订单状态选项数组 - 从viewStore获取
-  const statusOptions = viewStore.statusOptions
+  const statusOptions = [
+    { label: '所有状态', value: 'all'},
+    { label: '待入住', value: 'pending' },
+    { label: '已入住', value: 'checked-in' }
+  ]
 
   // 订单来源选项数组
   const sourceOptions = [
@@ -481,7 +485,7 @@
     checkInDate: date.formatDate(getCurrentTimeToMinute(), 'YYYY-MM-DD'),        // 入住日期，默认今天
     checkOutDate: date.formatDate(date.addToDate(getCurrentTimeToMinute(), { days: 1 }), 'YYYY-MM-DD'), // 离店日期，默认明天
     deposit: 100,                        // 押金，默认100元
-    paymentMethod: 'cash',               // 支付方式，默认现金
+    paymentMethod: '微信',// 支付方式，默认微信
     roomPrice: 0,                        // 房间价格
     remarks: ''                          // 备注信息
   })
