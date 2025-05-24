@@ -57,18 +57,18 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /api/orders - 创建新订单
-router.post('/', authenticationMiddleware,
+router.post('/new', authenticationMiddleware,
   [
-    // 基本的输入验证 - 根据您的 db_schema.sql 和 CreateOrder.vue 进行调整
-    body('orderNumber').notEmpty().withMessage('订单号不能为空').isString().trim(),
-    body('source').notEmpty().withMessage('订单来源不能为空').isString(),
-    body('guestName').notEmpty().withMessage('客人姓名不能为空').isString().trim(),
-    body('idNumber').notEmpty().withMessage('身份证号不能为空').isString().isLength({ min: 18, max: 18 }).withMessage('身份证号必须为18位'),
+    // 基本的输入验证 - 使用后端字段名
+    body('order_id').notEmpty().withMessage('订单号不能为空').isString().trim(),
+    body('order_source').notEmpty().withMessage('订单来源不能为空').isString(),
+    body('guest_name').notEmpty().withMessage('客人姓名不能为空').isString().trim(),
+    body('id_number').notEmpty().withMessage('身份证号不能为空').isString().isLength({ min: 18, max: 18 }).withMessage('身份证号必须为18位'),
     body('phone').notEmpty().withMessage('手机号不能为空').isString().isLength({ min: 11, max: 11 }).withMessage('手机号必须为11位'),
-    body('roomType').notEmpty().withMessage('房间类型不能为空').isString(),
-    body('roomNumber').notEmpty().withMessage('房间号不能为空').isString(),
-    body('checkInDate').notEmpty().withMessage('入住日期不能为空').isISO8601().toDate(),
-    body('checkOutDate').notEmpty().withMessage('离店日期不能为空').isISO8601().toDate(),
+    body('room_type').notEmpty().withMessage('房间类型不能为空').isString(),
+    body('room_number').notEmpty().withMessage('房间号不能为空').isString(),
+    body('check_in_date').notEmpty().withMessage('入住日期不能为空').isISO8601().toDate(),
+    body('check_out_date').notEmpty().withMessage('离店日期不能为空').isISO8601().toDate(),
     body('status')
       .notEmpty().withMessage('订单状态不能为空')
       .isString()
@@ -78,15 +78,15 @@ router.post('/', authenticationMiddleware,
         }
         return true;
       }),
-    body('paymentMethod').optional({ checkFalsy: true }).isString(), // 支付方式可以为空或字符串
-    body('roomPrice').notEmpty().withMessage('房间金额不能为空').isDecimal(),
+    body('payment_method').optional({ checkFalsy: true }).isString(), // 支付方式可以为空或字符串
+    body('room_price').notEmpty().withMessage('房间金额不能为空').isDecimal(),
     body('deposit').optional({ checkFalsy: true }).isDecimal(), // 押金可以为空或数字
-    body('createTime').notEmpty().withMessage('创建时间不能为空').isISO8601().toDate(),
-    // sourceNumber, remarks, actualCheckInTime, actualCheckOutTime 是可选的，不需要强制验证 notEmpty
-    body('sourceNumber').optional({ checkFalsy: true }).isString().trim(),
+    body('create_time').notEmpty().withMessage('创建时间不能为空').isISO8601().toDate(),
+    // id_source, remarks, actual_check_in_time, actual_check_out_time 是可选的，不需要强制验证 notEmpty
+    body('id_source').optional({ checkFalsy: true }).isString().trim(),
     body('remarks').optional({ checkFalsy: true }).isString().trim(),
-    body('actualCheckInTime').optional({ checkFalsy: true }).isISO8601().toDate(),
-    body('actualCheckOutTime').optional({ checkFalsy: true }).isISO8601().toDate(),
+    body('actual_check_in_time').optional({ checkFalsy: true }).isISO8601().toDate(),
+    body('actual_check_out_time').optional({ checkFalsy: true }).isISO8601().toDate(),
   ],
   async (req, res) => {
     console.log('收到订单创建请求，请求体:', JSON.stringify(req.body, null, 2));
@@ -101,34 +101,8 @@ router.post('/', authenticationMiddleware,
       return res.status(400).json({ errors: validationErrors });
     }
 
-    // 从 req.body 中提取数据，并映射到数据库表字段名
-    const orderDataForDb = {
-      order_id: req.body.orderNumber, // orders 表中的 order_id
-      id_source: req.body.sourceNumber || null, // orders 表中的 id_source (对应前端 sourceNumber)
-      order_source: req.body.source, // orders 表中的 order_source
-      guest_name: req.body.guestName,
-      phone: req.body.phone,
-      id_number: req.body.idNumber,
-      room_type: req.body.roomType,
-      room_number: req.body.roomNumber,
-      check_in_date: req.body.checkInDate,
-      check_out_date: req.body.checkOutDate,
-      status: req.body.status,
-      // 前端 paymentMethod 可能是一个对象 {label: '支付宝', value: 'alipay'} 或直接是值 'alipay'
-      // 后端需要的是值，例如 'alipay'
-      payment_method: req.body.paymentMethod ? (typeof req.body.paymentMethod === 'object' ? req.body.paymentMethod.value : req.body.paymentMethod) : null,
-      room_price: req.body.roomPrice,
-      deposit: req.body.deposit,
-      create_time: req.body.createTime,
-      actual_check_in_time: req.body.actualCheckInTime || null,
-      actual_check_out_time: req.body.actualCheckOutTime || null,
-      remarks: req.body.remarks || null,
-    };
-
     try {
-      const newOrder = await orderModule.createOrder(orderDataForDb);
-      // 实际应用中，创建订单后可能还需要更新房间状态等操作，这里简化处理
-      // 例如，调用 roomStore.reserveRoom 或 roomStore.occupyRoom 的后端等效逻辑
+      const newOrder = await orderModule.createOrder(req.body);
       res.status(201).json({ message: '订单创建成功', order: newOrder });
     } catch (error) {
       console.error('创建订单失败:', error);
@@ -138,7 +112,7 @@ router.post('/', authenticationMiddleware,
 );
 
 // PUT /api/orders/:orderNumber/status - 更新订单状态
-router.put('/:orderNumber/status', authenticationMiddleware, [
+router.post('/:orderNumber/status', authenticationMiddleware, [
     body('newStatus')
         .notEmpty().withMessage('新状态不能为空')
         .isString()

@@ -55,13 +55,6 @@ async function getAllRooms() {
       return room;
     });
 
-    // 添加调试日志
-    console.log('房间数据处理完成:');
-    console.log('- 总房间数量:', allRooms.length);
-    console.log('- 有订单的房间数量:', ordersResult.rows.length);
-    console.log('- 合并后的房间数量:', mergedRooms.length);
-    console.log('- 可用房间数量:', mergedRooms.filter(r => r.status === 'available' && !r.order_status).length);
-
     // 记录有订单状态的房间
     const roomsWithOrders = mergedRooms.filter(room => room.order_status);
     if (roomsWithOrders.length > 0) {
@@ -223,8 +216,7 @@ async function getAvailableRooms(startDate, endDate, typeCode = null) {
         SELECT 1
         FROM orders o
         WHERE o.room_number = r.room_number
-        AND o.status IN ('pending', 'checked-in')
-        AND $1::date < o.check_out_date::date
+        AND $1::date <= o.check_out_date::date
         AND $2::date > o.check_in_date::date
       )
     `;
@@ -240,8 +232,8 @@ async function getAvailableRooms(startDate, endDate, typeCode = null) {
     // 按房间号排序
     baseQuery += ' ORDER BY r.room_number';
 
-    console.log('执行SQL查询:', baseQuery);
-    console.log('查询参数:', queryParams);
+    // console.log('执行SQL查询:', baseQuery);
+    // console.log('查询参数:', queryParams);
 
     const result = await query(baseQuery, queryParams);
     console.log(`找到 ${result.rows.length} 个可用房间`);

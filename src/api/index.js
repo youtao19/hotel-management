@@ -25,17 +25,6 @@ api.interceptors.request.use(
 // 响应拦截器
 api.interceptors.response.use(
   response => {
-    // 为房间API添加日志
-    if (response.config.url.includes('/rooms') && !response.config.url.includes('/rooms/')) {
-      console.log('API响应房间数据:', response.data);
-      // 特别检查是否有订单状态
-      if (response.data.data) {
-        const room102 = response.data.data.find(room => room.room_number === '102');
-        if (room102) {
-          console.log('API返回的房间102数据:', room102);
-        }
-      }
-    }
     // 直接返回响应数据，无需解析
     return response.data
   },
@@ -79,10 +68,10 @@ export const orderApi = {
   getAllOrders: () => api.get('/orders'),
 
   // 添加新订单
-  addOrder: (orderData) => api.post('/orders', orderData),
+  addOrder: (orderData) => api.post('/orders/new', orderData),
 
   // 更新订单状态
-  updateOrderStatus: (orderId, status) => api.patch(`/orders/${orderId}/status`, { status }),
+  updateOrderStatus: (orderId, status) => api.post(`/orders/${orderId}/status`, { status }),
 
   // 更新订单房间信息
   updateOrderRoom: (orderId, roomData) => api.patch(`/orders/${orderId}/room`, roomData),

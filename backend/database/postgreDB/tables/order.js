@@ -1,5 +1,4 @@
 "use strict";
-const { query } = require('../pg'); // 修改导入以使用query函数而不是pool对象
 
 const tableName = "orders";
 

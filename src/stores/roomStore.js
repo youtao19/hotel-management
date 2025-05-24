@@ -577,12 +577,12 @@ export const useRoomStore = defineStore('room', () => {
    * @returns {string} 房间显示状态
    */
   function getRoomDisplayStatus(room) {
-    console.log('获取房间显示状态:', {
-      房间号: room.room_number,
-      原始状态: room.status,
-      订单状态: room.orderStatus,
-      预计算状态: room.displayStatus
-    });
+    // console.log('获取房间显示状态:', {
+    //   房间号: room.room_number,
+    //   原始状态: room.status,
+    //   订单状态: room.orderStatus,
+    //   预计算状态: room.displayStatus
+    // });
 
     // 如果有预计算的displayStatus，直接返回
     if (room.displayStatus) {

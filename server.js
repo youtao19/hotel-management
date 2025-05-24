@@ -73,15 +73,19 @@ async function bootup() { // 启动函数
     sessionOptions.cookie.sameSite = "strict"; // 设置SameSite为严格模式
   }
 
-  app.use(session(sessionOptions)); // 使用会话中间件
-  const authtication = require("./backend/modules/authentication"); // 引入认证模块
+  app.use(session(sessionOptions));
+
+  const authtication = require("./backend/modules/authentication");
   app.use(authtication.authenticationMiddleware); // 使用认证中间件
+
   app.use(express.json({
     limit: setup.reqSizeLimit, // 限制JSON请求体大小
     strict: false, // 不严格解析JSON
   }));
-  app.use(express.urlencoded({ extended: true, limit: setup.reqSizeLimit })); // 配置URL编码的请求体解析
-  app.use(express.text({ limit: setup.reqSizeLimit })); // 配置文本请求体解析
+
+  app.use(express.urlencoded({ extended: true, limit: setup.reqSizeLimit }));
+
+  app.use(express.text({ limit: setup.reqSizeLimit }));
 
   const userRoute = require("./backend/routes/userRoute"); // 引入用户路由模块
   const authRoute = require("./backend/routes/authRoute"); // 引入认证路由模块
@@ -91,9 +95,11 @@ async function bootup() { // 启动函数
   const roomRoute = require("./backend/routes/roomRoute"); // 引入房间路由
   const roomTypeRoute = require("./backend/routes/roomTypeRoute"); // 引入房型路由
 
-  app.use("/api/user", userRoute); // 挂载用户API路由
-  app.use("/api/auth", authRoute); // 挂载认证API路由
-  app.use("/api/orders", orderRoute); // 使用订单路由
+  app.use("/api/user", userRoute);
+
+  app.use("/api/auth", authRoute);
+
+  app.use("/api/orders", orderRoute);
 
   // 注册房间和房型API路由
   app.use("/api/rooms", roomRoute); // 挂载房间API路由
@@ -105,15 +111,12 @@ async function bootup() { // 启动函数
   // app.use("/api/hotel", hotelRoute);
   // app.use("/api/booking", bookingRoute);
 
-  app.use(express.static(staticFileRoot)); // 配置静态文件服务
+  // app.use(express.static(staticFileRoot)); // 配置静态文件服务
 
   app.get("/api/hup", (req, res) => { // 健康检查端点
     return res.status(200).json({ ok: true });
   });
-  // 添加来自 simple-api 的健康检查端点
-  app.get("/api/health", (req, res) => {
-    res.status(200).json({ status: 'ok', timestamp: new Date() });
-  });
+
   //catch all other unknown url here.
   // 捕获所有其他未知的URL请求
   app.all("/", function (req, res) {

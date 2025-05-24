@@ -8,9 +8,7 @@ const VALID_ROOM_STATES = ['available', 'occupied', 'cleaning', 'repair', 'reser
 // 获取所有房间
 router.get('/', async (req, res) => {
   try {
-    console.log('获取所有房间请求');
     const rooms = await roomModule.getAllRooms();
-    console.log(`成功获取 ${rooms.length} 条房间数据`);
 
     if (rooms.length === 0) {
       res.json({ data: [], message: '没有查询到房间数据' });

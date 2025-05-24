@@ -474,20 +474,21 @@
   // 订单表单数据 - 使用响应式引用，包含所有订单字段
   const orderData = ref({
     orderNumber: generateOrderNumber(),  // 自动生成订单号
-    status: 'pending',                   // 默认状态为"待入住"，使用英文代码
+    status: 'pending',                   // 默认状态为"待入住"
     source: 'front_desk',                // 默认订单来源为前台录入
-    sourceNumber: '',                    // 来源编号
+    sourceNumber: '',                    // 来源编号（可选）
     guestName: '',                       // 客人姓名
     idNumber: '',                        // 身份证号
     phone: '',                           // 手机号
     roomType: null,                      // 房间类型
     roomNumber: null,                    // 房间号
-    checkInDate: date.formatDate(getCurrentTimeToMinute(), 'YYYY-MM-DD'),        // 入住日期，默认今天
+    checkInDate: date.formatDate(getCurrentTimeToMinute(), 'YYYY-MM-DD'),  // 入住日期，默认今天
     checkOutDate: date.formatDate(date.addToDate(getCurrentTimeToMinute(), { days: 1 }), 'YYYY-MM-DD'), // 离店日期，默认明天
     deposit: 100,                        // 押金，默认100元
-    paymentMethod: '微信',// 支付方式，默认微信
-    roomPrice: 0,                        // 房间价格
-    remarks: ''                          // 备注信息
+    paymentMethod: '微信',               // 支付方式，默认微信
+    roomPrice: 0,                        // 房间价格，会根据选择的房间自动设置
+    remarks: '',                         // 备注信息（可选）
+    createTime: date.formatDate(getCurrentTimeToMinute(), 'YYYY-MM-DD HH:mm:ss'), // 创建时间
   })
 
   // 日期范围对象 - 用于日期选择器的范围选择模式
@@ -512,10 +513,12 @@
    */
   async function updateDatesAndRooms() {
     if (dateRange.value.from) {
-      orderData.value.checkInDate = dateRange.value.from;
+      // 将日期格式化为 YYYY-MM-DD 再赋值
+      orderData.value.checkInDate = date.formatDate(dateRange.value.from, 'YYYY-MM-DD');
     }
     if (dateRange.value.to) {
-      orderData.value.checkOutDate = dateRange.value.to;
+      // 将日期格式化为 YYYY-MM-DD 再赋值
+      orderData.value.checkOutDate = date.formatDate(dateRange.value.to, 'YYYY-MM-DD');
     }
     await updateAvailableRooms();
   }
@@ -526,14 +529,18 @@
   async function updateCheckOutMinDateAndRooms() {
     // 如果离店日期小于等于入住日期，重置离店日期
     if (orderData.value.checkOutDate <= orderData.value.checkInDate) {
-      // 设置为入住日期后一天
+      // 设置为入住日期后一天，并格式化为 YYYY-MM-DD
       orderData.value.checkOutDate = date.formatDate(
         date.addToDate(new Date(orderData.value.checkInDate), { days: 1 }),
         'YYYY-MM-DD'
       );
 
-      // 同步更新日期范围
-      dateRange.value.to = orderData.value.checkOutDate;
+      // 同步更新日期范围，注意这里dateRange存储的是YYYY/MM/DD格式，但我们已经确保orderData.value中的是YYYY-MM-DD
+      // 这里可以保持dateRange的格式不变，因为它只用于q-date组件内部显示
+      // 或者，为了保持一致性，也可以将dateRange.to也格式化，但这会影响q-date内部逻辑，不推荐修改dateRange的格式
+      // 保持dateRange的YYYY/MM/DD格式，只格式化赋值给orderData即可
+       dateRange.value.to = date.formatDate(orderData.value.checkOutDate, 'YYYY/MM/DD');
+
     }
     await updateAvailableRooms();
   }
@@ -718,55 +725,37 @@
       return
     }
 
-    // 创建包含所有字段的订单对象，用于发送到后端
-    const orderToSubmit = {
-      ...orderData.value,
-      status: orderData.value.status,
-      checkInDate: date.formatDate(orderData.value.checkInDate, 'YYYY-MM-DD'),
-      checkOutDate: date.formatDate(orderData.value.checkOutDate, 'YYYY-MM-DD'),
-      createTime: date.formatDate(now, 'YYYY-MM-DD HH:mm:ss'),
-      actualCheckInTime: orderData.value.status === 'checked-in' ?
-        date.formatDate(now, 'YYYY-MM-DD HH:mm:ss') : null,
-      actualCheckOutTime: orderData.value.status === 'checked-out' ?
-        date.formatDate(now, 'YYYY-MM-DD HH:mm:ss') : null,
-      paymentMethod: typeof orderData.value.paymentMethod === 'object' ?
-        orderData.value.paymentMethod.value :
-        (orderData.value.paymentMethod || 'cash'),
-      roomPrice: Number(orderData.value.roomPrice),
-      deposit: Number(orderData.value.deposit),
-    };
-
-    console.log('提交的订单数据:', orderToSubmit);
-
     try {
-      // 调用后端API创建订单
-      const response = await api.post('/api/orders', orderToSubmit);
+      // 使用 orderStore.addOrder 创建订单
+      const newOrder = await orderStore.addOrder({
+        ...orderData.value,
+        createTime: date.formatDate(now, 'YYYY-MM-DD HH:mm:ss'),
+        actualCheckInTime: orderData.value.status === 'checked-in' ?
+          date.formatDate(now, 'YYYY-MM-DD HH:mm:ss') : null,
+        actualCheckOutTime: orderData.value.status === 'checked-out' ?
+          date.formatDate(now, 'YYYY-MM-DD HH:mm:ss') : null,
+        paymentMethod: typeof orderData.value.paymentMethod === 'object' ?
+          orderData.value.paymentMethod.value :
+          orderData.value.paymentMethod,
+        roomPrice: Number(orderData.value.roomPrice),
+        deposit: Number(orderData.value.deposit)
+      });
 
-      if (response.data && response.data.order) {
-        // 订单创建成功
-        orderStore.addOrder(response.data.order);
+      // 刷新房间状态
+      await roomStore.refreshData();
 
-        // 刷新房间状态
-        await roomStore.refreshData();
+      $q.notify({
+        type: 'positive',
+        message: '订单创建成功！',
+        position: 'top'
+      });
 
-        $q.notify({
-          type: 'positive',
-          message: response.data.message || '订单创建成功！',
-          position: 'top'
-        });
-
-        // 导航到订单列表页面
-        router.push('/ViewOrders');
-      } else {
-        $q.notify({
-          type: 'warning',
-          message: '订单创建请求成功，但服务器响应异常。' + (response.data.message || ''),
-          position: 'top'
-        });
-      }
+      // 导航到订单列表页面
+      router.push('/ViewOrders');
     } catch (error) {
       console.error('订单创建失败:', error);
       let errorMessage = '订单创建失败，请稍后再试。';
+
       if (error.response && error.response.data) {
         console.log('服务器返回的详细错误:', error.response.data);
 
@@ -781,6 +770,7 @@
           errorMessage = error.response.data.message;
         }
       }
+
       $q.notify({
         type: 'negative',
         message: errorMessage,

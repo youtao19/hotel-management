@@ -152,7 +152,7 @@ async function executeSqlFile(filePath) {
         continue;
       }
 
-      console.log('执行SQL语句:', stmt.substring(0, 100) + (stmt.length > 100 ? '...' : ''));
+      // console.log('执行SQL语句:', stmt.substring(0, 100) + (stmt.length > 100 ? '...' : ''));
       try {
         await query(stmt);
       } catch (err) {
@@ -165,7 +165,7 @@ async function executeSqlFile(filePath) {
       }
     }
 
-    console.log(`SQL文件 ${filePath} 执行完成`);
+    // console.log(`SQL文件 ${filePath} 执行完成`);
   } catch (err) {
     console.error(`执行SQL文件 ${filePath} 出错:`, err);
     throw err;
