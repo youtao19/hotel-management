@@ -403,58 +403,80 @@ watch(filterStatus, (newValue) => {
  */
 const filteredRooms = computed(() => {
   // 获取URL中的状态参数，优先于filterStatus变量
-  const urlStatus = route.query.status
-  const urlType = route.query.type
-  const urlDateRange = route.query.dateRange
+  const urlStatus = route.query.status;
+  const urlType = route.query.type;
+  const urlDateRange = route.query.dateRange;
 
   console.log('重新计算筛选房间列表，条件:', {
     房型: filterType.value || urlType,
-    状态变量: filterStatus.value || urlStatus,
+    状态: filterStatus.value || urlStatus,
     日期范围: dateRange.value || urlDateRange
-  })
+  });
 
   // 使用roomStore的filterRooms方法替代本地过滤逻辑
-  const filters = {}
+  const filters = {};
 
   // 设置房型筛选
   if (urlType) {
-    filters.type = urlType
+    filters.type = urlType;
   } else if (filterType.value) {
-    filters.type = filterType.value
+    filters.type = filterType.value;
   }
 
   // 设置状态筛选，优先使用URL中的状态
   if (urlStatus) {
-    filters.status = urlStatus
+    filters.status = urlStatus;
   } else if (filterStatus.value) {
-    filters.status = filterStatus.value
+    filters.status = filterStatus.value;
   }
 
   // 设置日期范围筛选
   if (urlDateRange) {
-    filters.dateRange = urlDateRange
+    filters.dateRange = urlDateRange;
   } else if (dateRange.value) {
     // 如果是对象格式，转换为字符串
     if (typeof dateRange.value === 'object') {
-      const { from, to } = dateRange.value
+      const { from, to } = dateRange.value;
       if (from && to) {
-        filters.dateRange = `${from} to ${to}`
+        filters.dateRange = `${from} to ${to}`;
       }
     } else if (typeof dateRange.value === 'string') {
-      filters.dateRange = dateRange.value
+      filters.dateRange = dateRange.value;
     }
   }
 
   // 如果没有任何筛选条件，确保返回所有房间
   if (Object.keys(filters).length === 0) {
-    console.log('没有筛选条件，返回所有房间:', roomStore.rooms.length)
-  } else {
-    console.log('应用筛选条件:', filters)
+    console.log('没有筛选条件，返回所有房间:', roomStore.rooms.length);
+    return roomStore.rooms;
   }
 
-  const result = roomStore.filterRooms(filters)
-  console.log(`筛选结果: ${result.length} 个房间`)
-  return result
+  console.log('应用筛选条件:', filters);
+
+  // 获取基本过滤结果
+  let result = roomStore.filterRooms(filters);
+
+  // 如果有日期范围筛选，我们需要包含待入住的房间
+  if (filters.dateRange) {
+    // 获取所有待入住的房间
+    const pendingRooms = roomStore.rooms.filter(room => {
+      const order = orderStore.getActiveOrderByRoomNumber(room.room_number);
+      return order && order.status === 'pending';
+    });
+
+    // 将待入住的房间添加到结果中（如果它们不在结果中）
+    pendingRooms.forEach(pendingRoom => {
+      if (!result.find(r => r.room_id === pendingRoom.room_id)) {
+        result.push(pendingRoom);
+      }
+    });
+
+    // 按房间号排序
+    result.sort((a, b) => a.room_number.localeCompare(b.room_number));
+  }
+
+  console.log(`筛选结果: ${result.length} 个房间`);
+  return result;
 })
 
 /**
@@ -465,7 +487,6 @@ async function applyFilters() {
   try {
     loading.value = true;
     error.value = null;
-    console.log('应用筛选:', { 房型: filterType.value, 状态: filterStatus.value, 日期范围: dateRange.value });
 
     // 构建查询参数对象
     const query = {};
@@ -673,14 +694,11 @@ async function checkOut(roomId) {
       console.warn('显示加载提示失败:', loadingError);
     }
 
-    // 获取当前时间用于退房时间
-    const checkOutTime = new Date().toISOString();
-
     // 调用orderStore的方法更新订单状态
     try {
-      console.log(`准备更新订单 ${order.orderNumber} 状态为 checked-out`);
-      await orderStore.updateOrderStatusViaApi(order.orderNumber, 'checked-out', { checkOutTime });
-      console.log(`订单 ${order.orderNumber} 状态已更新为 checked-out`);
+      await orderStore.updateOrderStatusViaApi(order.orderNumber, 'checked-out', {
+        checkOutTime: new Date().toISOString()
+      });
     } catch (orderError) {
       console.error('更新订单状态失败:', orderError);
       throw new Error('更新订单状态失败: ' + (orderError.message || '未知错误'));
@@ -688,14 +706,12 @@ async function checkOut(roomId) {
 
     // 调用API更新房间状态为清扫中
     try {
-      console.log(`准备将房间 ${roomId} 状态更新为 cleaning`);
       const roomUpdateSuccess = await roomStore.checkOutRoom(roomId);
 
       if (!roomUpdateSuccess) {
         throw new Error('房间状态更新失败');
       }
 
-      console.log(`房间 ${roomId} 状态已更新为 cleaning`);
     } catch (roomUpdateError) {
       console.error('更新房间状态失败:', roomUpdateError);
       // 这里不抛出错误，因为订单已经更新，房间状态更新失败不应影响整个流程

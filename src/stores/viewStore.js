@@ -103,7 +103,6 @@ export const useViewStore = defineStore('view', () => {
    * @returns {string} 状态对应的颜色
    */
   function getStatusColor(status) {
-    console.log('获取状态颜色:', status, ORDER_STATUS_COLORS[status]);
     return ORDER_STATUS_COLORS[status] || 'grey';
   }
 

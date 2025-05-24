@@ -127,50 +127,50 @@ async function enableExtensions() {
  * 执行SQL脚本文件
  * @param {string} filePath - SQL文件路径
  */
-async function executeSqlFile(filePath) {
-  try {
-    console.log(`执行SQL文件: ${filePath}`);
-    const sqlContent = fs.readFileSync(filePath, 'utf8');
+// async function executeSqlFile(filePath) {
+//   try {
+//     console.log(`执行SQL文件: ${filePath}`);
+//     const sqlContent = fs.readFileSync(filePath, 'utf8');
 
-    // 移除注释和将文件内容分割成单独的SQL语句
-    const cleanedSql = sqlContent
-      .replace(/--.*$/gm, '') // 移除单行注释
-      .replace(/\/\*[\s\S]*?\*\//g, ''); // 移除多行注释
+//     // 移除注释和将文件内容分割成单独的SQL语句
+//     const cleanedSql = sqlContent
+//       .replace(/--.*$/gm, '') // 移除单行注释
+//       .replace(/\/\*[\s\S]*?\*\//g, ''); // 移除多行注释
 
-    // 按分号分割SQL语句
-    const statements = cleanedSql.split(';')
-      .map(stmt => stmt.trim())
-      .filter(stmt => stmt.length > 0 && !stmt.startsWith('\\'));
+//     // 按分号分割SQL语句
+//     const statements = cleanedSql.split(';')
+//       .map(stmt => stmt.trim())
+//       .filter(stmt => stmt.length > 0 && !stmt.startsWith('\\'));
 
-    // 逐条执行SQL语句
-    for (let stmt of statements) {
-      // 跳过PostgreSQL特定命令
-      if (stmt.toLowerCase().includes('create database') ||
-          stmt.toLowerCase().includes('\\') ||
-          stmt.trim().startsWith('\\')) {
-        console.log('跳过不支持的命令:', stmt.substring(0, 50) + (stmt.length > 50 ? '...' : ''));
-        continue;
-      }
+//     // 逐条执行SQL语句
+//     for (let stmt of statements) {
+//       // 跳过PostgreSQL特定命令
+//       if (stmt.toLowerCase().includes('create database') ||
+//           stmt.toLowerCase().includes('\\') ||
+//           stmt.trim().startsWith('\\')) {
+//         console.log('跳过不支持的命令:', stmt.substring(0, 50) + (stmt.length > 50 ? '...' : ''));
+//         continue;
+//       }
 
-      // console.log('执行SQL语句:', stmt.substring(0, 100) + (stmt.length > 100 ? '...' : ''));
-      try {
-        await query(stmt);
-      } catch (err) {
-        console.error(`执行语句出错: ${err.message}`);
-        // 判断是否应该继续执行
-        // 如果是关键的创建表语句失败了，可能需要中断整个过程
-        if (stmt.toLowerCase().includes('create table') && !stmt.toLowerCase().includes('if not exists')) {
-          throw err;
-        }
-      }
-    }
+//       // console.log('执行SQL语句:', stmt.substring(0, 100) + (stmt.length > 100 ? '...' : ''));
+//       try {
+//         await query(stmt);
+//       } catch (err) {
+//         console.error(`执行语句出错: ${err.message}`);
+//         // 判断是否应该继续执行
+//         // 如果是关键的创建表语句失败了，可能需要中断整个过程
+//         if (stmt.toLowerCase().includes('create table') && !stmt.toLowerCase().includes('if not exists')) {
+//           throw err;
+//         }
+//       }
+//     }
 
-    // console.log(`SQL文件 ${filePath} 执行完成`);
-  } catch (err) {
-    console.error(`执行SQL文件 ${filePath} 出错:`, err);
-    throw err;
-  }
-}
+//     // console.log(`SQL文件 ${filePath} 执行完成`);
+//   } catch (err) {
+//     console.error(`执行SQL文件 ${filePath} 出错:`, err);
+//     throw err;
+//   }
+// }
 
 /**
  * 初始化酒店管理系统数据库

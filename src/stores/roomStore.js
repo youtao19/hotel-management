@@ -629,22 +629,11 @@ export const useRoomStore = defineStore('room', () => {
    * 同步所有房间的显示状态
    */
   function syncAllRoomStatus() {
-    // 确保已获取最新订单数据
-    if (activeOrders.value.length === 0) {
-      return fetchActiveOrders().then(() => {
-        // 为所有房间更新显示状态
-        rooms.value.forEach(room => {
-          updateRoomDisplayStatus(room)
-        })
-        return true
-      })
-    } else {
-      // 直接更新所有房间状态
-      rooms.value.forEach(room => {
-        updateRoomDisplayStatus(room)
-      })
-      return Promise.resolve(true)
-    }
+    // 为所有房间更新显示状态
+    rooms.value.forEach(room => {
+      updateRoomDisplayStatus(room)
+    })
+    return Promise.resolve(true)
   }
 
   /**

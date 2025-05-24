@@ -19,9 +19,7 @@ export const useOrderStore = defineStore('order', () => {
     try {
       loading.value = true
       error.value = null
-      console.log('开始获取订单数据...')
       const response = await orderApi.getAllOrders() // 移除 /api 前缀
-      console.log('订单数据获取成功:', response) // response 本身就是拦截器处理后的数据
       // 确保从响应的 data 属性中获取数组 (如果后端直接返回 { data: [...] } 结构)
       // 如果后端直接返回数组，则不需要 .data.data
       const rawOrders = response && response.data ? response.data : (Array.isArray(response) ? response : [])
@@ -81,9 +79,6 @@ export const useOrderStore = defineStore('order', () => {
       loading.value = true
       error.value = null
 
-      // 打印接收到的原始订单数据
-      console.log('接收到的原始订单数据:', JSON.stringify(order, null, 2));
-
       // 数据验证
       if (!order) {
         throw new Error('订单数据不能为空');
@@ -139,8 +134,6 @@ export const useOrderStore = defineStore('order', () => {
         actual_check_out_time: null,
       }
 
-      // 打印准备发送的数据
-      console.log('准备发送到后端的数据:', JSON.stringify(orderData, null, 2));
 
       // 验证必填字段
       const requiredFields = ['order_id', 'guest_name', 'id_number', 'room_type', 'room_number', 'check_in_date', 'check_out_date', 'room_price'];
@@ -163,9 +156,7 @@ export const useOrderStore = defineStore('order', () => {
         throw new Error('手机号必须为11位');
       }
 
-      console.log('正在添加新订单 (确保日期为ISO):', JSON.stringify(orderData, null, 2));
       const response = await orderApi.addOrder(orderData);
-      console.log('订单添加成功:', response);
 
       // 添加到本地状态，确保字段名一致
       // 后端返回的可能是 { message: '...', order: { ... } }
@@ -218,36 +209,26 @@ export const useOrderStore = defineStore('order', () => {
     try {
       loading.value = true;
       error.value = null;
-      console.log(`通过API更新订单 ${orderNumber} 状态为: ${newStatus}, 选项:`, options);
+      // 构建状态更新数据
+      const statusData = {
+        newStatus,
+        checkInTime: options.checkInTime ? new Date(options.checkInTime).toISOString() : undefined,
+        checkOutTime: options.checkOutTime ? new Date(options.checkOutTime).toISOString() : undefined
+      };
 
-      const payload = { newStatus, ...options };
-      if (payload.checkInTime && !(payload.checkInTime instanceof String)) {
-        payload.checkInTime = new Date(payload.checkInTime).toISOString();
-      }
-      if (payload.checkOutTime && !(payload.checkOutTime instanceof String)){
-        payload.checkOutTime = new Date(payload.checkOutTime).toISOString();
-      }
 
-      // 使用 orderApi 而不是直接使用 api
-      const response = await orderApi.updateOrderStatus(orderNumber, payload);
-      console.log('订单状态API更新成功:', response);
+      // 发送请求
+      const response = await orderApi.updateOrderStatus(orderNumber, statusData);
 
       // 更新本地状态
       const updatedOrderFromApi = response.order || response;
       const index = orders.value.findIndex(o => o.orderNumber === orderNumber);
       if (index !== -1) {
-        orders.value[index].status = updatedOrderFromApi.status;
-        if (updatedOrderFromApi.actual_check_in_time) {
-          orders.value[index].actualCheckInTime = updatedOrderFromApi.actual_check_in_time;
-        }
-        if (updatedOrderFromApi.actual_check_out_time) {
-          orders.value[index].actualCheckOutTime = updatedOrderFromApi.actual_check_out_time;
-        }
         orders.value[index] = {
           ...orders.value[index],
+          status: updatedOrderFromApi.status,
           actualCheckInTime: updatedOrderFromApi.actual_check_in_time,
-          actualCheckOutTime: updatedOrderFromApi.actual_check_out_time,
-          status: updatedOrderFromApi.status
+          actualCheckOutTime: updatedOrderFromApi.actual_check_out_time
         };
       }
       return updatedOrderFromApi;

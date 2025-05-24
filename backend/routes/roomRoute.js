@@ -125,7 +125,7 @@ router.get('/test-repair/:id', async (req, res) => {
 });
 
 // 更新房间状态
-router.patch('/:id/status', async (req, res) => {
+router.post('/:id/status', async (req, res) => {
   try {
     const { id } = req.params;
 

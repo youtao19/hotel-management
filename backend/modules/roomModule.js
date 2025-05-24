@@ -208,7 +208,7 @@ async function getAvailableRooms(startDate, endDate, typeCode = null) {
 
     // 构建基础查询
     let baseQuery = `
-      SELECT DISTINCT r.*
+      SELECT r.*
       FROM rooms r
       WHERE r.is_closed = false
       AND r.status NOT IN ('repair', 'cleaning')
@@ -216,6 +216,7 @@ async function getAvailableRooms(startDate, endDate, typeCode = null) {
         SELECT 1
         FROM orders o
         WHERE o.room_number = r.room_number
+        AND o.status = 'checked-in'
         AND $1::date <= o.check_out_date::date
         AND $2::date > o.check_in_date::date
       )
@@ -232,11 +233,7 @@ async function getAvailableRooms(startDate, endDate, typeCode = null) {
     // 按房间号排序
     baseQuery += ' ORDER BY r.room_number';
 
-    // console.log('执行SQL查询:', baseQuery);
-    // console.log('查询参数:', queryParams);
-
     const result = await query(baseQuery, queryParams);
-    console.log(`找到 ${result.rows.length} 个可用房间`);
 
     // 添加日志：打印可用房间的房间号
     if (result.rows.length > 0) {

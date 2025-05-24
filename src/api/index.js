@@ -49,7 +49,7 @@ export const roomApi = {
   // 更新房间状态
   updateRoomStatus: (id, status) => {
     console.log(`前端发送更新房间状态请求: ID=${id}, 状态=${status}`);
-    return api.patch(`/rooms/${id}/status`, { status });
+    return api.post(`/rooms/${id}/status`, { status });
   },
 
   // 添加新房间
@@ -71,7 +71,7 @@ export const orderApi = {
   addOrder: (orderData) => api.post('/orders/new', orderData),
 
   // 更新订单状态
-  updateOrderStatus: (orderId, status) => api.post(`/orders/${orderId}/status`, { status }),
+  updateOrderStatus: (orderId, statusData) => api.post(`/orders/${orderId}/status`, statusData),
 
   // 更新订单房间信息
   updateOrderRoom: (orderId, roomData) => api.patch(`/orders/${orderId}/room`, roomData),
