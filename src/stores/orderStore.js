@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import api from '../api' // 确保导入的是默认导出的api实例
 import { useViewStore } from './viewStore'
+import { orderApi } from '../api'
 
 export const useOrderStore = defineStore('order', () => {
   // 引入视图store以使用日期格式化函数
@@ -20,7 +20,7 @@ export const useOrderStore = defineStore('order', () => {
       loading.value = true
       error.value = null
       console.log('开始获取订单数据...')
-      const response = await api.get('/orders') // 移除 /api 前缀
+      const response = await orderApi.getAllOrders() // 移除 /api 前缀
       console.log('订单数据获取成功:', response) // response 本身就是拦截器处理后的数据
       // 确保从响应的 data 属性中获取数组 (如果后端直接返回 { data: [...] } 结构)
       // 如果后端直接返回数组，则不需要 .data.data
@@ -164,7 +164,7 @@ export const useOrderStore = defineStore('order', () => {
       }
 
       console.log('正在添加新订单 (确保日期为ISO):', JSON.stringify(orderData, null, 2));
-      const response = await api.post('/orders/new', orderData);
+      const response = await orderApi.addOrder(orderData);
       console.log('订单添加成功:', response);
 
       // 添加到本地状态，确保字段名一致
@@ -228,11 +228,11 @@ export const useOrderStore = defineStore('order', () => {
         payload.checkOutTime = new Date(payload.checkOutTime).toISOString();
       }
 
-      const response = await api.put(`/orders/${orderNumber}/status`, payload); // 移除 /api 前缀
-      console.log('订单状态API更新成功:', response); // response 是拦截器处理后的数据
+      // 使用 orderApi 而不是直接使用 api
+      const response = await orderApi.updateOrderStatus(orderNumber, payload);
+      console.log('订单状态API更新成功:', response);
 
       // 更新本地状态
-      // 后端返回的可能是 { message: '...', order: { ... } }
       const updatedOrderFromApi = response.order || response;
       const index = orders.value.findIndex(o => o.orderNumber === orderNumber);
       if (index !== -1) {
@@ -243,9 +243,12 @@ export const useOrderStore = defineStore('order', () => {
         if (updatedOrderFromApi.actual_check_out_time) {
           orders.value[index].actualCheckOutTime = updatedOrderFromApi.actual_check_out_time;
         }
-        // 你可能还想更新其他从API返回的字段
-        orders.value[index] = { ...orders.value[index], ...orders.value[index], actualCheckInTime: updatedOrderFromApi.actual_check_in_time, actualCheckOutTime: updatedOrderFromApi.actual_check_out_time, status: updatedOrderFromApi.status };
-
+        orders.value[index] = {
+          ...orders.value[index],
+          actualCheckInTime: updatedOrderFromApi.actual_check_in_time,
+          actualCheckOutTime: updatedOrderFromApi.actual_check_out_time,
+          status: updatedOrderFromApi.status
+        };
       }
       return updatedOrderFromApi;
     } catch (err) {

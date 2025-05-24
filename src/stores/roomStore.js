@@ -59,7 +59,6 @@ export const useRoomStore = defineStore('room', () => {
   async function fetchActiveOrders() {
     try {
       loading.value = true
-      console.log('获取活跃订单数据...')
 
       // 使用orderStore的方法获取所有订单
       await orderStore.fetchAllOrders()
@@ -71,7 +70,6 @@ export const useRoomStore = defineStore('room', () => {
         order.status === ORDER_STATES.CHECKED_IN
       )
 
-      console.log(`获取到 ${activeOrders.value.length} 个活跃订单`)
       return activeOrders.value
     } catch (err) {
       console.error('获取订单数据失败:', err)
@@ -92,7 +90,6 @@ export const useRoomStore = defineStore('room', () => {
 
       // 获取所有房间数据
       const response = await roomApi.getAllRooms()
-      console.log('房间数据获取成功')
 
       if (!response || !response.data) {
         throw new Error('房间数据获取失败或格式错误')
@@ -117,7 +114,6 @@ export const useRoomStore = defineStore('room', () => {
         const status = room.displayStatus
         statusCounts[status] = (statusCounts[status] || 0) + 1
       })
-      console.log('房间状态统计:', statusCounts)
 
       return rooms.value
     } catch (err) {
@@ -173,7 +169,6 @@ export const useRoomStore = defineStore('room', () => {
   async function fetchRoomTypes() {
     try {
       const response = await roomApi.getRoomTypes()
-      console.log('房间类型获取成功')
       roomTypes.value = response.data
       return roomTypes.value
     } catch (err) {
@@ -320,12 +315,10 @@ export const useRoomStore = defineStore('room', () => {
     // 首先尝试从本地缓存中查找
     const cachedRoom = rooms.value.find(r => r.room_number === number)
     if (cachedRoom) {
-      console.log(`已从本地缓存中找到房间 ${number}:`, cachedRoom)
       return cachedRoom
     }
 
     // 本地未找到，再尝试通过API查询
-    console.log(`房间 ${number} 未在本地缓存中找到，尝试API请求...`)
     return roomApi.getRoomByNumber(number)
       .then(response => {
         const roomData = response.data || null
@@ -378,7 +371,6 @@ export const useRoomStore = defineStore('room', () => {
         updateRoomDisplayStatus(rooms.value[roomIndex])
       }
 
-      console.log(`房间 ID ${id} 状态已更新为: ${status}`)
       return true
     } catch (err) {
       console.error(`更新房间状态失败:`, err)
@@ -474,7 +466,6 @@ export const useRoomStore = defineStore('room', () => {
         rooms.value[roomIndex].checkOutDate = checkOutDate
         rooms.value[roomIndex].displayStatus = ROOM_STATES.OCCUPIED
 
-        console.log(`房间 ID ${id} 入住成功，状态已更新`)
       } else {
         // 如果找不到房间，重新加载数据
         await fetchAllRooms()
@@ -577,12 +568,6 @@ export const useRoomStore = defineStore('room', () => {
    * @returns {string} 房间显示状态
    */
   function getRoomDisplayStatus(room) {
-    // console.log('获取房间显示状态:', {
-    //   房间号: room.room_number,
-    //   原始状态: room.status,
-    //   订单状态: room.orderStatus,
-    //   预计算状态: room.displayStatus
-    // });
 
     // 如果有预计算的displayStatus，直接返回
     if (room.displayStatus) {
