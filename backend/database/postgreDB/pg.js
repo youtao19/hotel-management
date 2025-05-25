@@ -181,18 +181,18 @@ async function initializeHotelDB() {
     await enableExtensions();
     await createTables();
 
-    // 执行初始化SQL文件
-    const dbInitFilePath = path.join(__dirname, '../../../hotel_db_init.sql');
-    if (fs.existsSync(dbInitFilePath)) {
-      try {
-        await executeSqlFile(dbInitFilePath);
-        console.log('酒店数据库初始化SQL文件执行成功');
-      } catch (sqlErr) {
-        console.error('执行初始化SQL文件失败，将继续使用基本表结构:', sqlErr);
-      }
-    } else {
-      console.log('未找到初始化SQL文件，将仅使用基本表结构');
-    }
+    // // 执行初始化SQL文件
+    // const dbInitFilePath = path.join(__dirname, '../../../hotel_db_init.sql');
+    // if (fs.existsSync(dbInitFilePath)) {
+    //   try {
+    //     await executeSqlFile(dbInitFilePath);
+    //     console.log('酒店数据库初始化SQL文件执行成功');
+    //   } catch (sqlErr) {
+    //     console.error('执行初始化SQL文件失败，将继续使用基本表结构:', sqlErr);
+    //   }
+    // } else {
+    //   console.log('未找到初始化SQL文件，将仅使用基本表结构');
+    // }
 
     console.log('酒店管理系统数据库初始化完成');
     return true;

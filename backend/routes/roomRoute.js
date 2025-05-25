@@ -54,6 +54,7 @@ router.get('/available', async (req, res) => {
     console.log('查询可用房间:', { startDate, endDate, typeCode });
     const availableRooms = await roomModule.getAvailableRooms(startDate, endDate, typeCode);
 
+
     res.json({
       data: availableRooms,
       query: { startDate, endDate, typeCode }

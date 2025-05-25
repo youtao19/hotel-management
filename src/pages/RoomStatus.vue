@@ -407,12 +407,6 @@ const filteredRooms = computed(() => {
   const urlType = route.query.type;
   const urlDateRange = route.query.dateRange;
 
-  console.log('重新计算筛选房间列表，条件:', {
-    房型: filterType.value || urlType,
-    状态: filterStatus.value || urlStatus,
-    日期范围: dateRange.value || urlDateRange
-  });
-
   // 使用roomStore的filterRooms方法替代本地过滤逻辑
   const filters = {};
 
@@ -433,55 +427,32 @@ const filteredRooms = computed(() => {
   // 设置日期范围筛选
   if (urlDateRange) {
     filters.dateRange = urlDateRange;
+    console.log('已经设置日期范围')
   } else if (dateRange.value) {
-    // 如果是对象格式，转换为字符串
-    if (typeof dateRange.value === 'object') {
-      const { from, to } = dateRange.value;
-      if (from && to) {
-        filters.dateRange = `${from} to ${to}`;
-      }
-    } else if (typeof dateRange.value === 'string') {
-      filters.dateRange = dateRange.value;
-    }
+    filters.dateRange = dateRange.value;
   }
 
-  // 如果没有任何筛选条件，确保返回所有房间
-  if (Object.keys(filters).length === 0) {
-    console.log('没有筛选条件，返回所有房间:', roomStore.rooms.length);
-    return roomStore.rooms;
+  // 如果没有任何筛选条件 (仅指房型和状态)，并且 roomStore.rooms 本身可能已经是按日期筛选过的
+  // 或者包含了所有房间。roomStore.filterRooms 现在只处理 type 和 status。
+  if (!filters.type && !filters.status) {
+    console.log('没有房型或状态筛选条件，直接返回 roomStore.rooms:', roomStore.rooms.length);
+    return roomStore.rooms; // roomStore.rooms 可能已按日期筛选或为全部房间
   }
 
-  console.log('应用筛选条件:', filters);
-
-  // 获取基本过滤结果
+  // 获取基本过滤结果 - roomStore.filterRooms 现在只按房型和状态筛选
   let result = roomStore.filterRooms(filters);
 
-  // 如果有日期范围筛选，我们需要包含待入住的房间
-  if (filters.dateRange) {
-    // 获取所有待入住的房间
-    const pendingRooms = roomStore.rooms.filter(room => {
-      const order = orderStore.getActiveOrderByRoomNumber(room.room_number);
-      return order && order.status === 'pending';
-    });
-
-    // 将待入住的房间添加到结果中（如果它们不在结果中）
-    pendingRooms.forEach(pendingRoom => {
-      if (!result.find(r => r.room_id === pendingRoom.room_id)) {
-        result.push(pendingRoom);
-      }
-    });
-
-    // 按房间号排序
-    result.sort((a, b) => a.room_number.localeCompare(b.room_number));
-  }
-
-  console.log(`筛选结果: ${result.length} 个房间`);
   return result;
 })
 
 /**
  * 应用筛选按钮点击处理函数
  * 将筛选条件更新到URL参数并执行筛选
+ * @param {Object} filters - 筛选条件对象 {type, status, dateRange}
+ * @param {string} filters.type - 房型代码
+ * @param {string} filters.status - 房间状态
+ * @param {string} filters.dateRange - 日期范围，格式为 "YYYY-MM-DD to YYYY-MM-DD"
+ * @returns {Array} 筛选后的房间数组
  */
 async function applyFilters() {
   try {
@@ -499,6 +470,7 @@ async function applyFilters() {
       query.status = filterStatus.value;
     }
 
+    console.log('马上进入处理日期');
     // 处理日期范围
     if (dateRange.value) {
       let startDate, endDate;
@@ -507,27 +479,35 @@ async function applyFilters() {
       if (typeof dateRange.value === 'object') {
         const { from, to } = dateRange.value;
         if (from && to) {
-          startDate = from;
-          endDate = to;
-          query.dateRange = `${from} to ${to}`;
+          // 将 YYYY/MM/DD 转换为 YYYY-MM-DD
+          startDate = from.replace(/\//g, '-');
+          endDate = to.replace(/\//g, '-');
+          query.dateRange = `${from} to ${to}`; // query.dateRange 保持 YYYY/MM/DD to YYYY/MM/DD 用于URL
         }
       } else if (typeof dateRange.value === 'string' && dateRange.value.includes(' to ')) {
-        [startDate, endDate] = dateRange.value.split(' to ');
+        const [rawStartDate, rawEndDate] = dateRange.value.split(' to ');
+        // 假设原始字符串也是 YYYY/MM/DD，如果不是，也需要相应转换
+        startDate = rawStartDate.replace(/\//g, '-');
+        endDate = rawEndDate.replace(/\//g, '-');
         query.dateRange = dateRange.value;
       }
 
-      // 如果有有效的日期范围，查询可用房间
+      // 如果有有效的日期范围，查询可用房间并更新 store
       if (startDate && endDate) {
         try {
-          // 直接使用后端返回的结果
+          // roomStore.getAvailableRoomsByDate 会直接更新 store 中的 rooms.value
+          console.log('查询可用房间:', startDate, endDate, filterType.value);
           await roomStore.getAvailableRoomsByDate(
             startDate,
             endDate,
             filterType.value
           );
+          // 此处无需再对返回值进行操作，filteredRooms 会自动更新
         } catch (err) {
           console.error('查询可用房间失败:', err);
           error.value = '查询可用房间失败: ' + err.message;
+          // 即使查询失败，也尝试刷新所有房间以确保数据一致性
+          await roomStore.fetchAllRooms();
         }
       }
     } else {

@@ -49,10 +49,12 @@ export const useRoomStore = defineStore('room', () => {
   const rooms = ref([])
   // 房间类型
   const roomTypes = ref([])
-  // 加载状态
+  // 加载状态（用于反映前台的状态）
   const loading = ref(false)
   // 错误信息
   const error = ref(null)
+
+  // 活跃订单(待入住和已入住)
   const activeOrders = ref([])
 
   // 获取所有订单数据并筛选活跃订单
@@ -222,6 +224,7 @@ export const useRoomStore = defineStore('room', () => {
   })
 
   /**
+   * 前台的房间来源
    * 根据条件筛选房间
    * @param {Object} filters - 筛选条件对象 {type, status, dateRange}
    * @returns {Array} 筛选后的房间数组
@@ -241,34 +244,48 @@ export const useRoomStore = defineStore('room', () => {
       // 筛选状态 - 使用显示状态而不是原始状态
       if (filters.status && displayStatus !== filters.status) return false
 
-      // 筛选日期范围
-      if (filters.dateRange) {
-        // 日期格式应该是 "YYYY-MM-DD to YYYY-MM-DD"
-        const [startDateStr, endDateStr] = filters.dateRange.split(' to ')
-        if (startDateStr && endDateStr) {
-          const startDate = new Date(startDateStr)
-          const endDate = new Date(endDateStr)
-
-          // 检查日期是否有效
-          if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
-            // 已入住房间，检查退房日期是否在查询开始日期之前
-            if (displayStatus === ROOM_STATES.OCCUPIED && room.check_out_date) {
-              const checkOutDate = new Date(room.check_out_date)
-              if (checkOutDate < startDate) {
-                return false // 房间在查询日期前已空出
-              }
-            }
-
-            // 已预订房间默认在选择的日期范围内不可用
-            if (displayStatus === ROOM_STATES.RESERVED) {
-              return false
-            }
-          }
-        }
-      }
-
       return true
     })
+  }
+
+  /**
+   * 获取指定日期范围内的可用房间
+   * @param {string} startDate - 入住日期 YYYY-MM-DD
+   * @param {string} endDate - 退房日期 YYYY-MM-DD
+   * @param {string} [typeCode] - 可选的房型代码
+   * @returns {Promise<Array>} 可用房间列表
+   */
+  async function getAvailableRoomsByDate(startDate, endDate, typeCode = null) {
+    try {
+      console.log('查询可用房间:', { startDate, endDate, typeCode });
+
+      // 构建查询参数
+      const params = new URLSearchParams({
+        startDate,
+        endDate
+      });
+
+      if (typeCode) {
+        params.append('typeCode', typeCode);
+      }
+
+      const response = await roomApi.getAvailableRooms(params.toString());
+      const availableRoomsArray = response.data;
+
+      if (!Array.isArray(availableRoomsArray)) {
+        console.error('获取可用房间数据格式不正确，期望数组但得到:', availableRoomsArray);
+        throw new Error('获取可用房间数据格式不正确');
+      }
+
+      console.log(`Store: 找到 ${availableRoomsArray.length} 个可用房间，将更新主房间列表`);
+      // 直接用后端返回的、已按日期筛选的房间列表更新 store 中的 rooms
+      rooms.value = availableRoomsArray.map(room => processRoomData(room, {})); // 确保返回的房间也经过 processRoomData 处理
+
+      return rooms.value; // 返回更新后的 rooms.value
+    } catch (error) {
+      console.error('获取可用房间失败:', error);
+      throw error;
+    }
   }
 
   /**
@@ -693,46 +710,7 @@ export const useRoomStore = defineStore('room', () => {
   // 立即初始化
   initialize()
 
-  /**
-   * 获取指定日期范围内的可用房间
-   * @param {string} startDate - 入住日期 YYYY-MM-DD
-   * @param {string} endDate - 退房日期 YYYY-MM-DD
-   * @param {string} [typeCode] - 可选的房型代码
-   * @returns {Promise<Array>} 可用房间列表
-   */
-  async function getAvailableRoomsByDate(startDate, endDate, typeCode = null) {
-    try {
-      console.log('查询可用房间:', { startDate, endDate, typeCode });
 
-      // 构建查询参数
-      const params = new URLSearchParams({
-        startDate,
-        endDate
-      });
-
-      if (typeCode) {
-        params.append('typeCode', typeCode);
-      }
-
-      const response = await roomApi.getAvailableRooms(params.toString());
-
-      // The response from roomApi.getAvailableRooms is already the backend's JSON response
-      // { data: availableRoomsArray, query: queryObj }
-      // So, response.data should be the array of rooms.
-      const availableRoomsArray = response.data;
-
-      if (!Array.isArray(availableRoomsArray)) {
-        console.error('获取可用房间数据格式不正确，期望数组但得到:', availableRoomsArray);
-        throw new Error('获取可用房间数据格式不正确');
-      }
-
-      console.log(`Store: 找到 ${availableRoomsArray.length} 个可用房间`);
-      return availableRoomsArray;
-    } catch (error) {
-      console.error('获取可用房间失败:', error);
-      throw error;
-    }
-  }
 
   return {
     // 状态常量 - 导出给组件使用
