@@ -184,7 +184,6 @@ export const useRoomStore = defineStore('room', () => {
         displayStatus = ROOM_STATES.AVAILABLE
       }
 
-      console.log(`房间 ${room.room_number} 无关联订单, 状态: ${displayStatus}`)
     }
 
     return {

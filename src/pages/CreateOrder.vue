@@ -267,7 +267,6 @@
                         @update:model-value="onRoomTypeChange"
                         :rules="[val => !!val || '请选择房间类型']"
                       >
-                        <!-- 在选项中显示房间数量徽章 -->
                         <template v-slot:option="scope">
                           <q-item v-bind="scope.itemProps">
                             <q-item-section>
@@ -302,7 +301,7 @@
                   <q-select
                     v-model="orderData.roomNumber"
                     :options="availableRoomOptions"
-                    :label="orderData.roomType ? `房间号` : '房间号'"
+                    label="房间号"
                     filled
                     emit-value
                     map-options
@@ -422,6 +421,8 @@
 
   // 使用roomStore中的状态常量
   const { ROOM_STATES } = roomStore
+
+  const availableRoomsByDate = ref([]); // 存储当前时间范围下所有可用房间
 
   /**
    * 生成唯一的订单号
@@ -548,43 +549,30 @@
   /**
    * 更新可用房间列表
    */
-  async function updateAvailableRooms() {
-    try {
-      if (!orderData.value.checkInDate || !orderData.value.checkOutDate) {
-        return;
-      }
-
-      // 重置房间选择
-      orderData.value.roomNumber = null;
-      orderData.value.roomType = null;
-      orderData.value.roomPrice = 0;
-
-      // 获取指定日期范围内的可用房间
-      const availableRooms = await roomStore.getAvailableRoomsByDate(
-        orderData.value.checkInDate,
-        orderData.value.checkOutDate
-      );
-
-      // 更新房间状态
-      await roomStore.refreshData();
-
-      // 如果没有可用房间，显示提示
-      if (availableRooms.length === 0) {
-        $q.notify({
-          type: 'warning',
-          message: '所选日期范围内没有可用房间',
-          position: 'top'
-        });
-      }
-    } catch (error) {
-      console.error('获取可用房间失败:', error);
-      $q.notify({
-        type: 'negative',
-        message: '获取可用房间失败: ' + error.message,
-        position: 'top'
-      });
+   async function updateAvailableRooms() {
+  try {
+    if (!orderData.value.checkInDate || !orderData.value.checkOutDate) {
+      return;
     }
+    orderData.value.roomNumber = null;
+
+    // 获取指定日期范围和房型的可用房间（API返回所有可用房间，不仅仅是当前房型）
+    const rooms = await roomStore.getAvailableRoomsByDate(
+      orderData.value.checkInDate,
+      orderData.value.checkOutDate
+      // 不传typeCode，获取所有类型
+    );
+    console.log('API返回的可用房间:', rooms); // 重点调试
+    availableRoomsByDate.value = rooms; // 保存下来
+  } catch (error) {
+    console.error('获取可用房间失败:', error);
+    $q.notify({
+      type: 'negative',
+      message: '获取可用房间失败: ' + error.message,
+      position: 'top'
+    });
   }
+}
 
   // 监听日期变化
   watch(() => orderData.value.checkInDate, async () => {
@@ -597,29 +585,49 @@
     await updateAvailableRooms();
   });
 
-  // 修改计算可用房间的选项
-  const availableRoomOptions = computed(() => {
-    // 如果未选择房型或未选择日期，返回空数组
-    if (!orderData.value.roomType || !orderData.value.checkInDate || !orderData.value.checkOutDate) {
-      return [];
-    }
+  // 监听房型变化
+  watch(() => orderData.value.roomType, async () => {
+    await updateAvailableRooms();
+  });
 
-    // 使用roomStore的getAvailableRoomOptions方法获取特定房型和日期范围的可用房间
-    return roomStore.getAvailableRoomOptions(
-      orderData.value.roomType,
-      orderData.value.checkInDate,
-      orderData.value.checkOutDate
-    );
+  // 修改计算可用房间的选项
+  const roomTypeOptionsWithCount = computed(() => {
+    // 用当前时间范围下的可用房间统计
+    const typeOptions = viewStore.roomTypeOptions.filter(option => option.value !== null);
+    return typeOptions.map(option => {
+      const availableCount = availableRoomsByDate.value.filter(
+        room => room.type_code === option.value
+      ).length;
+      return {
+        ...option,
+        availableCount
+      };
+    });
+  });
+
+  const availableRoomOptions = computed(() => {
+    if (!orderData.value.roomType) return [];
+    return availableRoomsByDate.value
+      .filter(room => room.type_code === orderData.value.roomType)
+      .map(room => ({
+        label: `${room.room_number} (${viewStore.getRoomTypeName(room.type_code)})`,
+        value: room.room_number,
+        type: room.type_code,
+        price: room.price,
+        id: room.room_id
+      }));
   });
 
   // 计算当前选择房型的可用房间数量
   const availableRoomCount = computed(() => {
     if (!orderData.value.roomType) return 0;
-    return roomStore.getAvailableRoomCountByType(orderData.value.roomType);
+    // 用当前时间范围下的可用房间统计
+    return availableRoomsByDate.value.filter(
+      room => room.type_code === orderData.value.roomType
+    ).length;
   })
-
   // 从roomStore获取房间类型选项数组和可用房间数量
-  const roomTypeOptionsWithCount = computed(() => roomStore.getRoomTypeOptionsWithCount());
+  const roomTypeOptionsWithCountFromStore = computed(() => roomStore.getRoomTypeOptionsWithCount());
 
   // 根据房间数量获取对应的颜色
   const getRoomCountColor = roomStore.getRoomCountColor;
@@ -632,35 +640,24 @@
    * @param {string} value - 选择的房型值
    */
   function onRoomTypeChange(value) {
-    // 重置房间号
-    orderData.value.roomNumber = null
-
-    // 等待DOM更新完成后执行
+    orderData.value.roomNumber = null;
     nextTick(() => {
-      // 获取当前房型的数量信息
       const roomTypeText = viewStore.getRoomTypeName(value);
       const count = availableRoomCount.value;
-
-      // 检查当前房型是否有可用房间
       if (count === 0) {
-        // 如果没有可用房间，显示提示信息
         alert(`当前没有可用的${roomTypeText}，请联系管理员。`)
       } else {
-        // 有可用房间，自动选择第一个
-        orderData.value.roomNumber = availableRoomOptions.value[0].value
-
-        // 根据选择的房间设置房间金额
-        const selectedRoom = roomStore.getRoomByNumber(orderData.value.roomNumber)
-        if (selectedRoom) {
-          orderData.value.roomPrice = selectedRoom.price
-        }
-
-        // 当房间数量较少时提醒用户
-        if (count <= 3) {
-          console.log(`当前${roomTypeText}仅剩${count}间可用`)
+        if (availableRoomOptions.value.length > 0) {
+          orderData.value.roomNumber = availableRoomOptions.value[0].value;
+          const selectedRoom = availableRoomsByDate.value.find(
+            room => room.room_number === orderData.value.roomNumber
+          );
+          if (selectedRoom) {
+            orderData.value.roomPrice = selectedRoom.price;
+          }
         }
       }
-    })
+    });
   }
 
   /**
@@ -990,120 +987,15 @@
 
   // 组件挂载时执行的钩子函数
   onMounted(async () => {
-    try {
-      // 检查房间数据和状态
-      console.log('开始加载房间数据...');
-
-      // 先尝试获取房间数据
-      await roomStore.fetchAllRooms();
-
-      console.log('房间数据加载状态:', {
-        总房间数: roomStore.totalRooms,
-        所有房间: roomStore.rooms.map(r => ({
-          房间号: r.room_number,
-          状态: roomStore.getRoomStatusText(r)
-        }))
-      });
-
-      // 检查可用房间数量
-      const availableRoomsCount = roomStore.countByStatus.available;
-      console.log('可用房间数量:', availableRoomsCount);
-
-      // 如果房间数量为0，尝试重新加载
-      if (roomStore.totalRooms === 0) {
-        console.log('尝试重新加载房间数据...');
-        await roomStore.refreshData();
-        const newCount = roomStore.countByStatus.available;
-        console.log('重新加载后的可用房间数量:', newCount);
-      }
-
-      // 如果没有可用房间，在页面显示提示信息并记录日志
-      if (availableRoomsCount === 0) {
-        console.warn('系统中没有可用房间，请联系管理员设置房间状态。');
-        $q.notify({
-          type: 'warning',
-          message: '系统中没有可用房间，请联系管理员设置房间状态。',
-          position: 'top',
-          timeout: 10000
-        });
-
-        // 显示所有房间的状态，方便排查问题
-        const allRooms = roomStore.rooms;
-        if (allRooms.length > 0) {
-          console.log('系统中所有房间状态:');
-          const roomStatusMap = {};
-          allRooms.forEach(room => {
-            const status = roomStore.getRoomStatusText(room);
-            roomStatusMap[status] = (roomStatusMap[status] || 0) + 1;
-          });
-          console.table(roomStatusMap);
-        } else {
-          console.error('系统中没有任何房间数据，请检查数据库或API连接');
-          $q.notify({
-            type: 'negative',
-            message: '系统中没有任何房间数据，请检查数据库或API连接',
-            position: 'top',
-            timeout: 0
-          });
-        }
-      }
-
-      // 获取URL查询参数
-      const query = router.currentRoute.value.query;
-
-      // 检查是否自动填充测试数据
-      if (query.autofill === 'true') {
-        console.log('检测到autofill参数，自动填充测试数据');
-        fillTestData();
-      } else if (query.autofill === 'random') {
-        console.log('检测到autofill=random参数，自动填充随机测试数据');
-        fillRandomData();
-      }
-
-      // 如果有查询参数且包含房间信息，则自动填充表单
-      if (query && Object.keys(query).length > 0) {
-        console.log('检测到URL查询参数:', query);
-
-        // 设置房间类型
-        if (query.roomType) {
-          orderData.value.roomType = query.roomType;
-
-          // 等待DOM更新完成后再设置房间号
-          nextTick(() => {
-            // 如果有指定房间号，则设置该房间
-            if (query.roomNumber) {
-              orderData.value.roomNumber = query.roomNumber;
-
-              // 根据房间号获取房间信息，设置房间价格
-              const selectedRoom = roomStore.getRoomByNumber(query.roomNumber);
-              if (selectedRoom) {
-                orderData.value.roomPrice = selectedRoom.price;
-              }
-            }
-          });
-        }
-
-        // 如果有指定订单状态，则设置状态
-        if (query.status) {
-          orderData.value.status = query.status;
-        }
-      }
-    } catch (error) {
-      console.error('组件初始化失败:', error);
-      $q.notify({
-        type: 'negative',
-        message: '加载房间数据失败，请刷新页面重试',
-        position: 'top',
-        timeout: 0
-      });
-    }
+    // 页面加载时，主动拉取一次可用房间，保证房型数量能显示
+    await updateAvailableRooms();
   });
   </script>
 
   <style scoped>
   /* 页面主容器样式，限制最大宽度并居中 */
   .check-in {
-    max-width: 1200px;
+     max-width: 1200px;
     margin: 0 auto;
   }
   </style>
