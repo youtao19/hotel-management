@@ -137,17 +137,44 @@ export const useRoomStore = defineStore('room', () => {
     let orderStatus = room.order_status || null
     let guestName = room.guest_name || null
     let checkOutDate = room.check_out_date || null
+    let orderId = room.order_id || null
 
     // 如果找到关联订单，更新房间信息
     if (relatedOrder) {
-      orderStatus = relatedOrder.status
-      guestName = relatedOrder.guestName
-      checkOutDate = relatedOrder.checkOutDate
+      orderStatus = relatedOrder.status || orderStatus
+      guestName = relatedOrder.guestName || guestName // 确保保留原始guest_name（如果relatedOrder中为空）
+      checkOutDate = relatedOrder.checkOutDate || checkOutDate // 确保保留原始check_out_date（如果relatedOrder中为空）
+      orderId = relatedOrder.orderNumber || orderId
+
+      console.log(`处理房间 ${room.room_number} 关联订单:`, {
+        orderStatus: orderStatus,
+        guestName: guestName,
+        checkOutDate: checkOutDate,
+        orderId: orderId
+      })
 
       // 根据订单状态确定房间显示状态
       const mappedStatus = ORDER_TO_ROOM_STATE_MAP[orderStatus]
       if (mappedStatus) {
         displayStatus = mappedStatus
+        console.log(`房间 ${room.room_number} 状态映射: ${orderStatus} -> ${displayStatus}`)
+      }
+    } else if (room.guest_name || room.check_out_date || room.order_status) {
+      // 房间直接包含关联订单信息（来自后端getAllRooms合并）
+      console.log(`房间 ${room.room_number} 包含订单信息:`, {
+        guest_name: room.guest_name,
+        check_out_date: room.check_out_date,
+        order_status: room.order_status,
+        order_id: room.order_id
+      })
+
+      // 根据订单状态确定房间显示状态
+      if (room.order_status) {
+        const mappedStatus = ORDER_TO_ROOM_STATE_MAP[room.order_status]
+        if (mappedStatus) {
+          displayStatus = mappedStatus
+          console.log(`房间 ${room.room_number} 状态映射(从房间数据): ${room.order_status} -> ${displayStatus}`)
+        }
       }
     } else {
       // 没有关联订单，根据房间自身状态处理
@@ -156,6 +183,8 @@ export const useRoomStore = defineStore('room', () => {
       } else {
         displayStatus = ROOM_STATES.AVAILABLE
       }
+
+      console.log(`房间 ${room.room_number} 无关联订单, 状态: ${displayStatus}`)
     }
 
     return {
@@ -163,6 +192,7 @@ export const useRoomStore = defineStore('room', () => {
       currentGuest: guestName,
       checkOutDate: checkOutDate,
       orderStatus: orderStatus,
+      orderId: orderId,
       displayStatus: displayStatus
     }
   }
@@ -553,12 +583,23 @@ export const useRoomStore = defineStore('room', () => {
       return room.displayStatus;
     }
 
+    // 检查是否有客人信息，这说明是已入住状态
+    if (room.guest_name || room.currentGuest) {
+      const isCheckedIn = room.order_status === ORDER_STATES.CHECKED_IN ||
+                         room.orderStatus === ORDER_STATES.CHECKED_IN;
+      if (isCheckedIn) {
+        console.log(`房间${room.room_number}：有客人(${room.guest_name || room.currentGuest})，设为入住状态`);
+        return ROOM_STATES.OCCUPIED;
+      }
+    }
+
     // 订单状态优先
-    if (room.orderStatus) {
+    if (room.orderStatus || room.order_status) {
+      const status = room.orderStatus || room.order_status;
       // 使用映射获取对应的房间状态
-      const mappedStatus = ORDER_TO_ROOM_STATE_MAP[room.orderStatus];
+      const mappedStatus = ORDER_TO_ROOM_STATE_MAP[status];
       if (mappedStatus) {
-        console.log(`房间${room.room_number}：订单状态${room.orderStatus}映射为${mappedStatus}`);
+        console.log(`房间${room.room_number}：订单状态${status}映射为${mappedStatus}`);
         return mappedStatus;
       }
     }

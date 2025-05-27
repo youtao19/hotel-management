@@ -412,11 +412,7 @@
       label: '入住日期',
       field: 'checkInDate',
       sortable: true,
-      format: val => {
-        if (!val) return ''
-        // 移除时区信息，只显示日期
-        return val.split('T')[0]
-      }
+      format: val => formatDate(val)
     },
     {
       name: 'checkOutDate',
@@ -424,11 +420,7 @@
       label: '离店日期',
       field: 'checkOutDate',
       sortable: true,
-      format: val => {
-        if (!val) return ''
-        // 移除时区信息，只显示日期
-        return val.split('T')[0]
-      }
+      format: val => formatDate(val)
     },
     {
       name: 'status',
@@ -799,6 +791,7 @@
       const rawCheckOutDate = currentOrder.value.checkOutDate;
       console.log('Raw dates from order:', { rawCheckInDate, rawCheckOutDate });
 
+      // 确保日期格式正确（YYYY-MM-DD）
       const startDate = formatDate(rawCheckInDate);
       const endDate = formatDate(rawCheckOutDate);
       console.log('Formatted dates for API call:', { startDate, endDate }); // 打印格式化后的日期
@@ -848,32 +841,76 @@
    */
   function formatDateTime(dateTimeStr) {
     if (!dateTimeStr) return '';
-    // 如果是ISO格式的时间戳
-    if (dateTimeStr.includes('T')) {
-      const date = new Date(dateTimeStr);
-      return date.toLocaleString('zh-CN', {
+
+    try {
+      let dateObj;
+
+      // 如果是ISO格式的时间戳
+      if (typeof dateTimeStr === 'string' && dateTimeStr.includes('T')) {
+        dateObj = new Date(dateTimeStr);
+      }
+      // 如果是其他格式的字符串或Date对象
+      else {
+        dateObj = new Date(dateTimeStr);
+      }
+
+      // 检查日期是否有效
+      if (isNaN(dateObj.getTime())) {
+        console.warn('无效的日期时间格式:', dateTimeStr);
+        return dateTimeStr; // 返回原始值
+      }
+
+      // 使用toLocaleString格式化日期时间
+      return dateObj.toLocaleString('zh-CN', {
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
         hour: '2-digit',
         minute: '2-digit'
       }).replace(/\//g, '-');
+    } catch (error) {
+      console.error('日期时间格式化错误:', error, dateTimeStr);
+      return dateTimeStr; // 出错时返回原始值
     }
-    return dateTimeStr;
   }
 
   /**
    * 格式化日期（仅显示年月日）
    * @param {string} dateStr - 日期字符串
-   * @returns {string} 格式化后的日期
+   * @returns {string} 格式化后的日期，格式为 YYYY-MM-DD
    */
   function formatDate(dateStr) {
     if (!dateStr) return '';
-    // 如果是ISO格式的时间戳
-    if (dateStr.includes('T')) {
-      return dateStr.split('T')[0];
+
+    try {
+      // 处理各种可能的日期格式
+      let dateObj;
+
+      // 如果是ISO格式的时间戳 (包含T)
+      if (typeof dateStr === 'string' && dateStr.includes('T')) {
+        return dateStr.split('T')[0];
+      }
+      // 如果是Date对象或其他格式
+      else {
+        dateObj = new Date(dateStr);
+
+        // 检查是否是有效日期
+        if (isNaN(dateObj.getTime())) {
+          console.warn('无效的日期格式:', dateStr);
+          return dateStr; // 返回原始值
+        }
+
+        // 格式化为 YYYY-MM-DD
+        const year = dateObj.getFullYear();
+        const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const day = String(dateObj.getDate()).padStart(2, '0');
+
+        return `${year}-${month}-${day}`;
+      }
+    } catch (error) {
+      console.error('日期格式化错误:', error, dateStr);
+      return dateStr; // 出错时返回原始值
     }
-    return dateStr;
   }
 
   onMounted(async () => {

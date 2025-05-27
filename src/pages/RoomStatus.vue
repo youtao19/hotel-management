@@ -196,7 +196,7 @@
                   <div class="text-subtitle2 text-grey-7">客人:</div>
                 </div>
                 <div class="col-7">
-                  <div class="text-subtitle2 text-weight-bold">{{ room.currentGuest }}</div>
+                  <div class="text-subtitle2 text-weight-bold">{{ room.currentGuest || room.guest_name || '未知客人' }}</div>
                 </div>
               </div>
 
@@ -206,7 +206,22 @@
                   <div class="text-subtitle2 text-grey-7">退房日期:</div>
                 </div>
                 <div class="col-7">
-                  <div class="text-subtitle2 text-weight-bold">{{ viewStore.formatDate(room.checkOutDate) }}</div>
+                  <div class="text-subtitle2 text-weight-bold">
+                    <q-tooltip>将在此日期退房</q-tooltip>
+                    {{ viewStore.formatDate(room.checkOutDate || room.check_out_date) || '未设置' }}
+                  </div>
+                </div>
+              </div>
+
+              <!-- 已入住房间显示订单号 -->
+              <div v-if="roomStore.getRoomDisplayStatus(room) === 'occupied' && (room.order_id)" class="row q-mb-sm">
+                <div class="col-5">
+                  <div class="text-subtitle2 text-grey-7">订单号:</div>
+                </div>
+                <div class="col-7">
+                  <div class="text-subtitle2">
+                    <span class="text-weight-bold">{{ room.order_id }}</span>
+                  </div>
                 </div>
               </div>
             </q-card-section>

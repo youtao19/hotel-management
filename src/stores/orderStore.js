@@ -31,8 +31,9 @@ export const useOrderStore = defineStore('order', () => {
         idNumber: order.id_number,
         roomType: order.room_type,
         roomNumber: order.room_number,
-        checkInDate: order.check_in_date,
-        checkOutDate: order.check_out_date,
+        // 格式化日期，确保统一格式（YYYY-MM-DD）
+        checkInDate: formatOrderDate(order.check_in_date),
+        checkOutDate: formatOrderDate(order.check_out_date),
         status: order.status,
         paymentMethod: order.payment_method,
         roomPrice: order.room_price,
@@ -211,9 +212,13 @@ export const useOrderStore = defineStore('order', () => {
       const updatedOrderFromApi = response.order || response;
       const index = orders.value.findIndex(o => o.orderNumber === orderNumber);
       if (index !== -1) {
+        // 确保日期字段被正确格式化
         orders.value[index] = {
           ...orders.value[index],
-          status: updatedOrderFromApi.status
+          status: updatedOrderFromApi.status,
+          // 如果API返回了更新的日期字段，使用它们，并确保格式化
+          checkInDate: updatedOrderFromApi.check_in_date ? formatOrderDate(updatedOrderFromApi.check_in_date) : orders.value[index].checkInDate,
+          checkOutDate: updatedOrderFromApi.check_out_date ? formatOrderDate(updatedOrderFromApi.check_out_date) : orders.value[index].checkOutDate
         };
       }
       return updatedOrderFromApi;

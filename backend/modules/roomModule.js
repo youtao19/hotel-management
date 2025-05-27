@@ -215,6 +215,7 @@ async function getAvailableRooms(startDate, endDate, typeCode = null) {
           SELECT 1
           FROM orders o
           WHERE o.room_number = r.room_number
+            AND o.status NOT IN ('checked-out', 'cancelled')
             AND o.check_in_date < $2::date
             AND o.check_out_date > $1::date
         )
@@ -222,28 +223,17 @@ async function getAvailableRooms(startDate, endDate, typeCode = null) {
 
     const queryParams = [queryStartDate, queryEndDate];
 
+    // 如果指定了房型，添加房型筛选条件
     if (typeCode) {
-      // 修改基础查询以包含房型筛选
-      sqlQuery = `
-        SELECT r.room_id, r.room_number, r.type_code, r.status, r.price, r.is_closed
-        FROM rooms r
-        WHERE r.is_closed = FALSE
-          AND r.type_code = $3::varchar
-          AND NOT EXISTS (
-            FROM orders o
-            WHERE o.room_number = r.room_number
-              AND o.status NOT IN ('check-out', 'cancel')
-              AND o.check_in_date < $2::date
-              AND o.check_out_date > $1::date
-          )
-        ORDER BY r.room_number
-      `;
+      sqlQuery += ' AND r.type_code = $3::varchar';
       queryParams.push(typeCode);
       console.log('[Backend INFO] getAvailableRooms: 添加了房型筛选 typeCode:', typeCode);
     } else {
-      sqlQuery += ' ORDER BY r.room_number';
       console.log('[Backend INFO] getAvailableRooms: 未指定房型筛选 typeCode.');
     }
+
+    // 添加排序
+    sqlQuery += ' ORDER BY r.room_number';
 
     console.log('[Backend DEBUG] getAvailableRooms: 最终执行的SQL:\n', sqlQuery);
     console.log('[Backend DEBUG] getAvailableRooms: SQL参数:', queryParams);
