@@ -730,10 +730,6 @@
       const newOrder = await orderStore.addOrder({
         ...orderData.value,
         createTime: date.formatDate(now, 'YYYY-MM-DD HH:mm:ss'),
-        actualCheckInTime: orderData.value.status === 'checked-in' ?
-          date.formatDate(now, 'YYYY-MM-DD HH:mm:ss') : null,
-        actualCheckOutTime: orderData.value.status === 'checked-out' ?
-          date.formatDate(now, 'YYYY-MM-DD HH:mm:ss') : null,
         paymentMethod: typeof orderData.value.paymentMethod === 'object' ?
           orderData.value.paymentMethod.value :
           orderData.value.paymentMethod,

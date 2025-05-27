@@ -494,7 +494,7 @@
   const newRoomNumber = ref(null)
 
   // 房型选项
-  const roomTypeOptions = viewStore.roomTypeOptions.filter(option => option.value !== null)  // 使用roomStore获取可用房间
+  // const roomTypeOptions = viewStore.roomTypeOptions.filter(option => option.value !== null)  // 使用roomStore获取可用房间
   const availableRooms = computed(() => {
     return roomStore.rooms
       .filter(room => room.status === 'available')
@@ -531,8 +531,6 @@
       try {
         console.log('取消订单:', order.orderNumber);
 
-        // 记录原订单状态，用于判断是否需要释放房间
-        const originalStatus = order.status;
 
         // 调用 API 更新订单状态为 'cancelled'
         // 注意：API 期望的状态值是 'cancelled' (小写)
@@ -542,21 +540,6 @@
           $q.notify({ type: 'negative', message: '取消订单失败，API未返回更新后的订单', position: 'top' });
           loadingOrders.value = false;
           return;
-        }
-
-        // 如果原订单是 'pending' (待入住) 状态，且房间已预订，则尝试释放房间
-        // 注意：order.status 现在是 'cancelled'，所以要用 originalStatus
-        if (originalStatus === 'pending' || originalStatus === '待入住') { // 兼容中文状态
-          const room = roomStore.getRoomByNumber(order.roomNumber);
-          if (room && room.status === 'reserved') {
-            const roomUpdateSuccess = await roomStore.updateRoomStatus(room.room_id, 'available');
-            if (!roomUpdateSuccess) {
-              // 房间状态更新失败，但订单已取消。这是一个需要注意的情况。
-              $q.notify({ type: 'warning', message: '订单已取消，但释放预订房间失败，请检查房间状态！', position: 'top', multiLine: true });
-            } else {
-              await roomStore.fetchAllRooms(); // 刷新房间列表确保状态更新
-            }
-          }
         }
 
         // 更新当前正在查看的订单详情 (如果适用)
@@ -595,10 +578,8 @@
       try {
         console.log('办理退房:', order.orderNumber);
 
-        const checkOutTime = new Date().toISOString(); // 使用ISO格式给API
-
-        // 调用 API 更新订单状态为 'checked-out' 并记录退房时间
-        const updatedOrderFromApi = await orderStore.updateOrderStatusViaApi(order.orderNumber, 'checked-out', { checkOutTime });
+        // 调用 API 更新订单状态为 'checked-out'
+        const updatedOrderFromApi = await orderStore.updateOrderStatusViaApi(order.orderNumber, 'checked-out');
 
         if (!updatedOrderFromApi) {
           $q.notify({ type: 'negative', message: '办理退房失败，API未返回更新后的订单', position: 'top' });
@@ -696,11 +677,8 @@
     try {
       console.log('办理入住:', order.orderNumber, '房间:', order.roomNumber);
 
-      // 获取当前时间用于入住时间
-      const checkInTime = new Date().toISOString();
-
-      // 调用新的 store action 更新订单状态和入住时间
-      const updatedOrderFromApi = await orderStore.updateOrderStatusViaApi(order.orderNumber, 'checked-in', { checkInTime });
+      // 调用新的 store action 更新订单状态
+      const updatedOrderFromApi = await orderStore.updateOrderStatusViaApi(order.orderNumber, 'checked-in');
 
       if (!updatedOrderFromApi) {
         // store action 应该会抛出错误，但以防万一
@@ -721,23 +699,6 @@
         return;
       }
 
-      // 更新房间状态为已入住
-      const roomUpdateSuccess = await roomStore.occupyRoom(
-        room.room_id,
-        order.guestName,
-        order.checkOutDate // 确保传递的是预计退房日期
-      );
-
-      if (!roomUpdateSuccess) {
-        // 订单状态已更新，但房间状态更新失败。这是一个关键问题。
-        // 尝试回滚订单状态或强烈建议用户检查数据一致性。
-        $q.notify({ type: 'negative', message: '房间状态更新失败！订单已标记为入住，但房间可能仍显示为可用。请立即核实！', position: 'top', multiLine: true, timeout: 0, actions: [{ label: '关闭', color: 'white' }] });
-        // 理想情况下，这里应该有回滚订单状态的逻辑
-        // await orderStore.updateOrderStatusViaApi(order.orderNumber, 'pending', { checkInTime: null });
-        loadingOrders.value = false;
-        fetchAllOrders(); // 刷新确保用户看到潜在的不一致
-        return;
-      }
 
       // 入住成功后刷新房间列表，确保房间状态页面能显示最新的客人信息
       await roomStore.fetchAllRooms();
@@ -774,60 +735,6 @@
     }
   }
 
-  /**
-   * 更新房间信息函数 - 直接集成到组件中
-   * @param {string} orderNum - 订单号
-   * @param {string} roomType - 新房型
-   * @param {string} roomNum - 新房间号
-   * @param {number} roomPrice - 新房间价格
-   * @returns {boolean} 操作是否成功
-   */
-  function updateRoomInfo(orderNum, roomType, roomNum, roomPrice) {
-    try {
-      // 查找订单
-      const orderIndex = orderStore.orders.findIndex(o => o.orderNumber === orderNum)
-
-      if (orderIndex === -1) {
-        console.error('没有找到订单:', orderNum)
-        return false
-      }
-
-      // 获取订单对象
-      const order = orderStore.orders[orderIndex]
-
-      // 查找旧房间和新房间
-      const oldRoomNum = order.roomNumber
-      const oldRoom = roomStore.getRoomByNumber(oldRoomNum)
-      const newRoom = roomStore.getRoomByNumber(roomNum)
-
-      // 检查房间是否存在
-      if (!oldRoom || !newRoom) {
-        console.error('房间不存在:', oldRoomNum, roomNum)
-        return false
-      }
-
-      // 检查新房间是否可用
-      if (newRoom.status !== 'available') {
-        console.error('新房间不可用:', roomNum, newRoom.status)
-        return false
-      }      // 根据订单状态更新房间状态
-      if (order.status === '已入住') {
-        roomStore.updateRoomStatus(oldRoom.room_id, 'cleaning')
-        roomStore.occupyRoom(newRoom.room_id, order.guestName, order.checkOutDate)
-      } else if (order.status === '待入住') {
-        roomStore.updateRoomStatus(oldRoom.room_id, 'available')
-        roomStore.reserveRoom(newRoom.room_id)
-      }
-
-      // 更新订单信息
-      orderStore.updateOrderRoom(orderNum, roomType, roomNum, roomPrice)
-
-      return true
-    } catch (error) {
-      console.error('房间更新失败:', error)
-      return false
-    }
-  }
 
   // 更改房间
   async function changeRoom() {

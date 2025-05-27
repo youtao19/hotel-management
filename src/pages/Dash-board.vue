@@ -467,9 +467,9 @@ const recentGuests = computed(() => {
   return orderStore.orders
     .filter(order => order.status === '已入住' || order.status === '已退房')
     .sort((a, b) => {
-      // 按入住时间倒序排列
-      const dateA = a.actualCheckInTime || a.createTime
-      const dateB = b.actualCheckInTime || b.createTime
+      // 按创建时间倒序排列
+      const dateA = a.createTime
+      const dateB = b.createTime
       return new Date(dateB) - new Date(dateA)
     })
     .slice(0, 5) // 只取前5条
@@ -477,8 +477,8 @@ const recentGuests = computed(() => {
       id: order.orderNumber,
       name: order.guestName,
       room: order.roomNumber,
-      checkIn: viewStore.formatDate(order.actualCheckInTime || order.checkInDate),
-      checkOut: viewStore.formatDate(order.actualCheckOutTime || order.checkOutDate),
+      checkIn: viewStore.formatDate(order.checkInDate),
+      checkOut: viewStore.formatDate(order.checkOutDate),
       status: order.status === '已入住' ? '入住中' : '已退房',
       checkInFull: viewStore.formatDate(order.actualCheckInTime || order.checkInDate, true),
       checkOutFull: viewStore.formatDate(order.actualCheckOutTime || order.checkOutDate, true)

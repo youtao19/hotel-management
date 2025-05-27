@@ -50,10 +50,7 @@ function isValidOrderStatus(status) {
  * @param {string} orderData.status - 订单状态
  * @param {string} orderData.payment_method - 支付方式
  * @param {number} orderData.room_price - 房间价格
- * @param {number} orderData.deposit - 押金
- * @param {Date} orderData.create_time - 创建时间
- * @param {Date} orderData.actual_check_in_time - 实际入住时间
- * @param {Date} orderData.actual_check_out_time - 实际退房时间
+ * @param {number} orderData.deposit - 押金 * @param {Date} orderData.create_time - 创建时间
  * @param {string} orderData.remarks - 备注
  * @returns {Promise<Object>} 返回创建的订单对象
  */
@@ -62,23 +59,19 @@ async function createOrder(orderData) {
   if (!isValidOrderStatus(orderData.status)) {
     throw new Error(`无效的订单状态: ${orderData.status}。有效状态: ${VALID_ORDER_STATES.join(', ')}`);
   }
-
   const {
     order_id, id_source, order_source, guest_name, phone, id_number,
     room_type, room_number, check_in_date, check_out_date, status,
-    payment_method, room_price, deposit, create_time,
-    actual_check_in_time, actual_check_out_time, remarks
+    payment_method, room_price, deposit, create_time, remarks
   } = orderData;
-
   // 注意：字段名与 db_schema.sql 中的 orders 表完全对应
   const sqlQuery = `
     INSERT INTO ${tableName} (
       order_id, id_source, order_source, guest_name, phone, id_number,
       room_type, room_number, check_in_date, check_out_date, status,
-      payment_method, room_price, deposit, create_time,
-      actual_check_in_time, actual_check_out_time, remarks
+      payment_method, room_price, deposit, create_time, remarks
     ) VALUES (
-      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
+      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
     )
     RETURNING *;
   `;
@@ -86,8 +79,7 @@ async function createOrder(orderData) {
   const values = [
     order_id, id_source, order_source, guest_name, phone, id_number,
     room_type, room_number, check_in_date, check_out_date, status,
-    payment_method, room_price, deposit, create_time,
-    actual_check_in_time, actual_check_out_time, remarks
+    payment_method, room_price, deposit, create_time, remarks
   ];
 
   try {
@@ -149,52 +141,16 @@ async function getOrderById(orderId) {
  * 更新订单状态
  * @param {string} orderId - 订单ID
  * @param {string} newStatus - 新状态
- * @param {Object} [options] - 可选参数
- * @param {string} [options.checkInTime] - 实际入住时间 (YYYY-MM-DD HH:mm:ss)
- * @param {string} [options.checkOutTime] - 实际退房时间 (YYYY-MM-DD HH:mm:ss)
  * @returns {Promise<Object|null>} 更新后的订单对象或null
  */
-async function updateOrderStatus(orderId, newStatus, options = {}) {
+async function updateOrderStatus(orderId, newStatus) {
   // 验证订单状态
   if (!isValidOrderStatus(newStatus)) {
     throw new Error(`无效的订单状态: ${newStatus}。有效状态: ${VALID_ORDER_STATES.join(', ')}`);
   }
 
-  const setClauses = ['status = $1'];
-  const queryParams = [newStatus];
-  let paramCounter = 1;
-
-  if (newStatus === 'checked-in') {
-    paramCounter++;
-    if (options.checkInTime) {
-      setClauses.push(`actual_check_in_time = $${paramCounter}`);
-      queryParams.push(options.checkInTime);
-    } else {
-      setClauses.push('actual_check_in_time = CURRENT_TIMESTAMP');
-    }
-    // Optionally, ensure other time fields are reset or set appropriately
-    // For example, when checking in, actual_check_out_time should ideally be NULL
-    setClauses.push('actual_check_out_time = NULL');
-  } else if (newStatus === 'checked-out') {
-    paramCounter++;
-    if (options.checkOutTime) {
-      setClauses.push(`actual_check_out_time = $${paramCounter}`);
-      queryParams.push(options.checkOutTime);
-    } else {
-      setClauses.push('actual_check_out_time = CURRENT_TIMESTAMP');
-    }
-    // If checking out, actual_check_in_time should already exist.
-    // If it doesn't, and a checkout is happening, it might indicate a data issue or a need for CURRENT_TIMESTAMP for check-in as well.
-    // For simplicity, we assume actual_check_in_time is either set or not managed by this specific status change if not 'checked-in'.
-  } else if (newStatus === 'pending' || newStatus === 'cancelled') {
-    // If reverting to pending or cancelling, clear both actual times
-    setClauses.push('actual_check_in_time = NULL');
-    setClauses.push('actual_check_out_time = NULL');
-  }
-
-  paramCounter++;
-  const updateQuery = `UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE order_id = $${paramCounter} RETURNING *`;
-  queryParams.push(orderId);
+  const updateQuery = `UPDATE ${tableName} SET status = $1 WHERE order_id = $2 RETURNING *`;
+  const queryParams = [newStatus, orderId];
 
   try {
     const result = await query(updateQuery, queryParams);

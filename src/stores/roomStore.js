@@ -456,45 +456,7 @@ export const useRoomStore = defineStore('room', () => {
     return await updateRoomStatus(id, 'available')
   }
 
-  /**
-   * 预订房间，将状态改为已预订
-   * @param {number} id - 房间ID
-   * @returns {boolean} 操作是否成功
-   */
-  async function reserveRoom(id) {
-    return await updateRoomStatus(id, 'reserved')
-  }
 
-  /**
-   * 入住房间，将状态改为已入住
-   * @param {number} id - 房间ID
-   * @param {string} guestName - 客人姓名
-   * @param {string} checkOutDate - 预计退房日期
-   * @returns {boolean} 操作是否成功
-   */
-  async function occupyRoom(id, guestName, checkOutDate) {
-    try {
-      await roomApi.updateRoomStatus(id, 'occupied', { guestName, checkOutDate })
-
-      const roomIndex = rooms.value.findIndex(room => room.room_id === id)
-      if (roomIndex !== -1) {
-        rooms.value[roomIndex].status = 'occupied'
-        rooms.value[roomIndex].currentGuest = guestName
-        rooms.value[roomIndex].checkOutDate = checkOutDate
-        rooms.value[roomIndex].displayStatus = ROOM_STATES.OCCUPIED
-
-      } else {
-        // 如果找不到房间，重新加载数据
-        await fetchAllRooms()
-      }
-
-      return true
-    } catch (err) {
-      console.error('房间入住失败:', err)
-      error.value = '办理入住失败，请稍后再试'
-      return false
-    }
-  }
 
   /**
    * 添加新房间
@@ -742,8 +704,6 @@ export const useRoomStore = defineStore('room', () => {
     setMaintenance,
     clearMaintenance,
     clearCleaning,
-    reserveRoom,
-    occupyRoom,
     addRoom,
 
     // 房间状态方法

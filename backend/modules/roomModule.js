@@ -210,29 +210,40 @@ async function getAvailableRooms(startDate, endDate, typeCode = null) {
     let sqlQuery = `
       SELECT r.room_id, r.room_number, r.type_code, r.status, r.price, r.is_closed
       FROM rooms r
-      WHERE
-        r.is_closed = FALSE
+      WHERE r.is_closed = FALSE
         AND NOT EXISTS (
           SELECT 1
           FROM orders o
           WHERE o.room_number = r.room_number
-            AND o.status IN ('pending', 'checked-in')
-            AND o.check_in_date < $2::date       -- Query End Date
-            AND o.check_out_date > $1::date    -- Query Start Date
+            AND o.check_in_date < $2::date
+            AND o.check_out_date > $1::date
         )
     `;
 
     const queryParams = [queryStartDate, queryEndDate];
 
     if (typeCode) {
-      sqlQuery += ` AND r.type_code = $${queryParams.length + 1}::varchar`;
+      // 修改基础查询以包含房型筛选
+      sqlQuery = `
+        SELECT r.room_id, r.room_number, r.type_code, r.status, r.price, r.is_closed
+        FROM rooms r
+        WHERE r.is_closed = FALSE
+          AND r.type_code = $3::varchar
+          AND NOT EXISTS (
+            FROM orders o
+            WHERE o.room_number = r.room_number
+              AND o.status NOT IN ('check-out', 'cancel')
+              AND o.check_in_date < $2::date
+              AND o.check_out_date > $1::date
+          )
+        ORDER BY r.room_number
+      `;
       queryParams.push(typeCode);
       console.log('[Backend INFO] getAvailableRooms: 添加了房型筛选 typeCode:', typeCode);
     } else {
+      sqlQuery += ' ORDER BY r.room_number';
       console.log('[Backend INFO] getAvailableRooms: 未指定房型筛选 typeCode.');
     }
-
-    sqlQuery += ' ORDER BY r.room_number;';
 
     console.log('[Backend DEBUG] getAvailableRooms: 最终执行的SQL:\n', sqlQuery);
     console.log('[Backend DEBUG] getAvailableRooms: SQL参数:', queryParams);
@@ -247,36 +258,6 @@ async function getAvailableRooms(startDate, endDate, typeCode = null) {
     } else {
       console.log('[Backend INFO] getAvailableRooms: 没有找到符合条件的可用房间。');
     }
-
-    // 如果需要更详细的调试，可以取消注释下面的部分，它会检查为什么某些房间不可用
-    /*
-    if (availableRooms.length === 0 && (queryStartDate === '你的特定测试开始日期' && queryEndDate === '你的特定测试结束日期')) {
-      console.log('[Backend DEBUG] getAvailableRooms: 特定日期查询无结果，开始诊断...');
-      const allPotentiallyOpenRooms = await query('SELECT room_id, room_number, type_code, status, is_closed FROM rooms WHERE is_closed = FALSE ORDER BY room_number;');
-      console.log(`[Backend DEBUG] getAvailableRooms: 共有 ${allPotentiallyOpenRooms.rows.length} 个 is_closed = FALSE 的房间.`);
-      for (const room of allPotentiallyOpenRooms.rows) {
-        const conflictingOrders = await query( `
-          SELECT o.order_id, o.room_number, o.status, o.check_in_date, o.check_out_date
-          FROM orders o
-          WHERE o.room_number = $1
-            AND o.status IN ('pending', 'checked-in')
-            AND o.check_in_date < $3::date
-            AND o.check_out_date > $2::date;`,
-          [room.room_number, queryStartDate, queryEndDate]
-        );
-        if (conflictingOrders.rows.length > 0) {
-          console.log(`[Backend DEBUG] getAvailableRooms: 房间 ${room.room_number} (is_closed=FALSE) 因为以下冲突订单而不可用:`, conflictingOrders.rows.map(o => ({id: o.order_id, status: o.status, in: o.check_in_date, out: o.check_out_date })));
-        } else {
-           // 如果 typeCode 存在且不匹配，也记录一下
-           if (typeCode && room.type_code !== typeCode) {
-             console.log(`[Backend DEBUG] getAvailableRooms: 房间 ${room.room_number} (is_closed=FALSE, 无冲突订单) 因为房型 ${room.type_code} 不匹配 ${typeCode} 而不可用.`);
-           } else {
-             console.log(`[Backend DEBUG] getAvailableRooms: 房间 ${room.room_number} (is_closed=FALSE, 无冲突订单, 房型匹配或无房型筛选) 理论上应该可用，但未出现在结果中，请检查SQL逻辑或参数。`);
-           }
-        }
-      }
-    }
-    */
 
     return availableRooms;
   } catch (error) {

@@ -82,11 +82,9 @@ router.post('/new', authenticationMiddleware,
     body('room_price').notEmpty().withMessage('房间金额不能为空').isDecimal(),
     body('deposit').optional({ checkFalsy: true }).isDecimal(), // 押金可以为空或数字
     body('create_time').notEmpty().withMessage('创建时间不能为空').isISO8601().toDate(),
-    // id_source, remarks, actual_check_in_time, actual_check_out_time 是可选的，不需要强制验证 notEmpty
+    // id_source, remarks 是可选的，不需要强制验证 notEmpty
     body('id_source').optional({ checkFalsy: true }).isString().trim(),
     body('remarks').optional({ checkFalsy: true }).isString().trim(),
-    body('actual_check_in_time').optional({ checkFalsy: true }).isISO8601().toDate(),
-    body('actual_check_out_time').optional({ checkFalsy: true }).isISO8601().toDate(),
   ],
   async (req, res) => {
     console.log('收到订单创建请求，请求体:', JSON.stringify(req.body, null, 2));

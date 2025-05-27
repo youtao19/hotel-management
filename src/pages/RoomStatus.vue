@@ -676,9 +676,7 @@ async function checkOut(roomId) {
 
     // 调用orderStore的方法更新订单状态
     try {
-      await orderStore.updateOrderStatusViaApi(order.orderNumber, 'checked-out', {
-        checkOutTime: new Date().toISOString()
-      });
+      await orderStore.updateOrderStatusViaApi(order.orderNumber, 'checked-out');
     } catch (orderError) {
       console.error('更新订单状态失败:', orderError);
       throw new Error('更新订单状态失败: ' + (orderError.message || '未知错误'));
@@ -828,11 +826,11 @@ async function setMaintenance(roomId) {
             console.log(`找到房间 ${room.room_number} 的活跃订单:`, order);
 
             let newStatus = 'cancelled';
-            let updateData = { cancelTime: new Date().toISOString() };
+            let updateData = {};
 
             if (roomStatus === 'occupied') {
               newStatus = 'checked-out';
-              updateData = { checkOutTime: new Date().toISOString() };
+              updateData = {};
             }
 
             // 更新订单状态

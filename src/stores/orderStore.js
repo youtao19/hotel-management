@@ -39,8 +39,6 @@ export const useOrderStore = defineStore('order', () => {
         deposit: order.deposit,
         createTime: order.create_time,
         remarks: order.remarks,
-        actualCheckInTime: order.actual_check_in_time,
-        actualCheckOutTime: order.actual_check_out_time,
         source: order.order_source,
         sourceNumber: order.id_source
       }))
@@ -130,8 +128,6 @@ export const useOrderStore = defineStore('order', () => {
         order_source: order.source?.toString() || 'front_desk',  // 从 source 映射，确保是字符串
         id_source: order.sourceNumber?.toString() || '',   // 从 sourceNumber 映射，确保是字符串
         create_time: new Date().toISOString(),            // 使用当前时间
-        actual_check_in_time: null,
-        actual_check_out_time: null,
       }
 
 
@@ -176,8 +172,6 @@ export const useOrderStore = defineStore('order', () => {
         deposit: newOrderFromApi.deposit,
         createTime: newOrderFromApi.create_time,
         remarks: newOrderFromApi.remarks,
-        actualCheckInTime: newOrderFromApi.actual_check_in_time,
-        actualCheckOutTime: newOrderFromApi.actual_check_out_time,
         source: newOrderFromApi.order_source,
         sourceNumber: newOrderFromApi.id_source,
       };
@@ -201,21 +195,14 @@ export const useOrderStore = defineStore('order', () => {
    * 更新订单状态 (通过API)
    * @param {string} orderNumber - 订单号
    * @param {string} newStatus - 新状态 ('pending', 'checked-in', 'checked-out', 'cancelled')
-   * @param {object} [options] - 其他选项
-   * @param {string} [options.checkInTime] - 入住时间 (ISO string)
-   * @param {string} [options.checkOutTime] - 退房时间 (ISO string)
+   * @param {object} [options] - 其他选项 (已废弃，保留以兼容现有代码)
    */
   async function updateOrderStatusViaApi(orderNumber, newStatus, options = {}) {
     try {
       loading.value = true;
       error.value = null;
       // 构建状态更新数据
-      const statusData = {
-        newStatus,
-        checkInTime: options.checkInTime ? new Date(options.checkInTime).toISOString() : undefined,
-        checkOutTime: options.checkOutTime ? new Date(options.checkOutTime).toISOString() : undefined
-      };
-
+      const statusData = { newStatus };
 
       // 发送请求
       const response = await orderApi.updateOrderStatus(orderNumber, statusData);
@@ -226,9 +213,7 @@ export const useOrderStore = defineStore('order', () => {
       if (index !== -1) {
         orders.value[index] = {
           ...orders.value[index],
-          status: updatedOrderFromApi.status,
-          actualCheckInTime: updatedOrderFromApi.actual_check_in_time,
-          actualCheckOutTime: updatedOrderFromApi.actual_check_out_time
+          status: updatedOrderFromApi.status
         };
       }
       return updatedOrderFromApi;
@@ -247,19 +232,14 @@ export const useOrderStore = defineStore('order', () => {
     const index = orders.value.findIndex(o => o.orderNumber === orderNumber)
     if (index !== -1) {
       orders.value[index].status = status
-      if (status === 'cancelled' || status === 'pending') {
-        orders.value[index].actualCheckInTime = null;
-        orders.value[index].actualCheckOutTime = null;
-      }
     }
   }
 
-  // 更新订单退房信息 (本地)
+  // 更新订单退房信息 (本地) - 已废弃，保留以兼容现有代码
   function updateOrderCheckOutLocally(orderNumber, checkOutTime) {
     const index = orders.value.findIndex(o => o.orderNumber === orderNumber)
     if (index !== -1) {
       orders.value[index].status = 'checked-out'
-      orders.value[index].actualCheckOutTime = checkOutTime
     }
   }
 
