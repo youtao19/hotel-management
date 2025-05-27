@@ -1,0 +1,26 @@
+name: Node.js Test
+
+on:
+  push:
+    branches: [main]  # 可以改成你的默认分支名，如 master、dev
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '22'  # 你可以改为你的 Node.js 版本，如 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests with Jest
+        run: npm test
