@@ -31,6 +31,8 @@ jobs:
       PGDATABASE: hotel_test
       PGHOST: localhost
       PGPORT: 5432
+      APP_NAME: hotel-management-system
+
 
     steps:
       - name: Checkout repository
