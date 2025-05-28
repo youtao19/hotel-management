@@ -6,7 +6,7 @@
     "author": "youtao19 <wuyoutao19@gmail.com>",
     "private": true,
     "scripts": {
-        "test": "jest",
+        "test": "cross-env NODE_ENV=test jest",
         "dev": "quasar dev",
         "build": "quasar build",
         "postinstall": "quasar prepare",
@@ -38,6 +38,7 @@
         "@quasar/app-vite": "^2.1.0",
         "autoprefixer": "^10.4.2",
         "concurrently": "^9.1.2",
+        "cross-env": "^7.0.3",
         "jest": "^29.7.0",
         "nodemon": "^3.1.10",
         "postcss": "^8.4.14",
