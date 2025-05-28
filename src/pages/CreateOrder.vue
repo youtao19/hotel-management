@@ -995,7 +995,8 @@
   <style scoped>
   /* 页面主容器样式，限制最大宽度并居中 */
   .check-in {
-     max-width: 1200px;
+     /* max-width: 1200px; */
+    max-width: 90%;
     margin: 0 auto;
   }
   </style>

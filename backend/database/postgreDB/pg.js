@@ -178,21 +178,21 @@ async function enableExtensions() {
 async function initializeHotelDB() {
   try {
     createPool();
-    await enableExtensions();
-    await createTables();
 
-    // // 执行初始化SQL文件
-    // const dbInitFilePath = path.join(__dirname, '../../../hotel_db_init.sql');
-    // if (fs.existsSync(dbInitFilePath)) {
-    //   try {
-    //     await executeSqlFile(dbInitFilePath);
-    //     console.log('酒店数据库初始化SQL文件执行成功');
-    //   } catch (sqlErr) {
-    //     console.error('执行初始化SQL文件失败，将继续使用基本表结构:', sqlErr);
-    //   }
-    // } else {
-    //   console.log('未找到初始化SQL文件，将仅使用基本表结构');
-    // }
+    // 1. 启用扩展
+    await enableExtensions();
+
+    // 2. 如果是测试环境，清空已有表，保证干净数据
+    if (process.env.NODE_ENV === 'test') {
+      console.log('测试环境：清空旧表');
+      const tableNames = ['order', 'room', 'room_type', 'account']; // 按依赖关系从后往前删
+      for (let table of tableNames) {
+        await query(`DROP TABLE IF EXISTS ${table} CASCADE;`);
+      }
+    }
+
+    // 3. 创建表结构
+    await createTables();
 
     console.log('酒店管理系统数据库初始化完成');
     return true;
@@ -201,6 +201,7 @@ async function initializeHotelDB() {
     return false;
   }
 }
+
 
 /**
  * 关闭连接池

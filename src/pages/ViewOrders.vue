@@ -155,8 +155,8 @@
                   <q-item>
                     <q-item-section>
                       <q-item-label caption>入住时间</q-item-label>
-                      <q-item-label>{{ currentOrder.actualCheckInTime ? formatDateTime(currentOrder.actualCheckInTime) : '未入住' }}</q-item-label>
-                    </q-item-section>
+                        <q-item-label>{{ currentOrder.checkInDate || '未入住' }}</q-item-label>
+                      </q-item-section>
                   </q-item>
                 </q-list>
               </div>
@@ -188,7 +188,7 @@
                   <q-item>
                     <q-item-section>
                       <q-item-label caption>退房时间</q-item-label>
-                      <q-item-label>{{ currentOrder.actualCheckOutTime || '未退房' }}</q-item-label>
+                      <q-item-label>{{ currentOrder.checkOutDate || '未退房' }}</q-item-label>
                     </q-item-section>
                   </q-item>
                 </q-list>
@@ -582,9 +582,8 @@
         // 获取房间并将状态更改为清洁中
         const room = roomStore.getRoomByNumber(order.roomNumber);
         if (room && room.room_id) { // 确保 room_id 存在
-          // 根据规则，退房后房间状态应为 cleaning
-          // roomStore 可能没有 checkOutRoom，或者我们可以用通用的 updateRoomStatus
-          const roomUpdateSuccess = await roomStore.updateRoomStatus(room.room_id, 'cleaning');
+          // 直接调用roomStore的checkOutRoom方法
+          const roomUpdateSuccess = await roomStore.checkOutRoom(room.room_id);
           if (!roomUpdateSuccess) {
             $q.notify({ type: 'warning', message: '订单已退房，但更新房间状态为清洁中失败，请检查房间状态！', position: 'top', multiLine: true });
           } else {

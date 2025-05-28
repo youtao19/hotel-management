@@ -1383,7 +1383,8 @@ async function setRoomCleaning(roomId) {
 <style scoped>
 /* 设置页面最大宽度并居中 */
 .room-status {
-  max-width: 1400px;
+  /* max-width: 1400px; */
+  max-width: 100;
   margin: 0 auto;
 }
 
