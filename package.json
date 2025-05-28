@@ -6,7 +6,7 @@
     "author": "youtao19 <wuyoutao19@gmail.com>",
     "private": true,
     "scripts": {
-        "test": "cross-env NODE_ENV=test jest",
+        "test": "dotenv -e .env.test -- cross-env NODE_ENV=test jest",
         "dev": "quasar dev",
         "build": "quasar build",
         "postinstall": "quasar prepare",
