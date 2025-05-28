@@ -13,36 +13,30 @@
     <!-- 主卡片容器，包含整个表单 -->
     <q-card>
       <q-card-section>
-        <!-- 表单组件，提交时调用submitOrder方法，各输入框之间有间距 -->
+        <!-- 创建订单表单，使用Quasar的q-form组件 -->
         <q-form @submit="submitOrder" class="q-gutter-md">
 
           <!-- 订单信息部分 -->
           <div class="form-section q-mb-md">
-            <!-- 分区标题 -->
             <div class="text-subtitle1 q-mb-sm">订单信息</div>
-            <!-- 栅格布局，各列之间有间距 -->
             <div class="row q-col-gutter-md">
-              <!-- 订单号输入框（中等屏幕占1/3宽度，小屏幕占满） -->
+              <!-- 订单号输入框 -->
               <div class="col-md-4 col-xs-12">
-                <!-- 自动生成订单号的输入框，必填 -->
                 <q-input v-model="orderData.orderNumber" label="订单号" filled :rules="[val => !!val || '请输入订单号']"
                   hint="自动生成，可手动修改" />
               </div>
-              <!-- 订单状态选择框（中等屏幕占1/3宽度，小屏幕占满） -->
+              <!-- 订单状态选择框 -->
               <div class="col-md-4 col-xs-12">
-                <!-- 订单状态下拉选择，默认为待入住，必填 -->
                 <q-select v-model="orderData.status" :options="statusOptions" label="订单状态" filled emit-value map-options
                   :rules="[val => !!val || '请选择订单状态']" />
               </div>
-              <!-- 订单来源选择框（中等屏幕占1/3宽度，小屏幕占满） -->
+              <!-- 订单来源选择框 -->
               <div class="col-md-4 col-xs-12">
-                <!-- 订单来源下拉选择 -->
                 <q-select v-model="orderData.source" :options="sourceOptions" label="订单来源" filled emit-value
                   map-options />
               </div>
-              <!-- 来源编号输入框（中等屏幕占1/3宽度，小屏幕占满） -->
+              <!-- 来源编号输入框 -->
               <div class="col-md-4 col-xs-12">
-                <!-- 来源编号输入框 -->
                 <q-input v-model="orderData.sourceNumber" label="来源编号" filled hint="OTA订单号/旅行社单号等" />
               </div>
             </div>
@@ -50,18 +44,14 @@
 
           <!-- 客人信息部分 -->
           <div class="form-section q-mb-md">
-            <!-- 分区标题 -->
             <div class="text-subtitle1 q-mb-sm">客人信息</div>
-            <!-- 栅格布局，各列之间有间距 -->
             <div class="row q-col-gutter-md">
               <!-- 姓名输入框 -->
               <div class="col-md-4 col-xs-12">
-                <!-- 客人姓名输入框，必填 -->
                 <q-input v-model="orderData.guestName" label="姓名" filled :rules="[val => !!val || '请输入姓名']" />
               </div>
               <!-- 身份证号输入框 -->
               <div class="col-md-4 col-xs-12">
-                <!-- 身份证号输入框，有格式验证，必填，最多18位 -->
                 <q-input v-model="orderData.idNumber" label="身份证号" filled type="text" maxlength="18"
                   @input="validateIdNumber" :rules="[
                     val => !!val || '请输入身份证号',
@@ -76,7 +66,6 @@
               </div>
               <!-- 手机号输入框 -->
               <div class="col-md-4 col-xs-12">
-                <!-- 手机号输入框，必填，11位数字 -->
                 <q-input v-model="orderData.phone" label="手机号" filled mask="###########" :rules="[
                   val => !!val || '请输入手机号',
                   val => (val.length === 11) || '手机号必须为11位'
@@ -85,15 +74,12 @@
             </div>
           </div>
 
-          <!-- 入住信息部分 - 移到房间信息之前 -->
+          <!-- 入住信息部分 -->
           <div class="form-section q-mb-md">
-            <!-- 分区标题 -->
             <div class="text-subtitle1 q-mb-sm">入住时间</div>
-            <!-- 栅格布局 -->
             <div class="row">
               <!-- 日期范围选择器，占满整行 -->
               <div class="col-12">
-                <!-- 横向日期范围选择器，可选择入住和离店日期 -->
                 <q-date v-model="dateRange" range filled emit-value landscape today-btn color="primary"
                   :options="dateOptions" @update:model-value="updateDatesAndRooms">
                   <!-- 底部确认按钮 -->
@@ -104,14 +90,12 @@
               </div>
               <!-- 入住日期显示框 -->
               <div class="col-md-6 col-xs-12 q-mt-md">
-                <!-- 入住日期输入框，只读，显示选择的日期 -->
                 <q-input v-model="orderData.checkInDate" label="入住日期" filled readonly
                   :rules="[val => !!val || '请选择入住日期']">
                   <!-- 日期选择图标和弹出日历 -->
                   <template v-slot:append>
                     <q-icon name="event" class="cursor-pointer">
                       <q-popup-proxy ref="qDateCheckInProxy" cover transition-show="scale" transition-hide="scale">
-                        <!-- 单独的入住日期选择器，最早可选今天 -->
                         <q-date v-model="orderData.checkInDate" @update:model-value="updateCheckOutMinDateAndRooms"
                           :options="date => date >= today">
                           <!-- 底部确认按钮 -->
@@ -126,7 +110,6 @@
               </div>
               <!-- 离店日期显示框 -->
               <div class="col-md-6 col-xs-12 q-mt-md">
-                <!-- 离店日期输入框，只读，显示选择的日期 -->
                 <q-input v-model="orderData.checkOutDate" label="离店日期" filled readonly :rules="[
                   val => !!val || '请选择离店日期',
                   val => val > orderData.checkInDate || '离店日期必须晚于入住日期'
@@ -135,7 +118,6 @@
                   <template v-slot:append>
                     <q-icon name="event" class="cursor-pointer">
                       <q-popup-proxy ref="qDateCheckOutProxy" cover transition-show="scale" transition-hide="scale">
-                        <!-- 单独的离店日期选择器，最早可选入住日期后一天 -->
                         <q-date v-model="orderData.checkOutDate" :options="date => date > orderData.checkInDate"
                           @update:model-value="updateAvailableRooms">
                           <!-- 底部确认按钮 -->
@@ -153,15 +135,12 @@
 
           <!-- 房间信息部分 -->
           <div class="form-section q-mb-md">
-            <!-- 分区标题 -->
             <div class="text-subtitle1 q-mb-sm">房间信息</div>
 
-            <!-- 房间选择区域 - 水平布局 -->
             <div class="row q-col-gutter-md">
               <!-- 房间类型选择 -->
               <div class="col-md-6 col-xs-12">
                 <div class="row items-center">
-                  <!-- 房间类型下拉选择，必填，选择后会触发onRoomTypeChange方法 -->
                   <div class="col">
                     <q-select v-model="orderData.roomType" :options="roomTypeOptionsWithCount" label="房间类型" filled
                       emit-value map-options @update:model-value="onRoomTypeChange"
@@ -190,7 +169,6 @@
 
               <!-- 房间号选择 -->
               <div class="col-md-6 col-xs-12">
-                <!-- 房间号下拉选择，根据房型筛选可用房间，必填 -->
                 <q-select v-model="orderData.roomNumber" :options="availableRoomOptions" label="房间号" filled emit-value
                   map-options :rules="[val => !!val || '请选择房间号']" :disable="!orderData.roomType">
                   <!-- 没有可用房间时显示的内容 -->
@@ -211,23 +189,19 @@
           <div class="form-section q-mb-md">
             <!-- 分区标题 -->
             <div class="text-subtitle1 q-mb-sm">支付信息</div>
-            <!-- 栅格布局，各列之间有间距 -->
             <div class="row q-col-gutter-md">
               <!-- 支付方式选择 -->
               <div class="col-md-4 col-xs-12">
-                <!-- 支付方式下拉选择，必填 -->
                 <q-select v-model="orderData.paymentMethod" :options="viewStore.paymentMethodOptions" label="支付方式"
                   filled :rules="[val => !!val || '请选择支付方式']" />
               </div>
               <!-- 房间金额输入 -->
               <div class="col-md-4 col-xs-12">
-                <!-- 房间金额输入框，数字类型，自动根据房型设置默认值 -->
                 <q-input v-model.number="orderData.roomPrice" label="房间金额" filled type="number" prefix="¥"
                   :rules="[val => val > 0 || '房间金额必须大于0']" />
               </div>
               <!-- 押金输入 -->
               <div class="col-md-4 col-xs-12">
-                <!-- 押金输入框，数字类型，默认100元 -->
                 <q-input v-model.number="orderData.deposit" label="押金" filled type="number" prefix="¥"
                   :rules="[val => val >= 0 || '押金不能为负数']" />
               </div>
@@ -236,13 +210,9 @@
 
           <!-- 备注信息部分 -->
           <div class="form-section q-mb-md">
-            <!-- 分区标题 -->
             <div class="text-subtitle1 q-mb-sm">备注信息</div>
-            <!-- 栅格布局，各列之间有间距 -->
             <div class="row q-col-gutter-md">
-              <!-- 备注文本区域 -->
               <div class="col-md-12 col-xs-12">
-                <!-- 备注输入框，文本域，可自动增高 -->
                 <q-input v-model="orderData.remarks" label="备注" filled type="textarea" autogrow />
               </div>
             </div>
