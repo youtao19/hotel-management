@@ -26,12 +26,28 @@ jobs:
 
     env:
       NODE_ENV: test
+      NODE_PORT: 3000
       PGUSER: postgres
       PGPASSWORD: 1219
       PGDATABASE: hotel_test
       PGHOST: localhost
       PGPORT: 5432
-      APP_NAME: hotel-management-system
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PW: ghost@2023
+      OPENAI_HOST: staging.woyaochatgpt.com
+      OPENAI_KEY: wk-87f95f4b7eb976334fc42eaf03a5a52550cee4e464a53772d01673c3251a4907
+      OPENAI_CHAT_COMPLETION_PATH: /api/openai/v1/chat/completions
+      OPENAI_IMAGE_PATH: /api/openai/v1/images
+      OPENAI_O_KEY: ""
+      ADMIN_EMAIL: support@ghost-writer.com
+      APP_URL: http://localhost:9000
+      APP_NAME: hotelManagement
+      EMAIL_HOST: smtp.gmail.com
+      EMAIL_PORT: 587
+      EMAIL_USER: admin
+      EMAIL_PW: faqttg78
+
 
 
     steps:
