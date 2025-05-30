@@ -18,17 +18,7 @@ router.get('/', async (req, res) => {
     `);
 
     if (!tableCheck.rows[0].exists) {
-      console.log('room_types表不存在，返回模拟数据');
-      // 返回一些模拟数据
-      return res.json({
-        data: [
-          { type_code: 'standard', type_name: '标准间', base_price: 288.00, description: '舒适标准双人间，配备基础设施', is_closed: false },
-          { type_code: 'deluxe', type_name: '豪华间', base_price: 388.00, description: '豪华装修双人间，配备高档设施', is_closed: false },
-          { type_code: 'suite', type_name: '套房', base_price: 588.00, description: '独立客厅与卧室，尊享舒适空间', is_closed: false },
-          { type_code: 'presidential', type_name: '总统套房', base_price: 1288.00, description: '顶级豪华套房，配备全套高端设施与服务', is_closed: false },
-          { type_code: 'family', type_name: '家庭房', base_price: 688.00, description: '适合家庭入住的宽敞房间，配备儿童设施', is_closed: false }
-        ]
-      });
+      console.log('room_types表不存在');
     }
 
     const { rows } = await query('SELECT * FROM room_types');
@@ -60,20 +50,8 @@ router.get('/:code', async (req, res) => {
     `);
 
     if (!tableCheck.rows[0].exists) {
-      // 返回模拟数据
-      const mockTypes = {
-        'standard': { type_code: 'standard', type_name: '标准间', base_price: 288.00, description: '舒适标准双人间，配备基础设施', is_closed: false },
-        'deluxe': { type_code: 'deluxe', type_name: '豪华间', base_price: 388.00, description: '豪华装修双人间，配备高档设施', is_closed: false },
-        'suite': { type_code: 'suite', type_name: '套房', base_price: 588.00, description: '独立客厅与卧室，尊享舒适空间', is_closed: false },
-        'presidential': { type_code: 'presidential', type_name: '总统套房', base_price: 1288.00, description: '顶级豪华套房，配备全套高端设施与服务', is_closed: false },
-        'family': { type_code: 'family', type_name: '家庭房', base_price: 688.00, description: '适合家庭入住的宽敞房间，配备儿童设施', is_closed: false }
-      };
-
-      if (mockTypes[code]) {
-        return res.json({ data: mockTypes[code] });
-      } else {
-        return res.status(404).json({ message: '未找到房型' });
-      }
+      console.log('room_types表不存在');
+      return res.status(500).json({ message: '房型表不存在' });
     }
 
     const { rows } = await query('SELECT * FROM room_types WHERE type_code = $1', [code]);

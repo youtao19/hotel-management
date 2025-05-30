@@ -43,13 +43,6 @@ export const useOrderStore = defineStore('order', () => {
         source: order.order_source,
         sourceNumber: order.id_source
       }))
-
-      // 打印订单数据
-      // for (const order of orders.value) {
-      //   if (order.checkOutDate && order.checkOutDate.includes('T')) {
-      //     console.log(`订单 ${order.orderNumber} 退房日期格式: ${order.checkOutDate}`)
-      //   }
-      // }
     } catch (err) {
       console.error('获取订单数据失败:', err.response ? err.response.data : err.message)
       // 检查 err.message 是否已经是 HTML 字符串

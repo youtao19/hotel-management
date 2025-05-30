@@ -345,12 +345,12 @@ const dateOptions = (dateStr) => {
  */
 async function updateDatesAndRooms() {
   if (dateRange.value.from) {
-    // 将日期格式化为 YYYY-MM-DD 再赋值
-    orderData.value.checkInDate = date.formatDate(dateRange.value.from, 'YYYY-MM-DD');
+    dateRange.value.from = date.formatDate(dateRange.value.from, 'YYYY-MM-DD');
+    orderData.value.checkInDate = dateRange.value.from;
   }
   if (dateRange.value.to) {
-    // 将日期格式化为 YYYY-MM-DD 再赋值
-    orderData.value.checkOutDate = date.formatDate(dateRange.value.to, 'YYYY-MM-DD');
+    dateRange.value.to = date.formatDate(dateRange.value.to, 'YYYY-MM-DD');
+    orderData.value.checkOutDate = dateRange.value.to;
   }
   await updateAvailableRooms();
 }
@@ -366,12 +366,7 @@ async function updateCheckOutMinDateAndRooms() {
       date.addToDate(new Date(orderData.value.checkInDate), { days: 1 }),
       'YYYY-MM-DD'
     );
-
-    // 同步更新日期范围，注意这里dateRange存储的是YYYY/MM/DD格式，但我们已经确保orderData.value中的是YYYY-MM-DD
-    // 这里可以保持dateRange的格式不变，因为它只用于q-date组件内部显示
-    // 或者，为了保持一致性，也可以将dateRange.to也格式化，但这会影响q-date内部逻辑，不推荐修改dateRange的格式
-    // 保持dateRange的YYYY/MM/DD格式，只格式化赋值给orderData即可
-    dateRange.value.to = date.formatDate(orderData.value.checkOutDate, 'YYYY/MM/DD');
+    dateRange.value.to = date.formatDate(orderData.value.checkOutDate, 'YYYY-MM-DD');
 
   }
   await updateAvailableRooms();
@@ -385,12 +380,14 @@ async function updateAvailableRooms() {
     if (!orderData.value.checkInDate || !orderData.value.checkOutDate) {
       return;
     }
+    // 强制格式化
+    const startDate = date.formatDate(orderData.value.checkInDate, 'YYYY-MM-DD');
+    const endDate = date.formatDate(orderData.value.checkOutDate, 'YYYY-MM-DD');
     orderData.value.roomNumber = null;
 
-    // 获取指定日期范围和房型的可用房间（API返回所有可用房间，不仅仅是当前房型）
     const rooms = await roomStore.getAvailableRoomsByDate(
-      orderData.value.checkInDate,
-      orderData.value.checkOutDate
+      startDate,
+      endDate
     );
     availableRoomsByDate.value = rooms;
   } catch (error) {
@@ -405,12 +402,12 @@ async function updateAvailableRooms() {
 
 // 监听日期变化
 watch(() => orderData.value.checkInDate, async () => {
-  dateRange.value.from = orderData.value.checkInDate;
+  dateRange.value.from = date.formatDate(orderData.value.checkInDate, 'YYYY-MM-DD');
   await updateAvailableRooms();
 });
 
 watch(() => orderData.value.checkOutDate, async () => {
-  dateRange.value.to = orderData.value.checkOutDate;
+  dateRange.value.to = date.formatDate(orderData.value.checkOutDate, 'YYYY-MM-DD');
   await updateAvailableRooms();
 });
 

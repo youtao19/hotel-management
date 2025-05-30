@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { useViewStore } from './viewStore'
 import { useOrderStore } from './orderStore'
 import { roomApi } from '../api'
@@ -57,14 +57,27 @@ export const useRoomStore = defineStore('room', () => {
   // 活跃订单(待入住和已入住)
   const activeOrders = ref([])
 
-  // 获取所有订单数据并筛选活跃订单
+  /**
+   * 获取所有活跃订单（待入住和已入住）
+   * @function fetchActiveOrders
+   * @async
+   * @throws {Error} 如果订单数据获取失败或格式错误
+   * @throws {Error} 如果订单数据格式错误，期望数组但得到其他类型
+   * @returns {Promise<Array>} 返回活跃订单列表
+   * @description 获取所有活跃订单（待入住和已入住）
+   */
   async function fetchActiveOrders() {
     try {
       loading.value = true
-
-      // 使用orderStore的方法获取所有订单
-      await orderStore.fetchAllOrders()
-      const allOrders = orderStore.orders
+      const response = await orderApi.getAllOrders()
+      if (!response || !response.data) {
+        throw new Error('订单数据获取失败或格式错误')
+      }
+      // 确保返回的数据是数组
+      if (!Array.isArray(response.data)) {
+        throw new Error('订单数据格式错误，期望数组但得到: ' + JSON.stringify(response.data))
+      }
+      const allOrders = response.data
 
       // 筛选活跃订单（待入住和已入住）
       activeOrders.value = allOrders.filter(order =>
@@ -81,7 +94,14 @@ export const useRoomStore = defineStore('room', () => {
     }
   }
 
-  // 获取所有房间数据并关联订单状态
+  /**
+   * 获取所有房间数据
+   * @function fetchAllRooms
+   * @async
+   * @throws {Error} 如果房间数据获取失败或格式错误
+   * @returns {Promise<Array>} 返回所有房间列表
+   * @description 获取所有房间数据，并根据活跃订单设置房间的显示状态
+   */
   async function fetchAllRooms() {
     try {
       loading.value = true
@@ -145,13 +165,6 @@ export const useRoomStore = defineStore('room', () => {
       guestName = relatedOrder.guestName || guestName // 确保保留原始guest_name（如果relatedOrder中为空）
       checkOutDate = relatedOrder.checkOutDate || checkOutDate // 确保保留原始check_out_date（如果relatedOrder中为空）
       orderId = relatedOrder.orderNumber || orderId
-
-      console.log(`处理房间 ${room.room_number} 关联订单:`, {
-        orderStatus: orderStatus,
-        guestName: guestName,
-        checkOutDate: checkOutDate,
-        orderId: orderId
-      })
 
       // 根据订单状态确定房间显示状态
       const mappedStatus = ORDER_TO_ROOM_STATE_MAP[orderStatus]
@@ -416,7 +429,6 @@ export const useRoomStore = defineStore('room', () => {
         // 更新房间的显示状态
         updateRoomDisplayStatus(rooms.value[roomIndex])
       }
-
       return true
     } catch (err) {
       console.error(`更新房间状态失败:`, err)

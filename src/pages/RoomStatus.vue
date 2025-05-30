@@ -302,12 +302,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useRoomStore } from '../stores/roomStore'
 import { useViewStore } from '../stores/viewStore'
 import { useOrderStore } from '../stores/orderStore'
-import { useQuasar, date } from 'quasar'
+import { useQuasar } from 'quasar'
 
 // 获取房间store和视图store
 const roomStore = useRoomStore()
@@ -335,24 +335,11 @@ const error = ref(null)         // 错误信息
 const formattedDateRange = computed(() => {
   if (!dateRange.value) return ''
 
-  // 如果dateRange是对象形式
-  if (typeof dateRange.value === 'object') {
-    const { from, to } = dateRange.value
-    if (from && to) {
-      return `${from} 至 ${to}`
-    }
-  }
+  const { from, to } = dateRange.value
 
-  // 如果dateRange是字符串形式 "YYYY-MM-DD to YYYY-MM-DD"
-  if (typeof dateRange.value === 'string' && dateRange.value.includes(' to ')) {
-    const [startDate, endDate] = dateRange.value.split(' to ')
-    if (startDate && endDate) {
-      return `${startDate} 至 ${endDate}`
-    }
+  if (from && to) {
+    return `${from} 至 ${to}`
   }
-
-  // 其他情况返回原值
-  return dateRange.value ? String(dateRange.value) : ''
 })
 
 /**
@@ -398,16 +385,16 @@ watch(() => route.query, (newQuery) => {
 }, { immediate: true, deep: true })  // immediate确保组件初始化时立即执行一次，deep确保深度监听对象变化
 
 // 监听日期范围变化
-watch(dateRange, (newValue) => {
-  console.log('日期范围变化:', newValue)
-}, { deep: true })
+// watch(dateRange, (newValue) => {
+//   console.log('日期范围变化:', newValue)
+// }, { deep: true })
 
 /**
  * 添加对筛选条件变化的监听，用于调试
  */
-watch(filterStatus, (newValue) => {
-  console.log('筛选状态变化为:', newValue)
-}, { immediate: true })
+// watch(filterStatus, (newValue) => {
+//   console.log('筛选状态变化为:', newValue)
+// }, { immediate: true })
 
 /**
  * 计算属性：根据筛选条件过滤房间列表
@@ -485,13 +472,13 @@ async function applyFilters() {
       query.status = filterStatus.value;
     }
 
-    console.log('马上进入处理日期');
     // 处理日期范围
     if (dateRange.value) {
       let startDate, endDate;
 
       // 如果是对象格式，转换为字符串
       if (typeof dateRange.value === 'object') {
+        console.log('日期范围是对象格式', dateRange.value);
         const { from, to } = dateRange.value;
         if (from && to) {
           // 将 YYYY/MM/DD 转换为 YYYY-MM-DD
@@ -556,21 +543,13 @@ async function resetFilters() {
   try {
     loading.value = true;
     error.value = null;
-    console.log('重置筛选条件...');
 
     // 重置组件状态变量
     filterType.value = null;
     filterStatus.value = null;
     dateRange.value = null;
 
-    // 重新加载所有房间
-    console.log('正在重新加载所有房间数据...');
     await roomStore.fetchAllRooms();
-    console.log('房间数据已重新加载，共 ' + roomStore.rooms.length + ' 个房间');
-
-    // 确认filteredRooms计算属性现在会显示所有房间
-    console.log('重置后filteredRooms将显示:', roomStore.filterRooms({}));
-
     // 更新URL，移除所有筛选参数
     router.replace({
       path: route.path,
@@ -602,8 +581,6 @@ async function resetFilters() {
  * @param {number} roomId - 房间ID
  */
 async function bookRoom(roomId) {
-  console.log('预订房间:', roomId);
-
   try {
     // 获取要预订的房间信息
     const room = await roomStore.getRoomById(roomId);
@@ -652,8 +629,6 @@ async function bookRoom(roomId) {
  * @param {number} roomId - 房间ID
  */
 async function checkOut(roomId) {
-  console.log('办理退房:', roomId);
-
   try {
     // 获取房间信息
     const room = await roomStore.getRoomById(roomId);
@@ -778,13 +753,12 @@ async function checkOut(roomId) {
   }
 }
 
-/**
+ /**
  * 设置房间为维修状态
  * @param {number} roomId - 房间ID
  */
 async function setMaintenance(roomId) {
   console.log('设为维修:', roomId);
-
   try {
     // 获取房间信息
     const room = await roomStore.getRoomById(roomId);
@@ -1040,8 +1014,6 @@ async function clearMaintenance(roomId) {
  * @param {number} roomId - 房间ID
  */
 async function clearCleaning(roomId) {
-  console.log('完成清洁:', roomId);
-
   try {
     // 获取房间信息
     const room = await roomStore.getRoomById(roomId);
@@ -1052,19 +1024,6 @@ async function clearCleaning(roomId) {
     // 确认是否完成清洁
     if (!confirm(`确定将房间 ${room.room_number} 的清洁工作标记为已完成吗？房间将恢复为可用状态。`)) {
       return;
-    }
-
-    // 显示加载提示
-    try {
-      if ($q && $q.loading && typeof $q.loading.show === 'function') {
-        $q.loading.show({
-          message: '正在处理...'
-        });
-      } else {
-        console.log('$q.loading.show 不可用，使用备用方法');
-      }
-    } catch (loadingError) {
-      console.warn('显示加载提示失败:', loadingError);
     }
 
     // 调用API更新房间状态为可用
@@ -1084,9 +1043,7 @@ async function clearCleaning(roomId) {
 
     // 刷新房间列表
     try {
-      console.log('刷新房间列表...');
       await roomStore.fetchAllRooms();
-      console.log('房间列表已刷新');
     } catch (refreshError) {
       console.error('刷新房间列表失败:', refreshError);
     }
@@ -1152,44 +1109,44 @@ onMounted(() => {
   // fetchRooms()
 })
 
-// 使用计算属性获取各种状态的房间数量
-const statusCounts = computed(() => roomStore.countByStatus)
+// // 使用计算属性获取各种状态的房间数量
+// const statusCounts = computed(() => roomStore.countByStatus)
 
-// 使用计算属性获取各种类型的可用房间数量
-const availableRoomsByType = computed(() => roomStore.availableByType)
+// // 使用计算属性获取各种类型的可用房间数量
+// const availableRoomsByType = computed(() => roomStore.availableByType)
 
-/**
- * 获取特定状态的房间数量
- * @param {string} status - 房间状态
- * @returns {number} 该状态的房间数量
- */
-function getStatusCount(status) {
-  return roomStore.filterRooms({ status }).length
-}
+// /**
+//  * 获取特定状态的房间数量
+//  * @param {string} status - 房间状态
+//  * @returns {number} 该状态的房间数量
+//  */
+// function getStatusCount(status) {
+//   return roomStore.filterRooms({ status }).length
+// }
 
-/**
- * 获取特定房型的空余房间数量
- * @param {string} type - 房间类型
- * @returns {number} 该类型的空余房间数量
- */
-function getAvailableRoomCountByType(type) {
-  return roomStore.getAvailableRoomCountByType(type);
-}
+// /**
+//  * 获取特定房型的空余房间数量
+//  * @param {string} type - 房间类型
+//  * @returns {number} 该类型的空余房间数量
+//  */
+// function getAvailableRoomCountByType(type) {
+//   return roomStore.getAvailableRoomCountByType(type);
+// }
 
 /**
  * 获取房型的中文名称
  */
 const getRoomTypeName = viewStore.getRoomTypeName
 
-/**
- * 获取状态的中文文本
- */
-const getStatusText = viewStore.getStatusText
+// /**
+//  * 获取状态的中文文本
+//  */
+// const getStatusText = viewStore.getStatusText
 
-/**
- * 获取状态的颜色
- */
-const getStatusColor = viewStore.getStatusColor
+// /**
+//  * 获取状态的颜色
+//  */
+// const getStatusColor = viewStore.getStatusColor
 
 // 房间类型和状态选项
 const roomTypeOptions = viewStore.roomTypeOptions
