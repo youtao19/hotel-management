@@ -119,7 +119,7 @@ async function updateRoomStatus(id, status) {
     let isClosed = false;
 
     // 根据状态自动设置房间的is_closed字段
-    if (status === 'repair' || status === 'cleaning') {
+    if (status === 'repair') {
       console.log(`设置房间 ${id} 为关闭状态(is_closed=true)`);
       isClosed = true; // 维修中或清洁中的房间设为关闭状态
     } else {
@@ -215,7 +215,7 @@ async function getAvailableRooms(startDate, endDate, typeCode = null) {
           SELECT 1
           FROM orders o
           WHERE o.room_number = r.room_number
-            AND o.status NOT IN ('checked-out', 'cancelled')
+            AND o.status IN ('checked-in', 'pending')
             AND o.check_in_date < $2::date
             AND o.check_out_date > $1::date
         )

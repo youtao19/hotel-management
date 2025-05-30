@@ -7,7 +7,7 @@ describe('GET /api/rooms/available', () => {
     const res = await request(app).get('/api/rooms/available').query({
       startDate: '2025-06-01',
       endDate: '2025-06-03',
-      typeCode: 'A'
+      typeCode: 'standard'
     });
 
     expect(res.statusCode).toBe(200);
@@ -22,4 +22,104 @@ describe('GET /api/rooms/available', () => {
     expect(res.statusCode).toBe(400);
     expect(res.body.message).toBe('必须提供入住日期和退房日期');
   });
+
+it('2025-06-01 ~ 06-03 没有房间号102', async () => {
+  const res = await request(app).get('/api/rooms/available').query({
+    startDate: '2025-06-01',
+    endDate: '2025-06-03',
+    typeCode: 'standard'
+  });
+
+    expect(res.statusCode).toBe(200);
+    // some:是否存在至少一个元素，使得回调函数返回 true
+    expect(res.body.data.some(room => room.room_number === '102')).toBe(false);
+  });
+
+  it('2025-06-02 ~ 06-03 没有房间号102', async () => {
+    const res = await request(app).get('/api/rooms/available').query({
+      startDate: '2025-06-02',
+      endDate: '2025-06-03',
+      typeCode: 'standard'
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.some(room => room.room_number === '102')).toBe(false);
+  })
+
+  it('2025-06-01 ~ 06-02 有房间号102', async () => {
+    const res = await request(app).get('/api/rooms/available').query({
+      startDate: '2025-06-01',
+      endDate: '2025-06-02',
+      typeCode: 'standard'
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.some(room => room.room_number === '102')).toBe(true);
+  })
+
+  it('2025-06-03 ~ 06-04 有房间号102', async () => {
+    const res = await request(app).get('/api/rooms/available').query({
+      startDate: '2025-06-03',
+      endDate: '2025-06-04',
+      typeCode: 'standard'
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.some(room => room.room_number === '102')).toBe(true);
+  })
+
+  it('2025-05-25 ~ 05-26 没有房间号304', async () => {
+    const res = await request(app).get('/api/rooms/available').query({
+      startDate: '2025-05-25',
+      endDate: '2025-05-26',
+      typeCode: 'standard'
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.some(room => room.room_number === '304')).toBe(false);
+  })
+
+  it('2025-05-26 ~ 05-27 有房间号304', async () => {
+    const res = await request(app).get('/api/rooms/available').query({
+      startDate: '2025-05-26',
+      endDate: '2025-05-27',
+      typeCode: 'suite'
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.some(room => room.room_number === '304')).toBe(true);
+  })
+
+  it('103维修不可用',async() => {
+    const res = await request(app).get('/api/rooms/available').query({
+      startDate: '2025-06-01',
+      endDate: '2025-06-25',
+      typeCode: ''
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.some(room => room.room_number === '103')).toBe(false);
+  })
+
+  it('202房间维修不可用',async() => {
+    const res = await request(app).get('/api/rooms/available').query({
+      startDate: '2025-06-01',
+      endDate: '2025-06-25',
+      typeCode: ''
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.some(room => room.room_number === '202')).toBe(false);
+  })
+
+  it('104房间清扫可用',async() => {
+    const res = await request(app).get('/api/rooms/available').query({
+      startDate: '2025-06-01',
+      endDate: '2025-06-25',
+      typeCode: ''
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.some(room => room.room_number === '104')).toBe(true);
+  })
 });
