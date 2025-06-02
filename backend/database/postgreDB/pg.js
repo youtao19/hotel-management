@@ -182,14 +182,14 @@ async function initializeHotelDB() {
     // 1. 启用扩展
     await enableExtensions();
 
-    // 2. 如果是测试环境，清空已有表，保证干净数据
-    if (process.env.NODE_ENV === 'test') {
-      console.log('测试环境：清空旧表');
-      const tableNames = ['order', 'room', 'room_type', 'account']; // 按依赖关系从后往前删
-      for (let table of tableNames) {
-        await query(`DROP TABLE IF EXISTS ${table} CASCADE;`);
-      }
-    }
+    // // 2. 如果是测试环境，清空已有表，保证干净数据
+    // if (process.env.NODE_ENV === 'test') {
+    //   console.log('测试环境：清空旧表');
+    //   const tableNames = ['order', 'room', 'room_type', 'account']; // 按依赖关系从后往前删
+    //   for (let table of tableNames) {
+    //     await query(`DROP TABLE IF EXISTS ${table} CASCADE;`);
+    //   }
+    // }
 
     // 3. 创建表结构
     await createTables();

@@ -38,4 +38,4 @@ const table = {
   createIndexQueryStrings
 }
 
-module.exports
+module.exports = table;
