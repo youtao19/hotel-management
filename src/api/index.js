@@ -95,6 +95,12 @@ export const userApi = {
   logout: () => api.post('/auth/logout'),
 }
 
+// 账单相关接口
+export const billApi = {
+  // 创建账单
+  createBill: (billData) => api.post('/bills/create', billData),
+}
+
 // 库存相关接口
 export const inventoryApi = {
   // 获取指定日期的库存

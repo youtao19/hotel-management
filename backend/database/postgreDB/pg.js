@@ -79,13 +79,11 @@ async function getClient() {
 
 // 定义酒店系统需要的表
 const tables = [
-  require('./tables/account'),    // 账户表
-  require('./tables/room_type'),  // 房型表 - 放在第二位
-  require('./tables/room'),       // 房间表 - 放在第三位
-  require('./tables/order'),      // 订单表 - 放在最后
-  // 以下模块暂未创建，等需要时再添加
-  // require('./tables/guest'),    // 客人信息表
-  // require('./tables/payment')   // 支付记录表
+  require('./tables/account'),
+  require('./tables/room_type'),
+  require('./tables/room'),
+  require('./tables/order'),
+  require('./tables/bill'),
 ].filter(Boolean); // 确保只加载存在的表
 
 /**

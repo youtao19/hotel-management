@@ -54,12 +54,14 @@ const authRoute = require("./backend/routes/authRoute");
 const orderRoute = require("./backend/routes/orderRoute");
 const roomRoute = require("./backend/routes/roomRoute");
 const roomTypeRoute = require("./backend/routes/roomTypeRoute");
+const billRoute = require("./backend/routes/billRoute");
 
 app.use("/api/user", userRoute);
 app.use("/api/auth", authRoute);
 app.use("/api/orders", orderRoute);
 app.use("/api/rooms", roomRoute);
 app.use("/api/room-types", roomTypeRoute);
+app.use("/api/bills", billRoute);
 
 app.get("/api/hup", (req, res) => res.status(200).json({ ok: true }));
 
