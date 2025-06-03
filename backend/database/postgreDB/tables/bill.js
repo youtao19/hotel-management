@@ -3,7 +3,7 @@
 const tableName = "bills";
 
 const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
-    order_id VARCHAR(20) PRIMARY KEY,
+    order_id VARCHAR(50) PRIMARY KEY,
     room_number VARCHAR(10) NOT NULL,
     guest_name VARCHAR(50),
     deposit DECIMAL(10,2),

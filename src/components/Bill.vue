@@ -12,8 +12,8 @@
             <tr>
               <td class="bill-label">是否退押金</td>
               <td>
-                <q-radio v-model="billData.refund_deposit" val="yes" label="退押金" color="primary" />
-                <q-radio v-model="billData.refund_deposit" val="no" label="不退押金" color="negative" class="q-ml-xl" />
+                <q-radio v-model="billData.refund_deposit" val='yes' label="退押金" color="primary" />
+                <q-radio v-model="billData.refund_deposit" val='no' label="不退押金" color="negative" class="q-ml-xl" />
               </td>
             </tr>
             <tr>
@@ -26,7 +26,7 @@
             <tr>
               <td class="bill-label bill-pay-way">支付方式</td>
               <td class="bill-label select-way">
-                <q-select filled v-model="billData.pay_way" :options="way_options" label="选择支付方式" />
+                <q-select filled v-model="way" :options="way_options" label="选择支付方式" />
               </td>
             </tr>
             <tr>
@@ -58,6 +58,8 @@ const emit = defineEmits(['update:modelValue'])
 
 const billStore = useBillStore()
 
+let way = ref('')
+
 const billData = ref({
   order_id: props.currentOrder?.orderNumber || '',
   room_number: props.currentOrder?.roomNumber || '',
@@ -67,7 +69,7 @@ const billData = ref({
   room_fee: props.currentOrder?.roomPrice || 0,
   total_income: 0,
   pay_way: '',
-  remarks: ''
+  remarks: props.currentOrder?.remarks || ''
 })
 
 
@@ -109,6 +111,7 @@ async function createBill() {
       deposit: deposit
     }
 
+    console.log("账单数据：",billDataToSend)
     await billStore.addBill(billDataToSend)
   } catch (error) {
     console.error('创建账单失败:', error)
@@ -125,6 +128,7 @@ watch(
       billData.value.guest_name = order.guestName || ''
       billData.value.deposit = order.deposit || 0
       billData.value.room_fee = order.roomPrice || 0
+      billData.value.pay_way = way
     }
   },
   { immediate: true }
