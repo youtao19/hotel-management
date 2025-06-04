@@ -14,8 +14,8 @@ export const useBillStore = defineStore('bill', () => {
     async function addBill(billData) {
         try {
             const response = await billApi.createBill(billData);
-            bills.value.push(response.data.bill);
-            return response.data.bill;
+            bills.value.push(response.bill);
+            return response.bill;
         } catch (error) {
             console.error('添加账单失败:', error);
             throw error;

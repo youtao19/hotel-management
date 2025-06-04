@@ -99,6 +99,9 @@ export const userApi = {
 export const billApi = {
   // 创建账单
   createBill: (billData) => api.post('/bills/create', billData),
+
+  // 获得账单
+  getBillByOrderId: (orderId) => api.get(`/bills/${orderId}`),
 }
 
 // 库存相关接口

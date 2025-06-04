@@ -16,4 +16,16 @@ async function createBill(order_id, room_number, guest_name, deposit, refund_dep
     }
 }
 
-module.exports = { createBill };
+// 获得账单
+async function getBillByOrderId(order_id){
+    try {
+        const sqlQuery = `SELECT * FROM bills WHERE order_id = $1`;
+        const result = await query(sqlQuery, [order_id]);
+        return result.rows[0];
+    } catch (error) {
+        console.error('获得账单数据库错误:', error);
+        throw error;
+    }
+}
+
+module.exports = { createBill, getBillByOrderId };
