@@ -92,6 +92,7 @@
     <Bill
       v-model="showBillDialog"
       :currentOrder="billOrder"
+      @bill-created="handleBillCreated"
     />
 
   </div>
@@ -332,7 +333,7 @@ async function checkoutOrder(order) {
 
   //     // 获取房间并将状态更改为清洁中
   //     const room = roomStore.getRoomByNumber(order.roomNumber);
-  //     if (room && room.room_id) { // 确保 room_id 存在
+  //     if (room && room.room_id) {
   //       // 直接调用roomStore的checkOutRoom方法
   //       const roomUpdateSuccess = await roomStore.checkOutRoom(room.room_id);
   //       if (!roomUpdateSuccess) {
@@ -660,6 +661,68 @@ function formatDate(dateStr) {
   } catch (error) {
     console.error('日期格式化错误:', error, dateStr);
     return dateStr; // 出错时返回原始值
+  }
+}
+
+// 处理账单创建成功
+async function handleBillCreated() {
+  try {
+    if (!billOrder.value || !billOrder.value.orderNumber) {
+      console.error('订单信息无效');
+      return;
+    }
+
+    // 更新订单状态为已退房
+    const updatedOrderFromApi = await orderStore.updateOrderStatusViaApi(billOrder.value.orderNumber, 'checked-out');
+
+    if (!updatedOrderFromApi) {
+      $q.notify({
+        type: 'warning',
+        message: '账单已创建，但更新订单状态失败，请手动检查订单状态！',
+        position: 'top'
+      });
+      return;
+    }
+
+    // 获取房间并将状态更改为清洁中
+    const room = roomStore.getRoomByNumber(billOrder.value.roomNumber);
+    if (room && room.room_id) {
+      const roomUpdateSuccess = await roomStore.checkOutRoom(room.room_id);
+      if (!roomUpdateSuccess) {
+        $q.notify({
+          type: 'warning',
+          message: '订单已退房，但更新房间状态为清洁中失败，请检查房间状态！',
+          position: 'top',
+          multiLine: true
+        });
+      } else {
+        await roomStore.fetchAllRooms(); // 刷新房间列表
+      }
+    }
+
+    // 更新当前正在查看的订单详情
+    if (currentOrder.value && currentOrder.value.orderNumber === billOrder.value.orderNumber) {
+      currentOrder.value = { ...orderStore.getOrderByNumber(billOrder.value.orderNumber) };
+    }
+
+    // 刷新订单列表
+    await fetchAllOrders();
+
+    $q.notify({
+      type: 'positive',
+      message: '退房成功',
+      position: 'top'
+    });
+
+  } catch (error) {
+    console.error('办理退房操作失败:', error);
+    const errorMessage = error.response?.data?.message || error.message || '未知错误';
+    $q.notify({
+      type: 'negative',
+      message: `办理退房失败: ${errorMessage}`,
+      position: 'top',
+      multiLine: true
+    });
   }
 }
 

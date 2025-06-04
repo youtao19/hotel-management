@@ -49,14 +49,16 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import useBillStore from '../stores/billStore'
+import { useQuasar } from 'quasar'
 
 const props = defineProps({
   modelValue: Boolean,
   currentOrder: Object,
 })
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits(['update:modelValue', 'bill-created'])
 
 const billStore = useBillStore()
+const $q = useQuasar()
 
 let way = ref('')
 
@@ -98,6 +100,16 @@ const way_options = ref([
 
 async function createBill() {
   try {
+    // 验证支付方式是否已选择
+    if (!way.value) {
+      $q.notify({
+        type: 'warning',
+        message: '请选择支付方式',
+        position: 'top'
+      })
+      return
+    }
+
     // 在发送之前计算并设置 total_income
     const roomFee = parseFloat(billData.value.room_fee) || 0
     const deposit = parseFloat(billData.value.deposit) || 0
@@ -108,13 +120,32 @@ async function createBill() {
       ...billData.value,
       total_income: calculatedTotalIncome,
       room_fee: roomFee,
-      deposit: deposit
+      deposit: deposit,
+      pay_way: way.value
     }
 
     console.log("账单数据：",billDataToSend)
     await billStore.addBill(billDataToSend)
+
+    // 显示成功提示
+    $q.notify({
+      type: 'positive',
+      message: '账单创建成功',
+      position: 'top'
+    })
+
+    // 发射账单创建成功事件
+    emit('bill-created')
+
+    // 关闭对话框
+    emit('update:modelValue', false)
   } catch (error) {
     console.error('创建账单失败:', error)
+    $q.notify({
+      type: 'negative',
+      message: '创建账单失败: ' + error.message,
+      position: 'top'
+    })
   }
 }
 
