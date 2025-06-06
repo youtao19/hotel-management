@@ -6,12 +6,14 @@
     "author": "youtao19 <wuyoutao19@gmail.com>",
     "private": true,
     "scripts": {
-        "test": "dotenv -c .env.test -- cross-env NODE_ENV=test jest",
-        "dev": "quasar dev",
+        "test": "cross-env NODE_ENV=test jest",
+        "test:watch": "cross-env NODE_ENV=test jest --watch",
+        "dev": "cross-env NODE_ENV=dev quasar dev",
         "build": "quasar build",
         "postinstall": "quasar prepare",
         "start": "concurrently \"npm run devStart\" \"npm run dev\"",
-        "devStart": "nodemon server.js"
+        "devStart": "cross-env NODE_ENV=dev nodemon server.js",
+        "export-schema": "node scripts/exportSchema.js"
     },
     "dependencies": {
         "@quasar/extras": "^1.16.4",

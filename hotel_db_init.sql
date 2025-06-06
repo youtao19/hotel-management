@@ -37,8 +37,6 @@ CREATE TABLE IF NOT EXISTS orders (
     room_price DECIMAL(10,2) NOT NULL,
     deposit DECIMAL(10,2),
     create_time TIMESTAMP NOT NULL,
-    actual_check_in_time TIMESTAMP,
-    actual_check_out_time TIMESTAMP,
     remarks TEXT,
     FOREIGN KEY (room_type) REFERENCES room_types(type_code),
     FOREIGN KEY (room_number) REFERENCES rooms(room_number)

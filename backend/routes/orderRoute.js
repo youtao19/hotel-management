@@ -28,7 +28,7 @@ router.get('/', async (req, res) => {
     res.status(500).json({
       message: '服务器错误',
       error: err.message,
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+      stack: process.env.NODE_ENV === 'dev' ? err.stack : undefined
     });
   }
 });
@@ -51,7 +51,7 @@ router.get('/:id', async (req, res) => {
     res.status(500).json({
       message: '服务器错误',
       error: err.message,
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+      stack: process.env.NODE_ENV === 'dev' ? err.stack : undefined
     });
   }
 });

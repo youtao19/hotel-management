@@ -2,41 +2,8 @@ const request = require('supertest');
 const { initializeHotelDB, closePool } = require('../backend/database/postgreDB/pg');
 const app = require('../app'); // 注意是 app，不是 server
 
+
 describe('POST /api/orders/new', () => {
-//   beforeAll(async () => {
-//     // 初始化数据库（建表等）
-//     await initializeHotelDB();
-
-//     // 通过接口插入房型
-//     await request(app)
-//       .post('/api/room-types/new')
-//       .send({
-//         type_code: 'SINGLE',
-//         type_name: '单人间',
-//         base_price: 200,
-//         description: '测试单人间',
-//         is_closed: false
-//       })
-//       .set('Accept', 'application/json');
-
-//     // 通过接口插入房间
-//     await request(app)
-//       .post('/api/rooms/new')
-//       .send({
-//         room_id: 999,
-//         room_number: '101',
-//         type_code: 'SINGLE',
-//         status: 'available',
-//         price: 200,
-//         is_closed: false
-//       })
-//       .set('Accept', 'application/json');
-//   });
-
-//   afterAll(async () => {
-//     // 关闭数据库连接池
-//     await closePool();
-//   });
 
   it('应成功创建一个新订单', async () => {
     const now = new Date();

@@ -5,7 +5,16 @@ const { body, validationResult } = require('express-validator');
 const billModule = require('../modules/billModule');
 
 // 创建账单
-router.post('/create', async (req, res) => {
+router.post('/create', [
+    body('order_id').notEmpty().withMessage('订单ID不能为空'),
+    body('room_number').notEmpty().withMessage('房间号不能为空'),
+    body('guest_name').notEmpty().withMessage('客人姓名不能为空'),
+    body('deposit').notEmpty().withMessage('押金不能为空'),
+    body('refund_deposit').notEmpty().withMessage('退押金状态不能为空'),
+    body('room_fee').notEmpty().withMessage('房费不能为空'),
+    body('total_income').notEmpty().withMessage('总收入不能为空'),
+    body('pay_way').notEmpty().withMessage('支付方式不能为空'),
+], async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
         return res.status(400).json({ errors: errors.array() });

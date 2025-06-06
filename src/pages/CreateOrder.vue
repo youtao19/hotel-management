@@ -248,7 +248,7 @@ const viewStore = useViewStore()
 const $q = useQuasar() // For notifications
 
 // 检查是否为开发环境
-const isDev = ref(process.env.NODE_ENV === 'development')
+const isDev = ref(process.env.NODE_ENV === 'dev')
 
 // 使用roomStore中的状态常量
 const { ROOM_STATES } = roomStore

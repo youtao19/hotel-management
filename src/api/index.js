@@ -113,4 +113,4 @@ export const inventoryApi = {
   updateInventory: (date, typeCode, data) => api.patch(`/inventory/${date}/${typeCode}`, data),
 }
 
-export default api; // Export the configured axios instance as default
+export default api;

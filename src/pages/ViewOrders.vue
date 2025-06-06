@@ -225,22 +225,6 @@ const currentOrder = ref(null)
 const showChangeRoomDialog = ref(false)
 const newRoomNumber = ref(null)
 
-// // 房型选项
-// // const roomTypeOptions = viewStore.roomTypeOptions.filter(option => option.value !== null)  // 使用roomStore获取可用房间
-// const availableRooms = computed(() => {
-//   return roomStore.rooms
-//     .filter(room => room.status === 'available')
-//     .map(room => ({
-//       label: `${room.room_number} - ${viewStore.getRoomTypeName(room.type_code)}`,
-//       value: room.room_number,
-//       type: room.type_code,
-//       price: room.price,
-//       room_id: room.room_id
-//     }))
-// })
-// // 当前选择的房型（用于筛选可用房间）
-// const selectedRoomType = ref(null)
-
 // 在 script 部分添加相关变量和方法
 const availableRoomOptions = ref([]); // 用于存储从API获取的可用房间选项
 
@@ -309,72 +293,16 @@ async function checkoutOrder(order) {
     return;
   }
 
-
   showBillDialog.value = true;
   billOrder.value = order;
 
   console.log('showBillDialog', showBillDialog.value, billOrder.value)
-
-
-
-  // if (confirm(`确定要为订单 ${order.orderNumber} 办理退房吗？`)) {
-  //   loadingOrders.value = true;
-  //   try {
-  //     console.log('办理退房:', order.orderNumber);
-
-  //     // 调用 API 更新订单状态为 'checked-out'
-  //     const updatedOrderFromApi = await orderStore.updateOrderStatusViaApi(order.orderNumber, 'checked-out');
-
-  //     if (!updatedOrderFromApi) {
-  //       $q.notify({ type: 'negative', message: '办理退房失败，API未返回更新后的订单', position: 'top' });
-  //       loadingOrders.value = false;
-  //       return;
-  //     }
-
-  //     // 获取房间并将状态更改为清洁中
-  //     const room = roomStore.getRoomByNumber(order.roomNumber);
-  //     if (room && room.room_id) {
-  //       // 直接调用roomStore的checkOutRoom方法
-  //       const roomUpdateSuccess = await roomStore.checkOutRoom(room.room_id);
-  //       if (!roomUpdateSuccess) {
-  //         $q.notify({ type: 'warning', message: '订单已退房，但更新房间状态为清洁中失败，请检查房间状态！', position: 'top', multiLine: true });
-  //       } else {
-  //         await roomStore.fetchAllRooms(); // 刷新房间列表
-  //       }
-  //     } else {
-  //       $q.notify({ type: 'warning', message: '订单已退房，但未找到关联房间信息，无法更新房间状态。', position: 'top', multiLine: true });
-  //     }
-
-  //     // 更新当前正在查看的订单详情 (如果适用)
-  //     if (currentOrder.value && currentOrder.value.orderNumber === order.orderNumber) {
-  //       currentOrder.value = { ...orderStore.getOrderByNumber(order.orderNumber) }; // 从store获取最新数据
-  //     }
-
-  //     $q.notify({ type: 'positive', message: '退房成功', position: 'top' });
-
-  //   } catch (error) {
-  //     console.error('办理退房操作失败:', error);
-  //     const errorMessage = error.response?.data?.message || error.message || '未知错误';
-  //     $q.notify({
-  //       type: 'negative',
-  //       message: `办理退房失败: ${errorMessage}`,
-  //       position: 'top',
-  //       multiLine: true
-  //     });
-  //   } finally {
-  //     loadingOrders.value = false;
-  //     // 确保订单列表刷新以反映任何变化
-  //     fetchAllOrders();
-  //   }
-  // }
 }
 
 // 从详情页办理退房
 function checkoutOrderFromDetails() {
   if (currentOrder.value) {
     checkoutOrder(currentOrder.value); // 直接调用已修改的 checkoutOrder 函数
-    // 关闭对话框的逻辑可以保留，或者在 checkoutOrder 成功后处理
-    // 为简化，暂时保留在这里，如果 checkoutOrder 内部有更复杂的UI交互，可能需要调整
     showOrderDetails.value = false;
   }
 }

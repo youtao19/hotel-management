@@ -3,18 +3,21 @@ const { Pool } = require("pg");
 const setup = require("../../../appSettings/setup");
 const fs = require('fs');
 const path = require('path');
+const { getConfig } = require('./dbConfig');
 
 // 数据库连接配置
-const dbConfig = {
-  user: setup.db.postgres.user,
-  password: setup.db.postgres.pw,
-  host: setup.db.postgres.host,
-  port: setup.db.postgres.port,
-  database: setup.db.postgres.name,
-  max: 20, // 连接池最大连接数
-  idleTimeoutMillis: 30000, // 连接最大空闲时间 30s
-  connectionTimeoutMillis: 10000 // 连接超时时间 10s
-};
+// const dbConfig = {
+//   user: setup.db.postgres.user,
+//   password: setup.db.postgres.pw,
+//   host: setup.db.postgres.host,
+//   port: setup.db.postgres.port,
+//   database: setup.db.postgres.name,
+//   max: 20, // 连接池最大连接数
+//   idleTimeoutMillis: 30000, // 连接最大空闲时间 30s
+//   connectionTimeoutMillis: 10000 // 连接超时时间 10s
+// };
+
+const dbConfig = getConfig();
 
 // 创建连接池实例
 let pool = null;
@@ -180,16 +183,7 @@ async function initializeHotelDB() {
     // 1. 启用扩展
     await enableExtensions();
 
-    // // 2. 如果是测试环境，清空已有表，保证干净数据
-    // if (process.env.NODE_ENV === 'test') {
-    //   console.log('测试环境：清空旧表');
-    //   const tableNames = ['order', 'room', 'room_type', 'account']; // 按依赖关系从后往前删
-    //   for (let table of tableNames) {
-    //     await query(`DROP TABLE IF EXISTS ${table} CASCADE;`);
-    //   }
-    // }
-
-    // 3. 创建表结构
+    // 2. 创建表结构
     await createTables();
 
     console.log('酒店管理系统数据库初始化完成');

@@ -2,6 +2,10 @@
 const request = require('supertest');
 const app = require('../app'); // 注意是 app，不是 server
 
+// 确保订单中有 6.2 ~ 6.3  102房间
+// 确保订单中有 5.25 ~ 5.26  304房间
+
+
 describe('GET /api/rooms/available', () => {
   it('返回可用房间(200)', async () => {
     const res = await request(app).get('/api/rooms/available').query({
