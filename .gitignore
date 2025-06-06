@@ -36,6 +36,5 @@ yarn-error.log*
 
 dev.env
 
-dbConfig.js
-
+backend/database/postgreDB/dbConfig.js
 

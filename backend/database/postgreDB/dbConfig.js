@@ -2,7 +2,7 @@ const dbConfig = {
     dev: {
         user: 'postgres',
         password: '1219',
-        host: '192.168.31.9',
+        host: 'localhost',
         port: 5432,
         database: 'hotel_db',
         max: 20,
@@ -12,7 +12,7 @@ const dbConfig = {
     test: {
         user: 'postgres',
         password: '1219',
-        host: '192.168.31.9',
+        host: 'localhost',
         port: 5432,
         database: 'hotel_db_test',
         max: 10,
