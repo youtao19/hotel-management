@@ -1,12 +1,65 @@
 // tests/availableRooms.test.js
 const request = require('supertest');
 const app = require('../app'); // 注意是 app，不是 server
-
+const { initializeHotelDB, closePool, query } = require('../backend/database/postgreDB/pg');
 // 确保订单中有 6.2 ~ 6.3  102房间
 // 确保订单中有 5.25 ~ 5.26  304房间
 
 
+const orderData1 = {
+  order_id: 'TEST001',
+  order_source: 'front_desk',
+  guest_name: '张三',
+  id_number: '123456789012345678',
+  phone: '13800138000',
+  room_type: 'standard', // 确保数据库有这个房型
+  room_number: '102',  // 确保数据库有这个房间
+  check_in_date: '2025-06-02',
+  check_out_date: '2025-06-03',
+  status: 'pending',
+  payment_method: 'cash',
+  room_price: '200.00',
+  deposit: '100.00',
+  create_time: '2025-06-02',
+  remarks: '测试订单'
+};
+
+const orderData2 = {
+  order_id: 'TEST002',
+  order_source: 'front_desk',
+  guest_name: '张三',
+  id_number: '123456789012345678',
+  phone: '13800138000',
+  room_type: 'standard', // 确保数据库有这个房型
+  room_number: '304',  // 确保数据库有这个房间
+  check_in_date: '2025-05-25',
+  check_out_date: '2025-05-26',
+  status: 'pending',
+  payment_method: 'cash',
+  room_price: '200.00',
+  deposit: '100.00',
+  create_time: '2025-05-25',
+  remarks: '测试订单'
+};
+
 describe('GET /api/rooms/available', () => {
+
+  beforeAll(async () => {
+    await initializeHotelDB();
+    const res1 = request(app).post('/api/orders/new').send(orderData1);
+    const res2 = request(app).post('/api/orders/new').send(orderData2);
+    await Promise.all([res1, res2]);
+  });
+
+  // beforeEach(async () => {
+
+  // });
+
+  afterAll(async () => {
+    await query('DELETE FROM orders');
+    await closePool();
+  });
+
   it('返回可用房间(200)', async () => {
     const res = await request(app).get('/api/rooms/available').query({
       startDate: '2025-06-01',
