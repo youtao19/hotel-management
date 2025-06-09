@@ -20,7 +20,8 @@ const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
     create_time TIMESTAMP NOT NULL,
     remarks TEXT,
     FOREIGN KEY (room_type) REFERENCES room_types(type_code),
-    FOREIGN KEY (room_number) REFERENCES rooms(room_number)
+    FOREIGN KEY (room_number) REFERENCES rooms(room_number),
+    CONSTRAINT unique_order_constraint UNIQUE (guest_name, check_in_date, check_out_date, room_type)
 )`;
 
 

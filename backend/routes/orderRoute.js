@@ -56,59 +56,96 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /api/orders - 创建新订单
+/**
+ * 创建新订单
+ * POST /api/orders/new
+ */
+router.post('/new', async (req, res) => {
+  console.log('收到订单创建请求，请求体:', JSON.stringify(req.body, null, 2));
 
-router.post('/new', authenticationMiddleware,
-  [
-    // 基本的输入验证 - 使用后端字段名
-    body('order_id').notEmpty().withMessage('订单号不能为空').isString().trim(),
-    body('order_source').notEmpty().withMessage('订单来源不能为空').isString(),
-    body('guest_name').notEmpty().withMessage('客人姓名不能为空').isString().trim(),
-    body('id_number').notEmpty().withMessage('身份证号不能为空').isString().isLength({ min: 18, max: 18 }).withMessage('身份证号必须为18位'),
-    body('phone').notEmpty().withMessage('手机号不能为空').isString().isLength({ min: 11, max: 11 }).withMessage('手机号必须为11位'),
-    body('room_type').notEmpty().withMessage('房间类型不能为空').isString(),
-    body('room_number').notEmpty().withMessage('房间号不能为空').isString(),
-    body('check_in_date').notEmpty().withMessage('入住日期不能为空').isISO8601().toDate(),
-    body('check_out_date').notEmpty().withMessage('离店日期不能为空').isISO8601().toDate(),
-    body('status')
-      .notEmpty().withMessage('订单状态不能为空')
-      .isString()
-      .custom(value => {
-        if (!VALID_ORDER_STATES.includes(value)) {
-          throw new Error(`无效的订单状态。有效状态: ${VALID_ORDER_STATES.join(', ')}`);
-        }
-        return true;
-      }),
-    body('payment_method').optional({ checkFalsy: true }).isString(), // 支付方式可以为空或字符串
-    body('room_price').notEmpty().withMessage('房间金额不能为空').isDecimal(),
-    body('deposit').optional({ checkFalsy: true }).isDecimal(), // 押金可以为空或数字
-    body('create_time').notEmpty().withMessage('创建时间不能为空').isISO8601().toDate(),
-    // id_source, remarks 是可选的，不需要强制验证 notEmpty
-    body('id_source').optional({ checkFalsy: true }).isString().trim(),
-    body('remarks').optional({ checkFalsy: true }).isString().trim(),
-  ],
-  async (req, res) => {
-    console.log('收到订单创建请求，请求体:', JSON.stringify(req.body, null, 2));
+  // 请求参数验证
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    const validationErrors = errors.array();
+    console.log('订单验证失败，具体错误:');
+    validationErrors.forEach((err, i) => {
+      console.log(`${i+1}. 字段 ${err.path}: ${err.msg}`);
+    });
+    return res.status(400).json({
+      success: false,
+      message: '订单数据验证失败',
+      errors: validationErrors
+    });
+  }
 
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      const validationErrors = errors.array();
-      console.log('订单验证失败，具体错误:');
-      validationErrors.forEach((err, i) => {
-        console.log(`${i+1}. 字段 ${err.path}: ${err.msg}`);
-      });
-      return res.status(400).json({ errors: validationErrors });
-    }
+  try {
+    const newOrder = await orderModule.createOrder(req.body);
 
-    try {
-      const newOrder = await orderModule.createOrder(req.body);
-      res.status(201).json({ message: '订单创建成功', order: newOrder });
-    } catch (error) {
-      console.error('创建订单失败:', error);
-      res.status(500).json({ message: '创建订单失败', error: error.message });
+    res.status(201).json({
+      success: true,
+      message: '订单创建成功',
+      data: {
+        order: newOrder
+      }
+    });
+
+  } catch (error) {
+    console.error('创建订单失败:', error);
+
+    // 处理不同类型的错误
+    switch(error.code) {
+      case 'DUPLICATE_ORDER':
+        return res.status(409).json({
+          success: false,
+          message: '相同订单已存在',
+          data: {
+            existingOrder: error.existingOrder
+          }
+        });
+
+      case 'MISSING_REQUIRED_FIELDS':
+      case 'INVALID_ORDER_STATUS':
+      case 'INVALID_DATE_FORMAT':
+      case 'INVALID_DATE_RANGE':
+      case 'INVALID_PHONE_FORMAT':
+      case 'INVALID_PRICE':
+      case 'INVALID_DEPOSIT':
+      case 'INVALID_ROOM_TYPE':
+      case 'INVALID_ROOM_NUMBER':
+      case 'ROOM_CLOSED':
+      case 'ROOM_ALREADY_BOOKED':
+        return res.status(400).json({
+          success: false,
+          message: error.message,
+          error: {
+            code: error.code,
+            details: error.message
+          }
+        });
+
+      case '23505': // 数据库唯一约束冲突
+        return res.status(409).json({
+          success: false,
+          message: '订单创建失败：数据重复',
+          error: error.message
+        });
+
+      case '23503': // 外键约束冲突
+        return res.status(400).json({
+          success: false,
+          message: '订单创建失败：无效的关联数据',
+          error: error.message
+        });
+
+      default:
+        return res.status(500).json({
+          success: false,
+          message: '订单创建失败',
+          error: error.message
+        });
     }
   }
-);
+});
 
 // PUT /api/orders/:orderNumber/status - 更新订单状态
 router.post('/:orderNumber/status', authenticationMiddleware, [

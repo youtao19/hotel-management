@@ -8,11 +8,13 @@ describe('POST /api/bills/create', () => {
   });
 
   beforeEach(async () => {
-    // 清理测试数据
-    await query('DELETE FROM bills ');
+    await query('DELETE FROM bills');
+    await query('DELETE FROM orders');
   });
 
   afterAll(async () => {
+    await query('DELETE FROM bills');
+    await query('DELETE FROM orders');
     await closePool();
   });
 
@@ -26,8 +28,8 @@ describe('POST /api/bills/create', () => {
       phone: '13800138000',
       room_type: 'standard',
       room_number: '101',
-      check_in_date: '2024-03-15',
-      check_out_date: '2024-03-16',
+      check_in_date: new Date().toISOString(),
+      check_out_date: new Date(new Date().getTime() + 24 * 60 * 60 * 1000).toISOString(),
       status: 'pending',
       payment_method: 'cash',
       room_price: '200.00',
@@ -42,10 +44,11 @@ describe('POST /api/bills/create', () => {
       .set('Accept', 'application/json');
   }
 
-  it('应成功创建一个新账单', async () => {
+  it('成功创建一个新账单', async () => {
     const orderId = 'TEST' + Date.now();
+    // 创建测试订单
     await createTestOrder(orderId);
-
+    // 账单数据
     const billData = {
       order_id: orderId,
       room_number: '101',
@@ -58,6 +61,7 @@ describe('POST /api/bills/create', () => {
       remarks: '测试账单'
     };
 
+    // 创建账单
     const res = await request(app)
       .post('/api/bills/create')
       .send(billData)
@@ -81,7 +85,6 @@ describe('POST /api/bills/create', () => {
   it('不应重复创建已存在的账单', async () => {
     const orderId = 'TEST' + Date.now();
     await createTestOrder(orderId);
-
     const billData = {
       order_id: orderId,
       room_number: '101',
@@ -95,25 +98,25 @@ describe('POST /api/bills/create', () => {
     };
 
     // 第一次创建
-    await request(app)
-      .post('/api/bills/create')
-      .send(billData)
-      .set('Accept', 'application/json');
-
-    // 尝试重复创建
     const res = await request(app)
       .post('/api/bills/create')
       .send(billData)
       .set('Accept', 'application/json');
+    expect(res.status).toBe(201);
 
-    expect(res.status).toBe(400);
-    expect(res.body).toHaveProperty('message', '账单已存在，请勿重复创建');
+    // 第二次创建
+    const res2 = await request(app)
+      .post('/api/bills/create')
+      .send(billData)
+      .set('Accept', 'application/json');
+
+    expect(res2.status).toBe(400);
+    expect(res2.body).toHaveProperty('message', '账单已存在，请勿重复创建');
   });
 
-  it('应正确处理不同的退押金状态', async () => {
+  it('正确处理不同的退押金状态', async () => {
     const orderId = 'TEST' + Date.now();
     await createTestOrder(orderId);
-
     const billData = {
       order_id: orderId,
       room_number: '101',
@@ -135,7 +138,7 @@ describe('POST /api/bills/create', () => {
     expect(res.body.bill.refund_deposit).toBe(false);
   });
 
-  it('应验证必填字段', async () => {
+  it('验证必填字段', async () => {
     const res = await request(app)
       .post('/api/bills/create')
       .send({})
