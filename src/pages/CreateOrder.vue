@@ -1,6 +1,6 @@
 <template>
   <!-- 整个创建订单页面的主容器，添加内边距 -->
-  <div class="check-in q-pa-md">
+  <div class="check-in q-pa-md q-pt-none">
     <!-- 页面标题 -->
     <h1 class="text-h4 q-mb-md">创建订单</h1>
 

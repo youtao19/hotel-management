@@ -1,5 +1,5 @@
 <template>
-  <div class="view-orders q-pa-md">
+  <div class="view-orders q-pa-md q-pt-none">
     <h1 class="text-h4 q-mb-md">查看订单</h1>
     <div class="search-section q-mb-md">
       <div class="row q-col-gutter-md">

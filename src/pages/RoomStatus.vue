@@ -1,6 +1,6 @@
 <template>
   <!-- 主容器，使用 Quasar 的 padding 类 -->
-  <div class="room-status q-pa-md">
+  <div class="room-status q-pa-md q-pt-none">
     <!-- 页面标题 -->
     <!-- <h1 class="text-h4 q-mb-md">房间状态</h1> -->
 

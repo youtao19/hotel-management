@@ -1,7 +1,24 @@
 <template>
-  <div id="app">
-    <router-view />
-  </div>
+  <q-layout view="lHh Lpr lFf">
+    <q-header elevated>
+      <q-toolbar>
+        <q-toolbar-title>
+          酒店管理系统
+        </q-toolbar-title>
+        <div>
+          <q-btn flat to="/" label="仪表盘" />
+          <q-btn flat to="/CreateOrder" label="创建订单" />
+          <q-btn flat to="/RoomStatus" label="房间状态" />
+          <q-btn flat to="/ViewOrders" label="查看订单" />
+          <q-btn flat to="/shift-handover" label="交接班" />
+        </div>
+      </q-toolbar>
+    </q-header>
+
+    <q-page-container>
+      <router-view />
+    </q-page-container>
+  </q-layout>
 </template>
 
 <script setup>

@@ -1,5 +1,5 @@
 <template>
-  <div class="dashboard q-pa-md">
+  <div class="dashboard q-pa-md q-pt-none">
     <div class="row q-col-gutter-md">
       <!-- 页面标题 -->
       <div class="col-12">
