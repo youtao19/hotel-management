@@ -1,6 +1,7 @@
 <template>
-  <div class="view-orders q-pa-md q-pt-none">
-    <h1 class="text-h4 q-mb-md">查看订单</h1>
+  <q-page class="view-orders">
+    <div class="q-pa-md">
+      <h1 class="text-h4 q-mb-md">查看订单</h1>
     <div class="search-section q-mb-md">
       <div class="row q-col-gutter-md">
         <div class="col-md-6 col-xs-12">
@@ -95,7 +96,8 @@
       @bill-created="handleBillCreated"
     />
 
-  </div>
+    </div>
+  </q-page>
 </template>
 
 <script setup>

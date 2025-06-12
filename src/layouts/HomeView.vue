@@ -1,11 +1,11 @@
 <template>
-    <!-- 主布局容器，hHh lpR fFf 是 Quasar 布局视图配置 -->
-    <q-layout view="hHh lpR fFf">
+    <!-- 主布局容器，lHh Lpr lFf 是 Quasar 布局视图配置 -->
+    <q-layout view="lHh Lpr lFf">
 
       <!-- 页面顶部导航栏 -->
-      <q-header elevated class="bg-primary text-white q-pa-none">
+      <q-header elevated class="bg-primary text-white">
         <!-- 工具栏部分 -->
-        <q-toolbar class="q-pa-none">
+        <q-toolbar>
           <!-- 左侧菜单按钮 -->
           <!-- <q-btn dense flat round icon="menu" @click="toggleLeftDrawer" /> -->
 
@@ -72,7 +72,7 @@
       <!-- </q-drawer> -->
 
       <!-- 页面内容容器 -->
-      <q-page-container class="q-pa-none">
+      <q-page-container>
         <!-- 路由视图，根据当前路由显示不同组件 -->
         <router-view />
       </q-page-container>

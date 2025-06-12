@@ -1,1 +1,37 @@
 /* app global css */
+
+/* 全局页面样式 */
+.q-page {
+  min-height: 100vh;
+}
+
+/* 页面内容容器 */
+.q-page > .q-pa-md {
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+/* 页面标题样式 */
+.q-page .text-h4 {
+  margin-bottom: 1rem;
+  color: #1976d2;
+  font-weight: 500;
+}
+
+/* 卡片间距统一 */
+.q-card {
+  margin-bottom: 1rem;
+}
+
+/* 响应式调整 */
+@media (max-width: 1024px) {
+  .q-page > .q-pa-md {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 600px) {
+  .q-page > .q-pa-md {
+    padding: 0.5rem;
+  }
+}

@@ -5,9 +5,13 @@
     "productName": "Quasar App",
     "author": "youtao19 <wuyoutao19@gmail.com>",
     "private": true,
-    "scripts": {
-        "test": "cross-env NODE_ENV=test jest",
+    "scripts": {        "test": "cross-env NODE_ENV=test jest",
         "test:watch": "cross-env NODE_ENV=test jest --watch",
+        "test:shift-handover": "cross-env NODE_ENV=test node tests/runShiftHandoverTests.js",
+        "test:shift-handover-unit": "cross-env NODE_ENV=test jest tests/shiftHandoverModule.test.js",
+        "test:shift-handover-api": "cross-env NODE_ENV=test jest tests/shiftHandover.test.js",
+        "test:shift-handover-integration": "cross-env NODE_ENV=test jest tests/shiftHandoverIntegration.test.js",
+        "test:shift-handover-performance": "cross-env NODE_ENV=test jest tests/shiftHandoverPerformance.test.js",
         "dev": "cross-env NODE_ENV=dev quasar dev",
         "build": "quasar build",
         "postinstall": "quasar prepare",
@@ -34,7 +38,8 @@
         "quasar": "^2.16.0",
         "rate-limiter-flexible": "^7.1.0",
         "vue": "^3.4.18",
-        "vue-router": "^4.0.0"
+        "vue-router": "^4.0.0",
+        "xlsx": "^0.18.5"
     },
     "devDependencies": {
         "@quasar/app-vite": "^2.1.0",

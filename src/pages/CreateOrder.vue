@@ -1,8 +1,9 @@
 <template>
-  <!-- 整个创建订单页面的主容器，添加内边距 -->
-  <div class="check-in q-pa-md q-pt-none">
-    <!-- 页面标题 -->
-    <h1 class="text-h4 q-mb-md">创建订单</h1>
+  <!-- 整个创建订单页面的主容器，使用q-page组件 -->
+  <q-page class="check-in">
+    <div class="q-pa-md">
+      <!-- 页面标题 -->
+      <h1 class="text-h4 q-mb-md">创建订单</h1>
 
     <!-- 添加测试数据按钮 -->
     <div class="row q-mb-md">
@@ -229,7 +230,8 @@
         </q-form>
       </q-card-section>
     </q-card>
-  </div>
+    </div>
+  </q-page>
 </template>
 
 <script setup>

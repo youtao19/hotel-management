@@ -87,6 +87,7 @@ const tables = [
   require('./tables/room'),
   require('./tables/order'),
   require('./tables/bill'),
+  require('./tables/shift_handover'),
 ].filter(Boolean); // 确保只加载存在的表
 
 /**

@@ -1,8 +1,9 @@
 <template>
-  <!-- 主容器，使用 Quasar 的 padding 类 -->
-  <div class="room-status q-pa-md q-pt-none">
-    <!-- 页面标题 -->
-    <!-- <h1 class="text-h4 q-mb-md">房间状态</h1> -->
+  <!-- 主容器，使用 Quasar 的 q-page 组件 -->
+  <q-page class="room-status">
+    <div class="q-pa-md">
+      <!-- 页面标题 -->
+      <!-- <h1 class="text-h4 q-mb-md">房间状态</h1> -->
 
     <!-- 房型统计卡片部分 -->
     <div class="room-type-summary q-mb-md">
@@ -298,7 +299,8 @@
       <div class="text-h6 text-grey-7 q-mt-md">没有找到符合条件的房间</div>
       <q-btn color="primary" label="重置筛选" @click="resetFilters" class="q-mt-md" />
     </div>
-  </div>
+    </div>
+  </q-page>
 </template>
 
 <script setup>

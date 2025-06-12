@@ -4,7 +4,8 @@ const {
   getReceiptDetails,
   getStatistics,
   saveHandover,
-  getHandoverHistory
+  getHandoverHistory,
+  exportHandoverToExcel
 } = require('../modules/shiftHandoverModule');
 
 // 获取收款明细
@@ -42,13 +43,23 @@ router.post('/save', async (req, res) => {
   try {
     const handoverData = {
       ...req.body,
-      userId: 1 // 临时使用固定用户ID
+      cashier_name: req.body.cashier_name || '未知',
+      shift_time: req.body.shift_time || new Date().toTimeString().slice(0, 5)
     };
+
     const result = await saveHandover(handoverData);
-    res.json(result);
+    res.json({
+      success: true,
+      message: '交接班记录保存成功',
+      data: result
+    });
   } catch (error) {
     console.error('保存交接班记录失败:', error);
-    res.status(500).json({ message: '保存交接班记录失败' });
+    res.status(500).json({
+      success: false,
+      message: '保存交接班记录失败',
+      error: error.message
+    });
   }
 });
 
@@ -61,6 +72,24 @@ router.get('/history', async (req, res) => {
   } catch (error) {
     console.error('获取交接班历史记录失败:', error);
     res.status(500).json({ message: '获取交接班历史记录失败' });
+  }
+});
+
+// 导出Excel
+router.post('/export', async (req, res) => {
+  try {
+    const buffer = await exportHandoverToExcel(req.body);
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="shift_handover_${req.body.date || new Date().toISOString().split('T')[0]}.xlsx"`);
+    res.send(buffer);
+  } catch (error) {
+    console.error('导出Excel失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '导出Excel失败',
+      error: error.message
+    });
   }
 });
 

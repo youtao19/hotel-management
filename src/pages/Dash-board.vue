@@ -1,8 +1,9 @@
 <template>
-  <div class="dashboard q-pa-md q-pt-none">
-    <div class="row q-col-gutter-md">
-      <!-- 页面标题 -->
-      <div class="col-12">
+  <q-page class="dashboard">
+    <div class="q-pa-md">
+      <div class="row q-col-gutter-md">
+        <!-- 页面标题 -->
+        <div class="col-12">
         <q-card class="bg-primary text-white">
           <q-card-section>
             <div class="text-h4">酒店管理系统仪表盘</div>
@@ -312,8 +313,9 @@
           </q-list>
         </q-card>
       </div>
+      </div>
     </div>
-  </div>
+  </q-page>
 </template>
 
 <script setup>
