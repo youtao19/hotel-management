@@ -36,11 +36,17 @@
                 <div class="text-h6">
                   <q-icon name="receipt_long" class="q-mr-xs" />
                   收款明细表
+                  <q-tooltip class="bg-white text-primary" anchor="bottom left" self="top left">
+                    <div class="text-body2">
+                      <strong>客房住宿</strong>：跨日期订单或房价>150元<br/>
+                      <strong>休息房</strong>：当日订单且房价≤150元
+                    </div>
+                  </q-tooltip>
                 </div>
                 <q-btn-toggle
                   v-model="roomType"
                   :options="[
-                    {label: '客房', value: 'hotel'},
+                    {label: '客房住宿', value: 'hotel'},
                     {label: '休息房', value: 'rest'}
                   ]"
                   color="white"
@@ -162,7 +168,7 @@
 
                 <q-item>
                   <q-item-section>
-                    <q-item-label>客房收入</q-item-label>
+                    <q-item-label>客房住宿收入</q-item-label>
                   </q-item-section>
                   <q-item-section side>
                     <q-item-label class="text-weight-bold text-positive">¥{{ statistics.hotelIncome.toFixed(2) }}</q-item-label>
@@ -744,7 +750,7 @@ function printHandover() {
     </div>
 
     <div class="print-section">
-      <h3>${roomType.value === 'hotel' ? '客房' : '休息房'}收款明细</h3>
+      <h3>${roomType.value === 'hotel' ? '客房住宿' : '休息房'}收款明细</h3>
       <table class="print-table">
         <thead>
           <tr>

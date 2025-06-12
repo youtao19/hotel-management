@@ -14,13 +14,13 @@ const orderData1 = {
   phone: '13800138000',
   room_type: 'standard', // 确保数据库有这个房型
   room_number: '102',  // 确保数据库有这个房间
-  check_in_date: '2025-06-02',
-  check_out_date: '2025-06-03',
+  check_in_date: '2025-06-02T00:00:00.000Z',
+  check_out_date: '2025-06-03T00:00:00.000Z',
   status: 'pending',
   payment_method: 'cash',
   room_price: '200.00',
   deposit: '100.00',
-  create_time: '2025-06-02',
+  create_time: '2025-06-02T00:00:00.000Z',
   remarks: '测试订单'
 };
 
@@ -32,13 +32,13 @@ const orderData2 = {
   phone: '13800138000',
   room_type: 'standard', // 确保数据库有这个房型
   room_number: '304',  // 确保数据库有这个房间
-  check_in_date: '2025-05-25',
-  check_out_date: '2025-05-26',
+  check_in_date: '2025-05-25T00:00:00.000Z',
+  check_out_date: '2025-05-26T00:00:00.000Z',
   status: 'pending',
   payment_method: 'cash',
   room_price: '200.00',
   deposit: '100.00',
-  create_time: '2025-05-25',
+  create_time: '2025-05-25T00:00:00.000Z',
   remarks: '测试订单'
 };
 

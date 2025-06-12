@@ -8,12 +8,20 @@ const { query } = require('../database/postgreDB/pg');
  * @returns {Promise<Array>} 收款明细列表
  */
 async function getReceiptDetails(type, startDate, endDate) {
-  // 根据类型确定房间类型条件
+  // 根据类型确定分类条件 - 基于订单业务属性而非房间类型
   let typeCondition = '';
   if (type === 'hotel') {
-    typeCondition = "r.type_code IN ('standard', 'deluxe', 'suite')";
+    // 客房：跨日期的订单或房价高于150的订单
+    typeCondition = `(
+      DATE(o.check_in_date) != DATE(o.check_out_date)
+      OR o.room_price > 150
+    )`;
   } else if (type === 'rest') {
-    typeCondition = "r.type_code = 'rest'";
+    // 休息房：同日期且房价低于等于150的订单
+    typeCondition = `(
+      DATE(o.check_in_date) = DATE(o.check_out_date)
+      AND o.room_price <= 150
+    )`;
   } else {
     typeCondition = "1=1"; // 显示所有类型
   }
@@ -30,7 +38,12 @@ async function getReceiptDetails(type, startDate, endDate) {
       o.check_in_date,
       o.check_out_date,
       o.create_time as created_at,
-      r.type_code
+      r.type_code,
+      CASE
+        WHEN (DATE(o.check_in_date) != DATE(o.check_out_date)
+              OR o.room_price > 150) THEN 'hotel'
+        ELSE 'rest'
+      END as business_type
     FROM orders o
     JOIN rooms r ON o.room_number = r.room_number
     WHERE ${typeCondition}
@@ -54,31 +67,37 @@ async function getReceiptDetails(type, startDate, endDate) {
  * @returns {Promise<Object>} 统计数据
  */
 async function getStatistics(date) {
-  // 获取当天的订单统计
+  // 获取当天的订单统计 - 基于业务类型
   const orderStatsSql = `
     SELECT
-      r.type_code,
+      CASE
+        WHEN (DATE(o.check_in_date) != DATE(o.check_out_date)
+              OR o.room_price > 150) THEN 'hotel'
+        ELSE 'rest'
+      END as business_type,
       SUM(COALESCE(o.room_price, 0)) as income,
       SUM(COALESCE(o.deposit, 0)) as deposit,
       COUNT(*) as count,
       o.payment_method
     FROM orders o
-    JOIN rooms r ON o.room_number = r.room_number
     WHERE DATE(o.create_time) = $1
     AND o.status IN ('checked_in', 'checked_out', 'completed')
-    GROUP BY r.type_code, o.payment_method;
+    GROUP BY business_type, o.payment_method;
   `;
 
-  // 获取当天的房间统计
+  // 获取当天的房间统计 - 基于业务类型
   const roomStatsSql = `
     SELECT
-      r.type_code,
+      CASE
+        WHEN (DATE(o.check_in_date) != DATE(o.check_out_date)
+              OR o.room_price > 150) THEN 'hotel'
+        ELSE 'rest'
+      END as business_type,
       COUNT(*) as room_count
     FROM orders o
-    JOIN rooms r ON o.room_number = r.room_number
     WHERE DATE(o.create_time) = $1
     AND o.status IN ('checked_in', 'checked_out', 'completed')
-    GROUP BY r.type_code;
+    GROUP BY business_type;
   `;
 
   try {
@@ -111,17 +130,17 @@ async function getStatistics(date) {
       }
     };
 
-    // 处理订单统计结果
+    // 处理订单统计结果 - 基于业务类型
     orderStatsResult.rows.forEach(row => {
       const income = Number(row.income || 0);
       const deposit = Number(row.deposit || 0);
       const paymentMethod = row.payment_method || '现金';
 
-      // 按房间类型分类收入
-      if (row.type_code === 'standard' || row.type_code === 'deluxe' || row.type_code === 'suite') {
+      // 按业务类型分类收入
+      if (row.business_type === 'hotel') {
         statistics.hotelIncome += income;
         statistics.hotelDeposit += deposit;
-      } else if (row.type_code === 'rest') {
+      } else if (row.business_type === 'rest') {
         statistics.restIncome += income;
         statistics.restDeposit += deposit;
       }
@@ -134,18 +153,22 @@ async function getStatistics(date) {
       }
     });
 
-    // 处理房间统计结果
+    // 处理房间统计结果 - 基于业务类型
     roomStatsResult.rows.forEach(row => {
       const count = Number(row.room_count || 0);
-      if (row.type_code === 'standard' || row.type_code === 'deluxe' || row.type_code === 'suite') {
+      if (row.business_type === 'hotel') {
         statistics.totalRooms += count;
-      } else if (row.type_code === 'rest') {
+      } else if (row.business_type === 'rest') {
         statistics.restRooms += count;
       }
     });
 
     // 计算总收入
     statistics.totalIncome = statistics.hotelIncome + statistics.restIncome + statistics.carRentalIncome;
+
+    // 计算交接款金额
+    statistics.handoverAmount = statistics.totalIncome + statistics.reserveCash -
+                               statistics.hotelDeposit - statistics.restDeposit - statistics.retainedAmount;
 
     return statistics;
   } catch (error) {
@@ -160,15 +183,33 @@ async function getStatistics(date) {
  * @returns {Promise<Object>} 保存的交接班记录
  */
 async function saveHandover(handoverData) {
+  // 验证必填字段
+  if (!handoverData || typeof handoverData !== 'object') {
+    throw new Error('交接班数据不能为空');
+  }
+
   const {
     type = 'hotel',
     details = [],
     statistics = {},
     remarks = '',
-    cashier_name = '未知',
-    shift_time = new Date().toTimeString().slice(0, 5),
+    cashier_name,
+    shift_time,
     shift_date = new Date().toISOString().split('T')[0]
   } = handoverData;
+
+  // 验证必填字段
+  if (!cashier_name || cashier_name.trim() === '' || cashier_name === '未知') {
+    throw new Error('收银员姓名不能为空');
+  }
+
+  if (!shift_time || shift_time.trim() === '') {
+    throw new Error('交班时间不能为空');
+  }
+
+  if (!type || !['hotel', 'rest'].includes(type)) {
+    throw new Error('交接班类型必须是 hotel 或 rest');
+  }
 
   const sql = `
     INSERT INTO shift_handover (
@@ -189,8 +230,8 @@ async function saveHandover(handoverData) {
       JSON.stringify(details || []),
       JSON.stringify(statistics || {}),
       remarks || '',
-      cashier_name,
-      shift_time,
+      cashier_name.trim(),
+      shift_time.trim(),
       shift_date
     ]);
 

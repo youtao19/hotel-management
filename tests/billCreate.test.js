@@ -19,7 +19,10 @@ describe('POST /api/bills/create', () => {
   });
 
   // 创建测试订单的辅助函数
-  async function createTestOrder(orderId) {
+  async function createTestOrder(orderId, roomNumber = '101', offsetDays = 0) {
+    const baseDate = new Date();
+    baseDate.setDate(baseDate.getDate() + offsetDays);
+
     const orderData = {
       order_id: orderId,
       order_source: 'front_desk',
@@ -27,31 +30,37 @@ describe('POST /api/bills/create', () => {
       id_number: '123456789012345678',
       phone: '13800138000',
       room_type: 'standard',
-      room_number: '101',
-      check_in_date: new Date().toISOString(),
-      check_out_date: new Date(new Date().getTime() + 24 * 60 * 60 * 1000).toISOString(),
+      room_number: roomNumber,
+      check_in_date: baseDate.toISOString(),
+      check_out_date: new Date(baseDate.getTime() + 24 * 60 * 60 * 1000).toISOString(),
       status: 'pending',
       payment_method: 'cash',
       room_price: '200.00',
       deposit: '100.00',
-      create_time: new Date().toISOString(),
+      create_time: baseDate.toISOString(),
       remarks: '测试订单'
     };
 
-    await request(app)
+    const response = await request(app)
       .post('/api/orders/new')
       .send(orderData)
       .set('Accept', 'application/json');
+
+    if (response.status !== 201) {
+      throw new Error(`Failed to create test order: ${response.status} ${JSON.stringify(response.body)}`);
+    }
+
+    return response.body;
   }
 
   it('成功创建一个新账单', async () => {
     const orderId = 'TEST' + Date.now();
-    // 创建测试订单
-    await createTestOrder(orderId);
+    // 创建测试订单 - 使用房间104和未来日期避免冲突
+    await createTestOrder(orderId, '104', 1);
     // 账单数据
     const billData = {
       order_id: orderId,
-      room_number: '101',
+      room_number: '104',
       guest_name: '张三',
       deposit: '200.00',
       refund_deposit: 'yes',
@@ -84,10 +93,15 @@ describe('POST /api/bills/create', () => {
 
   it('不应重复创建已存在的账单', async () => {
     const orderId = 'TEST' + Date.now();
-    await createTestOrder(orderId);
+    // 确保订单创建完成
+    await createTestOrder(orderId, '105', 2);
+
+    // 等待一小段时间确保订单已保存
+    await new Promise(resolve => setTimeout(resolve, 100));
+
     const billData = {
       order_id: orderId,
-      room_number: '101',
+      room_number: '105',
       guest_name: '张三',
       deposit: '200.00',
       refund_deposit: 'yes',
@@ -116,10 +130,14 @@ describe('POST /api/bills/create', () => {
 
   it('正确处理不同的退押金状态', async () => {
     const orderId = 'TEST' + Date.now();
-    await createTestOrder(orderId);
+    // 确保订单创建完成
+    await createTestOrder(orderId, '106', 3);
+
+    // 等待一小段时间确保订单已保存
+    await new Promise(resolve => setTimeout(resolve, 100));
     const billData = {
       order_id: orderId,
-      room_number: '101',
+      room_number: '106',
       guest_name: '张三',
       deposit: '200.00',
       refund_deposit: 'no',

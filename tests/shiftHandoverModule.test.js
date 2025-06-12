@@ -23,13 +23,14 @@ describe('交接班模块单元测试', () => {
       INSERT INTO rooms (room_id, room_number, type_code, status, price)
       VALUES
         (101, '101', 'standard', 'available', 288.00),
-        (201, '201', 'rest', 'available', 88.00)
+        (201, '201', 'standard', 'available', 88.00)
       ON CONFLICT (room_number) DO NOTHING
     `);
   });
 
   afterAll(async () => {
     // 清理测试数据
+    await query('DELETE FROM bills WHERE order_id LIKE \'MODULE_TEST_%\'');
     await query('DELETE FROM orders WHERE order_id LIKE \'MODULE_TEST_%\'');
     await query('DELETE FROM shift_handover WHERE remarks LIKE \'%模块测试%\'');
   });
@@ -41,7 +42,7 @@ describe('交接班模块单元测试', () => {
 
       const testOrders = [
         {
-          order_id: 'MODULE_TEST_001',
+          order_id: 'MOD_TEST_001',
           id_source: 'system',
           order_source: 'front_desk',
           guest_name: '模块测试客人1',
@@ -53,27 +54,27 @@ describe('交接班模块单元测试', () => {
           deposit: 200.00,
           payment_method: '现金',
           status: 'checked_out',
-          check_in_date: today,
-          check_out_date: today,
-          create_time: `${today} 14:30:00`,
+          check_in_date: `${today} 10:00:00`,
+          check_out_date: new Date(new Date(today).getTime() + 24*60*60*1000).toISOString().split('T')[0] + ' 12:00:00',
+          create_time: `${today} 10:00:00`,
           remarks: '模块测试数据'
         },
         {
-          order_id: 'MODULE_TEST_002',
+          order_id: 'MOD_TEST_002',
           id_source: 'system',
           order_source: 'online',
           guest_name: '模块测试客人2',
           phone: '13900000002',
           id_number: '110101199002022002',
-          room_type: 'rest',
+          room_type: 'standard',
           room_number: '201',
           room_price: 88.00,
           deposit: 50.00,
           payment_method: '微信',
           status: 'checked_out',
-          check_in_date: today,
-          check_out_date: today,
-          create_time: `${today} 16:15:00`,
+          check_in_date: `${today} 14:00:00`,
+          check_out_date: `${today} 17:00:00`,
+          create_time: `${today} 14:00:00`,
           remarks: '模块测试数据'
         }
       ];
@@ -93,11 +94,27 @@ describe('交接班模块单元测试', () => {
           order.room_price, order.deposit, order.payment_method, order.status,
           order.check_in_date, order.check_out_date, order.create_time, order.remarks
         ]);
+
+        // 插入对应的账单记录
+        const billSql = `
+          INSERT INTO bills (
+            order_id, room_number, guest_name, deposit, refund_deposit,
+            room_fee, total_income, pay_way, create_time, remarks
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        `;
+
+        await query(billSql, [
+          order.order_id, order.room_number, order.guest_name,
+          order.deposit, true, order.room_price,
+          order.room_price + order.deposit, order.payment_method,
+          order.create_time, '模块测试账单'
+        ]);
       }
     });
 
     afterEach(async () => {
-      await query('DELETE FROM orders WHERE order_id LIKE \'MODULE_TEST_%\'');
+      await query('DELETE FROM bills WHERE order_id LIKE \'MOD_TEST_%\'');
+      await query('DELETE FROM orders WHERE order_id LIKE \'MOD_TEST_%\'');
     });    test('应该正确获取客房收款明细', async () => {
       const today = new Date().toISOString().split('T')[0];
 
@@ -105,7 +122,7 @@ describe('交接班模块单元测试', () => {
 
       expect(Array.isArray(receipts)).toBe(true);
 
-      const testReceipt = receipts.find(r => r.order_number === 'MODULE_TEST_001');
+      const testReceipt = receipts.find(r => r.order_number === 'MOD_TEST_001');
       expect(testReceipt).toBeDefined();
       expect(testReceipt.room_number).toBe('101');
       expect(parseFloat(testReceipt.room_fee)).toBe(300.00);
@@ -121,7 +138,7 @@ describe('交接班模块单元测试', () => {
 
       expect(Array.isArray(receipts)).toBe(true);
 
-      const testReceipt = receipts.find(r => r.order_number === 'MODULE_TEST_002');
+      const testReceipt = receipts.find(r => r.order_number === 'MOD_TEST_002');
       expect(testReceipt).toBeDefined();
       expect(testReceipt.room_number).toBe('201');
       expect(parseFloat(testReceipt.room_fee)).toBe(88.00);
@@ -139,6 +156,87 @@ describe('交接班模块单元测试', () => {
       expect(receipts.length).toBe(0);
     });
   });  describe('getStatistics', () => {
+    beforeEach(async () => {
+      // 插入测试数据
+      const today = new Date().toISOString().split('T')[0];
+
+      const testOrders = [
+        {
+          order_id: 'MOD_STAT_001',
+          id_source: 'system',
+          order_source: 'front_desk',
+          guest_name: '统计测试客人1',
+          phone: '13900000001',
+          id_number: '110101199001011001',
+          room_type: 'standard',
+          room_number: '101',
+          room_price: 300.00,
+          deposit: 200.00,
+          payment_method: '现金',
+          status: 'checked_out',
+          check_in_date: `${today} 10:00:00`,
+          check_out_date: new Date(new Date(today).getTime() + 24*60*60*1000).toISOString().split('T')[0] + ' 12:00:00',
+          create_time: `${today} 10:00:00`,
+          remarks: '模块测试数据'
+        },
+        {
+          order_id: 'MOD_STAT_002',
+          id_source: 'system',
+          order_source: 'online',
+          guest_name: '统计测试客人2',
+          phone: '13900000002',
+          id_number: '110101199002022002',
+          room_type: 'standard',
+          room_number: '201',
+          room_price: 88.00,
+          deposit: 50.00,
+          payment_method: '微信',
+          status: 'checked_out',
+          check_in_date: `${today} 14:00:00`,
+          check_out_date: `${today} 17:00:00`,
+          create_time: `${today} 14:00:00`,
+          remarks: '模块测试数据'
+        }
+      ];
+
+      for (const order of testOrders) {
+        const sql = `
+          INSERT INTO orders (
+            order_id, id_source, order_source, guest_name, phone, id_number,
+            room_type, room_number, room_price, deposit, payment_method,
+            status, check_in_date, check_out_date, create_time, remarks
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        `;
+
+        await query(sql, [
+          order.order_id, order.id_source, order.order_source, order.guest_name,
+          order.phone, order.id_number, order.room_type, order.room_number,
+          order.room_price, order.deposit, order.payment_method, order.status,
+          order.check_in_date, order.check_out_date, order.create_time, order.remarks
+        ]);
+
+        // 插入对应的账单记录
+        const billSql = `
+          INSERT INTO bills (
+            order_id, room_number, guest_name, deposit, refund_deposit,
+            room_fee, total_income, pay_way, create_time, remarks
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        `;
+
+        await query(billSql, [
+          order.order_id, order.room_number, order.guest_name,
+          order.deposit, true, order.room_price,
+          order.room_price + order.deposit, order.payment_method,
+          order.create_time, '模块测试账单'
+        ]);
+      }
+    });
+
+    afterEach(async () => {
+      await query('DELETE FROM bills WHERE order_id LIKE \'MOD_STAT_%\'');
+      await query('DELETE FROM orders WHERE order_id LIKE \'MOD_STAT_%\'');
+    });
+
     test('应该正确计算统计数据', async () => {
       const today = new Date().toISOString().split('T')[0];
 
@@ -167,11 +265,11 @@ describe('交接班模块单元测试', () => {
       expect(typeof statistics.restRooms).toBe('number');
 
       // 验证计算逻辑
-      const expectedTotal = statistics.reserveCash + statistics.hotelIncome +
-                           statistics.restIncome + statistics.carRentalIncome;
+      // 注意：reserveCash 是固定的备用金1000元，不参与income的累加计算
+      const expectedTotal = statistics.hotelIncome + statistics.restIncome + statistics.carRentalIncome;
       expect(statistics.totalIncome).toBe(expectedTotal);
 
-      const expectedHandover = statistics.totalIncome - statistics.hotelDeposit -
+      const expectedHandover = statistics.totalIncome + statistics.reserveCash - statistics.hotelDeposit -
                               statistics.restDeposit - statistics.retainedAmount;
       expect(statistics.handoverAmount).toBe(expectedHandover);
     });
@@ -215,20 +313,21 @@ describe('交接班模块单元测试', () => {
       expect(typeof result.id).toBe('number');
 
       // 验证数据是否正确保存
-      const savedRecord = await query(
+      const savedRecordResult = await query(
         'SELECT * FROM shift_handover WHERE id = $1',
         [result.id]
       );
 
-      expect(savedRecord.length).toBe(1);
-      expect(savedRecord[0].cashier_name).toBe('模块测试收银员');
-      expect(savedRecord[0].type).toBe('hotel');
-      expect(savedRecord[0].shift_time).toBe('08:00');
-      expect(savedRecord[0].remarks).toBe('模块测试交接班记录');
+      expect(savedRecordResult.rows.length).toBe(1);
+      const savedRecord = savedRecordResult.rows[0];
+      expect(savedRecord.cashier_name).toBe('模块测试收银员');
+      expect(savedRecord.type).toBe('hotel');
+      expect(savedRecord.shift_time).toBe('08:00');
+      expect(savedRecord.remarks).toBe('模块测试交接班记录');
 
-      const savedStatistics = typeof savedRecord[0].statistics === 'string'
-        ? JSON.parse(savedRecord[0].statistics)
-        : savedRecord[0].statistics;
+      const savedStatistics = typeof savedRecord.statistics === 'string'
+        ? JSON.parse(savedRecord.statistics)
+        : savedRecord.statistics;
 
       expect(savedStatistics.reserveCash).toBe(1000);
       expect(savedStatistics.hotelIncome).toBe(500);
