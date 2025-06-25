@@ -444,6 +444,48 @@
             </q-card-section>
           </q-card>
         </q-dialog>
+
+        <!-- 交接班详情对话框 -->
+        <q-dialog v-model="showDetailDialog" maximized>
+          <q-card>
+            <q-card-section class="bg-primary text-white">
+              <div class="row items-center justify-between">
+                <div class="text-h6">查看交接班详情</div>
+                <q-btn flat round icon="close" @click="showDetailDialog = false" />
+              </div>
+            </q-card-section>
+
+            <q-card-section class="q-pa-md">
+              <div v-if="selectedDetail">
+                <div class="row q-col-gutter-md q-mb-md">
+                  <div class="col-6">
+                    <div>收银员: {{ selectedDetail.cashier_name }}</div>
+                    <div>交班日期: {{ selectedDetail.shift_date }}</div>
+                    <div>交班时间: {{ selectedDetail.shift_time }}</div>
+                    <div>类型: {{ selectedDetail.type === 'hotel' ? '客房' : '休息房' }}</div>
+                  </div>
+                  <div class="col-6 text-right">
+                    <div>总收入: {{ selectedDetail.total_income }}</div>
+                    <div>交接款: {{ selectedDetail.handover_amount }}</div>
+                    <div>创建时间: {{ selectedDetail.created_at }}</div>
+                  </div>
+                </div>
+                <q-divider />
+                <div class="q-mt-md">
+                  <div class="text-h6 q-mb-sm">收款明细</div>
+                  <q-table
+                    :rows="selectedDetail.details || []"
+                    :columns="receiptColumns"
+                    row-key="id"
+                    dense
+                    flat
+                    bordered
+                  />
+                </div>
+              </div>
+            </q-card-section>
+          </q-card>
+        </q-dialog>
       </div>
     </div>
   </q-page>
@@ -474,6 +516,8 @@ const loading = ref(false)
 const saving = ref(false)
 const showHistory = ref(false)
 const loadingHistory = ref(false)
+const showDetailDialog = ref(false)
+const selectedDetail = ref(null)
 
 // 分页设置
 const pagination = ref({
@@ -885,8 +929,8 @@ async function loadHistoryRecords() {
 
 // 查看历史记录详情
 function viewHandoverDetail(record) {
-  // 这里可以实现查看详情的逻辑
-  console.log('查看详情:', record)
+  selectedDetail.value = record
+  showDetailDialog.value = true
 }
 
 // 组件挂载时初始化
