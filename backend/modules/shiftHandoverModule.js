@@ -48,7 +48,7 @@ async function getReceiptDetails(type, startDate, endDate) {
     JOIN rooms r ON o.room_number = r.room_number
     WHERE ${typeCondition}
     AND DATE(o.create_time) BETWEEN $1 AND $2
-    AND o.status IN ('checked_in', 'checked_out', 'completed')
+    AND o.status IN ('checked_in', 'checked_out', 'completed', 'checked-in', 'checked-out')
     ORDER BY o.create_time DESC;
   `;
 
@@ -62,12 +62,16 @@ async function getReceiptDetails(type, startDate, endDate) {
 }
 
 /**
- * 获取指定日期的统计数据
- * @param {string} date - 统计日期
+ * 获取指定日期范围的统计数据
+ * @param {string} startDate - 开始日期
+ * @param {string} endDate - 结束日期（可选，默认与开始日期相同）
  * @returns {Promise<Object>} 统计数据
  */
-async function getStatistics(date) {
-  // 获取当天的订单统计 - 基于业务类型
+async function getStatistics(startDate, endDate = null) {
+  // 如果没有提供结束日期，使用开始日期（单天查询）
+  const finalEndDate = endDate || startDate;
+
+  // 获取指定日期范围的订单统计 - 基于业务类型
   const orderStatsSql = `
     SELECT
       CASE
@@ -80,12 +84,12 @@ async function getStatistics(date) {
       COUNT(*) as count,
       o.payment_method
     FROM orders o
-    WHERE DATE(o.create_time) = $1
-    AND o.status IN ('checked_in', 'checked_out', 'completed')
+    WHERE DATE(o.create_time) BETWEEN $1 AND $2
+    AND o.status IN ('checked_in', 'checked_out', 'completed', 'checked-in', 'checked-out')
     GROUP BY business_type, o.payment_method;
   `;
 
-  // 获取当天的房间统计 - 基于业务类型
+  // 获取指定日期范围的房间统计 - 基于业务类型
   const roomStatsSql = `
     SELECT
       CASE
@@ -95,15 +99,15 @@ async function getStatistics(date) {
       END as business_type,
       COUNT(*) as room_count
     FROM orders o
-    WHERE DATE(o.create_time) = $1
-    AND o.status IN ('checked_in', 'checked_out', 'completed')
+    WHERE DATE(o.create_time) BETWEEN $1 AND $2
+    AND o.status IN ('checked_in', 'checked_out', 'completed', 'checked-in', 'checked-out')
     GROUP BY business_type;
   `;
 
   try {
     const [orderStatsResult, roomStatsResult] = await Promise.all([
-      query(orderStatsSql, [date]),
-      query(roomStatsSql, [date])
+      query(orderStatsSql, [startDate, finalEndDate]),
+      query(roomStatsSql, [startDate, finalEndDate])
     ]);
 
     // 初始化统计数据

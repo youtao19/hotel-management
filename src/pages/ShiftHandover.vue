@@ -58,6 +58,81 @@
               </div>
             </q-card-section>
 
+            <!-- 日期选择和筛选区域 -->
+            <q-card-section class="bg-grey-1">
+              <div class="row q-col-gutter-md items-center">
+                <div class="col-md-4 col-xs-12">
+                  <q-input
+                    v-model="selectedDate"
+                    filled
+                    label="查看日期"
+                    mask="####-##-##"
+                    dense
+                  >
+                    <template v-slot:append>
+                      <q-icon name="event" class="cursor-pointer">
+                        <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+                          <q-date
+                            v-model="selectedDate"
+                            @update:model-value="loadReceiptsByDate"
+                          >
+                            <div class="row items-center justify-end">
+                              <q-btn v-close-popup label="确定" color="primary" flat />
+                            </div>
+                          </q-date>
+                        </q-popup-proxy>
+                      </q-icon>
+                    </template>
+                  </q-input>
+                </div>
+                <div class="col-md-5 col-xs-12">
+                  <div class="row q-gutter-sm">
+                    <q-btn
+                      color="primary"
+                      icon="today"
+                      label="今天"
+                      size="sm"
+                      @click="setToday"
+                      :disable="loading"
+                    />
+                    <q-btn
+                      color="secondary"
+                      icon="skip_previous"
+                      label="昨天"
+                      size="sm"
+                      @click="setYesterday"
+                      :disable="loading"
+                    />
+                    <q-btn
+                      color="accent"
+                      icon="date_range"
+                      label="本周"
+                      size="sm"
+                      @click="setThisWeek"
+                      :disable="loading"
+                    />
+                    <q-btn
+                      color="orange"
+                      icon="calendar_month"
+                      label="本月"
+                      size="sm"
+                      @click="setThisMonth"
+                      :disable="loading"
+                    />
+                  </div>
+                </div>
+                <div class="col-md-3 col-xs-12 text-right">
+                  <q-chip
+                    :color="isToday ? 'positive' : 'info'"
+                    text-color="white"
+                    icon="date_range"
+                  >
+                    {{ formatDisplayDate(selectedDate) }}
+                  </q-chip>
+                </div>
+              </div>
+            </q-card-section>
+
             <!-- 明细表格 -->
             <q-card-section class="q-pa-none">
               <q-table
@@ -374,13 +449,6 @@
             <!-- 操作按钮 -->
             <q-card-actions align="right" class="q-pa-md">
               <q-btn
-                color="grey"
-                outline
-                icon="history"
-                label="历史记录"
-                @click="showHistory = true"
-              />
-              <q-btn
                 color="secondary"
                 icon="print"
                 label="打印交接单"
@@ -402,90 +470,6 @@
             </q-card-actions>
           </q-card>
         </div>
-
-        <!-- 历史记录对话框 -->
-        <q-dialog v-model="showHistory" maximized>
-          <q-card>
-            <q-card-section class="bg-primary text-white">
-              <div class="row items-center">
-                <div class="col">
-                  <div class="text-h6">交接班历史记录</div>
-                </div>
-                <div class="col-auto">
-                  <q-btn flat round icon="close" @click="showHistory = false" />
-                </div>
-              </div>
-            </q-card-section>
-
-            <q-card-section class="q-pa-none">
-              <q-table
-                :rows="historyRecords"
-                :columns="historyColumns"
-                row-key="id"
-                :loading="loadingHistory"
-                flat
-                bordered
-              >
-                <template v-slot:body-cell-actions="props">
-                  <q-td :props="props">
-                    <q-btn
-                      size="sm"
-                      color="primary"
-                      icon="visibility"
-                      @click="viewHandoverDetail(props.row)"
-                      dense
-                      flat
-                    >
-                      查看
-                    </q-btn>
-                  </q-td>
-                </template>
-              </q-table>
-            </q-card-section>
-          </q-card>
-        </q-dialog>
-
-        <!-- 交接班详情对话框 -->
-        <q-dialog v-model="showDetailDialog" maximized>
-          <q-card>
-            <q-card-section class="bg-primary text-white">
-              <div class="row items-center justify-between">
-                <div class="text-h6">查看交接班详情</div>
-                <q-btn flat round icon="close" @click="showDetailDialog = false" />
-              </div>
-            </q-card-section>
-
-            <q-card-section class="q-pa-md">
-              <div v-if="selectedDetail">
-                <div class="row q-col-gutter-md q-mb-md">
-                  <div class="col-6">
-                    <div>收银员: {{ selectedDetail.cashier_name }}</div>
-                    <div>交班日期: {{ selectedDetail.shift_date }}</div>
-                    <div>交班时间: {{ selectedDetail.shift_time }}</div>
-                    <div>类型: {{ selectedDetail.type === 'hotel' ? '客房' : '休息房' }}</div>
-                  </div>
-                  <div class="col-6 text-right">
-                    <div>总收入: {{ selectedDetail.total_income }}</div>
-                    <div>交接款: {{ selectedDetail.handover_amount }}</div>
-                    <div>创建时间: {{ selectedDetail.created_at }}</div>
-                  </div>
-                </div>
-                <q-divider />
-                <div class="q-mt-md">
-                  <div class="text-h6 q-mb-sm">收款明细</div>
-                  <q-table
-                    :rows="selectedDetail.details || []"
-                    :columns="receiptColumns"
-                    row-key="id"
-                    dense
-                    flat
-                    bordered
-                  />
-                </div>
-              </div>
-            </q-card-section>
-          </q-card>
-        </q-dialog>
       </div>
     </div>
   </q-page>
@@ -514,10 +498,7 @@ const cashierName = ref('张三') // 从用户状态获取
 const roomType = ref('hotel')
 const loading = ref(false)
 const saving = ref(false)
-const showHistory = ref(false)
-const loadingHistory = ref(false)
-const showDetailDialog = ref(false)
-const selectedDetail = ref(null)
+const selectedDate = ref(date.formatDate(new Date(), 'YYYY-MM-DD'))
 
 // 分页设置
 const pagination = ref({
@@ -536,47 +517,8 @@ const receiptColumns = [
   { name: 'checkOutTime', label: '退房时间', field: 'check_out_date', align: 'center', style: 'width: 140px' }
 ]
 
-// 历史记录表格列
-const historyColumns = [
-  { name: 'shift_date', label: '交班日期', field: 'shift_date', align: 'center', style: 'width: 120px' },
-  { name: 'cashier_name', label: '收银员', field: 'cashier_name', align: 'center', style: 'width: 100px' },
-  { name: 'shift_time', label: '交班时间', field: 'shift_time', align: 'center', style: 'width: 100px' },
-  { name: 'type', label: '类型', field: row => row.type === 'hotel' ? '客房' : '休息房', align: 'center', style: 'width: 80px' },
-  {
-    name: 'total_income',
-    label: '总收入',
-    field: row => {
-      try {
-        const stats = typeof row.statistics === 'string' ? JSON.parse(row.statistics) : row.statistics
-        return `¥${(stats.totalIncome || 0).toFixed(2)}`
-      } catch (e) {
-        return '¥0.00'
-      }
-    },
-    align: 'right',
-    style: 'width: 120px'
-  },
-  {
-    name: 'handover_amount',
-    label: '交接款',
-    field: row => {
-      try {
-        const stats = typeof row.statistics === 'string' ? JSON.parse(row.statistics) : row.statistics
-        return `¥${(stats.handoverAmount || 0).toFixed(2)}`
-      } catch (e) {
-        return '¥0.00'
-      }
-    },
-    align: 'right',
-    style: 'width: 120px'
-  },
-  { name: 'created_at', label: '创建时间', field: 'created_at', align: 'center', style: 'width: 140px' },
-  { name: 'actions', label: '操作', field: '', align: 'center', style: 'width: 80px' }
-]
-
 // 明细数据
 const receiptDetails = ref([])
-const historyRecords = ref([])
 
 // 统计数据
 const statistics = ref({
@@ -610,6 +552,10 @@ const paymentSummary = computed(() => {
     summary[method] = (summary[method] || 0) + (item.total_amount || 0)
   })
   return summary
+})
+
+const isToday = computed(() => {
+  return selectedDate.value === date.formatDate(new Date(), 'YYYY-MM-DD')
 })
 
 // 监听统计数据变化
@@ -650,17 +596,157 @@ function updateStatistics() {
 }
 
 // 切换房间类型
-async function switchRoomType(type) {
+async function switchRoomType(type, customStartDate = null, customEndDate = null) {
   loading.value = true
   try {
-    const today = date.formatDate(new Date(), 'YYYY-MM-DD')
+    // 确定查询的日期范围
+    let startDate, endDate
+
+    if (customStartDate && customEndDate) {
+      // 使用自定义日期范围
+      startDate = customStartDate
+      endDate = customEndDate
+    } else {
+      // 使用选中的日期（单天查询）
+      try {
+        const formattedDate = date.formatDate(new Date(selectedDate.value), 'YYYY-MM-DD')
+        startDate = endDate = formattedDate
+      } catch (e) {
+        // 如果日期无效，使用今天的日期
+        const today = date.formatDate(new Date(), 'YYYY-MM-DD')
+        selectedDate.value = today
+        startDate = endDate = today
+      }
+    }
+
+    console.log('🔍 交接班明细查询调试信息:')
+    console.log('查询类型:', type)
+    console.log('查询开始日期:', startDate)
+    console.log('查询结束日期:', endDate)
+    console.log('是否为范围查询:', startDate !== endDate)
+
     const response = await api.get('/shift-handover/receipts', {
       params: {
         type: type,
-        startDate: today,
-        endDate: today
+        startDate: startDate,
+        endDate: endDate
       }
     })
+
+    console.log('📊 API返回的原始数据:', response)
+    console.log('📊 返回数据数量:', response?.length || 0)
+
+    if (response && response.length > 0) {
+      console.log('📋 第一条订单示例:', response[0])
+    } else {
+      console.log('❌ 未获取到任何明细数据')
+
+      // 调试：检查今天是否有订单数据
+      try {
+        const debugResponse = await api.get('/orders')
+        console.log('🔍 /orders API原始返回:', debugResponse)
+        console.log('🔍 返回数据类型:', typeof debugResponse)
+        console.log('🔍 是否为数组:', Array.isArray(debugResponse))
+
+        // 处理不同的数据结构
+        let orders = []
+        if (Array.isArray(debugResponse)) {
+          orders = debugResponse
+        } else if (debugResponse && debugResponse.data && Array.isArray(debugResponse.data)) {
+          orders = debugResponse.data
+        } else if (debugResponse && debugResponse.orders && Array.isArray(debugResponse.orders)) {
+          orders = debugResponse.orders
+        } else {
+          console.log('🚫 无法识别的订单数据结构')
+          return
+        }
+
+        console.log('🔍 订单总数:', orders.length)
+
+        if (orders.length > 0) {
+          console.log('📋 第一条订单示例:', orders[0])
+          console.log('📋 订单字段列表:', Object.keys(orders[0]))
+
+          // 查找指定日期范围内的订单
+          const rangeOrders = orders.filter(order => {
+            // 尝试不同的日期字段
+            const createTime = order.createTime || order.create_time || order.created_at || order.createdAt
+            if (!createTime) {
+              console.log('⚠️ 订单缺少创建时间字段:', order)
+              return false
+            }
+
+            try {
+              const orderDate = date.formatDate(new Date(createTime), 'YYYY-MM-DD')
+              return orderDate >= startDate && orderDate <= endDate
+            } catch (e) {
+              console.log('⚠️ 日期解析失败:', createTime, e)
+              return false
+            }
+          })
+
+          console.log(`🔍 ${startDate === endDate ? '当天' : '日期范围内'}创建的订单数量:`, rangeOrders.length)
+          console.log(`🔍 ${startDate === endDate ? '当天' : '日期范围内'}的订单:`, rangeOrders)
+
+          if (rangeOrders.length > 0) {
+              console.log(`📋 ${startDate === endDate ? '当天' : '日期范围内'}订单状态分布:`,
+                rangeOrders.reduce((acc, order) => {
+                  const status = order.status || '未知状态'
+                  acc[status] = (acc[status] || 0) + 1
+                  return acc
+                }, {})
+              )
+
+              // 详细检查每个订单的关键字段
+              console.log(`📋 ${startDate === endDate ? '当天' : '日期范围内'}订单详细信息:`)
+              rangeOrders.forEach((order, index) => {
+                console.log(`   订单${index + 1}:`, {
+                  id: order.id || order.order_id,
+                  status: order.status,
+                  create_time: order.create_time || order.createTime,
+                  room_number: order.room_number,
+                  room_price: order.room_price,
+                  check_in_date: order.check_in_date,
+                  check_out_date: order.check_out_date
+                })
+              })
+
+            // 检查符合明细表条件的订单
+            const validOrders = rangeOrders.filter(order => {
+              const status = order.status
+              return status === 'checked_in' || status === 'checked_out' || status === 'completed' ||
+                     status === 'checked-in' || status === 'checked-out'
+            })
+            console.log('🔍 符合明细表条件的订单数量:', validOrders.length)
+            console.log('🔍 符合条件的订单:', validOrders)
+
+            if (validOrders.length === 0) {
+              console.log('❌ 没有找到符合明细表条件的订单')
+              console.log('💡 可能的原因：')
+              console.log('   1. 订单状态不是 checked_in、checked_out、completed、checked-in 或 checked-out')
+              console.log('   2. 订单还在 pending、confirmed 等状态')
+              console.log('   3. 需要手动执行入住/退房操作')
+
+              // 输出所有状态以便分析
+              const allStatuses = rangeOrders.map(order => order.status).filter(Boolean)
+              console.log(`📋 ${startDate === endDate ? '当天' : '日期范围内'}所有订单的状态:`, [...new Set(allStatuses)])
+              console.log('💡 状态格式说明: 后端已兼容 checked-out 和 checked_out 两种格式')
+            } else {
+              console.log('✅ 找到符合条件的订单，应该显示在明细表中')
+            }
+          }
+        }
+      } catch (debugError) {
+        console.log('🚫 无法获取调试订单数据:', debugError)
+      }
+
+      // 调试：检查明细表API的查询条件
+      console.log('🔍 明细表API查询参数:')
+      console.log('   - type:', type)
+      console.log('   - startDate:', startDate)
+      console.log('   - endDate:', endDate)
+      console.log('   - 完整URL:', `/api/shift-handover/receipts?type=${type}&startDate=${startDate}&endDate=${endDate}`)
+    }
 
     receiptDetails.value = response.map(item => ({
       ...item,
@@ -671,7 +757,7 @@ async function switchRoomType(type) {
       check_out_date: item.check_out_date ? date.formatDate(new Date(item.check_out_date), 'MM-DD HH:mm') : ''
     }))
 
-    await loadStatistics()
+    await loadStatistics(customStartDate, customEndDate)
   } catch (error) {
     console.error('获取收款明细失败:', error)
     $q.notify({
@@ -684,11 +770,33 @@ async function switchRoomType(type) {
 }
 
 // 加载统计数据
-async function loadStatistics() {
+async function loadStatistics(customStartDate = null, customEndDate = null) {
   try {
-    const today = date.formatDate(new Date(), 'YYYY-MM-DD')
+    // 确定查询的日期范围
+    let startDate, endDate
+
+    if (customStartDate && customEndDate) {
+      // 使用自定义日期范围
+      startDate = customStartDate
+      endDate = customEndDate
+    } else {
+      // 使用选中的日期（单天查询）
+      try {
+        const formattedDate = date.formatDate(new Date(selectedDate.value), 'YYYY-MM-DD')
+        startDate = endDate = formattedDate
+      } catch (e) {
+        // 如果日期无效，使用今天的日期
+        const today = date.formatDate(new Date(), 'YYYY-MM-DD')
+        selectedDate.value = today
+        startDate = endDate = today
+      }
+    }
+
     const response = await api.get('/shift-handover/statistics', {
-      params: { date: today }
+      params: {
+        startDate: startDate,
+        endDate: endDate
+      }
     })
 
     // 合并统计数据，保留用户输入的值
@@ -750,7 +858,6 @@ async function saveHandover() {
 
       // 重置表单
       remarks.value = ''
-      await loadHistoryRecords()
     }
   } catch (error) {
     console.error('保存交接班记录失败:', error)
@@ -900,105 +1007,133 @@ async function exportToExcel() {
   }
 }
 
-// 加载历史记录
-async function loadHistoryRecords() {
-  loadingHistory.value = true
+// 按指定日期加载收款明细
+async function loadReceiptsByDate(dateValue) {
+  if (!dateValue) return
+
+  // 确保日期格式正确并更新selectedDate
+  let formattedDate
   try {
-    const endDate = date.formatDate(new Date(), 'YYYY-MM-DD')
-    const startDate = date.formatDate(date.subtractFromDate(new Date(), { days: 30 }), 'YYYY-MM-DD')
-
-    const response = await api.get('/shift-handover/history', {
-      params: { startDate, endDate }
-    })
-
-    historyRecords.value = response.map(item => ({
-      ...item,
-      shift_date: date.formatDate(new Date(item.shift_date), 'YYYY-MM-DD'),
-      created_at: date.formatDate(new Date(item.created_at), 'MM-DD HH:mm')
-    }))
-  } catch (error) {
-    console.error('加载历史记录失败:', error)
+    formattedDate = date.formatDate(new Date(dateValue), 'YYYY-MM-DD')
+    selectedDate.value = formattedDate
+  } catch (e) {
+    console.error('日期格式错误:', dateValue, e)
     $q.notify({
       type: 'negative',
-      message: '加载历史记录失败'
+      message: '日期格式无效'
+    })
+    return
+  }
+
+  loading.value = true
+  try {
+    await switchRoomType(roomType.value)
+
+    $q.notify({
+      type: 'positive',
+      message: `已加载 ${formatDisplayDate(formattedDate)} 的收款明细`,
+      timeout: 1500
+    })
+  } catch (error) {
+    console.error('获取指定日期明细失败:', error)
+    $q.notify({
+      type: 'negative',
+      message: '获取指定日期明细失败'
     })
   } finally {
-    loadingHistory.value = false
+    loading.value = false
   }
 }
 
-// 查看历史记录详情
-function viewHandoverDetail(record) {
-  selectedDetail.value = record
-  showDetailDialog.value = true
+// 设置今天
+function setToday() {
+  selectedDate.value = date.formatDate(new Date(), 'YYYY-MM-DD')
+  loadReceiptsByDate(selectedDate.value)
+}
+
+// 设置昨天
+function setYesterday() {
+  const yesterday = date.subtractFromDate(new Date(), { days: 1 })
+  selectedDate.value = date.formatDate(yesterday, 'YYYY-MM-DD')
+  loadReceiptsByDate(selectedDate.value)
+}
+
+// 设置本周第一天（周一）
+function setThisWeek() {
+  const today = new Date()
+  const startOfWeek = date.startOfDate(today, 'week')
+  const endOfWeek = date.endOfDate(today, 'week')
+
+  // 设置显示日期为本周第一天
+  selectedDate.value = date.formatDate(startOfWeek, 'YYYY-MM-DD')
+
+  // 查询整周的数据
+  const startDate = date.formatDate(startOfWeek, 'YYYY-MM-DD')
+  const endDate = date.formatDate(endOfWeek, 'YYYY-MM-DD')
+
+  console.log('📅 查询本周数据:', startDate, '到', endDate)
+
+  loading.value = true
+  switchRoomType(roomType.value, startDate, endDate).finally(() => {
+    loading.value = false
+  })
+
+  $q.notify({
+    type: 'positive',
+    message: `已加载本周(${date.formatDate(startOfWeek, 'MM月DD日')} - ${date.formatDate(endOfWeek, 'MM月DD日')})的收款明细`,
+    timeout: 2000
+  })
+}
+
+// 设置本月第一天
+function setThisMonth() {
+  const today = new Date()
+  const startOfMonth = date.startOfDate(today, 'month')
+  const endOfMonth = date.endOfDate(today, 'month')
+
+  // 设置显示日期为本月第一天
+  selectedDate.value = date.formatDate(startOfMonth, 'YYYY-MM-DD')
+
+  // 但查询整个月的数据
+  const startDate = date.formatDate(startOfMonth, 'YYYY-MM-DD')
+  const endDate = date.formatDate(endOfMonth, 'YYYY-MM-DD')
+
+  console.log('📅 查询本月数据:', startDate, '到', endDate)
+
+  loading.value = true
+  switchRoomType(roomType.value, startDate, endDate).finally(() => {
+    loading.value = false
+  })
+
+  $q.notify({
+    type: 'positive',
+    message: `已加载本月(${date.formatDate(startOfMonth, 'MM月DD日')} - ${date.formatDate(endOfMonth, 'MM月DD日')})的收款明细`,
+    timeout: 2000
+  })
+}
+
+// 格式化显示日期
+function formatDisplayDate(dateStr) {
+  if (!dateStr) return ''
+  try {
+    const targetDate = new Date(dateStr)
+    const today = new Date()
+    const yesterday = date.subtractFromDate(today, { days: 1 })
+
+    if (date.formatDate(targetDate, 'YYYY-MM-DD') === date.formatDate(today, 'YYYY-MM-DD')) {
+      return '今天'
+    } else if (date.formatDate(targetDate, 'YYYY-MM-DD') === date.formatDate(yesterday, 'YYYY-MM-DD')) {
+      return '昨天'
+    } else {
+      return date.formatDate(targetDate, 'MM月DD日')
+    }
+  } catch (e) {
+    return dateStr
+  }
 }
 
 // 组件挂载时初始化
 onMounted(async () => {
   await switchRoomType(roomType.value)
-  await loadHistoryRecords()
 })
 </script>
-
-<style scoped>
-.shift-handover {
-  max-width: 1600px;
-  margin: 0 auto;
-  padding: 16px;
-}
-
-.q-table th {
-  font-weight: bold;
-  background-color: #f5f5f5;
-}
-
-.q-table .q-td {
-  font-size: 0.85rem;
-}
-
-.q-input .q-field__native {
-  text-align: right;
-}
-
-/* 增强标题区域的视觉效果 */
-.q-card.bg-primary {
-  background: linear-gradient(135deg, #1976D2 0%, #1565C0 100%) !important;
-  border-radius: 12px;
-}
-
-/* 打印样式 */
-@media print {
-  .q-btn, .q-dialog {
-    display: none !important;
-  }
-
-  .shift-handover {
-    max-width: none;
-    padding: 0;
-  }
-
-  .q-card {
-    box-shadow: none;
-    border: 1px solid #ddd;
-  }
-
-  .q-table {
-    font-size: 11px;
-  }
-}
-
-/* 响应式调整 */
-@media (max-width: 768px) {
-  .q-table {
-    font-size: 0.75rem;
-  }
-
-  .q-card-section {
-    padding: 8px;
-  }
-
-  .shift-handover {
-    padding: 8px;
-  }
-}
-</style>

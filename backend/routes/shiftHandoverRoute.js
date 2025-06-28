@@ -52,10 +52,13 @@ router.get('/receipts', async (req, res) => {
 // 获取统计数据
 router.get('/statistics', async (req, res) => {
   try {
-    const { date } = req.query;
-    const statistics = await getStatistics(
-      date || new Date().toISOString().split('T')[0]
-    );
+    const { date, startDate, endDate } = req.query;
+
+    // 支持两种参数格式：date 或 startDate/endDate
+    const finalStartDate = startDate || date || new Date().toISOString().split('T')[0];
+    const finalEndDate = endDate || date || new Date().toISOString().split('T')[0];
+
+    const statistics = await getStatistics(finalStartDate, finalEndDate);
     res.json(statistics);
   } catch (error) {
     console.error('获取统计数据失败:', error);
