@@ -295,10 +295,69 @@ async function checkoutOrder(order) {
     return;
   }
 
-  showBillDialog.value = true;
-  billOrder.value = order;
+  // 确认办理退房
+  if (!confirm(`确定要为订单 ${order.orderNumber} (房间: ${order.roomNumber}) 办理退房吗？`)) {
+    return;
+  }
 
-  console.log('showBillDialog', showBillDialog.value, billOrder.value)
+  loadingOrders.value = true;
+  try {
+    console.log('办理退房:', order.orderNumber, '房间:', order.roomNumber);
+
+    // 更新订单状态为已退房
+    const updatedOrderFromApi = await orderStore.updateOrderStatusViaApi(order.orderNumber, 'checked-out');
+
+    if (!updatedOrderFromApi) {
+      $q.notify({
+        type: 'negative',
+        message: '办理退房失败，请重试',
+        position: 'top'
+      });
+      return;
+    }
+
+    // 获取房间并将状态更改为清洁中
+    const room = roomStore.getRoomByNumber(order.roomNumber);
+    if (room && room.room_id) {
+      const roomUpdateSuccess = await roomStore.checkOutRoom(room.room_id);
+      if (!roomUpdateSuccess) {
+        $q.notify({
+          type: 'warning',
+          message: '订单已退房，但更新房间状态为清洁中失败，请检查房间状态！',
+          position: 'top',
+          multiLine: true
+        });
+      } else {
+        await roomStore.fetchAllRooms(); // 刷新房间列表
+      }
+    }
+
+    // 更新当前正在查看的订单详情
+    if (currentOrder.value && currentOrder.value.orderNumber === order.orderNumber) {
+      currentOrder.value = { ...orderStore.getOrderByNumber(order.orderNumber) };
+    }
+
+    // 刷新订单列表
+    await fetchAllOrders();
+
+    $q.notify({
+      type: 'positive',
+      message: '退房成功',
+      position: 'top'
+    });
+
+  } catch (error) {
+    console.error('办理退房操作失败:', error);
+    const errorMessage = error.response?.data?.message || error.message || '未知错误';
+    $q.notify({
+      type: 'negative',
+      message: `办理退房失败: ${errorMessage}`,
+      position: 'top',
+      multiLine: true
+    });
+  } finally {
+    loadingOrders.value = false;
+  }
 }
 
 // 从详情页办理退房
@@ -372,7 +431,6 @@ async function checkInOrder(order) {
       return;
     }
 
-
     // 入住成功后刷新房间列表，确保房间状态页面能显示最新的客人信息
     await roomStore.fetchAllRooms();
 
@@ -382,7 +440,11 @@ async function checkInOrder(order) {
       currentOrder.value = { ...orderStore.getOrderByNumber(order.orderNumber) }; // 从store获取最新数据
     }
 
-    $q.notify({ type: 'positive', message: '入住成功', position: 'top' });
+    // 办理入住成功后，显示账单创建对话框
+    showBillDialog.value = true;
+    billOrder.value = { ...orderStore.getOrderByNumber(order.orderNumber) };
+
+    $q.notify({ type: 'positive', message: '入住成功，请完成账单创建', position: 'top' });
 
   } catch (error) {
     console.error('办理入住操作失败:', error);
@@ -602,33 +664,7 @@ async function handleBillCreated() {
       return;
     }
 
-    // 更新订单状态为已退房
-    const updatedOrderFromApi = await orderStore.updateOrderStatusViaApi(billOrder.value.orderNumber, 'checked-out');
-
-    if (!updatedOrderFromApi) {
-      $q.notify({
-        type: 'warning',
-        message: '账单已创建，但更新订单状态失败，请手动检查订单状态！',
-        position: 'top'
-      });
-      return;
-    }
-
-    // 获取房间并将状态更改为清洁中
-    const room = roomStore.getRoomByNumber(billOrder.value.roomNumber);
-    if (room && room.room_id) {
-      const roomUpdateSuccess = await roomStore.checkOutRoom(room.room_id);
-      if (!roomUpdateSuccess) {
-        $q.notify({
-          type: 'warning',
-          message: '订单已退房，但更新房间状态为清洁中失败，请检查房间状态！',
-          position: 'top',
-          multiLine: true
-        });
-      } else {
-        await roomStore.fetchAllRooms(); // 刷新房间列表
-      }
-    }
+    console.log('账单创建成功，订单:', billOrder.value.orderNumber);
 
     // 更新当前正在查看的订单详情
     if (currentOrder.value && currentOrder.value.orderNumber === billOrder.value.orderNumber) {
@@ -640,18 +676,16 @@ async function handleBillCreated() {
 
     $q.notify({
       type: 'positive',
-      message: '退房成功',
+      message: '账单创建成功，入住手续已完成',
       position: 'top'
     });
 
   } catch (error) {
-    console.error('办理退房操作失败:', error);
-    const errorMessage = error.response?.data?.message || error.message || '未知错误';
+    console.error('处理账单创建成功事件失败:', error);
     $q.notify({
       type: 'negative',
-      message: `办理退房失败: ${errorMessage}`,
-      position: 'top',
-      multiLine: true
+      message: '账单创建成功，但更新界面失败，请刷新页面',
+      position: 'top'
     });
   }
 }

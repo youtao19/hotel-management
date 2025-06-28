@@ -6,15 +6,20 @@
         <q-markup-table flat bordered class="bill-table q-mb-lg">
           <tbody>
             <tr>
-              <td class="bill-label">押金</td>
-              <td class="bill-value text-primary text-bold">{{ currentOrder.deposit }}</td>
+              <td class="bill-label">订单号</td>
+              <td class="bill-value">{{ currentOrder.orderNumber }}</td>
             </tr>
             <tr>
-              <td class="bill-label">是否退押金</td>
-              <td>
-                <q-radio v-model="billData.refund_deposit" val='yes' label="退押金" color="primary" />
-                <q-radio v-model="billData.refund_deposit" val='no' label="不退押金" color="negative" class="q-ml-xl" />
-              </td>
+              <td class="bill-label">客人姓名</td>
+              <td class="bill-value">{{ currentOrder.guestName }}</td>
+            </tr>
+            <tr>
+              <td class="bill-label">房间号</td>
+              <td class="bill-value">{{ currentOrder.roomNumber }}</td>
+            </tr>
+            <tr>
+              <td class="bill-label">押金</td>
+              <td class="bill-value text-primary text-bold">{{ currentOrder.deposit }} 元</td>
             </tr>
             <tr>
               <td class="bill-label">房费</td>
@@ -24,15 +29,13 @@
               </td>
             </tr>
             <tr>
-              <td class="bill-label bill-pay-way">支付方式</td>
-              <td class="bill-label select-way">
-                <q-select filled v-model="way" :options="way_options" label="选择支付方式" />
-              </td>
+              <td class="bill-label">支付方式</td>
+              <td class="bill-value">{{ getPaymentMethodText(currentOrder.paymentMethod) }}</td>
             </tr>
             <tr>
-              <td class="bill-label bill-total-label">总收入</td>
+              <td class="bill-label bill-total-label">总金额</td>
               <td class="bill-total-value">
-                <span class="text-deep-orange-6">{{ totalIncome.toFixed(2) }}</span> 元
+                <span class="text-deep-orange-6">{{ totalAmount.toFixed(2) }}</span> 元
               </td>
             </tr>
           </tbody>
@@ -50,6 +53,7 @@
 import { ref, watch, computed } from 'vue'
 import useBillStore from '../stores/billStore'
 import { useQuasar } from 'quasar'
+import { useViewStore } from '../stores/viewStore'
 
 const props = defineProps({
   modelValue: Boolean,
@@ -58,73 +62,69 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'bill-created'])
 
 const billStore = useBillStore()
+const viewStore = useViewStore()
 const $q = useQuasar()
 
-let way = ref('')
-
 const billData = ref({
-  order_id: props.currentOrder?.orderNumber || '',
+  order_id: props.currentOrder?.orderNumber || '', // orderNumber 对应数据库的 order_id
   room_number: props.currentOrder?.roomNumber || '',
   guest_name: props.currentOrder?.guestName || '',
   deposit: props.currentOrder?.deposit || 0,
-  refund_deposit: 'yes',
+  refund_deposit: 'no', // 固定为不退押金，因为已经收取了房费+押金
   room_fee: props.currentOrder?.roomPrice || 0,
   total_income: 0,
-  pay_way: '',
+  pay_way: { value: props.currentOrder?.paymentMethod || '' }, // 后端期望的格式
   remarks: props.currentOrder?.remarks || ''
 })
 
-
-const way_options = ref([
-  {
-    label: '微信',
-    value: 'wechat'
-  },
-  {
-    label: '支付宝',
-    value: 'alipay'
-  },
-  {
-    label: '转账',
-    value: 'transfer'
-  },
-  {
-    label: '现金',
-    value: 'cash'
-  },
-  {
-    label: '平台',
-    value: 'platform'
-  }
-])
+// 获取支付方式显示文本
+function getPaymentMethodText(paymentMethod) {
+  return viewStore.getPaymentMethodName(paymentMethod)
+}
 
 async function createBill() {
   try {
-    // 验证支付方式是否已选择
-    if (!way.value) {
-      $q.notify({
-        type: 'warning',
-        message: '请选择支付方式',
-        position: 'top'
-      })
-      return
+    console.log('当前订单数据:', props.currentOrder)
+
+    // 验证必要字段
+    if (!props.currentOrder?.orderNumber) {
+      throw new Error('订单号不能为空')
+    }
+    if (!props.currentOrder?.roomNumber) {
+      throw new Error('房间号不能为空')
+    }
+    if (!props.currentOrder?.guestName) {
+      throw new Error('客人姓名不能为空')
+    }
+    if (!props.currentOrder?.paymentMethod) {
+      throw new Error('支付方式不能为空')
     }
 
-    // 在发送之前计算并设置 total_income
+    // 计算总金额（房费 + 押金）
     const roomFee = parseFloat(billData.value.room_fee) || 0
     const deposit = parseFloat(billData.value.deposit) || 0
-    const calculatedTotalIncome = billData.value.refund_deposit === 'yes' ? roomFee : roomFee + deposit
+    const calculatedTotalAmount = roomFee + deposit
 
-    // 确保所有数字字段都有有效值
+    // 构建账单数据，确保格式符合后端要求
     const billDataToSend = {
-      ...billData.value,
-      total_income: calculatedTotalIncome,
-      room_fee: roomFee,
+      order_id: props.currentOrder.orderNumber, // 使用订单号作为 order_id
+      room_number: props.currentOrder.roomNumber,
+      guest_name: props.currentOrder.guestName,
       deposit: deposit,
-      pay_way: way.value
+      refund_deposit: 'no', // 固定为不退押金
+      room_fee: roomFee,
+      total_income: calculatedTotalAmount,
+      pay_way: { value: props.currentOrder.paymentMethod }, // 后端期望的格式
+      remarks: billData.value.remarks || ''
     }
 
-    console.log("账单数据：",billDataToSend)
+    console.log("准备发送的账单数据：", billDataToSend)
+
+    // 验证数据完整性
+    if (!billDataToSend.order_id || !billDataToSend.room_number || !billDataToSend.guest_name) {
+      throw new Error('关键信息缺失，无法创建账单')
+    }
+
     await billStore.addBill(billDataToSend)
 
     // 显示成功提示
@@ -141,10 +141,23 @@ async function createBill() {
     emit('update:modelValue', false)
   } catch (error) {
     console.error('创建账单失败:', error)
+    console.error('错误详情:', error.response?.data || error.message)
+
+    let errorMessage = '创建账单失败'
+    if (error.response?.data?.errors) {
+      // 处理验证错误
+      errorMessage = error.response.data.errors.map(err => err.msg).join('; ')
+    } else if (error.response?.data?.message) {
+      errorMessage = error.response.data.message
+    } else if (error.message) {
+      errorMessage = error.message
+    }
+
     $q.notify({
       type: 'negative',
-      message: '创建账单失败: ' + error.message,
-      position: 'top'
+      message: errorMessage,
+      position: 'top',
+      timeout: 5000
     })
   }
 }
@@ -159,18 +172,18 @@ watch(
       billData.value.guest_name = order.guestName || ''
       billData.value.deposit = order.deposit || 0
       billData.value.room_fee = order.roomPrice || 0
-      billData.value.pay_way = way
+      billData.value.refund_deposit = 'no' // 固定为不退押金
+      billData.value.pay_way = { value: order.paymentMethod || '' } // 后端期望的格式
     }
   },
   { immediate: true }
 )
 
-const totalIncome = computed(() => {
+// 计算总金额（房费 + 押金）
+const totalAmount = computed(() => {
   const roomFee = parseFloat(billData.value.room_fee) || 0
   const deposit = parseFloat(props.currentOrder?.deposit) || 0
-  return billData.value.refund_deposit === 'yes'
-    ? roomFee
-    : roomFee + deposit
+  return roomFee + deposit
 })
 </script>
 
@@ -196,12 +209,14 @@ const totalIncome = computed(() => {
   text-align: right;
   background: #f5f7fa;
   border-right: 1px solid #e0e0e0;
+  padding: 8px 12px;
 }
 
 .bill-value {
-  font-size: 1.3em;
+  font-size: 1.1em;
   text-align: left;
   padding-left: 18px;
+  font-weight: 500;
 }
 
 .bill-input input {

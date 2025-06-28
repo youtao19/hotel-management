@@ -250,11 +250,15 @@ export const useRoomStore = defineStore('room', () => {
   // 按类型获取可用房间数量
   const availableByType = computed(() => {
     const counts = {
-      standard: 0,
-      deluxe: 0,
-      suite: 0,
-      presidential: 0,
-      family: 0
+      asu_wan_zhu: 0,
+      xing_yun_ge: 0,
+      sheng_sheng_man: 0,
+      yi_jiang_nan: 0,
+      yun_ju_ying_yin: 0,
+      bo_ye_shuang: 0,
+      nuan_ju_jiating: 0,
+      zui_shan_tang: 0,
+      rest: 0  // 保留休息房
     }
 
     // 使用getAvailableRoomCountByType方法计算每种类型的可用房间数

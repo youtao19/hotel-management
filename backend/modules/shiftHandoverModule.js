@@ -31,6 +31,7 @@ async function getReceiptDetails(type, startDate, endDate) {
       o.order_id as id,
       o.order_id as order_number,
       o.room_number,
+      o.guest_name,
       COALESCE(o.room_price, 0) as room_fee,
       COALESCE(o.deposit, 0) as deposit,
       COALESCE(o.payment_method, '现金') as payment_method,
@@ -292,6 +293,7 @@ async function exportHandoverToExcel(handoverData) {
     const detailsData = details.map((item, index) => ({
       '序号': index + 1,
       '房号': item.room_number,
+      '客户姓名': item.guest_name || '未知客户',
       '单号': item.order_number,
       '房费': item.room_fee,
       '押金': item.deposit,

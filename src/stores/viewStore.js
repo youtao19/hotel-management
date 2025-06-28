@@ -5,11 +5,15 @@ export const useViewStore = defineStore('view', () => {
   // 房间类型选项数组，用于类型筛选下拉框
   const roomTypeOptions = [
     { label: '所有房型', value: null },  // null值表示不筛选
-    { label: '标准间', value: 'standard' },
-    { label: '豪华间', value: 'deluxe' },
-    { label: '套房', value: 'suite' },
-    { label: '总统套房', value: 'presidential' },
-    { label: '家庭房', value: 'family' }
+    { label: '阿苏晚筑', value: 'asu_wan_zhu' },
+    { label: '行云阁有个院子', value: 'xing_yun_ge' },
+    { label: '声声慢投影大床', value: 'sheng_sheng_man' },
+    { label: '忆江南大床房', value: 'yi_jiang_nan' },
+    { label: '云居云端影音房', value: 'yun_ju_ying_yin' },
+    { label: '泊野双床', value: 'bo_ye_shuang' },
+    { label: '暖居家庭房', value: 'nuan_ju_jiating' },
+    { label: '醉山塘', value: 'zui_shan_tang' },
+    { label: '休息房', value: 'rest' }  // 保留休息房
   ]
 
   // 房间状态选项数组，用于状态筛选下拉框
@@ -71,11 +75,15 @@ export const useViewStore = defineStore('view', () => {
    */
   function getRoomTypeName(type) {
     switch (type) {
-      case 'standard': return '标准间'
-      case 'deluxe': return '豪华间'
-      case 'suite': return '套房'
-      case 'presidential': return '总统套房'
-      case 'family': return '家庭房'
+      case 'asu_wan_zhu': return '阿苏晚筑'
+      case 'xing_yun_ge': return '行云阁有个院子'
+      case 'sheng_sheng_man': return '声声慢投影大床'
+      case 'yi_jiang_nan': return '忆江南大床房'
+      case 'yun_ju_ying_yin': return '云居云端影音房'
+      case 'bo_ye_shuang': return '泊野双床'
+      case 'nuan_ju_jiating': return '暖居家庭房'
+      case 'zui_shan_tang': return '醉山塘'
+      case 'rest': return '休息房'  // 保留休息房
       default: return type
     }
   }

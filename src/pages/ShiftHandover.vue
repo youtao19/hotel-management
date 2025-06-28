@@ -13,11 +13,8 @@
                     交接班管理
                   </div>
                   <div class="text-h6 text-white-7">{{ currentDate }} - {{ getCurrentDayOfWeek() }}</div>
-                </div>
+                </div>使用MCP查看房型并根据脚本的信息修改
                 <div class="text-right">
-                  <q-chip color="white" text-color="primary" icon="person" class="q-mb-xs">
-                    {{ cashierName }}
-                  </q-chip>
                   <div class="text-subtitle1">
                     <q-icon name="schedule" size="sm" class="q-mr-xs" />
                     {{ shiftTime }}
@@ -405,71 +402,6 @@
             </q-card-section>
           </q-card>
         </div>
-
-        <!-- 备注和操作区域 -->
-        <div class="col-12">
-          <q-card>
-            <q-card-section class="bg-secondary text-white">
-              <div class="text-h6">
-                <q-icon name="notes" class="q-mr-xs" />
-                备注与签名
-              </div>
-            </q-card-section>
-
-            <q-card-section>
-              <div class="row q-col-gutter-md">
-                <div class="col-md-8 col-xs-12">
-                  <q-input
-                    v-model="remarks"
-                    type="textarea"
-                    filled
-                    autogrow
-                    label="交接班备注"
-                    rows="3"
-                  />
-                </div>
-                <div class="col-md-4 col-xs-12">
-                  <div class="q-gutter-sm">
-                    <q-input
-                      v-model="cashierName"
-                      filled
-                      label="收银员签名"
-                    />
-                    <q-input
-                      v-model="shiftTime"
-                      filled
-                      label="交班时间"
-                      readonly
-                    />
-                  </div>
-                </div>
-              </div>
-            </q-card-section>
-
-            <!-- 操作按钮 -->
-            <q-card-actions align="right" class="q-pa-md">
-              <q-btn
-                color="secondary"
-                icon="print"
-                label="打印交接单"
-                @click="printHandover"
-              />
-              <q-btn
-                color="accent"
-                icon="file_download"
-                label="导出Excel"
-                @click="exportToExcel"
-              />
-              <q-btn
-                color="primary"
-                icon="save"
-                label="保存交接班"
-                @click="saveHandover"
-                :loading="saving"
-              />
-            </q-card-actions>
-          </q-card>
-        </div>
       </div>
     </div>
   </q-page>
@@ -494,10 +426,8 @@ const getCurrentDayOfWeek = () => {
 }
 
 const shiftTime = ref(date.formatDate(new Date(), 'HH:mm'))
-const cashierName = ref('张三') // 从用户状态获取
 const roomType = ref('hotel')
 const loading = ref(false)
-const saving = ref(false)
 const selectedDate = ref(date.formatDate(new Date(), 'YYYY-MM-DD'))
 
 // 分页设置
@@ -508,6 +438,7 @@ const pagination = ref({
 // 明细表格列定义
 const receiptColumns = [
   { name: 'roomNumber', label: '房号', field: 'room_number', align: 'center', style: 'width: 80px' },
+  { name: 'guestName', label: '客户姓名', field: 'guest_name', align: 'center', style: 'width: 100px' },
   { name: 'orderNumber', label: '单号', field: 'order_number', align: 'left', style: 'width: 120px' },
   { name: 'roomFee', label: '房费', field: 'room_fee', align: 'right', style: 'width: 100px' },
   { name: 'deposit', label: '押金', field: 'deposit', align: 'right', style: 'width: 100px' },
@@ -536,9 +467,6 @@ const statistics = ref({
   totalRooms: 0,
   restRooms: 0
 })
-
-// 备注信息
-const remarks = ref('')
 
 // 计算属性
 const totalAmount = computed(() => {
@@ -702,6 +630,7 @@ async function switchRoomType(type, customStartDate = null, customEndDate = null
               rangeOrders.forEach((order, index) => {
                 console.log(`   订单${index + 1}:`, {
                   id: order.id || order.order_id,
+                  guest_name: order.guest_name,
                   status: order.status,
                   create_time: order.create_time || order.createTime,
                   room_number: order.room_number,
@@ -753,6 +682,7 @@ async function switchRoomType(type, customStartDate = null, customEndDate = null
       room_fee: parseFloat(item.room_fee || 0),
       deposit: parseFloat(item.deposit || 0),
       total_amount: parseFloat(item.total_amount || 0),
+      guest_name: item.guest_name || '未知客户',
       check_in_date: item.check_in_date ? date.formatDate(new Date(item.check_in_date), 'MM-DD HH:mm') : '',
       check_out_date: item.check_out_date ? date.formatDate(new Date(item.check_out_date), 'MM-DD HH:mm') : ''
     }))
@@ -825,51 +755,6 @@ async function loadStatistics(customStartDate = null, customEndDate = null) {
   }
 }
 
-// 保存交接班记录
-async function saveHandover() {
-  if (!cashierName.value.trim()) {
-    $q.notify({
-      type: 'negative',
-      message: '请输入收银员姓名'
-    })
-    return
-  }
-
-  saving.value = true
-  try {
-    const handoverData = {
-      type: roomType.value,
-      details: receiptDetails.value,
-      statistics: statistics.value,
-      remarks: remarks.value,
-      cashier_name: cashierName.value,
-      shift_time: shiftTime.value,
-      shift_date: date.formatDate(new Date(), 'YYYY-MM-DD')
-    }
-
-    const response = await api.post('/shift-handover/save', handoverData)
-
-    if (response && response.success) {
-      $q.notify({
-        type: 'positive',
-        message: '交接班记录已保存',
-        icon: 'check_circle'
-      })
-
-      // 重置表单
-      remarks.value = ''
-    }
-  } catch (error) {
-    console.error('保存交接班记录失败:', error)
-    $q.notify({
-      type: 'negative',
-      message: '保存交接班记录失败'
-    })
-  } finally {
-    saving.value = false
-  }
-}
-
 // 打印交接单
 function printHandover() {
   // 创建打印样式
@@ -897,7 +782,6 @@ function printHandover() {
     <div class="print-header">
       <div class="print-title">交接班记录单</div>
       <div class="print-date">${currentDate.value}</div>
-      <div>收银员：${cashierName.value} | 交班时间：${shiftTime.value}</div>
     </div>
 
     <div class="print-section">
@@ -906,6 +790,7 @@ function printHandover() {
         <thead>
           <tr>
             <th>房号</th>
+            <th>客户姓名</th>
             <th>单号</th>
             <th>房费</th>
             <th>押金</th>
@@ -919,6 +804,7 @@ function printHandover() {
           ${receiptDetails.value.map(item => `
             <tr>
               <td>${item.room_number}</td>
+              <td>${item.guest_name || '未知客户'}</td>
               <td>${item.order_number}</td>
               <td>¥${(item.room_fee || 0).toFixed(2)}</td>
               <td>¥${(item.deposit || 0).toFixed(2)}</td>
@@ -954,13 +840,6 @@ function printHandover() {
         <div>休息房数：${statistics.value.restRooms}</div>
       </div>
     </div>
-
-    ${remarks.value ? `
-      <div class="print-section">
-        <h3>备注</h3>
-        <div>${remarks.value}</div>
-      </div>
-    ` : ''}
   `
 
   // 打开新窗口并打印

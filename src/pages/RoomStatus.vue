@@ -8,52 +8,39 @@
     <!-- 房型统计卡片部分 -->
     <div class="room-type-summary q-mb-md">
       <div class="row q-col-gutter-sm">
-        <!-- 标准间统计卡片 -->
-        <div class="col-md col-sm-4 col-xs-12">
-          <q-card class="bg-blue-1 text-center cursor-pointer" @click="setTypeFilter('standard')">
-            <q-card-section>
-              <div class="text-subtitle1 text-weight-bold">标准间</div>
-              <div class="text-h6 text-weight-bold">剩余：{{ roomStore.getAvailableRoomCountByType('standard') }}</div>
+        <!-- 房型数据加载中的占位符 -->
+        <div v-if="loading || availableRoomTypeOptions.length === 0" class="col-12">
+          <q-card class="text-center">
+            <q-card-section class="q-py-md">
+              <div v-if="loading" class="text-subtitle1 text-grey-7">
+                <q-spinner color="primary" size="2em" class="q-mr-sm" />
+                正在加载房型数据...
+              </div>
+              <div v-else class="text-subtitle1 text-grey-7">
+                暂无可用房型
+              </div>
             </q-card-section>
           </q-card>
         </div>
 
-        <!-- 豪华间统计卡片 -->
-        <div class="col-md col-sm-4 col-xs-12">
-          <q-card class="bg-purple-1 text-center cursor-pointer" @click="setTypeFilter('deluxe')">
-            <q-card-section>
-              <div class="text-subtitle1 text-weight-bold">豪华间</div>
-              <div class="text-h6 text-weight-bold">剩余：{{ roomStore.getAvailableRoomCountByType('deluxe') }}</div>
-            </q-card-section>
-          </q-card>
-        </div>
-
-        <!-- 套房统计卡片 -->
-        <div class="col-md col-sm-4 col-xs-12">
-          <q-card class="bg-teal-1 text-center cursor-pointer" @click="setTypeFilter('suite')">
-            <q-card-section>
-              <div class="text-subtitle1 text-weight-bold">套房</div>
-              <div class="text-h6 text-weight-bold">剩余：{{ roomStore.getAvailableRoomCountByType('suite') }}</div>
-            </q-card-section>
-          </q-card>
-        </div>
-
-        <!-- 总统套房统计卡片 -->
-        <div class="col-md col-sm-4 col-xs-12">
-          <q-card class="bg-amber-1 text-center cursor-pointer" @click="setTypeFilter('presidential')">
-            <q-card-section>
-              <div class="text-subtitle1 text-weight-bold">总统套房</div>
-              <div class="text-h6 text-weight-bold">剩余：{{ roomStore.getAvailableRoomCountByType('presidential') }}</div>
-            </q-card-section>
-          </q-card>
-        </div>
-
-        <!-- 家庭房统计卡片 -->
-        <div class="col-md col-sm-4 col-xs-12">
-          <q-card class="bg-green-1 text-center cursor-pointer" @click="setTypeFilter('family')">
-            <q-card-section>
-              <div class="text-subtitle1 text-weight-bold">家庭房</div>
-              <div class="text-h6 text-weight-bold">剩余：{{ roomStore.getAvailableRoomCountByType('family') }}</div>
+        <!-- 动态生成房型统计卡片 -->
+        <div
+          v-for="(roomType, index) in availableRoomTypeOptions"
+          :key="roomType.value"
+          class="col-lg-2 col-md-3 col-sm-4 col-xs-6"
+        >
+          <q-card
+            :class="getRoomTypeCardClass(roomType.value, index)"
+            class="text-center cursor-pointer"
+            @click="setTypeFilter(roomType.value)"
+          >
+            <q-card-section class="q-py-sm">
+              <div class="text-caption text-weight-bold">{{ roomType.label }}</div>
+              <div class="text-h6 text-weight-bold">剩余：{{ roomStore.getAvailableRoomCountByType(roomType.value) }}</div>
+              <!-- 如果有描述信息，可以显示为tooltip -->
+              <q-tooltip v-if="roomType.description" anchor="bottom middle" self="top middle">
+                {{ roomType.description }}
+              </q-tooltip>
             </q-card-section>
           </q-card>
         </div>
@@ -1106,9 +1093,54 @@ function clearDateRange() {
 /**
  * 组件挂载时的生命周期钩子
  */
-onMounted(() => {
-  // 这里可以加载实际房间数据，例如从API获取
-  // fetchRooms()
+onMounted(async () => {
+  try {
+    console.log('RoomStatus页面挂载，开始加载数据...')
+    // 并行加载房间数据和房型数据
+    const [roomsResult, roomTypesResult] = await Promise.allSettled([
+      roomStore.fetchAllRooms(),
+      roomStore.fetchRoomTypes()
+    ])
+
+    // 检查加载结果
+    if (roomsResult.status === 'fulfilled') {
+      console.log('房间数据加载成功，房间数量:', roomStore.rooms.length)
+    } else {
+      console.error('房间数据加载失败:', roomsResult.reason)
+    }
+
+    if (roomTypesResult.status === 'fulfilled') {
+      console.log('房型数据加载成功，房型数量:', roomStore.roomTypes.length)
+    } else {
+      console.error('房型数据加载失败:', roomTypesResult.reason)
+      // 房型数据加载失败时显示警告，但不影响页面使用
+      try {
+        if ($q && $q.notify && typeof $q.notify === 'function') {
+          $q.notify({
+            type: 'warning',
+            message: '房型数据加载失败，将使用默认房型配置',
+            position: 'top'
+          })
+        }
+      } catch (notifyError) {
+        console.warn('显示警告提示失败:', notifyError)
+      }
+    }
+  } catch (error) {
+    console.error('加载数据失败:', error)
+    // 显示错误提示
+    try {
+      if ($q && $q.notify && typeof $q.notify === 'function') {
+        $q.notify({
+          type: 'negative',
+          message: `加载数据失败: ${error.message || '未知错误'}`,
+          position: 'top'
+        })
+      }
+    } catch (notifyError) {
+      console.warn('显示错误提示失败:', notifyError)
+    }
+  }
 })
 
 // // 使用计算属性获取各种状态的房间数量
@@ -1154,6 +1186,86 @@ const getRoomTypeName = viewStore.getRoomTypeName
 const roomTypeOptions = viewStore.roomTypeOptions
 const statusOptions = viewStore.statusOptions
 
+// 获取数据库中的房型选项（基于实际的房型数据）
+const availableRoomTypeOptions = computed(() => {
+  // 从roomStore.roomTypes获取数据库中的房型数据
+  const dbRoomTypes = roomStore.roomTypes || []
+  console.log('数据库房型数据:', dbRoomTypes)
+
+  if (dbRoomTypes.length > 0) {
+    // 如果数据库房型数据已加载，使用数据库数据
+    console.log('使用数据库房型数据创建房型卡片')
+    const result = dbRoomTypes
+      .filter(roomType => {
+        // 检查该房型是否有房间存在
+        const totalRoomCount = roomStore.rooms.filter(room => room.type_code === roomType.type_code).length
+        console.log(`房型 ${roomType.type_code} (${roomType.type_name}) 有 ${totalRoomCount} 个房间`)
+        return totalRoomCount > 0 // 只显示有房间的房型（不论是否可用）
+      })
+      .map(roomType => ({
+        label: roomType.type_name || viewStore.getRoomTypeName(roomType.type_code),
+        value: roomType.type_code,
+        description: roomType.description || '',
+        basePrice: roomType.base_price || 0  // 添加基础价格信息
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label)) // 按名称排序
+    console.log('最终房型卡片数据:', result)
+    return result
+  } else {
+    // 如果数据库房型数据未加载，使用viewStore中的房型选项作为备用
+    // 但只显示有房间的房型
+    console.log('数据库房型数据未加载，使用备用房型选项')
+    return roomTypeOptions.filter(option => {
+      if (option.value === null) return false // 排除"所有房型"选项
+      const totalRoomCount = roomStore.rooms.filter(room => room.type_code === option.value).length
+      return totalRoomCount > 0
+    })
+  }
+})
+
+/**
+ * 获取房型卡片的样式类
+ * @param {string} roomType - 房型代码
+ * @param {number} index - 卡片索引（用于颜色循环）
+ * @returns {string} CSS类名
+ */
+function getRoomTypeCardClass(roomType, index) {
+  // 定义颜色循环数组
+  const colorClasses = [
+    'bg-blue-1',      // 蓝色
+    'bg-green-1',     // 绿色
+    'bg-purple-1',    // 紫色
+    'bg-orange-1',    // 橙色
+    'bg-teal-1',      // 青色
+    'bg-amber-1',     // 琥珀色
+    'bg-pink-1',      // 粉色
+    'bg-indigo-1',    // 靛蓝色
+    'bg-cyan-1'       // 青蓝色
+  ]
+
+  // 根据索引循环选择颜色
+  const colorIndex = index % colorClasses.length
+  let baseClass = colorClasses[colorIndex]
+
+  // 如果当前房型被选中，增加选中状态的样式
+  if (isRoomTypeSelected(roomType)) {
+    baseClass += ' room-type-selected'
+  }
+
+  return baseClass
+}
+
+/**
+ * 检查房型是否被选中
+ * @param {string} roomType - 房型代码
+ * @returns {boolean} 是否被选中
+ */
+function isRoomTypeSelected(roomType) {
+  // 检查URL参数中的type或组件状态中的filterType
+  const urlType = route.query.type
+  return urlType === roomType || filterType.value === roomType
+}
+
 /**
  * 设置房型筛选
  * 实现筛选切换功能：如果当前已经是选中房型，则清除筛选；否则应用新筛选
@@ -1180,161 +1292,6 @@ function setTypeFilter(type) {
       path: route.path,
       query: { ...route.query, type: type }  // 保留其他查询参数，添加或更新type
     })
-  }
-}
-
-/**
- * 设置房间为清理状态
- * @param {number} roomId - 房间ID
- */
-async function setRoomCleaning(roomId) {
-  console.log('设置房间为清理状态:', roomId);
-
-  try {
-    // 获取房间信息 - 使用await因为getRoomById是异步的
-    const room = await roomStore.getRoomById(roomId);
-    if (!room) {
-      throw new Error('找不到房间信息');
-    }
-
-    // 检查房间当前状态
-    const roomStatus = roomStore.getRoomDisplayStatus(room);
-
-    // 确认是否将房间设为清理状态
-    let confirmMessage = `确定将房间 ${room.room_number} 设置为清理状态吗？`;
-
-    // 如果房间有预订或入住，需要特别提醒
-    if (roomStatus === 'reserved') {
-      const order = orderStore.getActiveOrderByRoomNumber(room.room_number);
-      if (order) {
-        confirmMessage = `房间 ${room.room_number} 目前有预订订单(${order.orderNumber})，将订单取消并设置房间为清理状态？`;
-      }
-    } else if (roomStatus === 'occupied') {
-      const order = orderStore.getActiveOrderByRoomNumber(room.room_number);
-      if (order) {
-        confirmMessage = `房间 ${room.room_number} 目前有客人入住(${order.guestName})，将订单设为退房并设置房间为清理状态？`;
-      }
-    }
-
-    if (!confirm(confirmMessage)) {
-      return;
-    }
-
-    // 显示加载提示（使用普通alert作为后备）
-    try {
-      if ($q && $q.loading && typeof $q.loading.show === 'function') {
-        $q.loading.show({
-          message: '正在处理...'
-        });
-      } else {
-        console.log('$q.loading.show 不可用，使用备用方法');
-      }
-    } catch (loadingError) {
-      console.warn('显示加载提示失败:', loadingError);
-    }
-
-    // 处理订单状态
-    if (roomStatus === 'reserved' || roomStatus === 'occupied') {
-      try {
-        // 检查房间号是否存在
-        if (!room.room_number) {
-          console.warn('房间号不存在，无法处理相关订单');
-        } else {
-          const order = orderStore.getActiveOrderByRoomNumber(room.room_number);
-
-          if (order) {
-            console.log(`找到房间 ${room.room_number} 的活跃订单:`, order);
-
-            let newStatus = 'cancelled';
-            let updateData = { cancelTime: new Date().toISOString() };
-
-            if (roomStatus === 'occupied') {
-              newStatus = 'checked-out';
-              updateData = { checkOutTime: new Date().toISOString() };
-            }
-
-            // 更新订单状态
-            console.log(`准备更新订单 ${order.orderNumber} 状态为 ${newStatus}`, updateData);
-            await orderStore.updateOrderStatusViaApi(order.orderNumber, newStatus, updateData);
-            console.log(`订单 ${order.orderNumber} 状态已更新为 ${newStatus}`);
-          } else {
-            console.log(`房间 ${room.room_number} 没有找到活跃订单`);
-          }
-        }
-      } catch (orderError) {
-        console.error('处理订单状态时出错:', orderError);
-        // 继续执行，尽管订单处理失败，我们仍然尝试更新房间状态
-      }
-    }
-
-    // 调用API更新房间状态为清理中
-    try {
-      console.log(`准备将房间 ${roomId} 状态更新为 cleaning`);
-      const roomUpdateSuccess = await roomStore.updateRoomStatus(roomId, 'cleaning');
-
-      if (!roomUpdateSuccess) {
-        throw new Error('房间状态更新失败');
-      }
-
-      console.log(`房间 ${roomId} 状态已更新为 cleaning`);
-    } catch (roomUpdateError) {
-      console.error('更新房间状态失败:', roomUpdateError);
-      throw roomUpdateError; // 重新抛出错误以便外层catch捕获
-    }
-
-    // 刷新房间列表
-    try {
-      console.log('刷新房间列表...');
-      await roomStore.fetchAllRooms();
-      console.log('房间列表已刷新');
-    } catch (refreshError) {
-      console.error('刷新房间列表失败:', refreshError);
-      // 继续执行，即使刷新失败也不影响主流程
-    }
-
-    // 显示成功提示
-    try {
-      if ($q && $q.notify && typeof $q.notify === 'function') {
-        $q.notify({
-          type: 'positive',
-          message: '房间已设置为清理状态',
-          position: 'top'
-        });
-      } else {
-        alert('房间已设置为清理状态');
-      }
-    } catch (notifyError) {
-      console.warn('显示成功提示失败:', notifyError);
-      alert('房间已设置为清理状态');
-    }
-
-  } catch (error) {
-    console.error('设置房间清理状态失败:', error);
-
-    // 显示错误提示
-    try {
-      if ($q && $q.notify && typeof $q.notify === 'function') {
-        $q.notify({
-          type: 'negative',
-          message: `操作失败: ${error.message || '未知错误'}`,
-          position: 'top'
-        });
-      } else {
-        alert(`操作失败: ${error.message || '未知错误'}`);
-      }
-    } catch (notifyError) {
-      console.warn('显示错误提示失败:', notifyError);
-      alert(`操作失败: ${error.message || '未知错误'}`);
-    }
-  } finally {
-    // 隐藏加载提示
-    try {
-      if ($q && $q.loading && typeof $q.loading.hide === 'function') {
-        $q.loading.hide();
-      }
-    } catch (hideError) {
-      console.warn('隐藏加载提示失败:', hideError);
-    }
   }
 }
 </script>
@@ -1372,6 +1329,19 @@ async function setRoomCleaning(roomId) {
   transform: translateY(-3px);
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
   background-color: rgba(0, 0, 0, 0.02);
+}
+
+/* 房型统计卡片选中状态 */
+.room-type-summary .room-type-selected {
+  border: 2px solid #1976d2 !important;
+  box-shadow: 0 3px 10px rgba(25, 118, 210, 0.3) !important;
+  transform: translateY(-2px);
+}
+
+/* 房型统计卡片选中状态悬停效果 */
+.room-type-summary .room-type-selected:hover {
+  border: 2px solid #1565c0 !important;
+  box-shadow: 0 5px 15px rgba(25, 118, 210, 0.4) !important;
 }
 
 /* 房型统计卡片内容样式 */
