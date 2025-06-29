@@ -5,129 +5,204 @@
       <!-- 页面标题 -->
       <!-- <h1 class="text-h4 q-mb-md">房间状态</h1> -->
 
-    <!-- 房型统计卡片部分 -->
-    <div class="room-type-summary q-mb-md">
-      <div class="row q-col-gutter-sm">
-        <!-- 房型数据加载中的占位符 -->
-        <div v-if="loading || availableRoomTypeOptions.length === 0" class="col-12">
-          <q-card class="text-center">
-            <q-card-section class="q-py-md">
-              <div v-if="loading" class="text-subtitle1 text-grey-7">
-                <q-spinner color="primary" size="2em" class="q-mr-sm" />
-                正在加载房型数据...
-              </div>
-              <div v-else class="text-subtitle1 text-grey-7">
-                暂无可用房型
-              </div>
-            </q-card-section>
-          </q-card>
-        </div>
+    <!-- 简约筛选工具栏 -->
+    <div class="compact-filters q-mb-lg">
+      <q-card flat bordered>
+        <q-card-section class="q-pa-md">
+          <div class="row q-col-gutter-md items-center">
+            <!-- 房型选择 -->
+            <div class="col-lg-3 col-md-4 col-sm-6 col-xs-12">
+              <q-select
+                v-model="selectedRoomType"
+                :options="roomTypeSelectOptions"
+                label="房型筛选"
+                outlined
+                dense
+                emit-value
+                map-options
+                clearable
+                clear-icon="close"
+                @update:model-value="onRoomTypeSelect"
+              >
+                <template v-slot:prepend>
+                  <q-icon name="hotel" color="primary" />
+                </template>
+                <template v-slot:option="scope">
+                  <q-item v-bind="scope.itemProps">
+                    <q-item-section avatar>
+                      <q-icon :name="getRoomTypeIcon(scope.opt.value)" color="primary" />
+                    </q-item-section>
+                    <q-item-section>
+                      <q-item-label>{{ scope.opt.label }}</q-item-label>
+                      <q-item-label caption>
+                        可用: {{ roomStore.getAvailableRoomCountByType(scope.opt.value) }} /
+                        总数: {{ roomStore.getTotalRoomCountByType(scope.opt.value) }}
+                      </q-item-label>
+                    </q-item-section>
+                    <q-item-section side v-if="scope.opt.basePrice">
+                      <q-chip size="sm" color="primary" text-color="white">
+                        ￥{{ scope.opt.basePrice }}
+                      </q-chip>
+                    </q-item-section>
+                  </q-item>
+                </template>
+              </q-select>
+            </div>
 
-        <!-- 动态生成房型统计卡片 -->
-        <div
-          v-for="(roomType, index) in availableRoomTypeOptions"
-          :key="roomType.value"
-          class="col-lg-2 col-md-3 col-sm-4 col-xs-6"
-        >
-          <q-card
-            :class="getRoomTypeCardClass(roomType.value, index)"
-            class="text-center cursor-pointer"
-            @click="setTypeFilter(roomType.value)"
-          >
-            <q-card-section class="q-py-sm">
-              <div class="text-caption text-weight-bold">{{ roomType.label }}</div>
-              <div class="text-h6 text-weight-bold">剩余：{{ roomStore.getAvailableRoomCountByType(roomType.value) }}</div>
-              <!-- 如果有描述信息，可以显示为tooltip -->
-              <q-tooltip v-if="roomType.description" anchor="bottom middle" self="top middle">
-                {{ roomType.description }}
-              </q-tooltip>
-            </q-card-section>
-          </q-card>
-        </div>
-      </div>
+            <!-- 房间状态筛选 -->
+            <div class="col-lg-2 col-md-3 col-sm-6 col-xs-12">
+              <q-select
+                v-model="filterStatus"
+                :options="statusOptions"
+                label="状态筛选"
+                outlined
+                dense
+                emit-value
+                map-options
+                clearable
+                clear-icon="close"
+              >
+                <template v-slot:prepend>
+                  <q-icon name="assignment" color="secondary" />
+                </template>
+              </q-select>
+            </div>
+
+            <!-- 统计信息概览 -->
+            <div class="col-lg-4 col-md-5 col-sm-12 col-xs-12">
+              <div class="stats-overview">
+                <div class="row q-gutter-sm items-center">
+                  <div class="col-auto">
+                    <q-chip color="green" text-color="white" size="md" icon="check_circle">
+                      总可用: {{ totalAvailableRooms }}间
+                    </q-chip>
+                  </div>
+                  <div class="col-auto" v-if="selectedRoomType">
+                    <q-chip color="blue" text-color="white" size="md" :icon="getRoomTypeIcon(selectedRoomType)">
+                      {{ getSelectedRoomTypeName() }}: {{ roomStore.getAvailableRoomCountByType(selectedRoomType) }}间
+                    </q-chip>
+                  </div>
+                  <div class="col-auto" v-if="selectedRoomType && getSelectedRoomTypePrice()">
+                    <q-chip color="orange" text-color="white" size="md" icon="payments">
+                      ￥{{ getSelectedRoomTypePrice() }}/晚
+                    </q-chip>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 快速切换和操作按钮 -->
+            <div class="col-lg-3 col-md-12 col-sm-12 col-xs-12">
+              <div class="quick-actions">
+                <div class="row q-gutter-xs items-center justify-end">
+                  <!-- 快速房型切换 -->
+                  <div class="col-auto">
+                    <q-btn-toggle
+                      v-model="selectedRoomType"
+                      :options="topRoomTypeToggleOptions"
+                      color="primary"
+                      text-color="white"
+                      toggle-color="primary"
+                      size="sm"
+                      flat
+                      @update:model-value="onRoomTypeSelect"
+                    />
+                  </div>
+                  <!-- 重置按钮 -->
+                  <div class="col-auto">
+                    <q-btn
+                      outline
+                      color="grey"
+                      icon="restart_alt"
+                      size="sm"
+                      round
+                      @click="resetAllFilters"
+                    >
+                      <q-tooltip>重置所有筛选</q-tooltip>
+                    </q-btn>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </q-card-section>
+      </q-card>
     </div>
 
-    <!-- 筛选器部分 -->
-    <div class="filters q-mb-md">
-      <div class="row q-col-gutter-md">
-        <!-- 房间类型筛选下拉框 -->
-        <div class="col-md-3 col-sm-6 col-xs-12">
-          <q-select
-            v-model="filterType"
-            :options="roomTypeOptions"
-            label="房间类型"
-            outlined
-            emit-value
-            map-options
-            clearable
-            clear-icon="close"
-          />
-        </div>
+    <!-- 日期筛选器（可选展开） -->
+    <div class="date-filters q-mb-md" v-if="showDateFilter">
+      <q-card flat bordered>
+        <q-card-section class="q-pa-md">
+          <div class="row q-col-gutter-md items-center">
+            <!-- 日期范围选择器 -->
+            <div class="col-md-6 col-sm-8 col-xs-12">
+              <q-input
+                outlined
+                dense
+                label="可用日期范围"
+                readonly
+                :model-value="formattedDateRange || '点击选择日期范围'"
+                placeholder="YYYY-MM-DD 至 YYYY-MM-DD"
+                clearable
+                clear-icon="close"
+                @clear="clearDateRange"
+              >
+                <template v-slot:append>
+                  <q-icon name="event" class="cursor-pointer">
+                    <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+                      <q-date
+                        v-model="dateRange"
+                        range
+                        default-view="Calendar"
+                        today-btn
+                      >
+                        <div class="row items-center justify-end q-pa-sm">
+                          <q-btn v-close-popup label="确定" color="primary" flat/>
+                        </div>
+                      </q-date>
+                    </q-popup-proxy>
+                  </q-icon>
+                </template>
+              </q-input>
+            </div>
 
-        <!-- 房间状态筛选下拉框 -->
-        <div class="col-md-3 col-sm-6 col-xs-12">
-          <q-select
-            v-model="filterStatus"
-            :options="statusOptions"
-            label="房间状态"
-            outlined
-            emit-value
-            map-options
-            clearable
-            clear-icon="close"
-          />
-        </div>
+            <!-- 应用筛选按钮 -->
+            <div class="col-md-3 col-sm-4 col-xs-12">
+              <q-btn
+                color="primary"
+                icon="filter_alt"
+                label="应用日期筛选"
+                @click="applyFilters"
+                class="full-width"
+              />
+            </div>
 
-        <!-- 日期范围选择器 -->
-        <div class="col-md-4 col-sm-6 col-xs-12">
-          <q-input
-            outlined
-            label="可用日期范围"
-            readonly
-            :model-value="formattedDateRange || '请选择日期范围'"
-            placeholder="YYYY-MM-DD 至 YYYY-MM-DD"
-            class="date-range-input"
-            clearable
-            clear-icon="close"
-            @clear="clearDateRange"
-          >
-            <template v-slot:append>
-              <q-icon name="event" class="cursor-pointer">
-                <q-popup-proxy cover transition-show="scale" transition-hide="scale">
-                  <q-date
-                    v-model="dateRange"
-                    range
-                    default-view="Calendar"
-                    today-btn
-                  >
-                    <div class="row items-center justify-end q-pa-sm">
-                      <q-btn v-close-popup label="确定" color="primary" flat/>
-                    </div>
-                  </q-date>
-                </q-popup-proxy>
-              </q-icon>
-            </template>
-          </q-input>
-        </div>
+            <!-- 关闭日期筛选 -->
+            <div class="col-md-3 col-xs-12">
+              <q-btn
+                flat
+                color="grey"
+                icon="expand_less"
+                label="收起"
+                @click="showDateFilter = false"
+                class="full-width"
+              />
+            </div>
+          </div>
+        </q-card-section>
+      </q-card>
+    </div>
 
-        <!-- 筛选操作按钮 -->
-        <div class="col-md-2 col-sm-6 col-xs-12 flex items-center">
-          <q-btn
-            color="primary"
-            icon="filter_alt"
-            label="应用筛选"
-            @click="applyFilters"
-            class="q-mr-sm"
-          />
-          <q-btn
-            outline
-            color="grey"
-            icon="restart_alt"
-            label="重置"
-            @click="resetFilters"
-          />
-        </div>
-      </div>
+    <!-- 展开日期筛选按钮 -->
+    <div class="text-center q-mb-md" v-if="!showDateFilter">
+      <q-btn
+        flat
+        color="primary"
+        icon="expand_more"
+        label="展开日期筛选"
+        size="sm"
+        @click="showDateFilter = true"
+      />
     </div>
 
     <!-- 房间网格视图部分 -->
@@ -318,6 +393,10 @@ const dateRange = ref(null)     // 日期范围筛选，初始为null表示不�
 const loading = ref(false)      // 加载状态
 const error = ref(null)         // 错误信息
 
+// 添加简约界面相关的响应式数据
+const showDateFilter = ref(false)
+const selectedRoomType = ref(null)  // 当前选中的房型
+
 /**
  * 格式化日期范围显示
  */
@@ -435,6 +514,79 @@ const filteredRooms = computed(() => {
 
   return result;
 })
+
+/**
+ * 房型选择器的选项数据
+ */
+const roomTypeSelectOptions = computed(() => {
+  const allOption = { label: '全部房型', value: null }
+  const typeOptions = availableRoomTypeOptions.value.map(option => ({
+    ...option,
+    label: option.label + ` (${roomStore.getAvailableRoomCountByType(option.value)}/${roomStore.getTotalRoomCountByType(option.value)})`
+  }))
+  return [allOption, ...typeOptions]
+})
+
+/**
+ * 快速切换按钮组的选项
+ */
+const topRoomTypeToggleOptions = computed(() => {
+  const topTypes = availableRoomTypeOptions.value.slice(0, 3)
+  return [
+    { label: '全部', value: null },
+    ...topTypes.map(type => ({
+      label: type.label.length > 4 ? type.label.substring(0, 4) : type.label,
+      value: type.value
+    }))
+  ]
+})
+
+/**
+ * 当前选中的房型数据
+ */
+const getSelectedRoomTypeName = () => {
+  if (!selectedRoomType.value) return ''
+  const roomType = availableRoomTypeOptions.value.find(type => type.value === selectedRoomType.value)
+  return roomType ? roomType.label : ''
+}
+
+const getSelectedRoomTypePrice = () => {
+  if (!selectedRoomType.value) return null
+  const roomType = availableRoomTypeOptions.value.find(type => type.value === selectedRoomType.value)
+  return roomType ? roomType.basePrice : null
+}
+
+/**
+ * 房型选择事件处理
+ */
+const onRoomTypeSelect = (value) => {
+  console.log('房型选择事件:', value)
+  selectedRoomType.value = value
+  filterType.value = value
+
+  // 更新URL参数
+  router.replace({
+    path: route.path,
+    query: { ...route.query, type: value || undefined }
+  })
+}
+
+/**
+ * 重置所有筛选
+ */
+const resetAllFilters = () => {
+  selectedRoomType.value = null
+  filterType.value = null
+  filterStatus.value = null
+  dateRange.value = null
+  showDateFilter.value = false
+
+  // 更新URL，清除所有筛选参数
+  router.replace({
+    path: route.path,
+    query: {}
+  })
+}
 
 /**
  * 应用筛选按钮点击处理函数
@@ -999,6 +1151,102 @@ async function clearMaintenance(roomId) {
 }
 
 /**
+ * 设置房间为清洁状态
+ * @param {number} roomId - 房间ID
+ */
+async function setRoomCleaning(roomId) {
+  try {
+    // 获取房间信息
+    const room = await roomStore.getRoomById(roomId);
+    if (!room) {
+      throw new Error('找不到房间信息');
+    }
+
+    // 确认是否设置房间为清洁状态
+    if (!confirm(`确定将房间 ${room.room_number} 设置为清洁状态吗？`)) {
+      return;
+    }
+
+    // 显示加载提示
+    try {
+      if ($q && $q.loading && typeof $q.loading.show === 'function') {
+        $q.loading.show({
+          message: '正在处理...'
+        });
+      }
+    } catch (loadingError) {
+      console.warn('显示加载提示失败:', loadingError);
+    }
+
+    // 调用API更新房间状态为清洁中
+    try {
+      console.log(`准备将房间 ${roomId} 状态更新为 cleaning`);
+      const roomUpdateSuccess = await roomStore.updateRoomStatus(roomId, 'cleaning');
+
+      if (!roomUpdateSuccess) {
+        throw new Error('房间状态更新失败');
+      }
+
+      console.log(`房间 ${roomId} 状态已更新为 cleaning`);
+    } catch (roomUpdateError) {
+      console.error('更新房间状态失败:', roomUpdateError);
+      throw roomUpdateError;
+    }
+
+    // 刷新房间列表
+    try {
+      await roomStore.fetchAllRooms();
+    } catch (refreshError) {
+      console.error('刷新房间列表失败:', refreshError);
+    }
+
+    // 显示成功提示
+    try {
+      if ($q && $q.notify && typeof $q.notify === 'function') {
+        $q.notify({
+          type: 'positive',
+          message: '房间已设置为清洁状态',
+          position: 'top'
+        });
+      } else {
+        alert('房间已设置为清洁状态');
+      }
+    } catch (notifyError) {
+      console.warn('显示成功提示失败:', notifyError);
+      alert('房间已设置为清洁状态');
+    }
+
+  } catch (error) {
+    console.error('设置房间清洁状态失败:', error);
+
+    // 显示错误提示
+    try {
+      if ($q && $q.notify && typeof $q.notify === 'function') {
+        $q.notify({
+          type: 'negative',
+          message: `操作失败: ${error.message || '未知错误'}`,
+          position: 'top'
+        });
+      } else {
+        alert(`操作失败: ${error.message || '未知错误'}`);
+      }
+    } catch (notifyError) {
+      console.warn('显示错误提示失败:', notifyError);
+      alert(`操作失败: ${error.message || '未知错误'}`);
+    }
+  } finally {
+    // 隐藏加载提示
+    try {
+      if ($q && $q.loading && typeof $q.loading.hide === 'function') {
+        $q.loading.hide();
+      }
+    } catch (hideError) {
+      console.warn('隐藏加载提示失败:', hideError);
+    }
+  }
+}
+
+/**
  * 完成房间清洁，将状态改为可用
  * @param {number} roomId - 房间ID
  */
@@ -1172,6 +1420,52 @@ onMounted(async () => {
  */
 const getRoomTypeName = viewStore.getRoomTypeName
 
+/**
+ * 获取房型对应的图标
+ * @param {string} typeCode - 房型代码
+ * @returns {string} 图标名称
+ */
+function getRoomTypeIcon(typeCode) {
+  const iconMap = {
+    // 数据库中实际房型代码映射（按照数据库中的type_code）
+    'asu_wan_zhu': 'hotel',           // 阿苏晚筑
+    'asu_xiao_zhu': 'bed',            // 阿苏晓筑
+    'xing_yun_ge': 'yard',            // 行云阁有个院子 - 带院子的房型
+    'sheng_sheng_man': 'tv',          // 声声慢投影大床 - 投影房
+    'yi_jiang_nan': 'king_bed',       // 忆江南大床房 - 大床房
+    'yun_ju_ying_yin': 'surround_sound', // 云居云端影音房 - 影音设备
+    'bo_ye_shuang': 'single_bed',     // 泊野双床 - 双床房
+    'nuan_ju_jiating': 'family_restroom', // 暖居家庭房 - 家庭房
+    'zui_shan_tang': 'landscape',     // 醉山塘 - 古典风格
+    'rest': 'hotel_class',            // 休息房
+    // 保留原有的英文映射作为备用
+    'SINGLE': 'bed',
+    'DOUBLE': 'hotel',
+    'TWIN': 'king_bed',
+    'SUITE': 'apartment',
+    'DELUXE': 'star',
+    'FAMILY': 'family_restroom',
+    'VIP': 'workspace_premium',
+    'PRESIDENT': 'diamond',
+    'STANDARD': 'bedroom_parent',
+    'ECONOMY': 'savings'
+  }
+  return iconMap[typeCode] || 'bed'
+}
+
+/**
+ * 获取卡片文字颜色
+ * @param {number} index - 卡片索引
+ * @returns {string} 颜色值
+ */
+function getCardTextColor(index) {
+  const colors = [
+    '#e3f2fd', '#e8f5e8', '#fff3e0', '#fce4ec',
+    '#f3e5f5', '#e0f2f1', '#fff8e1', '#e1f5fe'
+  ]
+  return colors[index % 8]
+}
+
 // /**
 //  * 获取状态的中文文本
 //  */
@@ -1224,38 +1518,6 @@ const availableRoomTypeOptions = computed(() => {
 })
 
 /**
- * 获取房型卡片的样式类
- * @param {string} roomType - 房型代码
- * @param {number} index - 卡片索引（用于颜色循环）
- * @returns {string} CSS类名
- */
-function getRoomTypeCardClass(roomType, index) {
-  // 定义颜色循环数组
-  const colorClasses = [
-    'bg-blue-1',      // 蓝色
-    'bg-green-1',     // 绿色
-    'bg-purple-1',    // 紫色
-    'bg-orange-1',    // 橙色
-    'bg-teal-1',      // 青色
-    'bg-amber-1',     // 琥珀色
-    'bg-pink-1',      // 粉色
-    'bg-indigo-1',    // 靛蓝色
-    'bg-cyan-1'       // 青蓝色
-  ]
-
-  // 根据索引循环选择颜色
-  const colorIndex = index % colorClasses.length
-  let baseClass = colorClasses[colorIndex]
-
-  // 如果当前房型被选中，增加选中状态的样式
-  if (isRoomTypeSelected(roomType)) {
-    baseClass += ' room-type-selected'
-  }
-
-  return baseClass
-}
-
-/**
  * 检查房型是否被选中
  * @param {string} roomType - 房型代码
  * @returns {boolean} 是否被选中
@@ -1294,6 +1556,13 @@ function setTypeFilter(type) {
     })
   }
 }
+
+// 总可用房间数
+const totalAvailableRooms = computed(() => {
+  return roomStore.rooms.filter(room =>
+    roomStore.getRoomDisplayStatus(room) === 'available'
+  ).length
+})
 </script>
 
 <style scoped>
@@ -1314,56 +1583,159 @@ function setTypeFilter(type) {
 }
 
 /* 房型统计卡片样式 */
-.room-type-summary .q-card {
+.room-type-card {
   transition: transform 0.3s, box-shadow 0.3s;
-  border-radius: 8px;
-  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
-  height: 120px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  height: 220px;
+  border: none;
+  overflow: hidden;
+  position: relative;
 }
 
+/* 不同颜色主题的卡片背景 */
+.room-type-color-0 { background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%); } /* 蓝色 */
+.room-type-color-1 { background: linear-gradient(135deg, #4caf50 0%, #388e3c 100%); } /* 绿色 */
+.room-type-color-2 { background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%); } /* 橙色 */
+.room-type-color-3 { background: linear-gradient(135deg, #e91e63 0%, #c2185b 100%); } /* 粉色 */
+.room-type-color-4 { background: linear-gradient(135deg, #9c27b0 0%, #7b1fa2 100%); } /* 紫色 */
+.room-type-color-5 { background: linear-gradient(135deg, #00bcd4 0%, #0097a7 100%); } /* 青色 */
+.room-type-color-6 { background: linear-gradient(135deg, #ffc107 0%, #ffa000 100%); } /* 黄色 */
+.room-type-color-7 { background: linear-gradient(135deg, #607d8b 0%, #455a64 100%); } /* 蓝灰色 */
+
 /* 房型统计卡片悬停效果 */
-.room-type-summary .q-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-  background-color: rgba(0, 0, 0, 0.02);
+.room-type-card:hover {
+  transform: translateY(-6px) scale(1.03);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
 }
 
 /* 房型统计卡片选中状态 */
-.room-type-summary .room-type-selected {
-  border: 2px solid #1976d2 !important;
-  box-shadow: 0 3px 10px rgba(25, 118, 210, 0.3) !important;
-  transform: translateY(-2px);
+.room-type-selected {
+  transform: translateY(-4px) scale(1.05);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3) !important;
 }
 
 /* 房型统计卡片选中状态悬停效果 */
-.room-type-summary .room-type-selected:hover {
-  border: 2px solid #1565c0 !important;
-  box-shadow: 0 5px 15px rgba(25, 118, 210, 0.4) !important;
+.room-type-selected:hover {
+  transform: translateY(-8px) scale(1.07) !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4) !important;
 }
 
 /* 房型统计卡片内容样式 */
-.room-type-summary .q-card-section {
-  padding: 16px;
+.room-type-content {
+  padding: 20px 16px;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: space-between;
+  height: 100%;
+  color: white;
+}
+
+/* 房型图标样式 */
+.room-type-icon {
+  display: flex;
   justify-content: center;
+  align-items: center;
 }
 
 /* 房型名称样式 */
-.room-type-summary .text-subtitle1 {
-  font-size: 1.3rem;
-  margin-bottom: 8px;
+.room-type-name {
+  font-size: 1.1rem;
+  text-align: center;
+  line-height: 1.3;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
-/* 房型空余数字样式 */
-.room-type-summary .text-h6 {
-  font-size: 1.2rem;
-  margin: 0;
-  color: #1976d2;
+/* 可用房间数量样式 */
+.available-count {
+  font-size: 2.5rem;
+  line-height: 1;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* 数量标签样式 */
+.count-label {
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+/* 总数信息样式 */
+.total-info {
+  opacity: 0.8;
+}
+
+/* 价格芯片样式 */
+.price-chip {
+  font-weight: 600;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* 选中状态指示器 */
+.selected-indicator {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  padding: 4px;
+  backdrop-filter: blur(10px);
+}
+
+/* 简约筛选工具栏样式 */
+.compact-filters .q-card {
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.stats-overview .q-chip {
+  margin: 2px;
+}
+
+/* 快速操作区域样式 */
+.quick-actions .q-btn-toggle {
+  border-radius: 6px;
+}
+
+.quick-actions .q-btn {
+  min-width: 40px;
+}
+
+/* 日期筛选区域样式 */
+.date-filters .q-card {
+  border-radius: 8px;
+  border: 1px dashed #e0e0e0;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .compact-filters .stats-overview {
+    order: 3;
+    margin-top: 12px;
+  }
+
+  .compact-filters .quick-actions {
+    order: 4;
+    margin-top: 12px;
+  }
+}
+
+/* 自定义列宽，实现一行5个的布局 */
+@media (min-width: 1920px) {
+  .col-xl-2-4 {
+    width: 20%;
+    max-width: 20%;
+    flex: 0 0 20%;
+  }
+}
+
+@media (min-width: 1200px) and (max-width: 1919px) {
+  .col-xl-2-4 {
+    width: 25%;
+    max-width: 25%;
+    flex: 0 0 25%;
+  }
 }
 
 /* 状态统计卡片的悬停效果 */

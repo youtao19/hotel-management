@@ -575,6 +575,15 @@ export const useRoomStore = defineStore('room', () => {
   }
 
   /**
+   * 获取特定房型的总房间数量
+   * @param {string} type - 房间类型
+   * @returns {number} 该类型的总房间数量
+   */
+  function getTotalRoomCountByType(type) {
+    return rooms.value.filter(room => room.type_code === type).length
+  }
+
+  /**
    * 根据房间数量获取对应的颜色
    * @param {number} count - 房间数量
    * @returns {string} 对应的颜色
@@ -766,6 +775,7 @@ export const useRoomStore = defineStore('room', () => {
     getAvailableRoomOptions,
     getRoomTypeOptionsWithCount,
     getAvailableRoomCountByType,
+    getTotalRoomCountByType,
     getRoomCountColor,
     getRoomDisplayStatus,
     getRoomStatusClass,

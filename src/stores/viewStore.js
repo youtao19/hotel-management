@@ -6,6 +6,7 @@ export const useViewStore = defineStore('view', () => {
   const roomTypeOptions = [
     { label: '所有房型', value: null },  // null值表示不筛选
     { label: '阿苏晚筑', value: 'asu_wan_zhu' },
+    { label: '阿苏晓筑', value: 'asu_xiao_zhu' },
     { label: '行云阁有个院子', value: 'xing_yun_ge' },
     { label: '声声慢投影大床', value: 'sheng_sheng_man' },
     { label: '忆江南大床房', value: 'yi_jiang_nan' },
@@ -76,6 +77,7 @@ export const useViewStore = defineStore('view', () => {
   function getRoomTypeName(type) {
     switch (type) {
       case 'asu_wan_zhu': return '阿苏晚筑'
+      case 'asu_xiao_zhu': return '阿苏晓筑'
       case 'xing_yun_ge': return '行云阁有个院子'
       case 'sheng_sheng_man': return '声声慢投影大床'
       case 'yi_jiang_nan': return '忆江南大床房'

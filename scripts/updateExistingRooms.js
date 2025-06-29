@@ -3,16 +3,16 @@ const { query } = require('../backend/database/postgreDB/pg');
 // 房间号到新房型的映射关系（基于准确的房间配置信息）
 const roomToTypeMapping = {
   // 阿苏晓筑
-  '101': 'asu_wan_zhu',
-  '102': 'asu_wan_zhu',
-  '103': 'asu_wan_zhu',
-  '105': 'asu_wan_zhu',
-  '106': 'asu_wan_zhu',
-  '107': 'asu_wan_zhu',
-  '108': 'asu_wan_zhu',
-  '109': 'asu_wan_zhu',
-  '110': 'asu_wan_zhu',
-  '111': 'asu_wan_zhu',
+  '101': 'asu_xiao_zhu',
+  '102': 'asu_xiao_zhu',
+  '103': 'asu_xiao_zhu',
+  '105': 'asu_xiao_zhu',
+  '106': 'asu_xiao_zhu',
+  '107': 'asu_xiao_zhu',
+  '108': 'asu_xiao_zhu',
+  '109': 'asu_xiao_zhu',
+  '110': 'asu_xiao_zhu',
+  '111': 'asu_xiao_zhu',
 
   // 行云阁
   '403': 'xing_yun_ge',
@@ -63,7 +63,7 @@ const roomToTypeMapping = {
 
 // 房型价格映射
 const typePriceMapping = {
-  'asu_wan_zhu': 288.00,
+  'asu_xiao_zhu': 288.00,
   'xing_yun_ge': 388.00,
   'sheng_sheng_man': 348.00,
   'yi_jiang_nan': 268.00,
@@ -73,12 +73,43 @@ const typePriceMapping = {
   'zui_shan_tang': 398.00
 };
 
+async function getExistingRoomNumbers() {
+  try {
+    const result = await query('SELECT room_number FROM rooms');
+    return result.rows.map(row => row.room_number);
+  } catch (error) {
+    console.error('获取房间列表失败:', error);
+    return [];
+  }
+}
+
 async function updateExistingRooms() {
   try {
     console.log('🔄 开始更新现有房间的房型配置...\n');
 
+    // 0. 获取当前存在的房间号列表
+    const currentRoomNumbers = await getExistingRoomNumbers();
+    console.log(`   系统中实际存在 ${currentRoomNumbers.length} 个房间`);
+
+    // 清理映射关系，只保留实际存在的房间
+    const filteredMapping = {};
+    for (const roomNumber of currentRoomNumbers) {
+      if (roomToTypeMapping[roomNumber]) {
+        filteredMapping[roomNumber] = roomToTypeMapping[roomNumber];
+      }
+    }
+
+    const nonExistentRooms = Object.keys(roomToTypeMapping).filter(
+      room => !currentRoomNumbers.includes(room)
+    );
+
+    if (nonExistentRooms.length > 0) {
+      console.log('\n⚠️  注意: 以下房间在映射中定义但实际不存在于数据库:');
+      console.log(`   ${nonExistentRooms.join(', ')}`);
+    }
+
     // 1. 检查现有房间状态
-    console.log('1. 检查现有房间状态...');
+    console.log('\n1. 检查现有房间状态...');
     const existingRooms = await query('SELECT room_number, type_code, price FROM rooms ORDER BY room_number');
     console.log(`   找到 ${existingRooms.rows.length} 个现有房间`);
 
@@ -89,7 +120,7 @@ async function updateExistingRooms() {
 
     for (const room of existingRooms.rows) {
       const roomNumber = room.room_number;
-      const newTypeCode = roomToTypeMapping[roomNumber];
+      const newTypeCode = filteredMapping[roomNumber];
 
       if (newTypeCode) {
         const newPrice = typePriceMapping[newTypeCode];
@@ -147,6 +178,26 @@ async function updateExistingRooms() {
     allRoomsUpdated.rows.forEach(room => {
       console.log(`     房间 ${room.room_number}: ${room.type_name || room.type_code} (¥${room.price})`);
     });
+
+    // 添加新功能：检查是否需要添加缺失的房间
+    console.log('\n📋 检查是否需要添加新房间:');
+    const allRoomNumbers = Object.keys(roomToTypeMapping);
+    const updatedRoomNumbers = allRoomsUpdated.rows.map(room => room.room_number);
+    const roomsToAdd = allRoomNumbers.filter(room => !updatedRoomNumbers.includes(room));
+
+    if (roomsToAdd.length > 0) {
+      console.log(`\n   在配置中定义但尚未创建的房间: ${roomsToAdd.length} 间`);
+      roomsToAdd.forEach(roomNumber => {
+        const typeCode = roomToTypeMapping[roomNumber];
+        const price = typePriceMapping[typeCode];
+        console.log(`     - 房间 ${roomNumber}: ${typeCode} (¥${price}) - 可以使用命令添加此房间`);
+      });
+
+      console.log('\n   如需添加缺失的房间，请运行以下命令:');
+      console.log('   node scripts/addMissingRooms.js');
+    } else {
+      console.log('   ✅ 所有配置的房间均已存在于系统中');
+    }
 
     console.log('\n🎉 房间房型更新完成！');
 
