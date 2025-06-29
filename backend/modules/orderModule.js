@@ -92,6 +92,22 @@ function handleOrderCreationError(error, orderData) {
 }
 
 /**
+ * 检查是否为休息房（入住和退房是同一天）
+ * @param {Object} orderData 订单数据
+ * @returns {boolean} 是否为休息房
+ */
+function isRestRoom(orderData) {
+  const checkInDate = new Date(orderData.check_in_date);
+  const checkOutDate = new Date(orderData.check_out_date);
+
+  // 比较日期部分，忽略时间
+  const checkInDateStr = checkInDate.toISOString().split('T')[0];
+  const checkOutDateStr = checkOutDate.toISOString().split('T')[0];
+
+  return checkInDateStr === checkOutDateStr;
+}
+
+/**
  * 验证订单数据
  * @param {Object} orderData 订单数据
  * @throws {Error} 验证失败时抛出错误
@@ -132,8 +148,9 @@ function validateOrderData(orderData) {
     throw error;
   }
 
-  if (checkInDate >= checkOutDate) {
-    const error = new Error('入住日期必须早于退房日期');
+  // 允许入住和退房是同一天（休息房）
+  if (checkInDate > checkOutDate) {
+    const error = new Error('入住日期不能晚于退房日期');
     error.code = 'INVALID_DATE_RANGE';
     throw error;
   }
@@ -204,26 +221,73 @@ async function createOrder(orderData) {
     }
 
     // 5. 检查房间在指定日期是否已被预订
-    const conflictQuery = `
-      SELECT * FROM orders
-      WHERE room_number = $1
-      AND status != '已取消'
-      AND check_in_date < $2
-      AND check_out_date > $3
-    `;
-    const conflictResult = await query(conflictQuery, [
-      orderData.room_number,
-      orderData.check_out_date,
-      orderData.check_in_date
-    ]);
+    // 对于休息房，需要特殊的冲突检查逻辑
+    const isCurrentOrderRestRoom = isRestRoom(orderData);
+
+    let conflictQuery;
+    let conflictParams;
+
+    if (isCurrentOrderRestRoom) {
+      // 休息房冲突检查：同一天同一房间不能有其他订单
+      conflictQuery = `
+        SELECT * FROM orders
+        WHERE room_number = $1
+        AND status != '已取消'
+        AND (
+          (check_in_date = $2) OR
+          (check_out_date = $2) OR
+          (check_in_date < $2 AND check_out_date > $2)
+        )
+      `;
+      conflictParams = [orderData.room_number, orderData.check_in_date];
+    } else {
+      // 普通订单冲突检查：日期区间重叠
+      conflictQuery = `
+        SELECT * FROM orders
+        WHERE room_number = $1
+        AND status != '已取消'
+        AND check_in_date < $2
+        AND check_out_date > $3
+      `;
+      conflictParams = [
+        orderData.room_number,
+        orderData.check_out_date,
+        orderData.check_in_date
+      ];
+    }
+
+    const conflictResult = await query(conflictQuery, conflictParams);
 
     if (conflictResult.rows.length > 0) {
-      const error = new Error(`房间 '${orderData.room_number}' 在指定日期已被预订`);
+      const conflictOrder = conflictResult.rows[0];
+      const isConflictRestRoom = isRestRoom(conflictOrder);
+
+      let errorMessage;
+      if (isCurrentOrderRestRoom && isConflictRestRoom) {
+        errorMessage = `房间 '${orderData.room_number}' 在 ${orderData.check_in_date} 已有休息房预订`;
+      } else if (isCurrentOrderRestRoom) {
+        errorMessage = `房间 '${orderData.room_number}' 在 ${orderData.check_in_date} 已被其他订单占用`;
+      } else if (isConflictRestRoom) {
+        errorMessage = `房间 '${orderData.room_number}' 在指定日期范围内有休息房占用`;
+      } else {
+        errorMessage = `房间 '${orderData.room_number}' 在指定日期已被预订`;
+      }
+
+      const error = new Error(errorMessage);
       error.code = 'ROOM_ALREADY_BOOKED';
       throw error;
     }
 
-    // 6. 插入订单数据
+    // 6. 处理休息房备注
+    let processedRemarks = remarks || '';
+    if (isCurrentOrderRestRoom) {
+      // 确保休息房订单在备注中有标识
+      if (!processedRemarks.includes('【休息房】')) {
+        processedRemarks = '【休息房】' + (processedRemarks ? ' ' + processedRemarks : '');
+      }
+    }
+
+    // 7. 插入订单数据
     const {
       order_id, id_source, order_source, guest_name, phone, id_number,
       room_type, room_number, check_in_date, check_out_date, status,
@@ -244,7 +308,7 @@ async function createOrder(orderData) {
     const values = [
       order_id, id_source, order_source, guest_name, phone, id_number,
       room_type, room_number, check_in_date, check_out_date, status,
-      payment_method, room_price, deposit, create_time || new Date(), remarks
+      payment_method, room_price, deposit, create_time || new Date(), processedRemarks
     ];
 
     const result = await query(insertQuery, values);
@@ -314,7 +378,8 @@ const table = {
   createOrder,
   getAllOrders,
   getOrderById,
-  updateOrderStatus
+  updateOrderStatus,
+  isRestRoom
 };
 
 module.exports = table;

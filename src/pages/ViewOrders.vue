@@ -58,6 +58,21 @@
             </q-td>
           </template>
 
+          <template v-slot:body-cell-orderType="props">
+            <q-td :props="props">
+              <q-chip
+                v-if="isRestRoom(props.row)"
+                color="orange"
+                text-color="white"
+                icon="access_time"
+                size="sm"
+              >
+                休息房
+              </q-chip>
+              <span v-else class="text-grey-6">住宿</span>
+            </q-td>
+          </template>
+
           <template v-slot:body-cell-status="props">
             <q-td :props="props">
               <q-badge :color="getStatusColor(props.row.status)"
@@ -153,6 +168,17 @@ function getStatusText(status) {
   return option ? option.label : status
 }
 
+// 判断是否为休息房（入住和退房是同一天）
+function isRestRoom(order) {
+  if (!order.checkInDate || !order.checkOutDate) return false;
+
+  // 比较日期部分，忽略时间
+  const checkInDate = new Date(order.checkInDate).toISOString().split('T')[0];
+  const checkOutDate = new Date(order.checkOutDate).toISOString().split('T')[0];
+
+  return checkInDate === checkOutDate;
+}
+
 // 订单表格列定义
 const orderColumns = [
   { name: 'orderNumber', align: 'left', label: '订单号', field: 'orderNumber', sortable: true },
@@ -181,6 +207,13 @@ const orderColumns = [
     field: 'checkOutDate',
     sortable: true,
     format: val => formatDate(val)
+  },
+  {
+    name: 'orderType',
+    align: 'center',
+    label: '类型',
+    field: 'orderType',
+    sortable: false
   },
   {
     name: 'status',

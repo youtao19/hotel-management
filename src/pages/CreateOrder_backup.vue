@@ -9,7 +9,7 @@
     <div class="row q-mb-md">
       <q-btn label="填充测试数据" color="orange" icon="bug_report" @click="fillTestData" class="q-mr-sm" />
       <q-btn v-if="isDev" label="随机数据" color="purple" icon="auto_awesome" @click="fillRandomData" class="q-mr-sm" />
-      <q-btn label="快速休息房" color="teal" icon="hotel" @click="fillRestRoomData" class="q-mr-sm" />
+      <q-btn label="快速休息房" color="teal" icon="access_time" @click="fillRestRoomData" class="q-mr-sm" />
     </div>
 
     <!-- 主卡片容器，包含整个表单 -->
@@ -37,9 +37,11 @@
                 <q-select v-model="orderData.source" :options="sourceOptions" label="订单来源" filled emit-value
                   map-options />
               </div>
-              <!-- 来源编号输入框 -->
-              <div class="col-md-4 col-xs-12">
-                <q-input v-model="orderData.sourceNumber" label="来源编号" filled hint="OTA订单号/旅行社单号等" />
+            </div>
+            <div class="row q-col-gutter-md q-mt-sm">
+              <!-- 来源编号输入框（可选） -->
+              <div class="col-md-6 col-xs-12">
+                <q-input v-model="orderData.sourceNumber" label="来源编号（可选）" filled hint="如携程订单号、美团订单号等" />
               </div>
             </div>
           </div>
@@ -48,37 +50,50 @@
           <div class="form-section q-mb-md">
             <div class="text-subtitle1 q-mb-sm">客人信息</div>
             <div class="row q-col-gutter-md">
-              <!-- 姓名输入框 -->
+              <!-- 客人姓名输入框 -->
               <div class="col-md-4 col-xs-12">
-                <q-input v-model="orderData.guestName" label="姓名" filled :rules="[val => !!val || '请输入姓名']" />
+                <q-input v-model="orderData.guestName" label="客人姓名" filled
+                  :rules="[val => !!val || '请输入客人姓名']" />
               </div>
               <!-- 身份证号输入框 -->
               <div class="col-md-4 col-xs-12">
-                <q-input v-model="orderData.idNumber" label="身份证号" filled type="text" maxlength="18"
-                  @input="validateIdNumber" :rules="[
-                    val => !!val || '请输入身份证号',
-                    val => (val.length === 18) || '身份证号必须为18位',
-                    val => /^[0-9X]+$/.test(val) || '身份证号只能包含数字和X'
-                  ]">
-                  <!-- 提示文本 -->
-                  <template v-slot:hint>
-                    请输入18位身份证号，最后一位可以是数字或X
-                  </template>
-                </q-input>
+                <q-input v-model="orderData.idNumber" label="身份证号" filled
+                  :rules="[val => !!val || '请输入身份证号']" @input="validateIdNumber" />
               </div>
               <!-- 手机号输入框 -->
               <div class="col-md-4 col-xs-12">
-                <q-input v-model="orderData.phone" label="手机号" filled mask="###########" :rules="[
-                  val => !!val || '请输入手机号',
-                  val => (val.length === 11) || '手机号必须为11位'
-                ]" />
+                <q-input v-model="orderData.phone" label="手机号" filled :rules="[val => !!val || '请输入手机号']" />
               </div>
             </div>
           </div>
 
-          <!-- 入住信息部分 -->
+          <!-- 入住时间部分 -->
           <div class="form-section q-mb-md">
-            <div class="text-subtitle1 q-mb-sm">入住时间</div>
+            <div class="text-subtitle1 q-mb-sm">
+              入住时间
+              <!-- 休息房提示 -->
+              <q-chip
+                v-if="isRestRoom"
+                color="orange"
+                text-color="white"
+                icon="access_time"
+                size="sm"
+                class="q-ml-sm"
+              >
+                休息房
+              </q-chip>
+              <!-- 住宿提示 -->
+              <q-chip
+                v-else-if="orderData.checkInDate && orderData.checkOutDate"
+                color="blue"
+                text-color="white"
+                icon="hotel"
+                size="sm"
+                class="q-ml-sm"
+              >
+                住宿
+              </q-chip>
+            </div>
             <div class="row">
               <!-- 日期范围选择器，占满整行 -->
               <div class="col-12">
@@ -121,7 +136,7 @@
                     <q-icon name="event" class="cursor-pointer">
                       <q-popup-proxy ref="qDateCheckOutProxy" cover transition-show="scale" transition-hide="scale">
                         <q-date v-model="orderData.checkOutDate" :options="date => date >= orderData.checkInDate"
-                          @update:model-value="updateAvailableRooms">
+                          @update:model-value="updateCheckOutDateAndRooms">
                           <!-- 底部确认按钮 -->
                           <div class="row items-center justify-end">
                             <q-btn label="确定" color="primary" flat v-close-popup />
@@ -132,72 +147,44 @@
                   </template>
                 </q-input>
               </div>
-              
-              <!-- 休息房/住宿类型提示 -->
-              <div class="col-12 q-mt-md" v-if="orderData.checkInDate" v-show="orderData.checkOutDate">
-                <div class="row items-center">
-                  <div class="col-auto">
-                    <q-chip 
-                      :color="orderData.isRestRoom ? 'orange' : 'blue'" 
-                      text-color="white" 
-                      :icon="orderData.isRestRoom ? 'hotel' : 'calendar_month'"
-                      :label="orderData.isRestRoom ? '休息房' : '住宿'"
-                    />
-                  </div>
-                  <div class="col-auto q-ml-sm text-caption text-grey-6" v-if="orderData.isRestRoom">
-                    当日入住，当日离店
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
 
           <!-- 房间信息部分 -->
           <div class="form-section q-mb-md">
             <div class="text-subtitle1 q-mb-sm">房间信息</div>
-
             <div class="row q-col-gutter-md">
-              <!-- 房间类型选择 -->
+              <!-- 房间类型选择框 -->
               <div class="col-md-6 col-xs-12">
-                <div class="row items-center">
-                  <div class="col">
-                    <q-select v-model="orderData.roomType" :options="roomTypeOptionsWithCount" label="房间类型" filled
-                      emit-value map-options @update:model-value="onRoomTypeChange"
-                      :rules="[val => !!val || '请选择房间类型']">
-                      <template v-slot:option="scope">
-                        <q-item v-bind="scope.itemProps">
-                          <q-item-section>
-                            <q-item-label>{{ scope.opt.label }}</q-item-label>
-                          </q-item-section>
-                          <q-item-section side>
-                            <q-badge :color="getRoomCountColor(scope.opt.availableCount)"
-                              :label="scope.opt.availableCount + '间'" />
-                          </q-item-section>
-                        </q-item>
-                      </template>
-                    </q-select>
-                  </div>
-                  <!-- 当前房型剩余房间信息 -->
-                  <div class="col-auto q-ml-md" v-if="orderData.roomType">
-                    <q-chip :color="getRoomCountColor(availableRoomCount)" text-color="white" icon="hotel">
-                      剩余: {{ availableRoomCount }}间
-                    </q-chip>
-                  </div>
-                </div>
-              </div>
-
-              <!-- 房间号选择 -->
-              <div class="col-md-6 col-xs-12">
-                <q-select v-model="orderData.roomNumber" :options="availableRoomOptions" label="房间号" filled emit-value
-                  map-options :rules="[val => !!val || '请选择房间号']" :disable="!orderData.roomType">
-                  <!-- 没有可用房间时显示的内容 -->
-                  <template v-slot:no-option>
-                    <q-item>
-                      <q-item-section class="text-negative">
-                        <q-icon name="warning" color="negative" />
-                        当前没有可用的{{ orderData.roomType ? viewStore.getRoomTypeName(orderData.roomType) : '房间' }}
+                <q-select v-model="orderData.roomType" :options="roomTypeOptionsWithCount" label="房间类型" filled
+                  emit-value map-options @update:model-value="onRoomTypeChange"
+                  :rules="[val => val !== null || '请选择房间类型']">
+                  <!-- 房间类型选项模板，显示房型和可用数量 -->
+                  <template v-slot:option="scope">
+                    <q-item v-bind="scope.itemProps">
+                      <q-item-section>
+                        <q-item-label>{{ scope.opt.label }}</q-item-label>
+                      </q-item-section>
+                      <q-item-section side>
+                        <q-chip :color="getRoomCountColor(scope.opt.availableCount)" text-color="white" size="sm">
+                          {{ scope.opt.availableCount }}间
+                        </q-chip>
                       </q-item-section>
                     </q-item>
+                  </template>
+                  <!-- 已选择房型的显示模板 -->
+                  <template v-slot:selected-item="scope">
+                    <span>{{ scope.opt.label }} ({{ availableRoomCount }}间可用)</span>
+                  </template>
+                </q-select>
+              </div>
+              <!-- 房间号选择框 -->
+              <div class="col-md-6 col-xs-12">
+                <q-select v-model="orderData.roomNumber" :options="availableRoomOptions" label="房间号" filled
+                  emit-value map-options :rules="[val => !!val || '请选择房间号']">
+                  <!-- 已选择房间号的显示模板 -->
+                  <template v-slot:selected-item="scope">
+                    <span>{{ scope.opt.label }}</span>
                   </template>
                 </q-select>
               </div>
@@ -206,22 +193,21 @@
 
           <!-- 支付信息部分 -->
           <div class="form-section q-mb-md">
-            <!-- 分区标题 -->
             <div class="text-subtitle1 q-mb-sm">支付信息</div>
             <div class="row q-col-gutter-md">
-              <!-- 支付方式选择 -->
+              <!-- 支付方式选择框 -->
               <div class="col-md-4 col-xs-12">
                 <q-select v-model="orderData.paymentMethod" :options="viewStore.paymentMethodOptions" label="支付方式"
-                  filled :rules="[val => !!val || '请选择支付方式']" />
+                  filled emit-value map-options />
               </div>
-              <!-- 房间金额输入 -->
+              <!-- 房间价格输入框 -->
               <div class="col-md-4 col-xs-12">
-                <q-input v-model.number="orderData.roomPrice" label="房间金额" filled type="number" prefix="¥"
-                  :rules="[val => val > 0 || '房间金额必须大于0']" />
+                <q-input v-model.number="orderData.roomPrice" label="房间价格" filled type="number" min="0"
+                  suffix="元" :rules="[val => val >= 0 || '房间价格不能为负数']" />
               </div>
-              <!-- 押金输入 -->
+              <!-- 押金输入框 -->
               <div class="col-md-4 col-xs-12">
-                <q-input v-model.number="orderData.deposit" label="押金" filled type="number" prefix="¥"
+                <q-input v-model.number="orderData.deposit" label="押金" filled type="number" min="0" suffix="元"
                   :rules="[val => val >= 0 || '押金不能为负数']" />
               </div>
             </div>
@@ -341,7 +327,7 @@ const orderData = ref({
   roomPrice: 0,                        // 房间价格，会根据选择的房间自动设置
   remarks: '',                         // 备注信息（可选）
   createTime: date.formatDate(getCurrentTimeToMinute(), 'YYYY-MM-DD HH:mm:ss'), // 创建时间
-  isRestRoom: false,                   // 是否为休息房
+  isRestRoom: false,                   // 是否为休息房（入住和退房同一天）
 })
 
 // 日期范围对象 - 用于日期选择器的范围选择模式
@@ -361,22 +347,79 @@ const dateOptions = (dateStr) => {
   return dateStr >= currentDate
 }
 
+// 计算属性：是否为休息房
+const isRestRoom = computed(() => {
+  const result = orderData.value.checkInDate === orderData.value.checkOutDate;
+  if (isDev.value) {
+    console.log('计算isRestRoom:', {
+      checkInDate: orderData.value.checkInDate,
+      checkOutDate: orderData.value.checkOutDate,
+      isRestRoom: result
+    });
+  }
+  return result;
+});
+
+/**
+ * 检查是否为休息房（入住和退房是同一天）并更新备注
+ */
+function checkIfRestRoom() {
+  if (orderData.value.checkInDate && orderData.value.checkOutDate) {
+    const wasRestRoom = orderData.value.isRestRoom;
+    const currentIsRestRoom = isRestRoom.value;
+
+    if (isDev.value) {
+      console.log('检查休息房状态:', {
+        checkInDate: orderData.value.checkInDate,
+        checkOutDate: orderData.value.checkOutDate,
+        wasRestRoom,
+        currentIsRestRoom,
+        statusChanged: wasRestRoom !== currentIsRestRoom
+      });
+    }
+
+    // 只有当状态发生变化时才更新备注
+    if (wasRestRoom !== currentIsRestRoom) {
+      if (currentIsRestRoom) {
+        // 变成休息房，添加标记
+        if (!orderData.value.remarks.includes('【休息房】')) {
+          orderData.value.remarks = orderData.value.remarks ?
+            '【休息房】' + orderData.value.remarks : '【休息房】';
+        }
+      } else {
+        // 不再是休息房，移除标记
+        orderData.value.remarks = orderData.value.remarks.replace('【休息房】', '').trim();
+      }
+    }
+
+    // 更新orderData中的isRestRoom以保持同步
+    orderData.value.isRestRoom = currentIsRestRoom;
+  }
+}
+
 /**
  * 更新入住和离店日期，并刷新可用房间列表
  */
 async function updateDatesAndRooms() {
   if (dateRange.value.from) {
-    dateRange.value.from = date.formatDate(dateRange.value.from, 'YYYY-MM-DD');
-    orderData.value.checkInDate = dateRange.value.from;
+    orderData.value.checkInDate = date.formatDate(dateRange.value.from, 'YYYY-MM-DD');
+    dateRange.value.from = orderData.value.checkInDate;
   }
   if (dateRange.value.to) {
-    dateRange.value.to = date.formatDate(dateRange.value.to, 'YYYY-MM-DD');
-    orderData.value.checkOutDate = dateRange.value.to;
+    orderData.value.checkOutDate = date.formatDate(dateRange.value.to, 'YYYY-MM-DD');
+    dateRange.value.to = orderData.value.checkOutDate;
   }
-  
-  // 更新休息房状态
-  updateRestRoomStatus();
-  
+
+  // 确保先检查休息房状态，再更新房间列表
+  checkIfRestRoom();
+  await updateAvailableRooms();
+}
+
+/**
+ * 更新离店日期并刷新可用房间列表
+ */
+async function updateCheckOutDateAndRooms() {
+  checkIfRestRoom();
   await updateAvailableRooms();
 }
 
@@ -386,14 +429,11 @@ async function updateDatesAndRooms() {
 async function updateCheckOutMinDateAndRooms() {
   // 如果离店日期小于入住日期，重置离店日期
   if (orderData.value.checkOutDate < orderData.value.checkInDate) {
-    // 设置为入住日期（允许同一天，即休息房）
+    // 对于休息房，离店日期等于入住日期
     orderData.value.checkOutDate = orderData.value.checkInDate;
     dateRange.value.to = date.formatDate(orderData.value.checkOutDate, 'YYYY-MM-DD');
   }
-  
-  // 更新休息房状态
-  updateRestRoomStatus();
-  
+  checkIfRestRoom();
   await updateAvailableRooms();
 }
 
@@ -426,15 +466,17 @@ async function updateAvailableRooms() {
 }
 
 // 监听日期变化
-watch(() => orderData.value.checkInDate, async () => {
+watch(() => orderData.value.checkInDate, async (newVal, oldVal) => {
+  if (isDev.value) console.log('入住日期变化:', { oldVal, newVal });
   dateRange.value.from = date.formatDate(orderData.value.checkInDate, 'YYYY-MM-DD');
-  updateRestRoomStatus();
+  checkIfRestRoom();
   await updateAvailableRooms();
 });
 
-watch(() => orderData.value.checkOutDate, async () => {
+watch(() => orderData.value.checkOutDate, async (newVal, oldVal) => {
+  if (isDev.value) console.log('离店日期变化:', { oldVal, newVal });
   dateRange.value.to = date.formatDate(orderData.value.checkOutDate, 'YYYY-MM-DD');
-  updateRestRoomStatus();
+  checkIfRestRoom();
   await updateAvailableRooms();
 });
 
@@ -462,8 +504,6 @@ const roomTypeOptionsWithCount = computed(() => {
     };
   });
 });
-
-
 
 /**
  * 计算当前选择房型的可用房间数量
@@ -493,10 +533,6 @@ const availableRoomCount = computed(() => {
     room => room.type_code === orderData.value.roomType
   ).length;
 })
-// // 从roomStore获取房间类型选项数组和可用房间数量
-// const roomTypeOptionsWithCountFromStore = computed(
-//   () => roomStore.getRoomTypeOptionsWithCount()
-// );
 
 // 根据房间数量获取对应的颜色
 const getRoomCountColor = roomStore.getRoomCountColor;
@@ -505,7 +541,7 @@ const getRoomCountColor = roomStore.getRoomCountColor;
  * 当房型改变时的处理函数
  * 1. 重置房间号
  * 2. 根据新房型选择第一个可用房间
- * 3. 根据房型设置房间金额（休息房按半价计算）
+ * 3. 根据房型设置房间金额
  * @param {string} value - 选择的房型值
  */
 function onRoomTypeChange(value) {
@@ -522,10 +558,7 @@ function onRoomTypeChange(value) {
           room => room.room_number === orderData.value.roomNumber
         );
         if (selectedRoom) {
-          // 如果是休息房，价格按半价计算
-          const basePrice = Number(selectedRoom.price);
-          orderData.value.roomPrice = orderData.value.isRestRoom ? 
-            Math.round(basePrice / 2) : basePrice;
+          orderData.value.roomPrice = selectedRoom.price;
         }
       }
     }
@@ -579,6 +612,9 @@ async function submitOrder() {
   }
 
   try {
+    // 确保在提交前检查休息房状态
+    checkIfRestRoom();
+
     // 使用 orderStore.addOrder 创建订单
     const newOrder = await orderStore.addOrder({
       ...orderData.value,
@@ -587,7 +623,8 @@ async function submitOrder() {
         orderData.value.paymentMethod.value :
         orderData.value.paymentMethod,
       roomPrice: Number(orderData.value.roomPrice),
-      deposit: Number(orderData.value.deposit)
+      deposit: Number(orderData.value.deposit),
+      isRestRoom: orderData.value.isRestRoom
     });
 
     // 刷新房间状态
@@ -605,22 +642,18 @@ async function submitOrder() {
     console.error('订单创建失败:', error);
     let errorMessage = '订单创建失败，请稍后再试。';
 
-    if (error.response) {
-      if (error.response.data) {
-        console.log('服务器返回的详细错误:', error.response.data);
+    if (error.response && error.response.data) {
+      console.log('服务器返回的详细错误:', error.response.data);
 
-        if (error.response.data.errors) {
-          if (Array.isArray(error.response.data.errors)) {
-            error.response.data.errors.forEach((err, index) => {
-              console.log(`错误 ${index + 1}:`, err);
-            });
+      if (error.response.data.errors && Array.isArray(error.response.data.errors)) {
+        error.response.data.errors.forEach((err, index) => {
+          console.log(`错误 ${index + 1}:`, err);
+        });
 
-            errorMessage = '表单验证失败：\n' +
-              error.response.data.errors.map(e => `- ${e.msg}`).join('\n');
-          }
-        } else if (error.response.data.message) {
-          errorMessage = error.response.data.message;
-        }
+        errorMessage = '表单验证失败：\n' +
+          error.response.data.errors.map(e => `- ${e.msg}`).join('\n');
+      } else if (error.response.data.message) {
+        errorMessage = error.response.data.message;
       }
     }
 
@@ -632,6 +665,82 @@ async function submitOrder() {
       multiLine: true
     });
   }
+}
+
+/**
+ * 快速填充休息房数据
+ */
+function fillRestRoomData() {
+  // 设置同一天入住和退房
+  const today = date.formatDate(new Date(), 'YYYY-MM-DD');
+  if (isDev.value) console.log('填充休息房数据:', { today });
+
+  orderData.value.checkInDate = today;
+  orderData.value.checkOutDate = today;
+
+  // 更新日期范围
+  dateRange.value.from = today;
+  dateRange.value.to = today;
+
+  // 填充基本客人信息
+  orderData.value.guestName = '李休息';
+  orderData.value.idNumber = '110101199001011234';
+  orderData.value.phone = '13800138000';
+  orderData.value.remarks = '休息房订单';
+
+  // 检查休息房状态
+  checkIfRestRoom();
+
+  if (isDev.value) {
+    console.log('休息房数据填充后:', {
+      checkInDate: orderData.value.checkInDate,
+      checkOutDate: orderData.value.checkOutDate,
+      isRestRoom: orderData.value.isRestRoom,
+      computedIsRestRoom: isRestRoom.value
+    });
+  }
+
+  // 异步获取可用房间并设置房间信息
+  nextTick(async () => {
+    await updateAvailableRooms();
+
+    // 获取第一个可用的房间类型
+    const availableRoomTypes = roomTypeOptionsWithCount.value
+      .filter(type => type.availableCount > 0);
+
+    if (availableRoomTypes.length > 0) {
+      // 设置房间类型
+      orderData.value.roomType = availableRoomTypes[0].value;
+
+      // 等待DOM更新
+      await nextTick();
+
+      // 设置第一个可用房间
+      if (availableRoomOptions.value.length > 0) {
+        orderData.value.roomNumber = availableRoomOptions.value[0].value;
+
+        // 根据选择的房间直接设置房间价格
+        const selectedRoom = roomStore.getRoomByNumber(orderData.value.roomNumber);
+        if (selectedRoom) {
+          // 休息房通常按半价收费
+          orderData.value.roomPrice = Math.round(Number(selectedRoom.price) * 0.5);
+        } else {
+          orderData.value.roomPrice = 150; // 默认休息房价格
+        }
+      }
+    }
+
+    // 设置支付信息
+    orderData.value.paymentMethod = 'cash';
+    orderData.value.deposit = 50; // 休息房押金较少
+
+    // 显示通知
+    $q.notify({
+      type: 'positive',
+      message: '休息房数据已填充',
+      position: 'top'
+    });
+  });
 }
 
 /**
@@ -776,127 +885,26 @@ function fillRandomData() {
   }, 500)
 }
 
-/**
- * 填充休息房测试数据
- */
-function fillRestRoomData() {
-  // 填充基本订单数据
-  orderData.value.guestName = '李休息'
-  orderData.value.idNumber = '110101199002021234'
-  orderData.value.phone = '13900139000'
-  
-  // 设置当天入住和离店
-  const today = date.formatDate(new Date(), 'YYYY-MM-DD')
-  orderData.value.checkInDate = today
-  orderData.value.checkOutDate = today
-  
-  // 更新日期范围
-  dateRange.value.from = today
-  dateRange.value.to = today
-  
-  // 更新休息房状态
-  updateRestRoomStatus()
-
-  // 获取第一个可用的房间类型
-  const availableRoomTypes = roomTypeOptionsWithCount.value
-    .filter(type => type.availableCount > 0)
-
-  if (availableRoomTypes.length > 0) {
-    // 设置房间类型
-    orderData.value.roomType = availableRoomTypes[0].value
-
-    // 等待DOM更新
-    nextTick(() => {
-      // 设置第一个可用房间
-      if (availableRoomOptions.value.length > 0) {
-        orderData.value.roomNumber = availableRoomOptions.value[0].value
-
-        // 根据选择的房间设置房间价格（休息房半价）
-        const selectedRoom = roomStore.getRoomByNumber(orderData.value.roomNumber)
-        if (selectedRoom) {
-          console.log('设置休息房价格:', Math.round(selectedRoom.price / 2))
-          orderData.value.roomPrice = Math.round(Number(selectedRoom.price) / 2)
-        } else {
-          // 设置一个默认的休息房价格
-          orderData.value.roomPrice = 150
-        }
-      }
-    })
-  }
-
-  // 设置休息房特有的支付信息
-  orderData.value.paymentMethod = 'cash'
-  orderData.value.deposit = 50  // 休息房押金较低
-
-  // 显示通知
-  $q.notify({
-    type: 'positive',
-    message: '休息房数据已填充',
-    position: 'top'
-  })
-
-  // 刷新可用房间
-  setTimeout(() => {
-    updateAvailableRooms()
-  }, 100)
-}
-
 // 组件挂载时执行的钩子函数
 onMounted(async () => {
   // 页面加载时，主动拉取一次可用房间，保证房型数量能显示
   await updateAvailableRooms();
-  
-  // 初始化休息房状态
-  updateRestRoomStatus();
-});
 
+  // 检查初始的休息房状态
+  checkIfRestRoom();
 
-/**
- * 检查是否为休息房
- * 如果入住日期和离店日期是同一天，则为休息房
- * @returns {boolean} 是否为休息房
- */
-function checkIfRestRoom() {
-  return orderData.value.checkInDate === orderData.value.checkOutDate
-}
-
-/**
- * 更新休息房状态并处理相关逻辑
- */
-function updateRestRoomStatus() {
-  const wasRestRoom = orderData.value.isRestRoom
-  orderData.value.isRestRoom = checkIfRestRoom()
-  
-  // 如果状态发生变化，更新备注
-  if (wasRestRoom !== orderData.value.isRestRoom) {
-    if (orderData.value.isRestRoom) {
-      // 变成休息房，添加标识
-      if (!orderData.value.remarks.includes('【休息房】')) {
-        orderData.value.remarks = orderData.value.remarks ? 
-          `【休息房】${orderData.value.remarks}` : '【休息房】'
-      }
-      // 调整价格为半价（如果当前价格大于0）
-      if (orderData.value.roomPrice > 0) {
-        orderData.value.roomPrice = Math.round(orderData.value.roomPrice / 2)
-      }
-      // 调整押金
-      if (orderData.value.deposit > 50) {
-        orderData.value.deposit = 50
-      }
-    } else {
-      // 不再是休息房，移除标识
-      orderData.value.remarks = orderData.value.remarks.replace(/【休息房】/g, '').trim()
-      // 恢复原价（如果当前是半价）
-      if (orderData.value.roomPrice > 0) {
-        orderData.value.roomPrice = orderData.value.roomPrice * 2
-      }
-      // 恢复押金
-      if (orderData.value.deposit < 100) {
-        orderData.value.deposit = 100
-      }
+  // 强制更新一次计算属性
+  nextTick(() => {
+    if (isDev.value) {
+      console.log('组件挂载完成，当前状态:', {
+        checkInDate: orderData.value.checkInDate,
+        checkOutDate: orderData.value.checkOutDate,
+        isRestRoom: orderData.value.isRestRoom,
+        computedIsRestRoom: isRestRoom.value
+      });
     }
-  }
-}
+  });
+});
 </script>
 
 <style scoped>

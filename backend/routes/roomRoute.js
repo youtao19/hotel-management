@@ -41,14 +41,14 @@ router.get('/available', async (req, res) => {
       return res.status(400).json({ message: '日期格式必须为 YYYY-MM-DD' });
     }
 
-    // 验证日期逻辑
+    // 验证日期逻辑（允许同一天入住和退房，支持休息房）
     const start = new Date(startDate);
     const end = new Date(endDate);
     if (isNaN(start.getTime()) || isNaN(end.getTime())) {
       return res.status(400).json({ message: '无效的日期' });
     }
-    if (start >= end) {
-      return res.status(400).json({ message: '退房日期必须晚于入住日期' });
+    if (start > end) {
+      return res.status(400).json({ message: '退房日期不能早于入住日期' });
     }
 
     console.log('查询可用房间:', { startDate, endDate, typeCode });

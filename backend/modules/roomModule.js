@@ -207,25 +207,52 @@ async function getAvailableRooms(startDate, endDate, typeCode = null) {
     const queryEndDate = endDate.split('T')[0];
     console.log('[Backend INFO] getAvailableRooms: 处理后的查询日期:', { queryStartDate, queryEndDate });
 
-    let sqlQuery = `
-      SELECT r.room_id, r.room_number, r.type_code, r.status, r.price, r.is_closed
-      FROM rooms r
-      WHERE r.is_closed = FALSE
-        AND NOT EXISTS (
-          SELECT 1
-          FROM orders o
-          WHERE o.room_number = r.room_number
-            AND o.status IN ('checked-in', 'pending')
-            AND o.check_in_date < $2::date
-            AND o.check_out_date > $1::date
-        )
-    `;
+    // 判断是否为休息房查询（同一天入住和退房）
+    const isRestRoomQuery = queryStartDate === queryEndDate;
+    console.log('[Backend INFO] getAvailableRooms: 是否为休息房查询:', isRestRoomQuery);
 
-    const queryParams = [queryStartDate, queryEndDate];
+    let sqlQuery;
+    if (isRestRoomQuery) {
+      // 休息房查询：检查当天是否有冲突
+      sqlQuery = `
+        SELECT r.room_id, r.room_number, r.type_code, r.status, r.price, r.is_closed
+        FROM rooms r
+        WHERE r.is_closed = FALSE
+          AND NOT EXISTS (
+            SELECT 1
+            FROM orders o
+            WHERE o.room_number = r.room_number
+              AND o.status IN ('checked-in', 'pending')
+              AND (
+                (o.check_in_date = $1::date) OR
+                (o.check_out_date = $1::date) OR
+                (o.check_in_date < $1::date AND o.check_out_date > $1::date)
+              )
+          )
+      `;
+    } else {
+      // 普通订单查询：标准的日期区间冲突检查
+      sqlQuery = `
+        SELECT r.room_id, r.room_number, r.type_code, r.status, r.price, r.is_closed
+        FROM rooms r
+        WHERE r.is_closed = FALSE
+          AND NOT EXISTS (
+            SELECT 1
+            FROM orders o
+            WHERE o.room_number = r.room_number
+              AND o.status IN ('checked-in', 'pending')
+              AND o.check_in_date < $2::date
+              AND o.check_out_date > $1::date
+          )
+      `;
+    }
+
+    const queryParams = isRestRoomQuery ? [queryStartDate] : [queryStartDate, queryEndDate];
 
     // 如果指定了房型，添加房型筛选条件
     if (typeCode) {
-      sqlQuery += ' AND r.type_code = $3::varchar';
+      const paramIndex = isRestRoomQuery ? 2 : 3;
+      sqlQuery += ` AND r.type_code = $${paramIndex}::varchar`;
       queryParams.push(typeCode);
       console.log('[Backend INFO] getAvailableRooms: 添加了房型筛选 typeCode:', typeCode);
     } else {
