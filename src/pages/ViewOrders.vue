@@ -50,6 +50,10 @@
                   v-if="props.row.status === 'checked-in'">
                   <q-tooltip>办理退房</q-tooltip>
                 </q-btn>
+                <q-btn flat round dense color="orange" icon="hotel_class" @click="openExtendStayDialog(props.row)"
+                  v-if="props.row.status === 'checked-out'">
+                  <q-tooltip>续住</q-tooltip>
+                </q-btn>
               </q-btn-group>
             </q-td>
           </template>
@@ -96,6 +100,17 @@
       @bill-created="handleBillCreated"
     />
 
+    <!-- 续住对话框 -->
+    <ExtendStayDialog
+      v-model="showExtendStayDialog"
+      :currentOrder="extendStayOrder"
+      :availableRoomOptions="extendStayRoomOptions"
+      :getRoomTypeName="getRoomTypeName"
+      :loadingRooms="loadingExtendStayRooms"
+      @extend-stay="handleExtendStay"
+      @refresh-rooms="handleRefreshExtendStayRooms"
+    />
+
     </div>
   </q-page>
 </template>
@@ -110,6 +125,7 @@ import { useBillStore } from '../stores/billStore' // 导入账单 store
 import OrderDetailsDialog from 'src/components/OrderDetailsDialog.vue';
 import ChangeRoomDialog from 'src/components/ChangeRoomDialog.vue';
 import Bill from 'src/components/Bill.vue';
+import ExtendStayDialog from 'src/components/ExtendStayDialog.vue';
 
 // 初始化 stores
 const orderStore = useOrderStore()
@@ -289,6 +305,12 @@ async function cancelOrder(order) {
 
 const showBillDialog = ref(false)
 const billOrder = ref(null)
+
+// 续住相关变量
+const showExtendStayDialog = ref(false)
+const extendStayOrder = ref(null)
+const extendStayRoomOptions = ref([])
+const loadingExtendStayRooms = ref(false)
 
 // 办理退房
 async function checkoutOrder(order) {
@@ -742,6 +764,170 @@ function showReviewInvitationDialog(order) {
   }).onCancel(() => {
     console.log('用户选择暂不邀请好评');
   });
+}
+
+// 打开续住对话框
+async function openExtendStayDialog(order) {
+  console.log('openExtendStayDialog function called for order:', order.orderNumber);
+
+  if (!order || order.status !== 'checked-out') {
+    $q.notify({
+      type: 'negative',
+      message: '只有已退房的订单才能申请续住',
+      position: 'top'
+    });
+    return;
+  }
+
+  extendStayOrder.value = order;
+  loadingExtendStayRooms.value = true;
+
+  try {
+    // 获取今天开始的可用房间（续住一般从今天开始）
+    const today = new Date().toISOString().split('T')[0];
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+    console.log('Getting available rooms for extend stay from:', today, 'to:', tomorrowStr);
+
+    // 获取可用房间
+    const rooms = await roomStore.getAvailableRoomsByDate(today, tomorrowStr);
+    console.log('Available rooms for extend stay:', rooms);
+
+    // 更新可用房间选项
+    extendStayRoomOptions.value = rooms.map(room => ({
+      label: `${room.room_number} - ${viewStore.getRoomTypeName(room.type_code)} (¥${room.price}/晚)`,
+      value: room.room_number,
+      type: room.type_code,
+      price: room.price
+    }));
+
+    console.log('Processed extend stay room options:', extendStayRoomOptions.value);
+    showExtendStayDialog.value = true;
+
+  } catch (error) {
+    console.error('获取续住可用房间失败:', error);
+    $q.notify({
+      type: 'negative',
+      message: '获取可用房间列表失败: ' + (error.message || '未知错误'),
+      position: 'top'
+    });
+  } finally {
+    loadingExtendStayRooms.value = false;
+  }
+}
+
+// 处理续住
+async function handleExtendStay(extendStayData) {
+  console.log('🏨 处理续住请求:', extendStayData);
+
+  try {
+    // 使用对话框中用户设置的订单号
+    const newOrderNumber = extendStayData.orderNumber;
+
+    // 创建新订单数据，使用 addOrder 期望的格式
+    const newOrderData = {
+      orderNumber: newOrderNumber,
+      guestName: extendStayData.guestName,
+      phone: extendStayData.phone,
+      idNumber: extendStayData.idNumber || '000000000000000000', // 使用原订单的身份证号，如果没有则使用默认值
+      roomType: extendStayData.roomType,
+      roomNumber: extendStayData.roomNumber,
+      checkInDate: extendStayData.checkInDate,
+      checkOutDate: extendStayData.checkOutDate,
+      status: 'pending', // 新订单默认为待入住状态
+      paymentMethod: 'cash', // 默认现金支付，管理员可以修改
+      roomPrice: extendStayData.roomPrice, // 单日房价
+      deposit: 0, // 续住默认押金为0
+      remarks: `续住订单，原订单号：${extendStayData.originalOrderNumber}。${extendStayData.notes || ''}`.trim(),
+      source: 'extend_stay', // 标记为续住来源
+      sourceNumber: extendStayData.originalOrderNumber || ''
+    };
+
+    console.log('📋 准备创建续住订单:', newOrderData);
+
+    // 使用 addOrder 方法创建新订单
+    const createdOrder = await orderStore.addOrder(newOrderData);
+
+    if (createdOrder) {
+      // 关闭对话框
+      showExtendStayDialog.value = false;
+
+      // 刷新订单列表
+      await fetchAllOrders();
+
+      $q.notify({
+        type: 'positive',
+        message: `🎉 续住订单创建成功！\n订单号：${newOrderNumber}`,
+        position: 'top',
+        multiLine: true,
+        timeout: 5000,
+        actions: [
+          {
+            label: '查看订单',
+            color: 'white',
+            handler: () => {
+              // 找到新创建的订单并查看详情
+              const newOrder = orderStore.getOrderByNumber(newOrderNumber);
+              if (newOrder) {
+                viewOrderDetails(newOrder);
+              }
+            }
+          }
+        ]
+      });
+
+      console.log('✅ 续住订单创建成功:', createdOrder);
+    }
+
+  } catch (error) {
+    console.error('❌ 创建续住订单失败:', error);
+    const errorMessage = error.response?.data?.message || error.message || '未知错误';
+    $q.notify({
+      type: 'negative',
+      message: `创建续住订单失败: ${errorMessage}`,
+      position: 'top',
+      multiLine: true
+    });
+  }
+}
+
+// 处理续住房间刷新
+async function handleRefreshExtendStayRooms(dateRange) {
+  console.log('刷新续住房间，日期范围:', dateRange);
+
+  if (!dateRange.startDate || !dateRange.endDate) {
+    return;
+  }
+
+  loadingExtendStayRooms.value = true;
+
+  try {
+    // 获取指定日期范围的可用房间
+    const rooms = await roomStore.getAvailableRoomsByDate(dateRange.startDate, dateRange.endDate);
+    console.log('刷新获取的可用房间:', rooms);
+
+    // 更新可用房间选项
+    extendStayRoomOptions.value = rooms.map(room => ({
+      label: `${room.room_number} - ${viewStore.getRoomTypeName(room.type_code)} (¥${room.price}/晚)`,
+      value: room.room_number,
+      type: room.type_code,
+      price: room.price
+    }));
+
+    console.log('刷新后的续住房间选项:', extendStayRoomOptions.value);
+
+  } catch (error) {
+    console.error('刷新续住可用房间失败:', error);
+    $q.notify({
+      type: 'negative',
+      message: '刷新可用房间列表失败: ' + (error.message || '未知错误'),
+      position: 'top'
+    });
+  } finally {
+    loadingExtendStayRooms.value = false;
+  }
 }
 
 onMounted(async () => {

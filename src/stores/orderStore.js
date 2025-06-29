@@ -281,6 +281,43 @@ export const useOrderStore = defineStore('order', () => {
     )
   }
 
+  // 创建新订单 (续住专用)
+  async function createOrder(orderData) {
+    try {
+      console.log('🏨 创建续住订单开始:', orderData);
+
+      // 将续住订单数据转换为适合addOrder的格式
+      const convertedOrderData = {
+        orderNumber: orderData.orderNumber,
+        guestName: orderData.guestName,
+        phone: orderData.phone,
+        idNumber: orderData.idNumber || '000000000000000000', // 续住时可能没有身份证号，使用默认值
+        roomType: orderData.roomType,
+        roomNumber: orderData.roomNumber,
+        checkInDate: orderData.checkInDate,
+        checkOutDate: orderData.checkOutDate,
+        status: orderData.status || 'pending',
+        paymentMethod: orderData.paymentMethod || 'cash',
+        roomPrice: orderData.totalPrice ? (orderData.totalPrice / orderData.stayDays || 1) : (orderData.roomPrice || 0),
+        deposit: 0, // 续住默认押金为0
+        remarks: orderData.notes || '',
+        source: 'extend_stay', // 标记为续住来源
+        sourceNumber: orderData.originalOrderNumber || ''
+      };
+
+      console.log('🔄 转换后的订单数据:', convertedOrderData);
+
+      // 调用现有的addOrder方法
+      const createdOrder = await addOrder(convertedOrderData);
+      console.log('✅ 续住订单创建成功:', createdOrder);
+      return createdOrder;
+
+    } catch (error) {
+      console.error('❌ 创建续住订单失败:', error);
+      throw error;
+    }
+  }
+
   // 初始加载数据
   function initialize() {
     console.log('开始初始化订单数据...')
@@ -309,6 +346,7 @@ export const useOrderStore = defineStore('order', () => {
     updateOrderRoom,
     getOrderByNumber,
     getActiveOrderByRoomNumber,
-    formatOrderDate
+    formatOrderDate,
+    createOrder
   }
 })
