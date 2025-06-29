@@ -48,7 +48,7 @@ async function checkExistingOrder(orderData) {
     AND check_in_date = $2
     AND check_out_date = $3
     AND room_type = $4
-    AND status != '已取消'
+    AND status NOT IN ('cancelled', 'checked-out')
   `;
 
   const result = await query(checkQuery, [guest_name, check_in_date, check_out_date, room_type]);
@@ -228,11 +228,11 @@ async function createOrder(orderData) {
     let conflictParams;
 
     if (isCurrentOrderRestRoom) {
-      // 休息房冲突检查：同一天同一房间不能有其他订单
+      // 休息房冲突检查：同一天同一房间不能有其他订单（排除已取消和已退房的订单）
       conflictQuery = `
         SELECT * FROM orders
         WHERE room_number = $1
-        AND status != '已取消'
+        AND status NOT IN ('cancelled', 'checked-out')
         AND (
           (check_in_date = $2) OR
           (check_out_date = $2) OR
@@ -241,11 +241,11 @@ async function createOrder(orderData) {
       `;
       conflictParams = [orderData.room_number, orderData.check_in_date];
     } else {
-      // 普通订单冲突检查：日期区间重叠
+      // 普通订单冲突检查：日期区间重叠（排除已取消和已退房的订单）
       conflictQuery = `
         SELECT * FROM orders
         WHERE room_number = $1
-        AND status != '已取消'
+        AND status NOT IN ('cancelled', 'checked-out')
         AND check_in_date < $2
         AND check_out_date > $3
       `;
@@ -278,7 +278,14 @@ async function createOrder(orderData) {
       throw error;
     }
 
-    // 6. 处理休息房备注
+    // 6. 插入订单数据 - 解构订单数据
+    const {
+      order_id, id_source, order_source, guest_name, phone, id_number,
+      room_type, room_number, check_in_date, check_out_date, status,
+      payment_method, room_price, deposit, create_time, remarks
+    } = orderData;
+
+    // 7. 处理休息房备注
     let processedRemarks = remarks || '';
     if (isCurrentOrderRestRoom) {
       // 确保休息房订单在备注中有标识
@@ -287,12 +294,7 @@ async function createOrder(orderData) {
       }
     }
 
-    // 7. 插入订单数据
-    const {
-      order_id, id_source, order_source, guest_name, phone, id_number,
-      room_type, room_number, check_in_date, check_out_date, status,
-      payment_method, room_price, deposit, create_time, remarks
-    } = orderData;
+    // 8. 执行数据库插入操作
 
     const insertQuery = `
       INSERT INTO orders (
