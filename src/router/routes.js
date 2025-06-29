@@ -16,7 +16,8 @@ const routes = [
       { path: 'room-status', component: () => import('pages/RoomStatus.vue') },
       { path: 'ViewOrders', component: () => import('pages/ViewOrders.vue') },
       { path: 'CreateOrder', component: () => import('pages/CreateOrder.vue') },
-      { path: 'shift-handover', component: () => import('pages/ShiftHandover.vue') }
+      { path: 'shift-handover', component: () => import('pages/ShiftHandover.vue') },
+      { path: 'review-management', component: () => import('pages/ReviewManagement.vue') }
     ]
   },
 

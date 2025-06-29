@@ -102,6 +102,21 @@ export const billApi = {
 
   // 获得账单
   getBillByOrderId: (orderId) => api.get(`/bills/${orderId}`),
+
+  // 邀请客户好评
+  inviteReview: (orderId) => api.post(`/bills/${orderId}/invite-review`),
+
+  // 更新好评状态
+  updateReviewStatus: (orderId, positive_review) => api.post(`/bills/${orderId}/review-status`, { positive_review }),
+
+  // 获取所有账单
+  getAllBills: () => api.get('/bills/all'),
+
+  // 获取待邀请好评的账单
+  getPendingInvitations: () => api.get('/bills/pending-invitations'),
+
+  // 获取已邀请但未设置好评状态的账单
+  getPendingReviews: () => api.get('/bills/pending-reviews'),
 }
 
 // 库存相关接口

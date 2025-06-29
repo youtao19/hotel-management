@@ -26,10 +26,6 @@ cleaning、repair 则 将is_closed 改为True。 available 将is_closed 改为 T
 
 我已经为你添加了postgresql的MCP服务
 
-
-在某个数据有bug时，不要单独处理一个数据，需要整体的处理。
-例如：我给你102房间有bug。你不能用逻辑单独去处理102，你需要处理所有与他相关的数据。
-
 ## 项目结构
 页面路径 ./src/pages
 前端路由 ./src/router

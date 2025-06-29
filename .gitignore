@@ -38,3 +38,5 @@ dev.env
 
 backend/database/postgreDB/dbConfig.js
 
+.vscode
+

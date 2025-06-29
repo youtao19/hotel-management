@@ -13,6 +13,10 @@ const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
     pay_way VARCHAR(20) NOT NULL,
     create_time TIMESTAMP NOT NULL,
     remarks TEXT,
+    review_invited BOOLEAN DEFAULT FALSE,
+    positive_review BOOLEAN DEFAULT NULL,
+    review_invite_time TIMESTAMP DEFAULT NULL,
+    review_update_time TIMESTAMP DEFAULT NULL,
     FOREIGN KEY (order_id) REFERENCES orders(order_id)
 )`;
 

@@ -106,6 +106,7 @@ import { date, useQuasar } from 'quasar'
 import { useOrderStore } from '../stores/orderStore' // 导入订单 store
 import { useRoomStore } from '../stores/roomStore' // 导入房间 store
 import { useViewStore } from '../stores/viewStore' // 导入视图 store
+import { useBillStore } from '../stores/billStore' // 导入账单 store
 import OrderDetailsDialog from 'src/components/OrderDetailsDialog.vue';
 import ChangeRoomDialog from 'src/components/ChangeRoomDialog.vue';
 import Bill from 'src/components/Bill.vue';
@@ -114,6 +115,7 @@ import Bill from 'src/components/Bill.vue';
 const orderStore = useOrderStore()
 const roomStore = useRoomStore()
 const viewStore = useViewStore()
+const billStore = useBillStore()
 const $q = useQuasar() // 初始化 $q 对象
 
 // 搜索和过滤
@@ -345,6 +347,13 @@ async function checkoutOrder(order) {
       message: '退房成功',
       position: 'top'
     });
+
+    // 退房成功后，询问是否邀请客户好评
+    console.log('准备显示好评邀请对话框，订单信息:', order);
+    setTimeout(() => {
+      console.log('显示好评邀请对话框');
+      showReviewInvitationDialog(order);
+    }, 1000);
 
   } catch (error) {
     console.error('办理退房操作失败:', error);
@@ -688,6 +697,51 @@ async function handleBillCreated() {
       position: 'top'
     });
   }
+}
+
+// 显示好评邀请对话框
+function showReviewInvitationDialog(order) {
+  console.log('showReviewInvitationDialog 被调用，订单数据:', order);
+
+  if (!order || !order.guestName || !order.orderNumber) {
+    console.error('订单数据不完整，无法显示好评邀请对话框:', order);
+    return;
+  }
+
+  console.log('准备显示好评邀请对话框');
+  $q.dialog({
+    title: '邀请客户好评',
+    message: `客户 ${order.guestName} 已成功退房，是否邀请客户参与好评？`,
+    cancel: {
+      label: '暂不邀请',
+      color: 'grey',
+      flat: true
+    },
+    ok: {
+      label: '邀请好评',
+      color: 'positive'
+    },
+    persistent: false
+  }).onOk(async () => {
+    console.log('用户选择邀请好评，订单号:', order.orderNumber);
+    try {
+      await billStore.inviteReview(order.orderNumber);
+      $q.notify({
+        type: 'positive',
+        message: `已成功邀请客户 ${order.guestName} 参与好评`,
+        position: 'top'
+      });
+    } catch (error) {
+      console.error('邀请好评失败:', error);
+      $q.notify({
+        type: 'negative',
+        message: '邀请好评失败: ' + (error.response?.data?.message || error.message),
+        position: 'top'
+      });
+    }
+  }).onCancel(() => {
+    console.log('用户选择暂不邀请好评');
+  });
 }
 
 onMounted(async () => {
