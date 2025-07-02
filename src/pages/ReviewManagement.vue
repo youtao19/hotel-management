@@ -92,19 +92,19 @@
                       flat
                       dense
                       color="positive"
-                      icon="thumb_up"
+                      icon="check_circle"
                       @click="setReviewStatus(props.row, true)"
                     >
-                      <q-tooltip>设为好评</q-tooltip>
+                      <q-tooltip>已好评</q-tooltip>
                     </q-btn>
                     <q-btn
                       flat
                       dense
                       color="negative"
-                      icon="thumb_down"
+                      icon="cancel"
                       @click="setReviewStatus(props.row, false)"
                     >
-                      <q-tooltip>设为差评</q-tooltip>
+                      <q-tooltip>未好评</q-tooltip>
                     </q-btn>
                   </q-btn-group>
                 </q-td>
@@ -127,7 +127,7 @@
                   <q-badge
                     v-if="props.row.review_invited && props.row.positive_review !== null"
                     :color="props.row.positive_review ? 'positive' : 'negative'"
-                    :label="props.row.positive_review ? '好评' : '差评'"
+                    :label="props.row.positive_review ? '好评' : '未好评'"
                   />
                   <q-badge
                     v-else-if="props.row.review_invited"
@@ -259,7 +259,7 @@ async function setReviewStatus(bill, isPositive) {
 
     $q.notify({
       type: 'positive',
-      message: `已将客户 ${bill.guest_name} 的评价设置为${isPositive ? '好评' : '差评'}`,
+      message: `已将客户 ${bill.guest_name} 的评价设置为${isPositive ? '好评' : '未好评'}`,
       position: 'top'
     })
 
