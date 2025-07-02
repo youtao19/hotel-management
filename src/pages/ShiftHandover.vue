@@ -2,29 +2,6 @@
   <q-page class="shift-handover">
     <div class="q-pa-md">
       <div class="row q-col-gutter-md">
-        <!-- 页面标题 -->
-        <div class="col-12">
-          <q-card class="bg-primary text-white q-mb-md shadow-10">
-            <q-card-section class="q-pa-lg">
-              <div class="row items-center justify-between">
-                <div>
-                  <div class="text-h3 text-weight-bold q-mb-xs">
-                    <q-icon name="swap_horizontal_circle" size="md" class="q-mr-sm" />
-                    交接班管理
-                  </div>
-                  <div class="text-h6 text-white-7">{{ currentDate }} - {{ getCurrentDayOfWeek() }}</div>
-                </div>使用MCP查看房型并根据脚本的信息修改
-                <div class="text-right">
-                  <div class="text-subtitle1">
-                    <q-icon name="schedule" size="sm" class="q-mr-xs" />
-                    {{ shiftTime }}
-                  </div>
-                </div>
-              </div>
-            </q-card-section>
-          </q-card>
-        </div>
-
         <!-- 收款明细表区域 -->
         <div class="col-md-8 col-xs-12">
           <q-card>
