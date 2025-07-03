@@ -47,6 +47,7 @@
           <q-route-tab to="/Dash-board" label="仪表盘" />
           <q-route-tab to="/CreateOrder" label="创建订单" />
           <q-route-tab to="/room-status" label="房间状态" />
+          <q-route-tab to="/room-management" label="房间管理" />
           <q-route-tab to="/ViewOrders" label="查看订单" />
           <q-route-tab to="/review-management" label="好评管理" />
           <q-route-tab to="/revenue-statistics" label="收入统计" />

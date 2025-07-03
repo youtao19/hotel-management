@@ -191,25 +191,93 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ message: '缺少必要字段' });
     }
 
-    // 检查房间号是否已存在
-    const checkResult = await query('SELECT * FROM rooms WHERE room_number = $1', [room_number]);
-    if (checkResult.rows.length > 0) {
-      return res.status(400).json({ message: '房间号已存在' });
-    }
-
-    // 生成新的room_id
-    const idResult = await query('SELECT MAX(room_id) as max_id FROM rooms');
-    const newId = (idResult.rows[0].max_id || 0) + 1;
-
-    const { rows } = await query(
-      'INSERT INTO rooms (room_id, room_number, type_code, status, price) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [newId, room_number, type_code, status, price]
-    );
-
-    res.status(201).json({ data: rows[0] });
+    // 使用roomModule的addRoom方法
+    const newRoom = await roomModule.addRoom({ room_number, type_code, status, price });
+    console.log('成功添加房间:', newRoom);
+    res.status(201).json({ data: newRoom });
   } catch (err) {
     console.error('添加房间错误:', err);
-    res.status(500).json({ message: '服务器错误' });
+    if (err.message === '房间号已存在') {
+      return res.status(400).json({ message: err.message });
+    }
+    res.status(500).json({ message: '服务器错误', error: err.message });
+  }
+});
+
+// 更新房间信息
+router.put('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { room_number, type_code, status, price } = req.body;
+
+    // 验证必要字段
+    if (!room_number || !type_code || !status || price === undefined) {
+      return res.status(400).json({ message: '缺少必要字段' });
+    }
+
+    // 检查房间是否存在
+    const existingRoom = await roomModule.getRoomById(id);
+    if (!existingRoom) {
+      return res.status(404).json({ message: '房间不存在' });
+    }
+
+    // 如果房间号发生变化，检查新房间号是否已存在
+    if (room_number !== existingRoom.room_number) {
+      const checkResult = await roomModule.getRoomByNumber(room_number);
+      if (checkResult) {
+        return res.status(400).json({ message: '房间号已存在' });
+      }
+    }
+
+    // 更新房间信息
+    const { query } = require('../database/postgreDB/pg');
+    const { rows } = await query(
+      'UPDATE rooms SET room_number = $1, type_code = $2, status = $3, price = $4 WHERE room_id = $5 RETURNING *',
+      [room_number, type_code, status, price, id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: '房间不存在' });
+    }
+
+    console.log('成功更新房间:', rows[0]);
+    res.json({ data: rows[0] });
+  } catch (err) {
+    console.error('更新房间错误:', err);
+    res.status(500).json({ message: '服务器错误', error: err.message });
+  }
+});
+
+// 删除房间
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // 检查房间是否存在
+    const existingRoom = await roomModule.getRoomById(id);
+    if (!existingRoom) {
+      return res.status(404).json({ message: '房间不存在' });
+    }
+
+    // 检查房间是否有活跃订单
+    const { query } = require('../database/postgreDB/pg');
+    const orderCheck = await query(
+      'SELECT COUNT(*) as count FROM orders WHERE room_number = $1 AND status IN ($2, $3)',
+      [existingRoom.room_number, 'pending', 'checked-in']
+    );
+
+    if (parseInt(orderCheck.rows[0].count) > 0) {
+      return res.status(400).json({ message: '无法删除，房间有活跃订单' });
+    }
+
+    // 删除房间
+    await query('DELETE FROM rooms WHERE room_id = $1', [id]);
+
+    console.log('成功删除房间:', existingRoom.room_number);
+    res.json({ message: '房间删除成功' });
+  } catch (err) {
+    console.error('删除房间错误:', err);
+    res.status(500).json({ message: '服务器错误', error: err.message });
   }
 });
 

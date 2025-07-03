@@ -55,8 +55,23 @@ export const roomApi = {
   // 添加新房间
   addRoom: (roomData) => api.post('/rooms', roomData),
 
+  // 更新房间信息
+  updateRoom: (id, roomData) => api.put(`/rooms/${id}`, roomData),
+
+  // 删除房间
+  deleteRoom: (id) => api.delete(`/rooms/${id}`),
+
   // 获取房间类型
   getRoomTypes: () => api.get('/room-types'),
+
+  // 添加房型
+  addRoomType: (roomTypeData) => api.post('/room-types', roomTypeData),
+
+  // 更新房型
+  updateRoomType: (code, roomTypeData) => api.put(`/room-types/${code}`, roomTypeData),
+
+  // 删除房型
+  deleteRoomType: (code) => api.delete(`/room-types/${code}`),
 
   getAvailableRooms: (params) => api.get(`/rooms/available?${params}`),
   changePendingRoom: (data) => api.post(`/rooms/change-room`, data),

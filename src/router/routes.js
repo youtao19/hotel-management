@@ -14,6 +14,7 @@ const routes = [
       { path: '', redirect: '/Dash-board' },
       { path: 'Dash-board', component: () => import('pages/Dash-board.vue') },
       { path: 'room-status', component: () => import('pages/RoomStatus.vue') },
+      { path: 'room-management', component: () => import('pages/RoomManagement.vue') },
       { path: 'ViewOrders', component: () => import('pages/ViewOrders.vue') },
       { path: 'CreateOrder', component: () => import('pages/CreateOrder.vue') },
       { path: 'shift-handover', component: () => import('pages/ShiftHandover.vue') },
