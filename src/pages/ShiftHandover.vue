@@ -35,7 +35,7 @@
             <!-- 日期选择和筛选区域 -->
             <q-card-section class="bg-grey-1">
               <div class="row q-col-gutter-md items-center">
-                <div class="col-md-4 col-xs-12">
+                <div class="col-md-3 col-xs-6">
                   <q-input
                     v-model="selectedDate"
                     filled
@@ -59,7 +59,22 @@
                     </template>
                   </q-input>
                 </div>
-                <div class="col-md-5 col-xs-12">
+                <div class="col-md-3 col-xs-6">
+                  <q-select
+                    v-model="selectedMonth"
+                    :options="monthOptions"
+                    filled
+                    label="选择月份"
+                    dense
+                    @update:model-value="loadMonthData"
+                    :disable="loading"
+                  >
+                    <template v-slot:prepend>
+                      <q-icon name="calendar_month" />
+                    </template>
+                  </q-select>
+                </div>
+                <div class="col-md-4 col-xs-12">
                   <div class="row q-gutter-sm">
                     <q-btn
                       color="primary"
@@ -95,7 +110,7 @@
                     />
                   </div>
                 </div>
-                <div class="col-md-3 col-xs-12 text-right">
+                <div class="col-md-2 col-xs-12 text-right">
                   <q-chip
                     :color="isToday ? 'positive' : 'info'"
                     text-color="white"
@@ -406,6 +421,32 @@ const shiftTime = ref(date.formatDate(new Date(), 'HH:mm'))
 const roomType = ref('hotel')
 const loading = ref(false)
 const selectedDate = ref(date.formatDate(new Date(), 'YYYY-MM-DD'))
+
+// 月份选择相关
+const selectedMonth = ref({
+  label: date.formatDate(new Date(), 'YYYY年MM月'),
+  value: date.formatDate(new Date(), 'YYYY-MM')
+})
+
+// 生成月份选项（最近12个月）
+const monthOptions = computed(() => {
+  const options = []
+  const currentDate = new Date()
+
+  // 生成过去11个月 + 当前月份
+  for (let i = 11; i >= 0; i--) {
+    const targetDate = date.subtractFromDate(currentDate, { months: i })
+    const monthValue = date.formatDate(targetDate, 'YYYY-MM')
+    const monthLabel = date.formatDate(targetDate, 'YYYY年MM月')
+
+    options.push({
+      label: monthLabel,
+      value: monthValue
+    })
+  }
+
+  return options
+})
 
 // 分页设置
 const pagination = ref({
@@ -870,8 +911,15 @@ async function loadReceiptsByDate(dateValue) {
   // 确保日期格式正确并更新selectedDate
   let formattedDate
   try {
-    formattedDate = date.formatDate(new Date(dateValue), 'YYYY-MM-DD')
+    const targetDate = new Date(dateValue)
+    formattedDate = date.formatDate(targetDate, 'YYYY-MM-DD')
     selectedDate.value = formattedDate
+
+    // 同步更新月份选择器
+    selectedMonth.value = {
+      label: date.formatDate(targetDate, 'YYYY年MM月'),
+      value: date.formatDate(targetDate, 'YYYY-MM')
+    }
   } catch (e) {
     console.error('日期格式错误:', dateValue, e)
     $q.notify({
@@ -903,7 +951,15 @@ async function loadReceiptsByDate(dateValue) {
 
 // 设置今天
 function setToday() {
-  selectedDate.value = date.formatDate(new Date(), 'YYYY-MM-DD')
+  const today = new Date()
+  selectedDate.value = date.formatDate(today, 'YYYY-MM-DD')
+
+  // 更新月份选择器为当前月份
+  selectedMonth.value = {
+    label: date.formatDate(today, 'YYYY年MM月'),
+    value: date.formatDate(today, 'YYYY-MM')
+  }
+
   loadReceiptsByDate(selectedDate.value)
 }
 
@@ -911,6 +967,13 @@ function setToday() {
 function setYesterday() {
   const yesterday = date.subtractFromDate(new Date(), { days: 1 })
   selectedDate.value = date.formatDate(yesterday, 'YYYY-MM-DD')
+
+  // 更新月份选择器为昨天对应的月份
+  selectedMonth.value = {
+    label: date.formatDate(yesterday, 'YYYY年MM月'),
+    value: date.formatDate(yesterday, 'YYYY-MM')
+  }
+
   loadReceiptsByDate(selectedDate.value)
 }
 
@@ -922,6 +985,12 @@ function setThisWeek() {
 
   // 设置显示日期为本周第一天
   selectedDate.value = date.formatDate(startOfWeek, 'YYYY-MM-DD')
+
+  // 更新月份选择器为本周对应的月份
+  selectedMonth.value = {
+    label: date.formatDate(startOfWeek, 'YYYY年MM月'),
+    value: date.formatDate(startOfWeek, 'YYYY-MM')
+  }
 
   // 查询整周的数据
   const startDate = date.formatDate(startOfWeek, 'YYYY-MM-DD')
@@ -950,6 +1019,12 @@ function setThisMonth() {
   // 设置显示日期为本月第一天
   selectedDate.value = date.formatDate(startOfMonth, 'YYYY-MM-DD')
 
+  // 更新月份选择器
+  selectedMonth.value = {
+    label: date.formatDate(today, 'YYYY年MM月'),
+    value: date.formatDate(today, 'YYYY-MM')
+  }
+
   // 但查询整个月的数据
   const startDate = date.formatDate(startOfMonth, 'YYYY-MM-DD')
   const endDate = date.formatDate(endOfMonth, 'YYYY-MM-DD')
@@ -968,6 +1043,47 @@ function setThisMonth() {
   })
 }
 
+// 加载指定月份的数据
+async function loadMonthData(monthObj) {
+  if (!monthObj || !monthObj.value) return
+
+  loading.value = true
+  try {
+    // 解析选中的月份
+    const [year, month] = monthObj.value.split('-')
+    const targetMonth = new Date(parseInt(year), parseInt(month) - 1, 1)
+
+    // 获取该月的第一天和最后一天
+    const startOfMonth = date.startOfDate(targetMonth, 'month')
+    const endOfMonth = date.endOfDate(targetMonth, 'month')
+
+    // 设置显示日期为该月第一天
+    selectedDate.value = date.formatDate(startOfMonth, 'YYYY-MM-DD')
+
+    // 查询整个月的数据
+    const startDate = date.formatDate(startOfMonth, 'YYYY-MM-DD')
+    const endDate = date.formatDate(endOfMonth, 'YYYY-MM-DD')
+
+    console.log('📅 查询指定月份数据:', startDate, '到', endDate)
+
+    await switchRoomType(roomType.value, startDate, endDate)
+
+    $q.notify({
+      type: 'positive',
+      message: `已加载${monthObj.label}的收款明细`,
+      timeout: 2000
+    })
+  } catch (error) {
+    console.error('获取月份明细失败:', error)
+    $q.notify({
+      type: 'negative',
+      message: '获取月份明细失败'
+    })
+  } finally {
+    loading.value = false
+  }
+}
+
 // 格式化显示日期
 function formatDisplayDate(dateStr) {
   if (!dateStr) return ''
@@ -981,7 +1097,13 @@ function formatDisplayDate(dateStr) {
     } else if (date.formatDate(targetDate, 'YYYY-MM-DD') === date.formatDate(yesterday, 'YYYY-MM-DD')) {
       return '昨天'
     } else {
-      return date.formatDate(targetDate, 'MM月DD日')
+      // 检查是否是月份的第一天，如果是则显示整月
+      const isFirstDayOfMonth = date.formatDate(targetDate, 'DD') === '01'
+      if (isFirstDayOfMonth) {
+        return date.formatDate(targetDate, 'MM月')
+      } else {
+        return date.formatDate(targetDate, 'MM月DD日')
+      }
     }
   } catch (e) {
     return dateStr

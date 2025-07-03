@@ -2,15 +2,6 @@
   <q-page class="dashboard">
     <div class="q-pa-md">
       <div class="row q-col-gutter-md">
-        <!-- 页面标题 -->
-        <div class="col-12">
-        <q-card class="bg-primary text-white">
-          <q-card-section>
-            <div class="text-h4">酒店管理系统仪表盘</div>
-            <div class="text-subtitle2">{{ currentDate }}</div>
-          </q-card-section>
-        </q-card>
-      </div>
 
       <!-- 统计卡片区域 -->
       <div class="col-md-3 col-sm-6 col-xs-12">
@@ -332,10 +323,6 @@ const roomStore = useRoomStore()
 const orderStore = useOrderStore()
 const viewStore = useViewStore()
 
-// 当前日期
-const currentDate = computed(() => {
-  return date.formatDate(new Date(), 'YYYY年MM月DD日 dddd')
-})
 
 /**
  * 格式化日期时间辅助函数

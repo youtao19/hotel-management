@@ -326,7 +326,7 @@ const fetchQuickStats = async () => {
     console.log('开始获取快速统计数据...')
     const response = await revenueApi.getQuickStats()
     console.log('快速统计API响应:', response)
-    quickStats.value = response.data.data || {
+    quickStats.value = response.data || {
       today: { total_revenue: 0, total_orders: 0 },
       thisWeek: { total_revenue: 0, total_orders: 0 },
       thisMonth: { total_revenue: 0, total_orders: 0 }
@@ -375,13 +375,13 @@ const fetchRevenueData = async () => {
     }
 
     console.log('收入数据API响应:', response)
-    revenueData.value = response.data.data || []
+    revenueData.value = response.data || []
     console.log('收入数据设置完成:', revenueData.value.length, '条记录')
 
     // 获取房型收入数据
     const roomTypeResponse = await revenueApi.getRoomTypeRevenue(dateRange.value.start, dateRange.value.end)
     console.log('房型收入API响应:', roomTypeResponse)
-    roomTypeData.value = roomTypeResponse.data.data || []
+    roomTypeData.value = roomTypeResponse.data || []
     console.log('房型数据设置完成:', roomTypeData.value.length, '条记录')
 
     // 更新图表
