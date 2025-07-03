@@ -119,6 +119,27 @@ export const billApi = {
   getPendingReviews: () => api.get('/bills/pending-reviews'),
 }
 
+// 收入统计相关接口
+export const revenueApi = {
+  // 获取每日收入统计
+  getDailyRevenue: (startDate, endDate) => api.get('/revenue/daily', { params: { startDate, endDate } }),
+
+  // 获取每周收入统计
+  getWeeklyRevenue: (startDate, endDate) => api.get('/revenue/weekly', { params: { startDate, endDate } }),
+
+  // 获取每月收入统计
+  getMonthlyRevenue: (startDate, endDate) => api.get('/revenue/monthly', { params: { startDate, endDate } }),
+
+  // 获取收入概览统计
+  getRevenueOverview: (startDate, endDate) => api.get('/revenue/overview', { params: { startDate, endDate } }),
+
+  // 获取房型收入统计
+  getRoomTypeRevenue: (startDate, endDate) => api.get('/revenue/room-type', { params: { startDate, endDate } }),
+
+  // 获取快速统计数据（今日、本周、本月）
+  getQuickStats: () => api.get('/revenue/quick-stats'),
+}
+
 // 库存相关接口
 export const inventoryApi = {
   // 获取指定日期的库存

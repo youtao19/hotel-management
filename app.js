@@ -14,7 +14,7 @@ if (setup.env === "dev") {
   const history = require('connect-history-api-fallback');
   const cors = require('cors');
   app.use(cors({
-    origin: ['http://localhost:9000'],
+    origin: ['http://localhost:9000', 'http://localhost:9001'],
     credentials: false,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
@@ -56,6 +56,7 @@ const roomRoute = require("./backend/routes/roomRoute");
 const roomTypeRoute = require("./backend/routes/roomTypeRoute");
 const billRoute = require("./backend/routes/billRoute");
 const shiftHandoverRoute = require("./backend/routes/shiftHandoverRoute");
+const revenueRoute = require("./backend/routes/revenueRoute");
 
 app.use("/api/user", userRoute);
 app.use("/api/auth", authRoute);
@@ -64,6 +65,7 @@ app.use("/api/rooms", roomRoute);
 app.use("/api/room-types", roomTypeRoute);
 app.use("/api/bills", billRoute);
 app.use("/api/shift-handover", shiftHandoverRoute);
+app.use("/api/revenue", revenueRoute);
 
 app.get("/api/hup", (req, res) => res.status(200).json({ ok: true }));
 

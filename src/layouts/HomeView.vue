@@ -49,6 +49,7 @@
           <q-route-tab to="/room-status" label="房间状态" />
           <q-route-tab to="/ViewOrders" label="查看订单" />
           <q-route-tab to="/review-management" label="好评管理" />
+          <q-route-tab to="/revenue-statistics" label="收入统计" />
           <q-route-tab to="/shift-handover" label="交接班" />
         </q-tabs>
       </q-header>

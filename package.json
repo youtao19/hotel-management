@@ -5,7 +5,8 @@
     "productName": "Quasar App",
     "author": "youtao19 <wuyoutao19@gmail.com>",
     "private": true,
-    "scripts": {        "test": "cross-env NODE_ENV=test jest",
+    "scripts": {
+        "test": "cross-env NODE_ENV=test jest",
         "test:watch": "cross-env NODE_ENV=test jest --watch",
         "test:shift-handover": "cross-env NODE_ENV=test node tests/runShiftHandoverTests.js",
         "test:shift-handover-unit": "cross-env NODE_ENV=test jest tests/shiftHandoverModule.test.js",
@@ -25,6 +26,7 @@
         "ajv-formats": "^3.0.1",
         "axios": "^1.2.1",
         "bcrypt": "^5.1.1",
+        "chart.js": "^4.5.0",
         "connect-history-api-fallback": "^2.0.0",
         "cors": "^2.8.5",
         "express": "^5.1.0",
