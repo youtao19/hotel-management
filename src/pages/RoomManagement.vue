@@ -206,7 +206,7 @@
                     dense
                     color="primary"
                     icon="edit"
-                    @click="editRoomType(props.row)"
+                    @click.stop="editRoomType(props.row)"
                   >
                     <q-tooltip>编辑房型</q-tooltip>
                   </q-btn>
@@ -215,7 +215,7 @@
                     dense
                     color="negative"
                     icon="delete"
-                    @click="deleteRoomType(props.row)"
+                    @click.stop="deleteRoomType(props.row)"
                   >
                     <q-tooltip>删除房型</q-tooltip>
                   </q-btn>
@@ -575,10 +575,23 @@ async function setRoomMaintenance(room) {
 
 function deleteRoom(room) {
   $q.dialog({
-    title: '确认删除',
-    message: `确定要删除房间 ${room.room_number} 吗？此操作不可恢复。`,
-    cancel: true,
-    persistent: true
+    title: '删除房间确认',
+    message: `您即将删除房间 "${room.room_number}"`,
+    html: true,
+    cancel: {
+      label: '取消',
+      color: 'grey-7',
+      flat: true
+    },
+    ok: {
+      label: '确认删除',
+      color: 'negative',
+      icon: 'delete'
+    },
+    persistent: true,
+    class: 'custom-delete-dialog',
+    style: 'border-radius: 12px;',
+    cardStyle: 'border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);'
   }).onOk(async () => {
     try {
       await roomApi.deleteRoom(room.room_id)
@@ -600,6 +613,7 @@ function deleteRoom(room) {
 
 // 房型操作
 function editRoomType(roomType) {
+  console.log('点击编辑房型按钮:', roomType)
   roomTypeForm.value = { ...roomType }
   isEditingRoomType.value = true
   showAddRoomTypeDialog.value = true
@@ -627,6 +641,8 @@ async function saveRoomType() {
 
     closeRoomTypeDialog()
     await loadRoomTypes()
+    // 刷新roomStore中的房型数据，确保其他页面能获取到最新的房型
+    await roomStore.fetchRoomTypes()
   } catch (error) {
     console.error('保存房型失败:', error)
     $q.notify({
@@ -650,26 +666,66 @@ function closeRoomTypeDialog() {
 }
 
 function deleteRoomType(roomType) {
+  console.log('点击删除房型按钮:', roomType)
+
+  if (!roomType || !roomType.type_code) {
+    console.error('房型数据无效:', roomType)
+    $q.notify({
+      type: 'negative',
+      message: '房型数据无效，无法删除'
+    })
+    return
+  }
+
   $q.dialog({
-    title: '确认删除',
-    message: `确定要删除房型 ${roomType.type_name} 吗？此操作不可恢复。`,
-    cancel: true,
-    persistent: true
+    title: '删除房型确认',
+    message: `您即将删除房型 "${roomType.type_name || roomType.type_code}"`,
+    html: true,
+    cancel: {
+      label: '取消',
+      color: 'grey-7',
+      flat: true
+    },
+    ok: {
+      label: '确认删除',
+      color: 'negative',
+      icon: 'delete'
+    },
+    persistent: true,
+    class: 'custom-delete-dialog',
+    style: 'border-radius: 12px;',
+    cardStyle: 'border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);'
   }).onOk(async () => {
+    console.log('用户确认删除房型:', roomType.type_code)
     try {
+      loading.value = true
+      console.log('开始调用API删除房型:', roomType.type_code)
+
       await roomApi.deleteRoomType(roomType.type_code)
+
+      console.log('房型删除API调用成功')
       $q.notify({
         type: 'positive',
         message: '房型删除成功'
       })
+
+      console.log('开始刷新房型列表')
       await loadRoomTypes()
+      // 刷新roomStore中的房型数据
+      await roomStore.fetchRoomTypes()
+      console.log('房型列表刷新完成')
+
     } catch (error) {
       console.error('删除房型失败:', error)
       $q.notify({
         type: 'negative',
         message: error.response?.data?.message || '删除房型失败'
       })
+    } finally {
+      loading.value = false
     }
+  }).onCancel(() => {
+    console.log('用户取消删除操作')
   })
 }
 
@@ -732,6 +788,119 @@ onMounted(async () => {
   .stats-overview {
     flex-direction: column;
     align-items: flex-start;
+  }
+}
+
+/* 自定义删除确认弹窗样式 */
+:deep(.custom-delete-dialog) {
+  border-radius: 16px !important;
+}
+
+:deep(.custom-delete-dialog .q-dialog__inner) {
+  padding: 0;
+}
+
+:deep(.custom-delete-dialog .q-card) {
+  border-radius: 16px !important;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25) !important;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  min-width: 400px;
+}
+
+:deep(.custom-delete-dialog .q-card__section--vert) {
+  background: linear-gradient(135deg, #fff 0%, #f8f9fa 100%);
+}
+
+:deep(.custom-delete-dialog .q-dialog__title) {
+  color: #e53e3e;
+  font-weight: 600;
+  font-size: 1.3rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 24px 24px 16px 24px;
+}
+
+:deep(.custom-delete-dialog .q-dialog__title:before) {
+  content: '⚠️';
+  font-size: 1.4rem;
+}
+
+:deep(.custom-delete-dialog .q-dialog__message) {
+  color: #2d3748;
+  font-size: 1rem;
+  line-height: 1.6;
+  margin: 0;
+  padding: 0 24px 16px 24px;
+  background: rgba(254, 243, 243, 0.8);
+  border-radius: 8px;
+  border-left: 4px solid #e53e3e;
+  margin-left: 24px;
+  margin-right: 24px;
+}
+
+:deep(.custom-delete-dialog .q-dialog__message:before) {
+  content: '⚠️ 警告：此操作不可撤销\A删除后将无法恢复房型数据，请确认您的操作。\A\A';
+  white-space: pre-line;
+  font-weight: 600;
+  color: #e53e3e;
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+}
+
+:deep(.custom-delete-dialog .q-card__actions) {
+  background: rgba(248, 249, 250, 0.8);
+  backdrop-filter: blur(5px);
+  padding: 20px 24px;
+  gap: 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+:deep(.custom-delete-dialog .q-btn) {
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  min-width: 100px;
+}
+
+:deep(.custom-delete-dialog .q-btn--flat) {
+  background: rgba(113, 128, 150, 0.1);
+  color: #4a5568;
+}
+
+:deep(.custom-delete-dialog .q-btn--flat:hover) {
+  background: rgba(113, 128, 150, 0.2);
+  transform: translateY(-1px);
+}
+
+:deep(.custom-delete-dialog .q-btn--standard) {
+  box-shadow: 0 4px 12px rgba(229, 62, 62, 0.3);
+  background: #e53e3e;
+}
+
+:deep(.custom-delete-dialog .q-btn--standard:hover) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(229, 62, 62, 0.4);
+  background: #c53030;
+}
+
+/* 弹窗动画效果 */
+:deep(.custom-delete-dialog .q-dialog) {
+  animation: dialogFadeIn 0.3s ease-out;
+}
+
+@keyframes dialogFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
   }
 }
 </style>

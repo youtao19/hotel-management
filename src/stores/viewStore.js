@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 
 export const useViewStore = defineStore('view', () => {
   // 房间类型选项数组，用于类型筛选下拉框
@@ -69,12 +69,38 @@ export const useViewStore = defineStore('view', () => {
     { label: '信用卡', value: 'card', icon: 'mdi-credit-card' }
   ]
 
+    // 房型数据映射（用于动态获取房型名称）
+  const roomTypeMap = ref(new Map())
+
+  /**
+   * 更新房型映射数据
+   * @param {Array} roomTypesData - 房型数据数组
+   */
+  function updateRoomTypeMap(roomTypesData) {
+    roomTypeMap.value.clear()
+    if (Array.isArray(roomTypesData)) {
+      roomTypesData.forEach(roomType => {
+        if (roomType.type_code && roomType.type_name) {
+          roomTypeMap.value.set(roomType.type_code, roomType.type_name)
+        }
+      })
+    }
+  }
+
   /**
    * 获取房型的中文名称
    * @param {string} type - 房间类型代码
    * @returns {string} 房间类型的中文名称
    */
   function getRoomTypeName(type) {
+    if (!type) return ''
+
+    // 优先从数据库房型映射中获取
+    if (roomTypeMap.value.has(type)) {
+      return roomTypeMap.value.get(type)
+    }
+
+    // 如果无法从数据库获取，使用硬编码映射作为备用
     switch (type) {
       case 'asu_wan_zhu': return '阿苏晚筑'
       case 'asu_xiao_zhu': return '阿苏晓筑'
@@ -180,6 +206,8 @@ export const useViewStore = defineStore('view', () => {
     statusOptions,
     orderStatusOptions,
     paymentMethodOptions,
+    roomTypeMap,
+    updateRoomTypeMap,
     getRoomTypeName,
     getStatusText,
     getStatusColor,

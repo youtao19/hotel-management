@@ -451,7 +451,22 @@ watch(() => orderData.value.roomType, async () => {
  * @returns {Array} 可用房间选项数组
  */
 const roomTypeOptionsWithCount = computed(() => {
-  // 用当前时间范围下的可用房间统计
+  // 优先使用数据库中的房型数据
+  if (roomStore.roomTypes && roomStore.roomTypes.length > 0) {
+    return roomStore.roomTypes.map(roomType => {
+      const availableCount = availableRoomsByDate.value.filter(
+        room => room.type_code === roomType.type_code
+      ).length;
+      return {
+        label: roomType.type_name,
+        value: roomType.type_code,
+        availableCount,
+        basePrice: roomType.base_price || 0
+      };
+    });
+  }
+
+  // 如果数据库房型数据未加载，使用viewStore中的备用选项
   const typeOptions = viewStore.roomTypeOptions.filter(option => option.value !== null);
   return typeOptions.map(option => {
     const availableCount = availableRoomsByDate.value.filter(
@@ -841,8 +856,18 @@ function fillRestRoomData() {
 
 // 组件挂载时执行的钩子函数
 onMounted(async () => {
+  console.log('CreateOrder组件已挂载，开始初始化数据')
+
+  // 首先获取房型数据，确保房型选择列表是最新的
+  await roomStore.fetchRoomTypes()
+
+  // 然后获取房间数据
+  await roomStore.fetchAllRooms()
+
   // 页面加载时，主动拉取一次可用房间，保证房型数量能显示
-  await updateAvailableRooms();
+  await updateAvailableRooms()
+
+  console.log('CreateOrder组件数据初始化完成')
 });
 
 

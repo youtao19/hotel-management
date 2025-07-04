@@ -486,7 +486,7 @@ onMounted(async () => {
   // 初始化房间数据
   await roomStore.fetchAllRooms()
   await roomStore.fetchRoomTypes()
-  await orderStore.fetchOrders()
+  await orderStore.fetchAllOrders()
 })
 
 /**

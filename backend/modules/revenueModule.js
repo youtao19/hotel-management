@@ -10,24 +10,25 @@ const { query } = require('../database/postgreDB/pg');
  */
 async function getDailyRevenue(startDate, endDate) {
     const sqlQuery = `
-        SELECT 
-            DATE(create_time) as date,
+        SELECT
+            DATE(o.check_in_date) as date,
             COUNT(*) as order_count,
-            SUM(COALESCE(total_income, 0)) as total_revenue,
-            SUM(CASE WHEN refund_deposit = true THEN COALESCE(deposit, 0) ELSE 0 END) as total_deposit_refund,
-            SUM(COALESCE(room_fee, 0)) as total_room_fee,
-            COUNT(CASE WHEN pay_way = '现金' THEN 1 END) as cash_orders,
-            COUNT(CASE WHEN pay_way = '微信' THEN 1 END) as wechat_orders,
-            COUNT(CASE WHEN pay_way = '支付宝' THEN 1 END) as alipay_orders,
-            COUNT(CASE WHEN pay_way = '信用卡' THEN 1 END) as credit_card_orders,
-            SUM(CASE WHEN pay_way = '现金' THEN COALESCE(total_income, 0) ELSE 0 END) as cash_revenue,
-            SUM(CASE WHEN pay_way = '微信' THEN COALESCE(total_income, 0) ELSE 0 END) as wechat_revenue,
-            SUM(CASE WHEN pay_way = '支付宝' THEN COALESCE(total_income, 0) ELSE 0 END) as alipay_revenue,
-            SUM(CASE WHEN pay_way = '信用卡' THEN COALESCE(total_income, 0) ELSE 0 END) as credit_card_revenue
-        FROM bills 
-        WHERE DATE(create_time) BETWEEN $1 AND $2
-        GROUP BY DATE(create_time)
-        ORDER BY DATE(create_time) DESC
+            SUM(COALESCE(b.total_income, 0)) as total_revenue,
+            SUM(CASE WHEN b.refund_deposit = true THEN COALESCE(b.deposit, 0) ELSE 0 END) as total_deposit_refund,
+            SUM(COALESCE(b.room_fee, 0)) as total_room_fee,
+            COUNT(CASE WHEN b.pay_way = '现金' THEN 1 END) as cash_orders,
+            COUNT(CASE WHEN b.pay_way = '微信' THEN 1 END) as wechat_orders,
+            COUNT(CASE WHEN b.pay_way = '支付宝' THEN 1 END) as alipay_orders,
+            COUNT(CASE WHEN b.pay_way = '信用卡' THEN 1 END) as credit_card_orders,
+            SUM(CASE WHEN b.pay_way = '现金' THEN COALESCE(b.total_income, 0) ELSE 0 END) as cash_revenue,
+            SUM(CASE WHEN b.pay_way = '微信' THEN COALESCE(b.total_income, 0) ELSE 0 END) as wechat_revenue,
+            SUM(CASE WHEN b.pay_way = '支付宝' THEN COALESCE(b.total_income, 0) ELSE 0 END) as alipay_revenue,
+            SUM(CASE WHEN b.pay_way = '信用卡' THEN COALESCE(b.total_income, 0) ELSE 0 END) as credit_card_revenue
+        FROM bills b
+        JOIN orders o ON b.order_id = o.order_id
+        WHERE DATE(o.check_in_date) BETWEEN $1 AND $2
+        GROUP BY DATE(o.check_in_date)
+        ORDER BY DATE(o.check_in_date) DESC
     `;
 
     try {
@@ -47,28 +48,29 @@ async function getDailyRevenue(startDate, endDate) {
  */
 async function getWeeklyRevenue(startDate, endDate) {
     const sqlQuery = `
-        SELECT 
-            DATE_TRUNC('week', create_time) as week_start,
-            DATE_TRUNC('week', create_time) + INTERVAL '6 days' as week_end,
-            EXTRACT(year FROM create_time) as year,
-            EXTRACT(week FROM create_time) as week_number,
+        SELECT
+            DATE_TRUNC('week', o.check_in_date) as week_start,
+            DATE_TRUNC('week', o.check_in_date) + INTERVAL '6 days' as week_end,
+            EXTRACT(year FROM o.check_in_date) as year,
+            EXTRACT(week FROM o.check_in_date) as week_number,
             COUNT(*) as order_count,
-            SUM(COALESCE(total_income, 0)) as total_revenue,
-            SUM(CASE WHEN refund_deposit = true THEN COALESCE(deposit, 0) ELSE 0 END) as total_deposit_refund,
-            SUM(COALESCE(room_fee, 0)) as total_room_fee,
-            AVG(COALESCE(total_income, 0)) as avg_daily_revenue,
-            COUNT(CASE WHEN pay_way = '现金' THEN 1 END) as cash_orders,
-            COUNT(CASE WHEN pay_way = '微信' THEN 1 END) as wechat_orders,
-            COUNT(CASE WHEN pay_way = '支付宝' THEN 1 END) as alipay_orders,
-            COUNT(CASE WHEN pay_way = '信用卡' THEN 1 END) as credit_card_orders,
-            SUM(CASE WHEN pay_way = '现金' THEN COALESCE(total_income, 0) ELSE 0 END) as cash_revenue,
-            SUM(CASE WHEN pay_way = '微信' THEN COALESCE(total_income, 0) ELSE 0 END) as wechat_revenue,
-            SUM(CASE WHEN pay_way = '支付宝' THEN COALESCE(total_income, 0) ELSE 0 END) as alipay_revenue,
-            SUM(CASE WHEN pay_way = '信用卡' THEN COALESCE(total_income, 0) ELSE 0 END) as credit_card_revenue
-        FROM bills 
-        WHERE DATE(create_time) BETWEEN $1 AND $2
-        GROUP BY DATE_TRUNC('week', create_time), EXTRACT(year FROM create_time), EXTRACT(week FROM create_time)
-        ORDER BY DATE_TRUNC('week', create_time) DESC
+            SUM(COALESCE(b.total_income, 0)) as total_revenue,
+            SUM(CASE WHEN b.refund_deposit = true THEN COALESCE(b.deposit, 0) ELSE 0 END) as total_deposit_refund,
+            SUM(COALESCE(b.room_fee, 0)) as total_room_fee,
+            AVG(COALESCE(b.total_income, 0)) as avg_daily_revenue,
+            COUNT(CASE WHEN b.pay_way = '现金' THEN 1 END) as cash_orders,
+            COUNT(CASE WHEN b.pay_way = '微信' THEN 1 END) as wechat_orders,
+            COUNT(CASE WHEN b.pay_way = '支付宝' THEN 1 END) as alipay_orders,
+            COUNT(CASE WHEN b.pay_way = '信用卡' THEN 1 END) as credit_card_orders,
+            SUM(CASE WHEN b.pay_way = '现金' THEN COALESCE(b.total_income, 0) ELSE 0 END) as cash_revenue,
+            SUM(CASE WHEN b.pay_way = '微信' THEN COALESCE(b.total_income, 0) ELSE 0 END) as wechat_revenue,
+            SUM(CASE WHEN b.pay_way = '支付宝' THEN COALESCE(b.total_income, 0) ELSE 0 END) as alipay_revenue,
+            SUM(CASE WHEN b.pay_way = '信用卡' THEN COALESCE(b.total_income, 0) ELSE 0 END) as credit_card_revenue
+        FROM bills b
+        JOIN orders o ON b.order_id = o.order_id
+        WHERE DATE(o.check_in_date) BETWEEN $1 AND $2
+        GROUP BY DATE_TRUNC('week', o.check_in_date), EXTRACT(year FROM o.check_in_date), EXTRACT(week FROM o.check_in_date)
+        ORDER BY DATE_TRUNC('week', o.check_in_date) DESC
     `;
 
     try {
@@ -88,34 +90,35 @@ async function getWeeklyRevenue(startDate, endDate) {
  */
 async function getMonthlyRevenue(startDate, endDate) {
     const sqlQuery = `
-        SELECT 
-            DATE_TRUNC('month', create_time) as month_start,
-            EXTRACT(year FROM create_time) as year,
-            EXTRACT(month FROM create_time) as month,
+        SELECT
+            DATE_TRUNC('month', o.check_in_date) as month_start,
+            EXTRACT(year FROM o.check_in_date) as year,
+            EXTRACT(month FROM o.check_in_date) as month,
             COUNT(*) as order_count,
-            SUM(COALESCE(total_income, 0)) as total_revenue,
-            SUM(CASE WHEN refund_deposit = true THEN COALESCE(deposit, 0) ELSE 0 END) as total_deposit_refund,
-            SUM(COALESCE(room_fee, 0)) as total_room_fee,
-            AVG(COALESCE(total_income, 0)) as avg_daily_revenue,
-            COUNT(CASE WHEN pay_way = '现金' THEN 1 END) as cash_orders,
-            COUNT(CASE WHEN pay_way = '微信' THEN 1 END) as wechat_orders,
-            COUNT(CASE WHEN pay_way = '支付宝' THEN 1 END) as alipay_orders,
-            COUNT(CASE WHEN pay_way = '信用卡' THEN 1 END) as credit_card_orders,
-            SUM(CASE WHEN pay_way = '现金' THEN COALESCE(total_income, 0) ELSE 0 END) as cash_revenue,
-            SUM(CASE WHEN pay_way = '微信' THEN COALESCE(total_income, 0) ELSE 0 END) as wechat_revenue,
-            SUM(CASE WHEN pay_way = '支付宝' THEN COALESCE(total_income, 0) ELSE 0 END) as alipay_revenue,
-            SUM(CASE WHEN pay_way = '信用卡' THEN COALESCE(total_income, 0) ELSE 0 END) as credit_card_revenue,
+            SUM(COALESCE(b.total_income, 0)) as total_revenue,
+            SUM(CASE WHEN b.refund_deposit = true THEN COALESCE(b.deposit, 0) ELSE 0 END) as total_deposit_refund,
+            SUM(COALESCE(b.room_fee, 0)) as total_room_fee,
+            AVG(COALESCE(b.total_income, 0)) as avg_daily_revenue,
+            COUNT(CASE WHEN b.pay_way = '现金' THEN 1 END) as cash_orders,
+            COUNT(CASE WHEN b.pay_way = '微信' THEN 1 END) as wechat_orders,
+            COUNT(CASE WHEN b.pay_way = '支付宝' THEN 1 END) as alipay_orders,
+            COUNT(CASE WHEN b.pay_way = '信用卡' THEN 1 END) as credit_card_orders,
+            SUM(CASE WHEN b.pay_way = '现金' THEN COALESCE(b.total_income, 0) ELSE 0 END) as cash_revenue,
+            SUM(CASE WHEN b.pay_way = '微信' THEN COALESCE(b.total_income, 0) ELSE 0 END) as wechat_revenue,
+            SUM(CASE WHEN b.pay_way = '支付宝' THEN COALESCE(b.total_income, 0) ELSE 0 END) as alipay_revenue,
+            SUM(CASE WHEN b.pay_way = '信用卡' THEN COALESCE(b.total_income, 0) ELSE 0 END) as credit_card_revenue,
             -- 计算月度增长率（与上月比较）
-            LAG(SUM(COALESCE(total_income, 0))) OVER (ORDER BY DATE_TRUNC('month', create_time)) as prev_month_revenue
-        FROM bills 
-        WHERE DATE(create_time) BETWEEN $1 AND $2
-        GROUP BY DATE_TRUNC('month', create_time), EXTRACT(year FROM create_time), EXTRACT(month FROM create_time)
-        ORDER BY DATE_TRUNC('month', create_time) DESC
+            LAG(SUM(COALESCE(b.total_income, 0))) OVER (ORDER BY DATE_TRUNC('month', o.check_in_date)) as prev_month_revenue
+        FROM bills b
+        JOIN orders o ON b.order_id = o.order_id
+        WHERE DATE(o.check_in_date) BETWEEN $1 AND $2
+        GROUP BY DATE_TRUNC('month', o.check_in_date), EXTRACT(year FROM o.check_in_date), EXTRACT(month FROM o.check_in_date)
+        ORDER BY DATE_TRUNC('month', o.check_in_date) DESC
     `;
 
     try {
         const result = await query(sqlQuery, [startDate, endDate]);
-        
+
         // 计算增长率
         const processedResult = result.rows.map(row => {
             let growth_rate = null;
@@ -127,7 +130,7 @@ async function getMonthlyRevenue(startDate, endDate) {
                 growth_rate: growth_rate
             };
         });
-        
+
         return processedResult;
     } catch (error) {
         console.error('获取每月收入统计数据库错误:', error);
@@ -143,25 +146,26 @@ async function getMonthlyRevenue(startDate, endDate) {
  */
 async function getRevenueOverview(startDate, endDate) {
     const sqlQuery = `
-        SELECT 
+        SELECT
             COUNT(*) as total_orders,
-            SUM(COALESCE(total_income, 0)) as total_revenue,
-            AVG(COALESCE(total_income, 0)) as avg_order_value,
-            SUM(CASE WHEN refund_deposit = true THEN COALESCE(deposit, 0) ELSE 0 END) as total_deposit_refund,
-            SUM(COALESCE(room_fee, 0)) as total_room_fee,
-            MAX(COALESCE(total_income, 0)) as max_order_value,
-            MIN(COALESCE(total_income, 0)) as min_order_value,
+            SUM(COALESCE(b.total_income, 0)) as total_revenue,
+            AVG(COALESCE(b.total_income, 0)) as avg_order_value,
+            SUM(CASE WHEN b.refund_deposit = true THEN COALESCE(b.deposit, 0) ELSE 0 END) as total_deposit_refund,
+            SUM(COALESCE(b.room_fee, 0)) as total_room_fee,
+            MAX(COALESCE(b.total_income, 0)) as max_order_value,
+            MIN(COALESCE(b.total_income, 0)) as min_order_value,
             -- 支付方式统计
-            COUNT(CASE WHEN pay_way = '现金' THEN 1 END) as cash_orders,
-            COUNT(CASE WHEN pay_way = '微信' THEN 1 END) as wechat_orders,
-            COUNT(CASE WHEN pay_way = '支付宝' THEN 1 END) as alipay_orders,
-            COUNT(CASE WHEN pay_way = '信用卡' THEN 1 END) as credit_card_orders,
-            SUM(CASE WHEN pay_way = '现金' THEN COALESCE(total_income, 0) ELSE 0 END) as cash_revenue,
-            SUM(CASE WHEN pay_way = '微信' THEN COALESCE(total_income, 0) ELSE 0 END) as wechat_revenue,
-            SUM(CASE WHEN pay_way = '支付宝' THEN COALESCE(total_income, 0) ELSE 0 END) as alipay_revenue,
-            SUM(CASE WHEN pay_way = '信用卡' THEN COALESCE(total_income, 0) ELSE 0 END) as credit_card_revenue
-        FROM bills 
-        WHERE DATE(create_time) BETWEEN $1 AND $2
+            COUNT(CASE WHEN b.pay_way = '现金' THEN 1 END) as cash_orders,
+            COUNT(CASE WHEN b.pay_way = '微信' THEN 1 END) as wechat_orders,
+            COUNT(CASE WHEN b.pay_way = '支付宝' THEN 1 END) as alipay_orders,
+            COUNT(CASE WHEN b.pay_way = '信用卡' THEN 1 END) as credit_card_orders,
+            SUM(CASE WHEN b.pay_way = '现金' THEN COALESCE(b.total_income, 0) ELSE 0 END) as cash_revenue,
+            SUM(CASE WHEN b.pay_way = '微信' THEN COALESCE(b.total_income, 0) ELSE 0 END) as wechat_revenue,
+            SUM(CASE WHEN b.pay_way = '支付宝' THEN COALESCE(b.total_income, 0) ELSE 0 END) as alipay_revenue,
+            SUM(CASE WHEN b.pay_way = '信用卡' THEN COALESCE(b.total_income, 0) ELSE 0 END) as credit_card_revenue
+        FROM bills b
+        JOIN orders o ON b.order_id = o.order_id
+        WHERE DATE(o.check_in_date) BETWEEN $1 AND $2
     `;
 
     try {
@@ -181,7 +185,7 @@ async function getRevenueOverview(startDate, endDate) {
  */
 async function getRoomTypeRevenue(startDate, endDate) {
     const sqlQuery = `
-        SELECT 
+        SELECT
             o.room_type,
             rt.type_name,
             COUNT(*) as order_count,
@@ -192,7 +196,7 @@ async function getRoomTypeRevenue(startDate, endDate) {
         FROM bills b
         JOIN orders o ON b.order_id = o.order_id
         LEFT JOIN room_types rt ON o.room_type = rt.type_code
-        WHERE DATE(b.create_time) BETWEEN $1 AND $2
+        WHERE DATE(o.check_in_date) BETWEEN $1 AND $2
         GROUP BY o.room_type, rt.type_name
         ORDER BY total_revenue DESC
     `;

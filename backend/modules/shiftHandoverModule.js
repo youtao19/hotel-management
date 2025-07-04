@@ -48,9 +48,9 @@ async function getReceiptDetails(type, startDate, endDate) {
     FROM orders o
     JOIN rooms r ON o.room_number = r.room_number
     WHERE ${typeCondition}
-    AND DATE(o.create_time) BETWEEN $1 AND $2
+    AND DATE(o.check_in_date) BETWEEN $1 AND $2
     AND o.status IN ('checked_in', 'checked_out', 'completed', 'checked-in', 'checked-out')
-    ORDER BY o.create_time DESC;
+    ORDER BY o.check_in_date DESC;
   `;
 
   try {
@@ -85,7 +85,7 @@ async function getStatistics(startDate, endDate = null) {
       COUNT(*) as count,
       o.payment_method
     FROM orders o
-    WHERE DATE(o.create_time) BETWEEN $1 AND $2
+    WHERE DATE(o.check_in_date) BETWEEN $1 AND $2
     AND o.status IN ('checked_in', 'checked_out', 'completed', 'checked-in', 'checked-out')
     GROUP BY business_type, o.payment_method;
   `;
@@ -100,7 +100,7 @@ async function getStatistics(startDate, endDate = null) {
       END as business_type,
       COUNT(*) as room_count
     FROM orders o
-    WHERE DATE(o.create_time) BETWEEN $1 AND $2
+    WHERE DATE(o.check_in_date) BETWEEN $1 AND $2
     AND o.status IN ('checked_in', 'checked_out', 'completed', 'checked-in', 'checked-out')
     GROUP BY business_type;
   `;

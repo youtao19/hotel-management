@@ -214,6 +214,16 @@ export const useRoomStore = defineStore('room', () => {
     try {
       const response = await roomApi.getRoomTypes()
       roomTypes.value = response.data
+
+      // 更新viewStore中的房型映射
+      try {
+        const { useViewStore } = await import('./viewStore')
+        const viewStore = useViewStore()
+        viewStore.updateRoomTypeMap(roomTypes.value)
+      } catch (error) {
+        console.warn('更新房型映射失败:', error)
+      }
+
       return roomTypes.value
     } catch (err) {
       console.error('获取房间类型失败:', err)

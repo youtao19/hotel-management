@@ -12,7 +12,7 @@
           <!-- 标题部分 -->
           <q-toolbar-title>
             <q-avatar>
-              <img src="https://cdn.quasar.dev/logo-v2/svg/logo-mono-white.svg">
+              <img src="/favicon.ico">
             </q-avatar>
             酒店管理系统
           </q-toolbar-title>
@@ -157,7 +157,7 @@ function handleLogin() {
   if (loginForm.value.username) {
     userStore.login({
       username: loginForm.value.username,
-      avatar: 'https://cdn.quasar.dev/img/boy-avatar.png',
+      avatar: '/icons/default-avatar.png',
       role: '管理员'
     })
 

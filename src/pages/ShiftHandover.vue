@@ -2,197 +2,36 @@
   <q-page class="shift-handover">
     <div class="q-pa-md">
       <div class="row q-col-gutter-md">
-        <!-- 收款明细表区域 -->
+        <!-- 提示信息区域 -->
         <div class="col-md-8 col-xs-12">
           <q-card>
-            <q-card-section class="bg-secondary text-white">
+            <q-card-section class="bg-info text-white">
               <div class="row items-center justify-between">
                 <div class="text-h6">
-                  <q-icon name="receipt_long" class="q-mr-xs" />
-                  收款明细表
-                  <q-tooltip class="bg-white text-primary" anchor="bottom left" self="top left">
-                    <div class="text-body2">
-                      <strong>客房住宿</strong>：跨日期订单或房价>150元<br/>
-                      <strong>休息房</strong>：当日订单且房价≤150元
-                    </div>
-                  </q-tooltip>
+                  <q-icon name="info" class="q-mr-xs" />
+                  收款明细表已移至收入统计
                 </div>
-                <q-btn-toggle
-                  v-model="roomType"
-                  :options="[
-                    {label: '客房住宿', value: 'hotel'},
-                    {label: '休息房', value: 'rest'}
-                  ]"
+                <q-btn
                   color="white"
-                  text-color="primary"
-                  toggle-color="primary"
+                  text-color="info"
+                  icon="trending_up"
+                  label="查看收入统计"
                   size="sm"
-                  @update:model-value="switchRoomType"
+                  @click="goToRevenueStatistics"
                 />
               </div>
             </q-card-section>
 
-            <!-- 日期选择和筛选区域 -->
-            <q-card-section class="bg-grey-1">
-              <div class="row q-col-gutter-md items-center">
-                <div class="col-md-3 col-xs-6">
-                  <q-input
-                    v-model="selectedDate"
-                    filled
-                    label="查看日期"
-                    mask="####-##-##"
-                    dense
-                  >
-                    <template v-slot:append>
-                      <q-icon name="event" class="cursor-pointer">
-                        <q-popup-proxy cover transition-show="scale" transition-hide="scale">
-                          <q-date
-                            v-model="selectedDate"
-                            @update:model-value="loadReceiptsByDate"
-                          >
-                            <div class="row items-center justify-end">
-                              <q-btn v-close-popup label="确定" color="primary" flat />
-                            </div>
-                          </q-date>
-                        </q-popup-proxy>
-                      </q-icon>
-                    </template>
-                  </q-input>
-                </div>
-                <div class="col-md-3 col-xs-6">
-                  <q-select
-                    v-model="selectedMonth"
-                    :options="monthOptions"
-                    filled
-                    label="选择月份"
-                    dense
-                    @update:model-value="loadMonthData"
-                    :disable="loading"
-                  >
-                    <template v-slot:prepend>
-                      <q-icon name="calendar_month" />
-                    </template>
-                  </q-select>
-                </div>
-                <div class="col-md-4 col-xs-12">
-                  <div class="row q-gutter-sm">
-                    <q-btn
-                      color="primary"
-                      icon="today"
-                      label="今天"
-                      size="sm"
-                      @click="setToday"
-                      :disable="loading"
-                    />
-                    <q-btn
-                      color="secondary"
-                      icon="skip_previous"
-                      label="昨天"
-                      size="sm"
-                      @click="setYesterday"
-                      :disable="loading"
-                    />
-                    <q-btn
-                      color="accent"
-                      icon="date_range"
-                      label="本周"
-                      size="sm"
-                      @click="setThisWeek"
-                      :disable="loading"
-                    />
-                    <q-btn
-                      color="orange"
-                      icon="calendar_month"
-                      label="本月"
-                      size="sm"
-                      @click="setThisMonth"
-                      :disable="loading"
-                    />
-                  </div>
-                </div>
-                <div class="col-md-2 col-xs-12 text-right">
-                  <q-chip
-                    :color="isToday ? 'positive' : 'info'"
-                    text-color="white"
-                    icon="date_range"
-                  >
-                    {{ formatDisplayDate(selectedDate) }}
-                  </q-chip>
-                </div>
+            <q-card-section>
+              <div class="text-body1 q-mb-md">
+                收款明细表功能已迁移到<strong>收入统计</strong>页面，您可以在那里：
               </div>
-            </q-card-section>
-
-            <!-- 明细表格 -->
-            <q-card-section class="q-pa-none">
-              <q-table
-                :rows="receiptDetails"
-                :columns="receiptColumns"
-                row-key="id"
-                :loading="loading"
-                :pagination="pagination"
-                dense
-                flat
-                bordered
-              >
-                <!-- 自定义支付方式列 -->
-                <template v-slot:body-cell-paymentMethod="props">
-                  <q-td :props="props">
-                    <q-chip
-                      :color="getPaymentMethodColor(props.value)"
-                      text-color="white"
-                      dense
-                      size="sm"
-                    >
-                      {{ props.value }}
-                    </q-chip>
-                  </q-td>
-                </template>
-
-                <!-- 自定义金额列 -->
-                <template v-slot:body-cell-roomFee="props">
-                  <q-td :props="props" class="text-right">
-                    <span class="text-weight-medium">¥{{ props.value.toFixed(2) }}</span>
-                  </q-td>
-                </template>
-
-                <template v-slot:body-cell-deposit="props">
-                  <q-td :props="props" class="text-right">
-                    <span class="text-weight-medium">¥{{ props.value.toFixed(2) }}</span>
-                  </q-td>
-                </template>
-
-                <template v-slot:body-cell-totalAmount="props">
-                  <q-td :props="props" class="text-right">
-                    <span class="text-weight-bold text-primary">¥{{ props.value.toFixed(2) }}</span>
-                  </q-td>
-                </template>
-
-                <!-- 底部汇总行 -->
-                <template v-slot:bottom>
-                  <div class="full-width q-pa-md bg-grey-1">
-                    <div class="row q-col-gutter-md">
-                      <div class="col-md-6 col-xs-12">
-                        <div class="text-subtitle2 q-mb-sm">按支付方式统计：</div>
-                        <div class="row q-col-gutter-xs">
-                          <div v-for="(amount, method) in paymentSummary" :key="method" class="col-auto">
-                            <q-chip
-                              :color="getPaymentMethodColor(method)"
-                              text-color="white"
-                              size="sm"
-                            >
-                              {{ method }}：¥{{ amount.toFixed(2) }}
-                            </q-chip>
-                          </div>
-                        </div>
-                      </div>
-                      <div class="col-md-6 col-xs-12 text-right">
-                        <div class="text-subtitle2">总计：<span class="text-h6 text-primary">¥{{ totalAmount.toFixed(2) }}</span></div>
-                        <div class="text-caption text-grey-7">共 {{ receiptDetails.length }} 条记录</div>
-                      </div>
-                    </div>
-                  </div>
-                </template>
-              </q-table>
+              <div class="q-ml-md">
+                <div class="text-body2 q-mb-xs">• 查看客房住宿和休息房的详细收款明细</div>
+                <div class="text-body2 q-mb-xs">• 按日期范围筛选收款记录</div>
+                <div class="text-body2 q-mb-xs">• 按支付方式统计收款金额</div>
+                <div class="text-body2 q-mb-xs">• 导出Excel收款明细表</div>
+              </div>
             </q-card-section>
           </q-card>
         </div>
@@ -403,9 +242,11 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { date } from 'quasar'
 import { useQuasar } from 'quasar'
+import { useRouter } from 'vue-router'
 import api from '../api/index.js'
 
 const $q = useQuasar()
+const router = useRouter()
 
 // 基础数据
 const currentDate = computed(() => {
@@ -508,6 +349,11 @@ const isToday = computed(() => {
 watch(statistics, () => {
   updateHandoverAmount()
 }, { deep: true })
+
+// 跳转到收入统计页面
+function goToRevenueStatistics() {
+  router.push('/RevenueStatistics')
+}
 
 // 获取支付方式对应的颜色
 function getPaymentMethodColor(method) {

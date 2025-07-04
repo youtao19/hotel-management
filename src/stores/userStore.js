@@ -26,7 +26,7 @@ export const useUserStore = defineStore('user', () => {
         user.value = {
           isLoggedIn: true,
           username: userData.username,
-          avatar: userData.avatar || 'https://cdn.quasar.dev/img/boy-avatar.png',
+          avatar: userData.avatar || '/icons/default-avatar.png',
           role: userData.role || '员工'
         }
       }
@@ -58,7 +58,7 @@ export const useUserStore = defineStore('user', () => {
           user.value = {
             isLoggedIn: true,
             username: userData.username,
-            avatar: userData.avatar || 'https://cdn.quasar.dev/img/boy-avatar.png',
+            avatar: userData.avatar || '/icons/default-avatar.png',
             role: userData.role || '员工'
           }
           return true

@@ -26,6 +26,9 @@
               <div class="text-h6">
                 <q-icon name="today" class="q-mr-sm" />
                 今日收入
+                <q-tooltip class="bg-white text-primary" anchor="bottom left" self="top left">
+                  按今日开房时间统计
+                </q-tooltip>
               </div>
             </q-card-section>
             <q-card-section class="text-center">
@@ -41,6 +44,9 @@
               <div class="text-h6">
                 <q-icon name="date_range" class="q-mr-sm" />
                 本周收入
+                <q-tooltip class="bg-white text-primary" anchor="bottom left" self="top left">
+                  按本周开房时间统计
+                </q-tooltip>
               </div>
             </q-card-section>
             <q-card-section class="text-center">
@@ -56,6 +62,9 @@
               <div class="text-h6">
                 <q-icon name="calendar_month" class="q-mr-sm" />
                 本月收入
+                <q-tooltip class="bg-white text-primary" anchor="bottom left" self="top left">
+                  按本月开房时间统计
+                </q-tooltip>
               </div>
             </q-card-section>
             <q-card-section class="text-center">
@@ -119,6 +128,11 @@
           <div class="text-h6 q-mb-md">
             <q-icon name="trending_up" class="q-mr-sm" />
             收入趋势图
+            <q-tooltip class="bg-white text-primary" anchor="bottom left" self="top left">
+              <div class="text-body2">
+                <strong>统计说明</strong>：按开房时间统计收入数据
+              </div>
+            </q-tooltip>
           </div>
           <div class="chart-container" style="height: 400px;">
             <canvas ref="revenueChart"></canvas>
@@ -134,6 +148,11 @@
               <div class="text-h6 q-mb-md">
                 <q-icon name="payment" class="q-mr-sm" />
                 支付方式分布
+                <q-tooltip class="bg-white text-primary" anchor="bottom left" self="top left">
+                  <div class="text-body2">
+                    <strong>统计说明</strong>：按开房时间统计支付方式分布
+                  </div>
+                </q-tooltip>
               </div>
               <div class="chart-container" style="height: 300px;">
                 <canvas ref="paymentChart"></canvas>
@@ -148,6 +167,11 @@
               <div class="text-h6 q-mb-md">
                 <q-icon name="hotel" class="q-mr-sm" />
                 房型收入分布
+                <q-tooltip class="bg-white text-primary" anchor="bottom left" self="top left">
+                  <div class="text-body2">
+                    <strong>统计说明</strong>：按开房时间统计房型收入分布
+                  </div>
+                </q-tooltip>
               </div>
               <div class="chart-container" style="height: 300px;">
                 <canvas ref="roomTypeChart"></canvas>
@@ -156,6 +180,205 @@
           </q-card>
         </div>
       </div>
+
+      <!-- 收款明细表 -->
+      <q-card class="q-mb-lg">
+        <q-card-section>
+          <div class="row items-center justify-between q-mb-md">
+            <div class="text-h6">
+              <q-icon name="receipt_long" class="q-mr-sm" />
+              收款明细表
+              <q-tooltip class="bg-white text-primary" anchor="bottom left" self="top left">
+                <div class="text-body2">
+                  <strong>客房住宿</strong>：跨日期订单或房价>150元<br/>
+                  <strong>休息房</strong>：当日订单且房价≤150元<br/>
+                  <strong>查询范围</strong>：按开房时间筛选数据
+                </div>
+              </q-tooltip>
+            </div>
+            <div class="row q-gutter-sm items-center">
+              <q-btn-toggle
+                v-model="receiptType"
+                :options="[
+                  {label: '客房住宿', value: 'hotel'},
+                  {label: '休息房', value: 'rest'}
+                ]"
+                color="primary"
+                text-color="white"
+                toggle-color="primary"
+                size="sm"
+                @update:model-value="switchReceiptType"
+              />
+              <q-btn
+                color="primary"
+                icon="refresh"
+                size="sm"
+                round
+                @click="refreshReceiptDetails"
+                :loading="receiptLoading"
+              >
+                <q-tooltip>刷新明细</q-tooltip>
+              </q-btn>
+            </div>
+          </div>
+
+          <!-- 日期选择和筛选区域 -->
+          <div class="row q-col-gutter-md q-mb-md items-center">
+            <div class="col-md-3 col-xs-6">
+              <q-input
+                v-model="receiptSelectedDate"
+                filled
+                label="查看日期"
+                mask="####-##-##"
+                dense
+              >
+                <template v-slot:append>
+                  <q-icon name="event" class="cursor-pointer">
+                    <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+                      <q-date
+                        v-model="receiptSelectedDate"
+                        @update:model-value="onReceiptDateChange"
+                      >
+                        <div class="row items-center justify-end">
+                          <q-btn v-close-popup label="确定" color="primary" flat />
+                        </div>
+                      </q-date>
+                    </q-popup-proxy>
+                  </q-icon>
+                </template>
+              </q-input>
+            </div>
+                         <div class="col-md-6 col-xs-12">
+               <div class="row q-gutter-sm receipt-date-controls">
+                <q-btn
+                  color="primary"
+                  icon="today"
+                  label="今天"
+                  size="sm"
+                  @click="setReceiptToday"
+                  :disable="receiptLoading"
+                />
+                <q-btn
+                  color="secondary"
+                  icon="skip_previous"
+                  label="昨天"
+                  size="sm"
+                  @click="setReceiptYesterday"
+                  :disable="receiptLoading"
+                />
+                <q-btn
+                  color="accent"
+                  icon="date_range"
+                  label="本周"
+                  size="sm"
+                  @click="setReceiptThisWeek"
+                  :disable="receiptLoading"
+                />
+                <q-btn
+                  color="orange"
+                  icon="calendar_month"
+                  label="本月"
+                  size="sm"
+                  @click="setReceiptThisMonth"
+                  :disable="receiptLoading"
+                />
+              </div>
+            </div>
+            <div class="col-md-3 col-xs-12">
+              <div class="row q-gutter-sm">
+                <q-btn
+                  color="green"
+                  icon="file_download"
+                  label="导出Excel"
+                  size="sm"
+                  @click="exportReceiptToExcel"
+                  :disable="receiptDetails.length === 0"
+                />
+                <q-chip
+                  :color="receiptIsToday ? 'positive' : 'info'"
+                  text-color="white"
+                  icon="date_range"
+                  size="sm"
+                >
+                  {{ formatReceiptDisplayDate(receiptSelectedDate) }}
+                </q-chip>
+              </div>
+            </div>
+          </div>
+
+          <!-- 收款明细表格 -->
+          <q-table
+            :rows="receiptDetails"
+            :columns="receiptColumns"
+            row-key="id"
+            :loading="receiptLoading"
+            :pagination="{ rowsPerPage: 10 }"
+            dense
+            flat
+            bordered
+            class="receipt-table"
+          >
+            <!-- 自定义支付方式列 -->
+            <template v-slot:body-cell-paymentMethod="props">
+              <q-td :props="props">
+                <q-chip
+                  :color="getPaymentMethodColor(props.value)"
+                  text-color="white"
+                  dense
+                  size="sm"
+                >
+                  {{ props.value }}
+                </q-chip>
+              </q-td>
+            </template>
+
+            <!-- 自定义金额列 -->
+            <template v-slot:body-cell-roomFee="props">
+              <q-td :props="props" class="text-right">
+                <span class="text-weight-medium">¥{{ formatCurrency(props.value) }}</span>
+              </q-td>
+            </template>
+
+            <template v-slot:body-cell-deposit="props">
+              <q-td :props="props" class="text-right">
+                <span class="text-weight-medium">¥{{ formatCurrency(props.value) }}</span>
+              </q-td>
+            </template>
+
+            <template v-slot:body-cell-totalAmount="props">
+              <q-td :props="props" class="text-right">
+                <span class="text-weight-bold text-primary">¥{{ formatCurrency(props.value) }}</span>
+              </q-td>
+            </template>
+
+            <!-- 底部汇总行 -->
+            <template v-slot:bottom>
+              <div class="full-width q-pa-md bg-grey-1">
+                <div class="row q-col-gutter-md">
+                  <div class="col-md-6 col-xs-12">
+                    <div class="text-subtitle2 q-mb-sm">按支付方式统计：</div>
+                    <div class="row q-col-gutter-xs">
+                      <div v-for="(amount, method) in receiptPaymentSummary" :key="method" class="col-auto">
+                        <q-chip
+                          :color="getPaymentMethodColor(method)"
+                          text-color="white"
+                          size="sm"
+                        >
+                          {{ method }}：¥{{ formatCurrency(amount) }}
+                        </q-chip>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-md-6 col-xs-12 text-right">
+                    <div class="text-subtitle2">总计：<span class="text-h6 text-primary">¥{{ formatCurrency(receiptTotalAmount) }}</span></div>
+                    <div class="text-caption text-grey-7">共 {{ receiptDetails.length }} 条记录</div>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </q-table>
+        </q-card-section>
+      </q-card>
 
       <!-- 详细数据表格 -->
       <q-card>
@@ -197,8 +420,9 @@
 
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
-import { useQuasar } from 'quasar'
+import { useQuasar, date } from 'quasar'
 import { revenueApi } from '../api/index'
+import api from '../api/index'
 import Chart from 'chart.js/auto'
 
 const $q = useQuasar()
@@ -212,6 +436,12 @@ const quickStats = ref({
 })
 const revenueData = ref([])
 const roomTypeData = ref([])
+
+// 收款明细表相关数据
+const receiptLoading = ref(false)
+const receiptType = ref('hotel') // 'hotel' 或 'rest'
+const receiptDetails = ref([])
+const receiptSelectedDate = ref(date.formatDate(new Date(), 'YYYY-MM-DD')) // 当前选中的日期
 
 // 日期范围
 const dateRange = ref({
@@ -236,6 +466,19 @@ const roomTypeChart = ref(null)
 let revenueChartInstance = null
 let paymentChartInstance = null
 let roomTypeChartInstance = null
+
+// 收款明细表格列定义
+const receiptColumns = [
+  { name: 'roomNumber', label: '房号', field: 'room_number', align: 'center', style: 'width: 80px' },
+  { name: 'guestName', label: '客户姓名', field: 'guest_name', align: 'center', style: 'width: 100px' },
+  { name: 'orderNumber', label: '单号', field: 'order_number', align: 'left', style: 'width: 120px' },
+  { name: 'roomFee', label: '房费', field: 'room_fee', align: 'right', style: 'width: 100px' },
+  { name: 'deposit', label: '押金', field: 'deposit', align: 'right', style: 'width: 100px' },
+  { name: 'paymentMethod', label: '支付方式', field: 'payment_method', align: 'center', style: 'width: 100px' },
+  { name: 'totalAmount', label: '总额', field: 'total_amount', align: 'right', style: 'width: 120px' },
+  { name: 'checkInTime', label: '开房时间', field: 'check_in_date', align: 'center', style: 'width: 140px' },
+  { name: 'checkOutTime', label: '退房时间', field: 'check_out_date', align: 'center', style: 'width: 140px' }
+]
 
 // 表格列定义
 const tableColumns = computed(() => {
@@ -309,6 +552,26 @@ const tableColumns = computed(() => {
   return baseColumns
 })
 
+// 收款明细表计算属性
+const receiptTotalAmount = computed(() => {
+  return receiptDetails.value.reduce((sum, item) => sum + (item.total_amount || 0), 0)
+})
+
+const receiptPaymentSummary = computed(() => {
+  const summary = {}
+  receiptDetails.value.forEach(item => {
+    const method = item.payment_method || '现金'
+    summary[method] = (summary[method] || 0) + (item.total_amount || 0)
+  })
+  return summary
+})
+
+// 收款明细表计算属性
+const receiptIsToday = computed(() => {
+  const today = date.formatDate(new Date(), 'YYYY-MM-DD')
+  return receiptSelectedDate.value === today
+})
+
 // 工具函数
 const formatCurrency = (value) => {
   if (!value) return '0.00'
@@ -318,6 +581,16 @@ const formatCurrency = (value) => {
 const formatDate = (dateStr) => {
   if (!dateStr) return ''
   return new Date(dateStr).toLocaleDateString('zh-CN')
+}
+
+// 收款明细表日期格式化
+const formatReceiptDisplayDate = (dateStr) => {
+  if (!dateStr) return ''
+  try {
+    return date.formatDate(new Date(dateStr), 'MM-DD')
+  } catch (e) {
+    return dateStr
+  }
 }
 
 // 获取快速统计数据
@@ -669,11 +942,244 @@ const updateRoomTypeChart = () => {
   })
 }
 
+// 生成示例收款明细数据
+const generateSampleReceiptData = (type) => {
+  const paymentMethods = ['现金', '微信', '支付宝', '银行卡']
+  const guestNames = ['张三', '李四', '王五', '赵六', '孙七', '周八', '吴九', '郑十']
+
+  const sampleData = []
+  const isHotel = type === 'hotel'
+  const basePrice = isHotel ? 200 : 100
+  const count = Math.floor(Math.random() * 8) + 3 // 3-10条记录
+
+  for (let i = 0; i < count; i++) {
+    const roomNumber = isHotel ? `${Math.floor(Math.random() * 9) + 1}0${Math.floor(Math.random() * 9) + 1}` : `${Math.floor(Math.random() * 9) + 1}${Math.floor(Math.random() * 9) + 1}${Math.floor(Math.random() * 9) + 1}`
+    const guestName = guestNames[Math.floor(Math.random() * guestNames.length)]
+    const paymentMethod = paymentMethods[Math.floor(Math.random() * paymentMethods.length)]
+    const roomFee = basePrice + Math.floor(Math.random() * 100)
+    const deposit = isHotel ? Math.floor(Math.random() * 200) + 100 : Math.floor(Math.random() * 50) + 50
+
+    sampleData.push({
+      room_number: roomNumber,
+      guest_name: guestName,
+      order_number: `ORD${Date.now()}${i}`.substring(0, 12),
+      room_fee: roomFee,
+      deposit: deposit,
+      payment_method: paymentMethod,
+      total_amount: roomFee + deposit,
+      check_in_date: new Date(receiptSelectedDate.value + 'T' + String(Math.floor(Math.random() * 12) + 8).padStart(2, '0') + ':' + String(Math.floor(Math.random() * 60)).padStart(2, '0')).toLocaleString('zh-CN', {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      }),
+      check_out_date: new Date(receiptSelectedDate.value + 'T' + String(Math.floor(Math.random() * 8) + 14).padStart(2, '0') + ':' + String(Math.floor(Math.random() * 60)).padStart(2, '0')).toLocaleString('zh-CN', {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    })
+  }
+
+  return sampleData
+}
+
+// 获取支付方式对应的颜色
+const getPaymentMethodColor = (method) => {
+  const colors = {
+    '现金': 'green',
+    '微信': 'green-7',
+    '支付宝': 'blue',
+    '银行卡': 'purple',
+    '其他': 'grey'
+  }
+  return colors[method] || 'grey'
+}
+
+// 获取收款明细
+const fetchReceiptDetails = async (customStartDate = null, customEndDate = null) => {
+  receiptLoading.value = true
+  try {
+    // 确定查询的日期范围
+    let startDate, endDate
+
+    if (customStartDate && customEndDate) {
+      // 使用自定义日期范围（用于本周、本月等查询）
+      startDate = customStartDate
+      endDate = customEndDate
+    } else {
+      // 使用选中的日期（单天查询）
+      try {
+        const formattedDate = date.formatDate(new Date(receiptSelectedDate.value), 'YYYY-MM-DD')
+        startDate = endDate = formattedDate
+      } catch (e) {
+        // 如果日期无效，使用今天的日期
+        const today = date.formatDate(new Date(), 'YYYY-MM-DD')
+        receiptSelectedDate.value = today
+        startDate = endDate = today
+      }
+    }
+
+    const data = await api.get('/shift-handover/receipts', {
+      params: {
+        type: receiptType.value,
+        startDate: startDate,
+        endDate: endDate
+      }
+    })
+    receiptDetails.value = data.map(item => ({
+      ...item,
+      room_fee: parseFloat(item.room_fee || 0),
+      deposit: parseFloat(item.deposit || 0),
+      total_amount: parseFloat(item.total_amount || 0),
+      guest_name: item.guest_name || '未知客户',
+      check_in_date: item.check_in_date ? new Date(item.check_in_date).toLocaleString('zh-CN', {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      }) : '',
+      check_out_date: item.check_out_date ? new Date(item.check_out_date).toLocaleString('zh-CN', {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      }) : ''
+    }))
+
+    console.log(`获取到 ${receiptDetails.value.length} 条${receiptType.value === 'hotel' ? '客房' : '休息房'}明细`)
+  } catch (error) {
+    console.error('获取收款明细失败:', error)
+    // 生成示例数据用于演示
+    receiptDetails.value = generateSampleReceiptData(receiptType.value)
+    $q.notify({
+      type: 'warning',
+      message: '获取收款明细失败，显示示例数据',
+      position: 'top'
+    })
+  } finally {
+    receiptLoading.value = false
+  }
+}
+
+// 切换收款明细类型
+const switchReceiptType = async () => {
+  await fetchReceiptDetails()
+}
+
+// 刷新收款明细
+const refreshReceiptDetails = async () => {
+  await fetchReceiptDetails()
+}
+
+// 收款明细日期变化处理
+const onReceiptDateChange = async () => {
+  await fetchReceiptDetails()
+}
+
+// 快捷日期选择方法
+const setReceiptToday = async () => {
+  const today = date.formatDate(new Date(), 'YYYY-MM-DD')
+  receiptSelectedDate.value = today
+  await fetchReceiptDetails()
+}
+
+const setReceiptYesterday = async () => {
+  const yesterday = date.subtractFromDate(new Date(), { days: 1 })
+  receiptSelectedDate.value = date.formatDate(yesterday, 'YYYY-MM-DD')
+  await fetchReceiptDetails()
+}
+
+const setReceiptThisWeek = async () => {
+  const today = new Date()
+  const currentDay = today.getDay() // 0为周日，1为周一
+  const mondayOffset = currentDay === 0 ? -6 : 1 - currentDay // 计算到周一的偏移
+
+  const monday = date.addToDate(today, { days: mondayOffset })
+  const sunday = date.addToDate(monday, { days: 6 })
+
+  const startDate = date.formatDate(monday, 'YYYY-MM-DD')
+  const endDate = date.formatDate(sunday, 'YYYY-MM-DD')
+
+  // 设置显示日期为今天
+  receiptSelectedDate.value = date.formatDate(new Date(), 'YYYY-MM-DD')
+  await fetchReceiptDetails(startDate, endDate)
+}
+
+const setReceiptThisMonth = async () => {
+  const today = new Date()
+  const firstDayOfMonth = date.startOfDate(today, 'month')
+  const lastDayOfMonth = date.endOfDate(today, 'month')
+
+  const startDate = date.formatDate(firstDayOfMonth, 'YYYY-MM-DD')
+  const endDate = date.formatDate(lastDayOfMonth, 'YYYY-MM-DD')
+
+  // 设置显示日期为今天
+  receiptSelectedDate.value = date.formatDate(new Date(), 'YYYY-MM-DD')
+  await fetchReceiptDetails(startDate, endDate)
+}
+
+// 导出收款明细到Excel
+const exportReceiptToExcel = async () => {
+  try {
+    // 计算统计数据
+    const statistics = {
+      reserveCash: 0,
+      hotelIncome: 0,
+      restIncome: 0,
+      carRentalIncome: 0,
+      totalIncome: receiptTotalAmount.value,
+      hotelDeposit: 0,
+      restDeposit: 0,
+      retainedAmount: 0,
+      handoverAmount: receiptTotalAmount.value,
+      goodReviews: 0,
+      vipCards: 0,
+      totalRooms: receiptDetails.value.length,
+      restRooms: receiptDetails.value.filter(item => receiptType.value === 'rest').length
+    }
+
+    const response = await api.post('/shift-handover/export', {
+      type: receiptType.value,
+      details: receiptDetails.value,
+      date: receiptSelectedDate.value,
+      statistics: statistics
+    }, {
+      responseType: 'blob'
+    })
+
+    // 创建下载链接
+    const url = window.URL.createObjectURL(new Blob([response.data]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `收款明细_${receiptType.value === 'hotel' ? '客房' : '休息房'}_${receiptSelectedDate.value}.xlsx`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+
+    $q.notify({
+      type: 'positive',
+      message: 'Excel文件已下载',
+      position: 'top'
+    })
+  } catch (error) {
+    console.error('导出Excel失败:', error)
+    $q.notify({
+      type: 'negative',
+      message: '导出Excel失败',
+      position: 'top'
+    })
+  }
+}
+
 // 刷新所有数据
 const refreshAllData = async () => {
   await Promise.all([
     fetchQuickStats(),
-    fetchRevenueData()
+    fetchRevenueData(),
+    fetchReceiptDetails()
   ])
 }
 
@@ -681,6 +1187,7 @@ const refreshAllData = async () => {
 onMounted(async () => {
   await fetchQuickStats()
   await fetchRevenueData()
+  await fetchReceiptDetails()
 })
 </script>
 
@@ -771,6 +1278,55 @@ onMounted(async () => {
   font-weight: 600;
   color: #1976d2;
   background: #f8f9fa;
+}
+
+/* 收款明细表样式 */
+.receipt-table {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.receipt-table :deep(.q-table__top) {
+  background-color: #f5f5f5;
+  padding: 16px;
+}
+
+.receipt-table :deep(.q-table__bottom) {
+  background-color: #f8f9fa;
+  border-top: 1px solid #e0e0e0;
+}
+
+.receipt-table :deep(.q-table thead th) {
+  background-color: #fafafa;
+  font-weight: 600;
+  color: #424242;
+  padding: 16px 12px;
+}
+
+.receipt-table :deep(.q-table tbody tr:hover) {
+  background-color: #f5f5f5;
+}
+
+.receipt-table :deep(.q-chip) {
+  font-weight: 500;
+}
+
+.receipt-table :deep(.q-td) {
+  padding: 12px;
+}
+
+/* 收款明细快捷按钮样式 */
+.receipt-table :deep(.q-btn-group) {
+  box-shadow: none;
+}
+
+.receipt-date-controls .q-btn {
+  margin-right: 4px;
+  border-radius: 4px;
+}
+
+.receipt-date-controls .q-chip {
+  margin-left: 8px;
 }
 
 /* 响应式设计 */

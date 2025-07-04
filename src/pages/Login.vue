@@ -141,7 +141,7 @@ async function onSubmit() { // 将函数改为异步
         id: response.data.id, // 使用后端返回的 id
         username: response.data.name, // 使用后端返回的 name 作为 username
         email: response.data.email, // 使用后端返回的 email
-        avatar: 'https://cdn.quasar.dev/img/boy-avatar.png',
+        avatar: '/icons/default-avatar.png',
         role: '员工'
       });
 
