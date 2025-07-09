@@ -63,10 +63,9 @@ export const useViewStore = defineStore('view', () => {
 
   // 支付方式选项
   const paymentMethodOptions = [
-    { label: '现金', value: 'cash', icon: 'mdi-cash' },
+    { label: '微邮付', value: 'weiyoufu', icon: 'mdi-alipay' },
     { label: '微信', value: 'wechat', icon: 'mdi-wechat' },
-    { label: '支付宝', value: 'alipay', icon: 'mdi-alipay' },
-    { label: '信用卡', value: 'card', icon: 'mdi-credit-card' }
+    { label: '现金', value: 'cash', icon: 'mdi-cash' }
   ]
 
     // 房型数据映射（用于动态获取房型名称）

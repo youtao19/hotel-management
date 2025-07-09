@@ -12,7 +12,7 @@
           <q-card class="col-md-3 col-sm-6 col-xs-12" flat bordered>
             <q-card-section class="text-center">
               <div class="text-h4 text-positive">{{ statistics.pendingInvitations }}</div>
-              <div class="text-subtitle2">待邀请好评</div>
+              <div class="text-subtitle2">可邀请好评</div>
             </q-card-section>
           </q-card>
 
@@ -40,7 +40,7 @@
 
         <!-- 标签页 -->
         <q-tabs v-model="activeTab" dense class="text-grey" active-color="primary" indicator-color="primary" align="justify">
-          <q-tab name="pending-invitations" label="待邀请好评" />
+          <q-tab name="pending-invitations" label="可邀请好评" />
           <q-tab name="pending-reviews" label="待设置评价" />
           <q-tab name="all-reviews" label="所有评价" />
         </q-tabs>
@@ -48,8 +48,16 @@
         <q-separator />
 
         <q-tab-panels v-model="activeTab" animated>
-          <!-- 待邀请好评 -->
+          <!-- 可邀请好评 -->
           <q-tab-panel name="pending-invitations">
+            <div class="q-mb-md">
+              <q-banner class="bg-blue-1 text-blue-9" dense>
+                <template v-slot:avatar>
+                  <q-icon name="info" color="blue" />
+                </template>
+                显示昨天和今天已入住的客户，可以邀请他们进行好评。如果列表为空，说明昨天和今天没有新入住的客户。
+              </q-banner>
+            </div>
             <q-table
               :rows="pendingInvitations"
               :columns="invitationColumns"
@@ -190,7 +198,7 @@ const invitationColumns = [
   { name: 'order_id', label: '订单号', field: 'order_id', align: 'left' },
   { name: 'guest_name', label: '客户姓名', field: 'guest_name', align: 'left' },
   { name: 'room_number', label: '房间号', field: 'room_number', align: 'center' },
-  { name: 'check_out_date', label: '退房日期', field: 'check_out_date', align: 'center', format: val => formatDate(val) },
+  { name: 'check_in_date', label: '入住日期', field: 'check_in_date', align: 'center', format: val => formatDate(val) },
   { name: 'phone', label: '联系电话', field: 'phone', align: 'center' },
   { name: 'actions', label: '操作', field: 'actions', align: 'center' }
 ]

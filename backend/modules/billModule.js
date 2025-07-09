@@ -66,16 +66,18 @@ async function getAllBills() {
     }
 }
 
-// 获取待邀请好评的账单（退房后未邀请好评的）
+// 获取待邀请好评的账单（昨天和今天已入住的未邀请好评的）
 async function getPendingReviewInvitations() {
     try {
         const sqlQuery = `
-            SELECT b.*, o.guest_name, o.phone, o.check_out_date
+            SELECT b.*, o.guest_name, o.phone, o.check_in_date
             FROM bills b
             JOIN orders o ON b.order_id = o.order_id
-            WHERE o.status = 'checked-out'
+            WHERE o.status = 'checked-in'
             AND b.review_invited = FALSE
-            ORDER BY b.create_time DESC
+            AND o.check_in_date >= CURRENT_DATE - INTERVAL '1 day'
+            AND o.check_in_date < CURRENT_DATE + INTERVAL '1 day'
+            ORDER BY o.check_in_date DESC
         `;
         const result = await query(sqlQuery);
         return result.rows;

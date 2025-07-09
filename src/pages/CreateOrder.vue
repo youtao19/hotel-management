@@ -277,7 +277,7 @@ const viewStore = useViewStore()
 const $q = useQuasar() // For notifications
 
 // 检查是否为开发环境
-const isDev = ref(process.env.NODE_ENV === 'dev')
+const isDev = ref(process.env.NODE_ENV === 'development')
 
 // 使用roomStore中的状态常量
 const { ROOM_STATES } = roomStore
@@ -345,8 +345,8 @@ const orderData = ref({
   roomNumber: null,                    // 房间号
   checkInDate: date.formatDate(getCurrentTimeToMinute(), 'YYYY-MM-DD'),  // 入住日期，默认今天
   checkOutDate: date.formatDate(date.addToDate(getCurrentTimeToMinute(), { days: 1 }), 'YYYY-MM-DD'), // 离店日期，默认明天
-  deposit: 100,                        // 押金，默认100元
-  paymentMethod: '微信',               // 支付方式，默认微信
+  deposit: 0,                        // 押金，默认100元
+  paymentMethod: viewStore.paymentMethodOptions[0].label,               // 支付方式，默认微邮付
   roomPrice: 0,                        // 房间价格，会根据选择的房间自动设置
   remarks: '',                         // 备注信息（可选）
   createTime: date.formatDate(getCurrentTimeToMinute(), 'YYYY-MM-DD HH:mm:ss'), // 创建时间

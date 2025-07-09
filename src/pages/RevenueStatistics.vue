@@ -424,8 +424,10 @@ import { useQuasar, date } from 'quasar'
 import { revenueApi } from '../api/index'
 import api from '../api/index'
 import Chart from 'chart.js/auto'
+import { useViewStore } from '../stores/viewStore'
 
 const $q = useQuasar()
+const viewStore = useViewStore()
 
 // 响应式数据
 const loading = ref(false)
@@ -474,7 +476,13 @@ const receiptColumns = [
   { name: 'orderNumber', label: '单号', field: 'order_number', align: 'left', style: 'width: 120px' },
   { name: 'roomFee', label: '房费', field: 'room_fee', align: 'right', style: 'width: 100px' },
   { name: 'deposit', label: '押金', field: 'deposit', align: 'right', style: 'width: 100px' },
-  { name: 'paymentMethod', label: '支付方式', field: 'payment_method', align: 'center', style: 'width: 100px' },
+  {
+    name: 'paymentMethod',
+    label: '支付方式',
+    field: row => viewStore.getPaymentMethodName(row.payment_method) || row.payment_method,
+    align: 'center',
+    style: 'width: 100px'
+  },
   { name: 'totalAmount', label: '总额', field: 'total_amount', align: 'right', style: 'width: 120px' },
   { name: 'checkInTime', label: '开房时间', field: 'check_in_date', align: 'center', style: 'width: 140px' },
   { name: 'checkOutTime', label: '退房时间', field: 'check_out_date', align: 'center', style: 'width: 140px' }
@@ -560,8 +568,9 @@ const receiptTotalAmount = computed(() => {
 const receiptPaymentSummary = computed(() => {
   const summary = {}
   receiptDetails.value.forEach(item => {
-    const method = item.payment_method || '现金'
-    summary[method] = (summary[method] || 0) + (item.total_amount || 0)
+    const methodValue = item.payment_method || 'cash'
+    const methodLabel = viewStore.getPaymentMethodName(methodValue)
+    summary[methodLabel] = (summary[methodLabel] || 0) + (item.total_amount || 0)
   })
   return summary
 })
@@ -800,30 +809,31 @@ const updatePaymentChart = () => {
 
   // 计算支付方式总收入
   const paymentData = revenueData.value.reduce((acc, item) => {
-    acc.cash += item.cash_revenue || 0
-    acc.wechat += item.wechat_revenue || 0
-    acc.alipay += item.alipay_revenue || 0
-    acc.credit_card += item.credit_card_revenue || 0
+    acc.weiyoufu = (acc.weiyoufu || 0) + (item.weiyoufu_revenue || 0)
+    acc.wechat = (acc.wechat || 0) + (item.wechat_revenue || 0)
+    acc.cash = (acc.cash || 0) + (item.cash_revenue || 0)
     return acc
-  }, { cash: 0, wechat: 0, alipay: 0, credit_card: 0 })
+  }, { weiyoufu: 0, wechat: 0, cash: 0 })
+
+  // 从viewStore获取支付方式标签
+  const paymentLabels = viewStore.paymentMethodOptions.map(option => option.label)
+  const paymentValues = viewStore.paymentMethodOptions.map(option => paymentData[option.value] || 0)
 
   paymentChartInstance = new Chart(ctx, {
     type: 'doughnut',
     data: {
-      labels: ['现金', '微信', '支付宝', '信用卡'],
+      labels: paymentLabels,
       datasets: [{
-        data: [paymentData.cash, paymentData.wechat, paymentData.alipay, paymentData.credit_card],
+        data: paymentValues,
         backgroundColor: [
-          'rgba(76, 175, 80, 0.8)',
-          'rgba(76, 175, 80, 0.6)',
-          'rgba(25, 118, 210, 0.8)',
-          'rgba(255, 152, 0, 0.8)'
+          'rgba(255, 152, 0, 0.8)',  // 微邮付
+          'rgba(76, 175, 80, 0.6)',  // 微信
+          'rgba(76, 175, 80, 0.8)'   // 现金
         ],
         borderColor: [
-          'rgba(76, 175, 80, 1)',
-          'rgba(76, 175, 80, 0.8)',
-          'rgba(25, 118, 210, 1)',
-          'rgba(255, 152, 0, 1)'
+          'rgba(255, 152, 0, 1)',    // 微邮付
+          'rgba(76, 175, 80, 0.8)',  // 微信
+          'rgba(76, 175, 80, 1)'     // 现金
         ],
         borderWidth: 2
       }]
@@ -988,10 +998,9 @@ const generateSampleReceiptData = (type) => {
 // 获取支付方式对应的颜色
 const getPaymentMethodColor = (method) => {
   const colors = {
-    '现金': 'green',
-    '微信': 'green-7',
-    '支付宝': 'blue',
-    '银行卡': 'purple',
+    [viewStore.paymentMethodOptions[0].label]: 'orange',  // 微邮付
+    [viewStore.paymentMethodOptions[1].label]: 'green-7', // 微信
+    [viewStore.paymentMethodOptions[2].label]: 'green',   // 现金
     '其他': 'grey'
   }
   return colors[method] || 'grey'
