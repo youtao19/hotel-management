@@ -16,13 +16,6 @@ alwaysApply: true
 ## 对数据库中信息的说明
 数据库中订单状态： 待入住，已入住，已退房，已取消
 
-房间表说明：
-
-1.房间状态：表示房间是否可用。
-
-cleaning、repair 则 将is_closed 改为True。 available 将is_closed 改为 True
-
-与订单表进行绑定，可以查看入住时间退房时间和客人信息
 
 我已经为你添加了postgresql的MCP服务
 
@@ -38,6 +31,8 @@ port : 5432
 user : postgres
 password : 1219
 
+
+使用终端时，始终使用powershell的语法
 
 
 

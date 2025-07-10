@@ -33,8 +33,7 @@
           <!-- 表头 -->
           <thead>
             <tr class="table-header">
-              <th colspan="8" class="text-center text-h6 text-weight-bold">交接班</th>
-              <th rowspan="2" class="notes-header">备忘录</th>
+              <th colspan="9" class="text-center text-h6 text-weight-bold">交接班</th>
             </tr>
             <tr class="sub-header">
               <th>各用金</th>
@@ -45,6 +44,7 @@
               <th>客房退押</th>
               <th>休息退押</th>
               <th>留存款</th>
+              <th>交接款</th>
             </tr>
           </thead>
 
@@ -65,12 +65,10 @@
               <td>
                 <q-input v-model.number="paymentData.cash.restDeposit" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
               </td>
-              <td>
+                            <td>
                 <q-input v-model.number="paymentData.cash.retainedAmount" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
               </td>
-              <td rowspan="4" class="notes-cell">
-                <q-input v-model="notes" type="textarea" rows="8" placeholder="记录交接班相关信息..." borderless class="notes-input" />
-              </td>
+              <td class="handover-empty"></td>
             </tr>
 
             <!-- 微信 -->
@@ -89,6 +87,7 @@
               <td>
                 <q-input v-model.number="paymentData.wechat.retainedAmount" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
               </td>
+              <td class="handover-empty"></td>
             </tr>
 
             <!-- 数码付 -->
@@ -109,6 +108,7 @@
               <td>
                 <q-input v-model.number="paymentData.digital.retainedAmount" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
               </td>
+              <td class="handover-empty"></td>
             </tr>
 
             <!-- 其他方式 -->
@@ -129,13 +129,10 @@
               <td>
                 <q-input v-model.number="paymentData.other.retainedAmount" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
               </td>
+              <td class="handover-empty"></td>
             </tr>
-          </tbody>
-        </table>
 
-        <!-- 汇总行 -->
-        <table class="shift-table summary-table">
-          <tbody>
+            <!-- 汇总行 -->
             <tr class="summary-row">
               <td class="summary-label">合计</td>
               <td class="summary-total">{{ totalSummary.reserveCash.toFixed(0) }}</td>
@@ -182,6 +179,81 @@
             </table>
           </div>
         </div>
+
+        <!-- 今日待办事项 -->
+        <div class="row q-mt-lg">
+          <div class="col-12">
+            <div class="task-management-container">
+              <div class="task-management-header">
+                <q-icon name="task_alt" size="24px" class="q-mr-sm" />
+                <span class="text-h6 text-weight-bold">今日待办事项</span>
+              </div>
+
+              <div class="task-management-content">
+                <div class="task-list-horizontal">
+                  <div
+                    v-for="(task, index) in taskList"
+                    :key="task.id"
+                    class="task-card"
+                    :class="{ 'task-completed': task.completed }"
+                  >
+                    <q-checkbox
+                      v-model="task.completed"
+                      class="task-checkbox"
+                      @update:model-value="updateTaskStatus(task.id, $event)"
+                    />
+                    <div class="task-content" @click="editTask(index)">
+                      <div class="task-title" :class="{ 'completed': task.completed }">
+                        {{ task.title }}
+                      </div>
+                      <div class="task-time" v-if="task.time">
+                        <q-icon name="schedule" size="14px" class="q-mr-xs" />
+                        {{ task.time }}
+                      </div>
+                    </div>
+                    <q-btn
+                      flat
+                      round
+                      dense
+                      size="sm"
+                      icon="close"
+                      class="task-delete"
+                      @click="deleteTask(index)"
+                    />
+                  </div>
+
+                  <!-- 添加新任务卡片 -->
+                  <div class="add-task-card">
+                    <q-input
+                      v-model="newTaskTitle"
+                      placeholder="添加新任务..."
+                      dense
+                      borderless
+                      class="add-task-input"
+                      @keyup.enter="addNewTask"
+                    >
+                      <template v-slot:prepend>
+                        <q-icon name="add" />
+                      </template>
+                      <template v-slot:append>
+                        <q-btn
+                          flat
+                          round
+                          dense
+                          size="sm"
+                          icon="add"
+                          color="primary"
+                          @click="addNewTask"
+                          :disable="!newTaskTitle.trim()"
+                        />
+                      </template>
+                    </q-input>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </q-page>
@@ -204,6 +276,41 @@ const handoverPerson = ref('')
 const receivePerson = ref('')
 const cashierName = ref('张')
 const notes = ref('')
+
+// 任务列表相关
+const newTaskTitle = ref('')
+const taskList = ref([
+  {
+    id: 1,
+    title: '检查101房间空调',
+    time: '10:00',
+    completed: false
+  },
+  {
+    id: 2,
+    title: '接待VIP客人',
+    time: '12:30',
+    completed: false
+  },
+  {
+    id: 3,
+    title: '安排会议室布置',
+    time: '14:00',
+    completed: true
+  },
+  {
+    id: 4,
+    title: '处理客户投诉',
+    time: '15:30',
+    completed: false
+  },
+  {
+    id: 5,
+    title: '检查库存',
+    time: '16:00',
+    completed: false
+  }
+])
 
 // 班次选项
 const shiftOptions = ['白班', '夜班']
@@ -347,6 +454,7 @@ async function saveHandover() {
       receivePerson: receivePerson.value,
       cashierName: cashierName.value,
       notes: notes.value,
+      taskList: taskList.value,
       paymentData: paymentData.value,
       totalSummary: totalSummary.value,
       handoverAmount: handoverAmount.value,
@@ -477,6 +585,18 @@ function printHandover() {
       <p><strong>开房数: ${totalRooms.value}</strong> &nbsp;&nbsp; <strong>休息房数: ${restRooms.value}</strong> &nbsp;&nbsp; <strong>大美卡: ${vipCards.value}</strong></p>
       <p><strong>收银员: ${cashierName.value}</strong></p>
       ${notes.value ? `<p><strong>备注:</strong> ${notes.value}</p>` : ''}
+      ${taskList.value.length > 0 ? `
+        <div style="margin-top: 15px;">
+          <p><strong>今日待办事项:</strong></p>
+          <ul style="margin: 5px 0; padding-left: 20px;">
+            ${taskList.value.map(task => `
+              <li style="margin: 3px 0; ${task.completed ? 'text-decoration: line-through; color: #999;' : ''}">
+                ${task.completed ? '✓' : '○'} ${task.title} ${task.time ? `(${task.time})` : ''}
+              </li>
+            `).join('')}
+          </ul>
+        </div>
+      ` : ''}
     </div>
   `
 
@@ -498,6 +618,7 @@ async function exportToExcel() {
       receivePerson: receivePerson.value,
       cashierName: cashierName.value,
       notes: notes.value,
+      taskList: taskList.value,
       paymentData: paymentData.value,
       totalSummary: totalSummary.value,
       handoverAmount: handoverAmount.value,
@@ -529,6 +650,41 @@ async function exportToExcel() {
       type: 'negative',
       message: '导出Excel失败'
     })
+  }
+}
+
+// 任务管理方法
+function addNewTask() {
+  if (!newTaskTitle.value.trim()) return
+
+  const newTask = {
+    id: Date.now(),
+    title: newTaskTitle.value.trim(),
+    time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+    completed: false
+  }
+
+  taskList.value.push(newTask)
+  newTaskTitle.value = ''
+}
+
+function deleteTask(index) {
+  taskList.value.splice(index, 1)
+}
+
+function editTask(index) {
+  // 可以扩展为内联编辑功能
+  const task = taskList.value[index]
+  const newTitle = prompt('编辑任务:', task.title)
+  if (newTitle && newTitle.trim()) {
+    task.title = newTitle.trim()
+  }
+}
+
+function updateTaskStatus(taskId, completed) {
+  const task = taskList.value.find(t => t.id === taskId)
+  if (task) {
+    task.completed = completed
   }
 }
 
@@ -626,29 +782,137 @@ onMounted(async () => {
   font-weight: bold;
 }
 
-.notes-header {
-  background-color: #e9ecef;
-  font-weight: bold;
-  writing-mode: vertical-rl;
-  text-orientation: mixed;
-  width: 150px;
+
+
+
+
+/* 任务管理容器 */
+.task-management-container {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e0e0e0;
 }
 
-.notes-cell {
-  width: 150px;
-  padding: 5px;
+.task-management-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+  color: #2196f3;
+  border-bottom: 2px solid #e3f2fd;
+  padding-bottom: 12px;
 }
 
-.notes-input {
+.task-management-content {
+  min-height: 100px;
+}
+
+.task-list-horizontal {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.task-card {
+  display: flex;
+  align-items: center;
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 12px;
+  min-width: 200px;
+  max-width: 300px;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.task-card:hover {
+  background: #e3f2fd;
+  border-color: #2196f3;
+  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.2);
+}
+
+.task-card.task-completed {
+  opacity: 0.7;
+  background: #f0f0f0;
+  border-color: #ccc;
+}
+
+.task-card.task-completed:hover {
+  background: #e8e8e8;
+}
+
+.task-checkbox {
+  margin-right: 10px;
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
+.task-content {
+  flex: 1;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+  min-width: 0;
+}
+
+.task-title {
+  font-size: 14px;
+  line-height: 1.4;
+  margin-bottom: 4px;
+  font-weight: 500;
+  word-wrap: break-word;
+}
+
+.task-title.completed {
+  text-decoration: line-through;
+  color: #999;
+}
+
+.task-time {
+  font-size: 12px;
+  color: #666;
+  display: flex;
+  align-items: center;
+}
+
+.task-delete {
+  opacity: 0;
+  transition: opacity 0.2s;
+  color: #f44336;
+  margin-left: 8px;
+  align-self: flex-start;
+}
+
+.task-card:hover .task-delete {
+  opacity: 1;
+}
+
+.add-task-card {
+  display: flex;
+  align-items: center;
+  background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
+  border: 2px dashed #2196f3;
+  border-radius: 8px;
+  padding: 12px;
+  min-width: 200px;
+  max-width: 300px;
+  transition: all 0.3s ease;
+}
+
+.add-task-card:hover {
+  background: linear-gradient(135deg, #bbdefb 0%, #e1bee7 100%);
+  border-color: #1976d2;
+}
+
+.add-task-input {
+  font-size: 14px;
   width: 100%;
-  height: 100%;
-  resize: none;
 }
 
-.summary-table {
-  margin-top: 0;
-  border-top: none;
-}
+
 
 .summary-row {
   background-color: #fff3e0;
@@ -676,6 +940,12 @@ onMounted(async () => {
 .handover-amount {
   background-color: #c8e6c9;
   border: 2px solid #4caf50;
+  font-weight: bold;
+}
+
+.handover-empty {
+  background-color: #f5f5f5;
+  border-right: 1px solid #ddd;
 }
 
 .special-stats-table {

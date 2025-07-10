@@ -13,13 +13,13 @@ async function getReceiptDetails(type, startDate, endDate) {
   if (type === 'hotel') {
     // 客房：跨日期的订单或房价高于150的订单
     typeCondition = `(
-      DATE(o.check_in_date) != DATE(o.check_out_date)
+      o.check_in_date::date != o.check_out_date::date
       OR o.room_price > 150
     )`;
   } else if (type === 'rest') {
     // 休息房：同日期且房价低于等于150的订单
     typeCondition = `(
-      DATE(o.check_in_date) = DATE(o.check_out_date)
+      o.check_in_date::date = o.check_out_date::date
       AND o.room_price <= 150
     )`;
   } else {
@@ -32,24 +32,25 @@ async function getReceiptDetails(type, startDate, endDate) {
       o.order_id as order_number,
       o.room_number,
       o.guest_name,
-      COALESCE(o.room_price, 0) as room_fee,
-      COALESCE(o.deposit, 0) as deposit,
-      COALESCE(o.payment_method, '现金') as payment_method,
-      (COALESCE(o.room_price, 0) + COALESCE(o.deposit, 0)) as total_amount,
+      COALESCE(b.room_fee, o.room_price, 0) as room_fee,
+      COALESCE(b.deposit, o.deposit, 0) as deposit,
+      COALESCE(b.pay_way, o.payment_method, '现金') as payment_method,
+      COALESCE(b.total_income, (COALESCE(o.room_price, 0) + COALESCE(o.deposit, 0))) as total_amount,
       o.check_in_date,
       o.check_out_date,
       o.create_time as created_at,
       r.type_code,
       CASE
-        WHEN (DATE(o.check_in_date) != DATE(o.check_out_date)
-              OR o.room_price > 150) THEN 'hotel'
+        WHEN (o.check_in_date::date != o.check_out_date::date
+              OR COALESCE(b.room_fee, o.room_price, 0) > 150) THEN 'hotel'
         ELSE 'rest'
       END as business_type
     FROM orders o
     JOIN rooms r ON o.room_number = r.room_number
+    LEFT JOIN bills b ON o.order_id = b.order_id
     WHERE ${typeCondition}
-    AND DATE(o.check_in_date) BETWEEN $1 AND $2
-    AND o.status IN ('checked_in', 'checked_out', 'completed', 'checked-in', 'checked-out')
+    AND o.check_in_date::date BETWEEN $1::date AND $2::date
+    AND o.status IN ('checked-in', 'checked-out', 'pending')
     ORDER BY o.check_in_date DESC;
   `;
 
@@ -76,32 +77,34 @@ async function getStatistics(startDate, endDate = null) {
   const orderStatsSql = `
     SELECT
       CASE
-        WHEN (DATE(o.check_in_date) != DATE(o.check_out_date)
-              OR o.room_price > 150) THEN 'hotel'
+        WHEN (o.check_in_date::date != o.check_out_date::date
+              OR COALESCE(b.room_fee, o.room_price, 0) > 150) THEN 'hotel'
         ELSE 'rest'
       END as business_type,
-      SUM(COALESCE(o.room_price, 0)) as income,
-      SUM(COALESCE(o.deposit, 0)) as deposit,
+      SUM(COALESCE(b.room_fee, o.room_price, 0)) as income,
+      SUM(COALESCE(b.deposit, o.deposit, 0)) as deposit,
       COUNT(*) as count,
-      o.payment_method
+      COALESCE(b.pay_way, o.payment_method, '现金') as payment_method
     FROM orders o
-    WHERE DATE(o.check_in_date) BETWEEN $1 AND $2
-    AND o.status IN ('checked_in', 'checked_out', 'completed', 'checked-in', 'checked-out')
-    GROUP BY business_type, o.payment_method;
+    LEFT JOIN bills b ON o.order_id = b.order_id
+    WHERE o.check_in_date::date BETWEEN $1::date AND $2::date
+    AND o.status IN ('checked-in', 'checked-out', 'pending')
+    GROUP BY business_type, COALESCE(b.pay_way, o.payment_method, '现金');
   `;
 
   // 获取指定日期范围的房间统计 - 基于业务类型
   const roomStatsSql = `
     SELECT
       CASE
-        WHEN (DATE(o.check_in_date) != DATE(o.check_out_date)
-              OR o.room_price > 150) THEN 'hotel'
+        WHEN (o.check_in_date::date != o.check_out_date::date
+              OR COALESCE(b.room_fee, o.room_price, 0) > 150) THEN 'hotel'
         ELSE 'rest'
       END as business_type,
       COUNT(*) as room_count
     FROM orders o
-    WHERE DATE(o.check_in_date) BETWEEN $1 AND $2
-    AND o.status IN ('checked_in', 'checked_out', 'completed', 'checked-in', 'checked-out')
+    LEFT JOIN bills b ON o.order_id = b.order_id
+    WHERE o.check_in_date::date BETWEEN $1::date AND $2::date
+    AND o.status IN ('checked-in', 'checked-out', 'pending')
     GROUP BY business_type;
   `;
 

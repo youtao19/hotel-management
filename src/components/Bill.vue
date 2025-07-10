@@ -19,7 +19,10 @@
             </tr>
             <tr>
               <td class="bill-label">押金</td>
-              <td class="bill-value text-primary text-bold">{{ currentOrder.deposit }} 元</td>
+              <td>
+                <q-input v-model="billData.deposit" type="number" dense outlined class="bill-input"
+                  style="max-width: 120px;" />
+              </td>
             </tr>
             <tr>
               <td class="bill-label">房费</td>
@@ -110,9 +113,9 @@ async function createBill() {
       order_id: props.currentOrder.orderNumber, // 使用订单号作为 order_id
       room_number: props.currentOrder.roomNumber,
       guest_name: props.currentOrder.guestName,
-      deposit: deposit,
+      deposit: deposit, // 使用输入框中的押金值
       refund_deposit: 'no', // 固定为不退押金
-      room_fee: roomFee,
+      room_fee: roomFee, // 使用输入框中的房费值
       total_income: calculatedTotalAmount,
       pay_way: { value: props.currentOrder.paymentMethod }, // 后端期望的格式
       remarks: billData.value.remarks || ''
@@ -182,7 +185,7 @@ watch(
 // 计算总金额（房费 + 押金）
 const totalAmount = computed(() => {
   const roomFee = parseFloat(billData.value.room_fee) || 0
-  const deposit = parseFloat(props.currentOrder?.deposit) || 0
+  const deposit = parseFloat(billData.value.deposit) || 0
   return roomFee + deposit
 })
 </script>
