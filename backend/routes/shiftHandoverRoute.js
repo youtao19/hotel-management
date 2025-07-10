@@ -105,12 +105,29 @@ router.post('/save', async (req, res) => {
 // 获取历史记录
 router.get('/history', async (req, res) => {
   try {
-    const { startDate, endDate } = req.query;
-    const history = await getHandoverHistory(startDate, endDate);
+    const {
+      startDate,
+      endDate,
+      page = 1,
+      limit = 10,
+      cashierName = ''
+    } = req.query;
+
+    const history = await getHandoverHistory(
+      startDate,
+      endDate,
+      parseInt(page),
+      parseInt(limit),
+      cashierName
+    );
+
     res.json(history);
   } catch (error) {
     console.error('获取交接班历史记录失败:', error);
-    res.status(500).json({ message: '获取交接班历史记录失败' });
+    res.status(500).json({
+      message: '获取交接班历史记录失败',
+      error: error.message
+    });
   }
 });
 

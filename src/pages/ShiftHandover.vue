@@ -8,6 +8,7 @@
           <q-btn color="primary" icon="print" label="打印" @click="printHandover" />
           <q-btn color="green" icon="download" label="导出Excel" @click="exportToExcel" />
           <q-btn color="orange" icon="save" label="保存交接记录" @click="saveHandover" />
+          <q-btn color="blue" icon="history" label="历史记录" @click="showHistoryDialog = true" />
         </div>
       </div>
 
@@ -33,18 +34,19 @@
           <!-- 表头 -->
           <thead>
             <tr class="table-header">
-              <th colspan="9" class="text-center text-h6 text-weight-bold">交接班</th>
+              <th colspan="10" class="text-center text-h6 text-weight-bold">交接班</th>
             </tr>
             <tr class="sub-header">
-              <th>各用金</th>
-              <th>客房收入1</th>
-              <th>休息房收入2</th>
-              <th>租车收入3</th>
-              <th>合计</th>
-              <th>客房退押</th>
-              <th>休息退押</th>
-              <th>留存款</th>
-              <th>交接款</th>
+              <th class="payment-method-header">支付方式</th>
+              <th class="payment-method-header">备用金</th>
+              <th class="income-header">客房<br/>收入1</th>
+              <th class="income-header">休息房<br/>收入2</th>
+              <th class="income-header">租车<br/>收入3</th>
+              <th class="total-header">合计</th>
+              <th class="deposit-header">客房<br/>退押</th>
+              <th class="deposit-header">休息退押</th>
+              <th class="retained-header">留存款</th>
+              <th class="handover-header">交接款</th>
             </tr>
           </thead>
 
@@ -53,102 +55,116 @@
             <!-- 现金 -->
             <tr class="payment-row cash-row">
               <td class="payment-label">现金</td>
-              <td>
+              <td class="editable-cell">
                 <q-input v-model.number="paymentData.cash.reserveCash" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
               </td>
-              <td class="auto-calculate">{{ paymentData.cash.hotelIncome.toFixed(0) }}</td>
-              <td class="auto-calculate">{{ paymentData.cash.restIncome.toFixed(0) }}</td>
+              <td class="editable-cell">
+                <q-input v-model.number="paymentData.cash.hotelIncome" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
+              </td>
+              <td class="editable-cell">
+                <q-input v-model.number="paymentData.cash.restIncome" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
+              </td>
+              <td class="editable-cell">
+                <q-input v-model.number="paymentData.cash.carRentIncome" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
+              </td>
               <td class="total-cell">{{ paymentData.cash.total.toFixed(0) }}</td>
-              <td>
+              <td class="editable-cell">
                 <q-input v-model.number="paymentData.cash.hotelDeposit" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
               </td>
-              <td>
+              <td class="editable-cell">
                 <q-input v-model.number="paymentData.cash.restDeposit" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
               </td>
-                            <td>
+              <td class="editable-cell">
                 <q-input v-model.number="paymentData.cash.retainedAmount" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
               </td>
-              <td class="handover-empty"></td>
+              <td class="auto-calculate">{{ (paymentData.cash.total - paymentData.cash.hotelDeposit - paymentData.cash.restDeposit - paymentData.cash.retainedAmount).toFixed(0) }}</td>
             </tr>
 
             <!-- 微信 -->
             <tr class="payment-row wechat-row">
               <td class="payment-label">微信</td>
-              <td class="auto-calculate">{{ paymentData.wechat.reserveCash.toFixed(0) }}</td>
-              <td class="auto-calculate">{{ paymentData.wechat.hotelIncome.toFixed(0) }}</td>
-              <td class="auto-calculate">{{ paymentData.wechat.restIncome.toFixed(0) }}</td>
+              <td class="editable-cell">
+                <q-input v-model.number="paymentData.wechat.reserveCash" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
+              </td>
+              <td class="editable-cell">
+                <q-input v-model.number="paymentData.wechat.hotelIncome" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
+              </td>
+              <td class="editable-cell">
+                <q-input v-model.number="paymentData.wechat.restIncome" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
+              </td>
+              <td class="editable-cell">
+                <q-input v-model.number="paymentData.wechat.carRentIncome" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
+              </td>
               <td class="total-cell">{{ paymentData.wechat.total.toFixed(0) }}</td>
-              <td>
+              <td class="editable-cell">
                 <q-input v-model.number="paymentData.wechat.hotelDeposit" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
               </td>
-              <td>
+              <td class="editable-cell">
                 <q-input v-model.number="paymentData.wechat.restDeposit" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
               </td>
-              <td>
+              <td class="editable-cell">
                 <q-input v-model.number="paymentData.wechat.retainedAmount" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
               </td>
-              <td class="handover-empty"></td>
+              <td class="auto-calculate">{{ (paymentData.wechat.total - paymentData.wechat.hotelDeposit - paymentData.wechat.restDeposit - paymentData.wechat.retainedAmount).toFixed(0) }}</td>
             </tr>
 
-            <!-- 数码付 -->
+            <!-- 支付宝 -->
             <tr class="payment-row digital-row">
-              <td class="payment-label">数码付</td>
-              <td>
+              <td class="payment-label">支付宝</td>
+              <td class="editable-cell">
                 <q-input v-model.number="paymentData.digital.reserveCash" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
               </td>
-              <td class="auto-calculate">{{ paymentData.digital.hotelIncome.toFixed(0) }}</td>
-              <td class="auto-calculate">{{ paymentData.digital.restIncome.toFixed(0) }}</td>
+              <td class="editable-cell">
+                <q-input v-model.number="paymentData.digital.hotelIncome" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
+              </td>
+              <td class="editable-cell">
+                <q-input v-model.number="paymentData.digital.restIncome" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
+              </td>
+              <td class="editable-cell">
+                <q-input v-model.number="paymentData.digital.carRentIncome" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
+              </td>
               <td class="total-cell">{{ paymentData.digital.total.toFixed(0) }}</td>
-              <td>
+              <td class="editable-cell">
                 <q-input v-model.number="paymentData.digital.hotelDeposit" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
               </td>
-              <td>
+              <td class="editable-cell">
                 <q-input v-model.number="paymentData.digital.restDeposit" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
               </td>
-              <td>
+              <td class="editable-cell">
                 <q-input v-model.number="paymentData.digital.retainedAmount" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
               </td>
-              <td class="handover-empty"></td>
+              <td class="auto-calculate">{{ (paymentData.digital.total - paymentData.digital.hotelDeposit - paymentData.digital.restDeposit - paymentData.digital.retainedAmount).toFixed(0) }}</td>
             </tr>
 
             <!-- 其他方式 -->
             <tr class="payment-row other-row">
               <td class="payment-label">其他方式</td>
-              <td>
+              <td class="editable-cell">
                 <q-input v-model.number="paymentData.other.reserveCash" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
               </td>
-              <td class="auto-calculate">{{ paymentData.other.hotelIncome.toFixed(0) }}</td>
-              <td class="auto-calculate">{{ paymentData.other.restIncome.toFixed(0) }}</td>
+              <td class="editable-cell">
+                <q-input v-model.number="paymentData.other.hotelIncome" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
+              </td>
+              <td class="editable-cell">
+                <q-input v-model.number="paymentData.other.restIncome" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
+              </td>
+              <td class="editable-cell">
+                <q-input v-model.number="paymentData.other.carRentIncome" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
+              </td>
               <td class="total-cell">{{ paymentData.other.total.toFixed(0) }}</td>
-              <td>
+              <td class="editable-cell">
                 <q-input v-model.number="paymentData.other.hotelDeposit" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
               </td>
-              <td>
+              <td class="editable-cell">
                 <q-input v-model.number="paymentData.other.restDeposit" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
               </td>
-              <td>
+              <td class="editable-cell">
                 <q-input v-model.number="paymentData.other.retainedAmount" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
               </td>
-              <td class="handover-empty"></td>
+              <td class="auto-calculate">{{ (paymentData.other.total - paymentData.other.hotelDeposit - paymentData.other.restDeposit - paymentData.other.retainedAmount).toFixed(0) }}</td>
             </tr>
 
-            <!-- 汇总行 -->
-            <tr class="summary-row">
-              <td class="summary-label">合计</td>
-              <td class="summary-total">{{ totalSummary.reserveCash.toFixed(0) }}</td>
-              <td class="summary-total">{{ totalSummary.hotelIncome.toFixed(0) }}</td>
-              <td class="summary-total">{{ totalSummary.restIncome.toFixed(0) }}</td>
-              <td class="summary-grand-total">{{ totalSummary.grandTotal.toFixed(0) }}</td>
-              <td class="summary-total">{{ totalSummary.hotelDeposit.toFixed(0) }}</td>
-              <td class="summary-total">{{ totalSummary.restDeposit.toFixed(0) }}</td>
-              <td class="summary-total">{{ totalSummary.retainedAmount.toFixed(0) }}</td>
-              <td class="handover-amount">
-                <div class="text-center">
-                  <div class="text-caption">交接款</div>
-                  <div class="text-h6 text-weight-bold text-green-8">{{ handoverAmount.toFixed(0) }}</div>
-                </div>
-              </td>
-            </tr>
+
           </tbody>
         </table>
 
@@ -256,18 +272,132 @@
         </div>
       </div>
     </div>
+
+    <!-- 历史记录对话框 -->
+    <q-dialog v-model="showHistoryDialog" maximized>
+      <q-card class="history-dialog">
+        <q-card-section class="row items-center q-pb-none">
+          <div class="text-h6">交接班历史记录</div>
+          <q-space />
+          <q-btn icon="close" flat round dense v-close-popup />
+        </q-card-section>
+
+        <q-card-section class="q-pt-none">
+          <!-- 搜索和筛选 -->
+          <div class="row q-gutter-md q-mb-md">
+            <q-input
+              v-model="historyFilter.cashierName"
+              label="收银员姓名"
+              dense
+              outlined
+              style="width: 200px"
+              @update:model-value="loadHistoryRecords"
+            />
+            <q-input
+              v-model="historyFilter.startDate"
+              label="开始日期"
+              type="date"
+              dense
+              outlined
+              style="width: 200px"
+              @update:model-value="loadHistoryRecords"
+            />
+            <q-input
+              v-model="historyFilter.endDate"
+              label="结束日期"
+              type="date"
+              dense
+              outlined
+              style="width: 200px"
+              @update:model-value="loadHistoryRecords"
+            />
+            <q-btn color="primary" icon="search" label="搜索" @click="loadHistoryRecords" />
+            <q-btn color="secondary" icon="refresh" label="刷新" @click="refreshHistory" />
+          </div>
+
+          <!-- 历史记录表格 -->
+          <q-table
+            :rows="historyRecords"
+            :columns="historyColumns"
+            row-key="id"
+            :loading="historyLoading"
+            :pagination="historyPagination"
+            @request="onHistoryRequest"
+            binary-state-sort
+            class="history-table"
+          >
+            <template v-slot:body-cell-actions="props">
+              <q-td :props="props">
+                <q-btn
+                  size="sm"
+                  color="primary"
+                  icon="visibility"
+                  label="查看"
+                  @click="viewHistoryRecord(props.row)"
+                  class="q-mr-sm"
+                />
+                <q-btn
+                  size="sm"
+                  color="green"
+                  icon="download"
+                  label="导出"
+                  @click="exportHistoryRecord(props.row)"
+                />
+              </q-td>
+            </template>
+          </q-table>
+        </q-card-section>
+      </q-card>
+    </q-dialog>
+
+    <!-- 历史记录详情对话框 -->
+    <q-dialog v-model="showHistoryDetailDialog" maximized>
+      <q-card class="history-detail-dialog">
+        <q-card-section class="row items-center q-pb-none">
+          <div class="text-h6">交接班记录详情</div>
+          <q-space />
+          <q-btn icon="close" flat round dense v-close-popup />
+        </q-card-section>
+
+        <q-card-section v-if="selectedHistoryRecord">
+          <div class="row q-col-gutter-md q-mb-md">
+            <div class="col-md-3">
+              <q-input label="日期" :model-value="selectedHistoryRecord.shift_date" readonly />
+            </div>
+            <div class="col-md-3">
+              <q-input label="班次时间" :model-value="selectedHistoryRecord.shift_time" readonly />
+            </div>
+            <div class="col-md-3">
+              <q-input label="收银员" :model-value="selectedHistoryRecord.cashier_name" readonly />
+            </div>
+            <div class="col-md-3">
+              <q-input label="类型" :model-value="selectedHistoryRecord.type" readonly />
+            </div>
+          </div>
+
+          <!-- 显示详细数据 -->
+          <div v-if="selectedHistoryRecord.details" class="q-mt-md">
+            <div class="text-h6 q-mb-md">交接班数据</div>
+            <pre class="history-data">{{ JSON.stringify(selectedHistoryRecord.details, null, 2) }}</pre>
+          </div>
+
+          <div v-if="selectedHistoryRecord.remarks" class="q-mt-md">
+            <div class="text-h6 q-mb-md">备注</div>
+            <div class="remarks-content">{{ selectedHistoryRecord.remarks }}</div>
+          </div>
+        </q-card-section>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { date } from 'quasar'
 import { useQuasar } from 'quasar'
-import { useRouter } from 'vue-router'
-import api, { shiftHandoverApi } from '../api/index.js'
+import { shiftHandoverApi } from '../api/index.js'
 
 const $q = useQuasar()
-const router = useRouter()
 
 // 基础数据
 const selectedDate = ref(date.formatDate(new Date(), 'YYYY-MM-DD'))
@@ -312,6 +442,75 @@ const taskList = ref([
   }
 ])
 
+// 历史记录相关
+const showHistoryDialog = ref(false)
+const showHistoryDetailDialog = ref(false)
+const historyRecords = ref([])
+const historyLoading = ref(false)
+const selectedHistoryRecord = ref(null)
+
+// 历史记录筛选条件
+const historyFilter = ref({
+  cashierName: '',
+  startDate: '',
+  endDate: ''
+})
+
+// 历史记录分页
+const historyPagination = ref({
+  sortBy: 'id',
+  descending: true,
+  page: 1,
+  rowsPerPage: 10,
+  rowsNumber: 0
+})
+
+// 历史记录表格列定义
+const historyColumns = [
+  {
+    name: 'id',
+    label: 'ID',
+    field: 'id',
+    sortable: true,
+    align: 'left'
+  },
+  {
+    name: 'shift_date',
+    label: '日期',
+    field: 'shift_date',
+    sortable: true,
+    align: 'center',
+    format: (val) => val ? new Date(val).toLocaleDateString() : ''
+  },
+  {
+    name: 'shift_time',
+    label: '班次时间',
+    field: 'shift_time',
+    sortable: true,
+    align: 'center'
+  },
+  {
+    name: 'cashier_name',
+    label: '收银员',
+    field: 'cashier_name',
+    sortable: true,
+    align: 'center'
+  },
+  {
+    name: 'type',
+    label: '类型',
+    field: 'type',
+    sortable: true,
+    align: 'center'
+  },
+  {
+    name: 'actions',
+    label: '操作',
+    field: 'actions',
+    align: 'center'
+  }
+]
+
 // 班次选项
 const shiftOptions = ['白班', '夜班']
 
@@ -321,15 +520,17 @@ const paymentData = ref({
     reserveCash: 320,
     hotelIncome: 0,
     restIncome: 100,
+    carRentIncome: 0,
     total: 420,
     hotelDeposit: 80,
     restDeposit: 0,
-    retainedAmount: 320
+    retainedAmount: 300
   },
   wechat: {
     reserveCash: 0,
     hotelIncome: 2523,
     restIncome: 0,
+    carRentIncome: 0,
     total: 2523,
     hotelDeposit: 20,
     restDeposit: 0,
@@ -339,6 +540,7 @@ const paymentData = ref({
     reserveCash: 0,
     hotelIncome: 300,
     restIncome: 160,
+    carRentIncome: 0,
     total: 460,
     hotelDeposit: 0,
     restDeposit: 0,
@@ -348,6 +550,7 @@ const paymentData = ref({
     reserveCash: 0,
     hotelIncome: 0,
     restIncome: 0,
+    carRentIncome: 0,
     total: 0,
     hotelDeposit: 0,
     restDeposit: 0,
@@ -355,49 +558,34 @@ const paymentData = ref({
   }
 })
 
+// 计算各项合计
+function calculateTotals() {
+  // 现金行：备用金 + 客房收入 + 休息房收入 + 租车收入 = 合计
+  paymentData.value.cash.total = (paymentData.value.cash.reserveCash || 0) +
+                                 (paymentData.value.cash.hotelIncome || 0) +
+                                 (paymentData.value.cash.restIncome || 0) +
+                                 (paymentData.value.cash.carRentIncome || 0)
+
+  // 其他支付方式：客房收入 + 休息房收入 + 租车收入 = 合计
+  Object.keys(paymentData.value).forEach(paymentType => {
+    if (paymentType !== 'cash') {
+      const payment = paymentData.value[paymentType]
+      payment.total = (payment.hotelIncome || 0) + (payment.restIncome || 0) + (payment.carRentIncome || 0)
+    }
+  })
+
+  // 注意：留存款(retainedAmount)不在这里计算，由用户手动输入
+  // 交接款会在模板中自动计算：合计 - 客房退押 - 休息退押 - 留存款
+}
+
 // 特殊统计
 const totalRooms = ref(29)
 const restRooms = ref(3)
 const vipCards = ref(6)
 
-// 计算汇总数据
-const totalSummary = computed(() => {
-  const summary = {
-    reserveCash: 0,
-    hotelIncome: 0,
-    restIncome: 0,
-    grandTotal: 0,
-    hotelDeposit: 0,
-    restDeposit: 0,
-    retainedAmount: 0
-  }
 
-  Object.values(paymentData.value).forEach(payment => {
-    summary.reserveCash += payment.reserveCash || 0
-    summary.hotelIncome += payment.hotelIncome || 0
-    summary.restIncome += payment.restIncome || 0
-    summary.grandTotal += payment.total || 0
-    summary.hotelDeposit += payment.hotelDeposit || 0
-    summary.restDeposit += payment.restDeposit || 0
-    summary.retainedAmount += payment.retainedAmount || 0
-  })
 
-  return summary
-})
 
-// 交接款计算
-const handoverAmount = computed(() => {
-  return totalSummary.value.grandTotal - totalSummary.value.hotelDeposit -
-         totalSummary.value.restDeposit - totalSummary.value.retainedAmount
-})
-
-// 计算各项合计
-function calculateTotals() {
-  Object.keys(paymentData.value).forEach(paymentType => {
-    const payment = paymentData.value[paymentType]
-    payment.total = (payment.reserveCash || 0) + (payment.hotelIncome || 0) + (payment.restIncome || 0)
-  })
-}
 
 // 加载班次数据
 async function loadShiftData() {
@@ -456,8 +644,6 @@ async function saveHandover() {
       notes: notes.value,
       taskList: taskList.value,
       paymentData: paymentData.value,
-      totalSummary: totalSummary.value,
-      handoverAmount: handoverAmount.value,
       specialStats: {
         totalRooms: totalRooms.value,
         restRooms: restRooms.value,
@@ -567,21 +753,11 @@ function printHandover() {
           <td>${paymentData.value.other.restDeposit}</td>
           <td>${paymentData.value.other.retainedAmount}</td>
         </tr>
-        <tr style="font-weight: bold; background-color: #f0f0f0;">
-          <td>合计</td>
-          <td>${totalSummary.value.reserveCash}</td>
-          <td>${totalSummary.value.hotelIncome}</td>
-          <td>${totalSummary.value.restIncome}</td>
-          <td>${totalSummary.value.grandTotal}</td>
-          <td>${totalSummary.value.hotelDeposit}</td>
-          <td>${totalSummary.value.restDeposit}</td>
-          <td>${totalSummary.value.retainedAmount}</td>
-        </tr>
+
       </tbody>
     </table>
 
     <div class="notes-section">
-      <p><strong>交接款: ¥${handoverAmount.value.toFixed(2)}</strong></p>
       <p><strong>开房数: ${totalRooms.value}</strong> &nbsp;&nbsp; <strong>休息房数: ${restRooms.value}</strong> &nbsp;&nbsp; <strong>大美卡: ${vipCards.value}</strong></p>
       <p><strong>收银员: ${cashierName.value}</strong></p>
       ${notes.value ? `<p><strong>备注:</strong> ${notes.value}</p>` : ''}
@@ -620,8 +796,6 @@ async function exportToExcel() {
       notes: notes.value,
       taskList: taskList.value,
       paymentData: paymentData.value,
-      totalSummary: totalSummary.value,
-      handoverAmount: handoverAmount.value,
       specialStats: {
         totalRooms: totalRooms.value,
         restRooms: restRooms.value,
@@ -688,10 +862,85 @@ function updateTaskStatus(taskId, completed) {
   }
 }
 
+// 历史记录相关方法
+async function loadHistoryRecords() {
+  historyLoading.value = true
+  try {
+    const params = {
+      page: historyPagination.value.page,
+      limit: historyPagination.value.rowsPerPage,
+      sortBy: historyPagination.value.sortBy,
+      descending: historyPagination.value.descending,
+      ...historyFilter.value
+    }
+
+    const response = await shiftHandoverApi.getHandoverHistory(params)
+    historyRecords.value = response.data || []
+    historyPagination.value.rowsNumber = response.total || 0
+  } catch (error) {
+    console.error('加载历史记录失败:', error)
+    $q.notify({
+      type: 'negative',
+      message: '加载历史记录失败'
+    })
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+async function onHistoryRequest(props) {
+  const { page, rowsPerPage, sortBy, descending } = props.pagination
+
+  historyPagination.value.page = page
+  historyPagination.value.rowsPerPage = rowsPerPage
+  historyPagination.value.sortBy = sortBy
+  historyPagination.value.descending = descending
+
+  await loadHistoryRecords()
+}
+
+function refreshHistory() {
+  historyFilter.value = {
+    cashierName: '',
+    startDate: '',
+    endDate: ''
+  }
+  historyPagination.value.page = 1
+  loadHistoryRecords()
+}
+
+function viewHistoryRecord(record) {
+  selectedHistoryRecord.value = record
+  showHistoryDetailDialog.value = true
+}
+
+async function exportHistoryRecord(record) {
+  try {
+    await shiftHandoverApi.exportHandover(record)
+    $q.notify({
+      type: 'positive',
+      message: '导出成功'
+    })
+  } catch (error) {
+    console.error('导出失败:', error)
+    $q.notify({
+      type: 'negative',
+      message: '导出失败'
+    })
+  }
+}
+
 // 监听支付数据变化
 watch(paymentData, () => {
   calculateTotals()
 }, { deep: true })
+
+// 监听历史记录对话框打开
+watch(showHistoryDialog, (newVal) => {
+  if (newVal) {
+    loadHistoryRecords()
+  }
+})
 
 // 组件挂载时初始化
 onMounted(async () => {
@@ -723,8 +972,12 @@ onMounted(async () => {
 .shift-table td {
   border: 1px solid #333;
   padding: 8px;
-  text-align: center;
+  text-align: center !important;
   vertical-align: middle;
+}
+
+.shift-table td * {
+  text-align: center !important;
 }
 
 .table-header {
@@ -736,8 +989,45 @@ onMounted(async () => {
 .sub-header {
   background-color: #e9ecef;
   font-weight: bold;
-  height: 35px;
-  font-size: 14px;
+  height: 45px;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.sub-header th {
+  vertical-align: middle;
+  text-align: center;
+  padding: 6px 4px;
+}
+
+.payment-method-header {
+  background-color: #e3f2fd;
+  width: 80px;
+}
+
+.income-header {
+  background-color: #f3e5f5;
+  width: 90px;
+}
+
+.total-header {
+  background-color: #fff3e0;
+  width: 80px;
+}
+
+.deposit-header {
+  background-color: #e8f5e8;
+  width: 80px;
+}
+
+.retained-header {
+  background-color: #fce4ec;
+  width: 80px;
+}
+
+.handover-header {
+  background-color: #e0f2f1;
+  width: 80px;
 }
 
 .payment-row {
@@ -745,42 +1035,73 @@ onMounted(async () => {
 }
 
 .cash-row {
-  background-color: #fff3cd;
+  background-color: #ffeaa7;
 }
 
 .wechat-row {
-  background-color: #d4edda;
+  background-color: #a4e8a4;
 }
 
 .digital-row {
-  background-color: #cce7ff;
+  background-color: #81c7f0;
 }
 
 .other-row {
-  background-color: #f8d7da;
+  background-color: #f0b7ba;
 }
 
 .payment-label {
   font-weight: bold;
   background-color: rgba(0, 0, 0, 0.05);
-  width: 100px;
+  width: 80px;
+  text-align: center !important;
+}
+
+.reserve-cash-cell {
+  background-color: white;
+  position: relative;
+  text-align: center !important;
+  font-weight: bold;
+}
+
+.editable-cell {
+  background-color: white;
+  position: relative;
+  text-align: center !important;
 }
 
 .auto-calculate {
   background-color: #f8f9fa;
   font-weight: bold;
+  text-align: center !important;
 }
 
 .total-cell {
   background-color: #ffe6cc;
   font-weight: bold;
   color: #d63384;
+  text-align: center !important;
 }
 
 .table-input {
-  text-align: center;
+  text-align: center !important;
   font-weight: bold;
+  width: 100%;
 }
+
+.table-input :deep(.q-field__control) {
+  text-align: center !important;
+}
+
+.table-input :deep(.q-field__native) {
+  text-align: center !important;
+}
+
+.table-input :deep(input) {
+  text-align: center !important;
+}
+
+
 
 
 
@@ -914,39 +1235,14 @@ onMounted(async () => {
 
 
 
-.summary-row {
-  background-color: #fff3e0;
+/* .summary-row {
+  background-color: #ff9800;
   font-weight: bold;
   height: 50px;
-}
-
-.summary-label {
-  background-color: #ff9800;
   color: white;
-  font-weight: bold;
-}
+} */
 
-.summary-total {
-  font-size: 16px;
-  color: #1976d2;
-}
 
-.summary-grand-total {
-  font-size: 18px;
-  color: #d32f2f;
-  font-weight: bold;
-}
-
-.handover-amount {
-  background-color: #c8e6c9;
-  border: 2px solid #4caf50;
-  font-weight: bold;
-}
-
-.handover-empty {
-  background-color: #f5f5f5;
-  border-right: 1px solid #ddd;
-}
 
 .special-stats-table {
   width: 100%;
@@ -1003,5 +1299,39 @@ onMounted(async () => {
   .notes-cell {
     width: 120px;
   }
+}
+
+/* 历史记录对话框样式 */
+.history-dialog {
+  width: 100%;
+  height: 100%;
+}
+
+.history-table {
+  margin-top: 16px;
+}
+
+.history-detail-dialog {
+  width: 100%;
+  height: 100%;
+}
+
+.history-data {
+  background-color: #f5f5f5;
+  padding: 16px;
+  border-radius: 8px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  max-height: 400px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.remarks-content {
+  background-color: #f9f9f9;
+  padding: 12px;
+  border-radius: 6px;
+  border-left: 4px solid #2196f3;
 }
 </style>

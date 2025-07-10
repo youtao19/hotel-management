@@ -290,20 +290,85 @@ async function saveHandover(handoverData) {
  * @param {string} endDate - 结束日期
  * @returns {Promise<Array>} 交接班记录列表
  */
-async function getHandoverHistory(startDate, endDate) {
-  const sql = `
+async function getHandoverHistory(startDate, endDate, page = 1, limit = 10, cashierName = '') {
+  let sql = `
     SELECT
       h.*,
       h.statistics->>'totalIncome' as total_income,
       h.statistics->>'handoverAmount' as handover_amount
     FROM shift_handover h
-    WHERE h.shift_date BETWEEN $1 AND $2
-    ORDER BY h.shift_date DESC, h.created_at DESC;
+    WHERE 1=1
   `;
 
+  const params = [];
+  let paramIndex = 1;
+
+  // 添加日期筛选
+  if (startDate) {
+    sql += ` AND h.shift_date >= $${paramIndex}`;
+    params.push(startDate);
+    paramIndex++;
+  }
+
+  if (endDate) {
+    sql += ` AND h.shift_date <= $${paramIndex}`;
+    params.push(endDate);
+    paramIndex++;
+  }
+
+  // 添加收银员筛选
+  if (cashierName) {
+    sql += ` AND h.cashier_name ILIKE $${paramIndex}`;
+    params.push(`%${cashierName}%`);
+    paramIndex++;
+  }
+
+  sql += ` ORDER BY h.id DESC`;
+
+  // 添加分页
+  const offset = (page - 1) * limit;
+  sql += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+  params.push(limit, offset);
+
   try {
-    const result = await query(sql, [startDate, endDate]);
-    return result.rows;
+    const result = await query(sql, params);
+
+    // 获取总数
+    let countSql = `
+      SELECT COUNT(*) as total
+      FROM shift_handover h
+      WHERE 1=1
+    `;
+
+    const countParams = [];
+    let countParamIndex = 1;
+
+    if (startDate) {
+      countSql += ` AND h.shift_date >= $${countParamIndex}`;
+      countParams.push(startDate);
+      countParamIndex++;
+    }
+
+    if (endDate) {
+      countSql += ` AND h.shift_date <= $${countParamIndex}`;
+      countParams.push(endDate);
+      countParamIndex++;
+    }
+
+    if (cashierName) {
+      countSql += ` AND h.cashier_name ILIKE $${countParamIndex}`;
+      countParams.push(`%${cashierName}%`);
+    }
+
+    const countResult = await query(countSql, countParams);
+    const total = parseInt(countResult.rows[0].total);
+
+    return {
+      data: result.rows,
+      total: total,
+      page: page,
+      limit: limit
+    };
   } catch (error) {
     console.error('获取交接班历史记录失败:', error);
     throw error;
