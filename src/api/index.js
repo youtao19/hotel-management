@@ -164,4 +164,25 @@ export const inventoryApi = {
   updateInventory: (date, typeCode, data) => api.patch(`/inventory/${date}/${typeCode}`, data),
 }
 
+// 交接班相关接口
+export const shiftHandoverApi = {
+  // 获取收款明细
+  getReceiptDetails: (params) => api.get('/shift-handover/receipts', { params }),
+
+  // 获取统计数据
+  getStatistics: (params) => api.get('/shift-handover/statistics', { params }),
+
+  // 保存交接班记录
+  saveHandover: (handoverData) => api.post('/shift-handover/save', handoverData),
+
+  // 获取历史记录
+  getHandoverHistory: (params) => api.get('/shift-handover/history', { params }),
+
+  // 导出Excel
+  exportHandover: (handoverData) => api.post('/shift-handover/export', handoverData, { responseType: 'blob' }),
+
+  // 导出新版Excel
+  exportNewHandover: (handoverData) => api.post('/shift-handover/export-new', handoverData, { responseType: 'blob' }),
+}
+
 export default api;

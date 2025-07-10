@@ -173,6 +173,14 @@
           color="positive"
           @click="emitCheckout"
         />
+        <q-btn
+          v-if="currentOrder && canRefundDeposit(currentOrder)"
+          flat
+          label="退押金"
+          color="purple"
+          icon="account_balance_wallet"
+          @click="emitRefundDeposit"
+        />
       </q-card-actions>
     </q-card>
   </q-dialog>
@@ -192,7 +200,7 @@ const props = defineProps({
   formatDateTime: Function
 });
 
-const emit = defineEmits(['update:modelValue', 'check-in', 'change-room', 'checkout']);
+const emit = defineEmits(['update:modelValue', 'check-in', 'change-room', 'checkout', 'refund-deposit']);
 
 function emitCheckIn() {
   emit('check-in');
@@ -202,5 +210,21 @@ function emitChangeRoom() {
 }
 function emitCheckout() {
   emit('checkout');
+}
+
+function emitRefundDeposit() {
+  emit('refund-deposit');
+}
+
+// 判断是否可以退押金
+function canRefundDeposit(order) {
+  if (!order) return false
+
+  const hasDeposit = (order.deposit || 0) > 0
+  const refundedDeposit = order.refundedDeposit || 0
+  const canRefund = ['checked-out', 'cancelled'].includes(order.status)
+  const hasRemainingDeposit = refundedDeposit < (order.deposit || 0)
+
+  return hasDeposit && canRefund && hasRemainingDeposit
 }
 </script>

@@ -193,7 +193,21 @@ async function saveHandover(handoverData) {
     throw new Error('交接班数据不能为空');
   }
 
+  // 兼容新旧格式
   const {
+    // 新格式字段
+    date,
+    shift,
+    handoverPerson,
+    receivePerson,
+    cashierName,
+    notes,
+    paymentData,
+    totalSummary,
+    handoverAmount,
+    specialStats,
+
+    // 旧格式字段 (向后兼容)
     type = 'hotel',
     details = [],
     statistics = {},
@@ -203,18 +217,38 @@ async function saveHandover(handoverData) {
     shift_date = new Date().toISOString().split('T')[0]
   } = handoverData;
 
+  // 确定最终字段值 (新格式优先)
+  const finalCashierName = cashierName || cashier_name;
+  const finalShiftTime = shift_time || new Date().toTimeString().slice(0, 5);
+  const finalShiftDate = date || shift_date;
+  const finalRemarks = notes || remarks;
+
   // 验证必填字段
-  if (!cashier_name || cashier_name.trim() === '' || cashier_name === '未知') {
+  if (!finalCashierName || finalCashierName.trim() === '' || finalCashierName === '未知') {
     throw new Error('收银员姓名不能为空');
   }
 
-  if (!shift_time || shift_time.trim() === '') {
-    throw new Error('交班时间不能为空');
-  }
+  // 构造完整的交接班数据
+  const fullHandoverData = {
+    // 基本信息
+    date: finalShiftDate,
+    shift: shift || '白班',
+    handoverPerson: handoverPerson || '',
+    receivePerson: receivePerson || '',
+    cashierName: finalCashierName,
+    notes: finalRemarks,
 
-  if (!type || !['hotel', 'rest'].includes(type)) {
-    throw new Error('交接班类型必须是 hotel 或 rest');
-  }
+    // 支付数据
+    paymentData: paymentData || {},
+    totalSummary: totalSummary || {},
+    handoverAmount: handoverAmount || 0,
+    specialStats: specialStats || {},
+
+    // 兼容旧格式
+    type,
+    details,
+    statistics
+  };
 
   const sql = `
     INSERT INTO shift_handover (
@@ -232,12 +266,12 @@ async function saveHandover(handoverData) {
   try {
     const result = await query(sql, [
       type,
-      JSON.stringify(details || []),
-      JSON.stringify(statistics || {}),
-      remarks || '',
-      cashier_name.trim(),
-      shift_time.trim(),
-      shift_date
+      JSON.stringify(fullHandoverData),
+      JSON.stringify(totalSummary || statistics || {}),
+      finalRemarks,
+      finalCashierName.trim(),
+      finalShiftTime,
+      finalShiftDate
     ]);
 
     return result.rows[0];
@@ -336,10 +370,157 @@ async function exportHandoverToExcel(handoverData) {
   }
 }
 
+/**
+ * 导出新版交接班表格为Excel格式
+ * @param {Object} handoverData - 交接班数据
+ * @returns {Promise<Buffer>} Excel文件缓冲区
+ */
+async function exportNewHandoverToExcel(handoverData) {
+  try {
+    const XLSX = require('xlsx');
+
+    const {
+      date,
+      shift,
+      handoverPerson,
+      receivePerson,
+      cashierName,
+      notes,
+      paymentData,
+      totalSummary,
+      handoverAmount,
+      specialStats
+    } = handoverData;
+
+    // 创建工作簿
+    const workbook = XLSX.utils.book_new();
+
+    // 创建交接班表格数据
+    const sheetData = [
+      // 标题行
+      ['交接班记录'],
+      [`日期: ${date}`, `班次: ${shift}`, `交班人: ${handoverPerson}`, `接班人: ${receivePerson}`],
+      [],
+      // 表头
+      ['支付方式', '各用金', '客房收入1', '休息房收入2', '租车收入3', '合计', '客房退押', '休息退押', '留存款', '备注'],
+      // 现金行
+      [
+        '现金',
+        paymentData.cash.reserveCash || 0,
+        paymentData.cash.hotelIncome || 0,
+        paymentData.cash.restIncome || 0,
+        0, // 租车收入
+        paymentData.cash.total || 0,
+        paymentData.cash.hotelDeposit || 0,
+        paymentData.cash.restDeposit || 0,
+        paymentData.cash.retainedAmount || 0,
+        notes || ''
+      ],
+      // 微信行
+      [
+        '微信',
+        paymentData.wechat.reserveCash || 0,
+        paymentData.wechat.hotelIncome || 0,
+        paymentData.wechat.restIncome || 0,
+        0,
+        paymentData.wechat.total || 0,
+        paymentData.wechat.hotelDeposit || 0,
+        paymentData.wechat.restDeposit || 0,
+        paymentData.wechat.retainedAmount || 0,
+        ''
+      ],
+      // 数码付行
+      [
+        '数码付',
+        paymentData.digital.reserveCash || 0,
+        paymentData.digital.hotelIncome || 0,
+        paymentData.digital.restIncome || 0,
+        0,
+        paymentData.digital.total || 0,
+        paymentData.digital.hotelDeposit || 0,
+        paymentData.digital.restDeposit || 0,
+        paymentData.digital.retainedAmount || 0,
+        ''
+      ],
+      // 其他方式行
+      [
+        '其他方式',
+        paymentData.other.reserveCash || 0,
+        paymentData.other.hotelIncome || 0,
+        paymentData.other.restIncome || 0,
+        0,
+        paymentData.other.total || 0,
+        paymentData.other.hotelDeposit || 0,
+        paymentData.other.restDeposit || 0,
+        paymentData.other.retainedAmount || 0,
+        ''
+      ],
+      // 合计行
+      [
+        '合计',
+        totalSummary.reserveCash || 0,
+        totalSummary.hotelIncome || 0,
+        totalSummary.restIncome || 0,
+        0,
+        totalSummary.grandTotal || 0,
+        totalSummary.hotelDeposit || 0,
+        totalSummary.restDeposit || 0,
+        totalSummary.retainedAmount || 0,
+        `交接款: ${handoverAmount || 0}`
+      ],
+      [],
+      // 特殊统计
+      ['特殊统计'],
+      ['项目', '数量', '收银员', cashierName || ''],
+      ['好评', '遗1得1', '', ''],
+      ['大美卡', specialStats?.vipCards || 0, '', ''],
+      ['开房数', specialStats?.totalRooms || 0, '', ''],
+      ['休息房数', specialStats?.restRooms || 0, '', '']
+    ];
+
+    // 创建工作表
+    const worksheet = XLSX.utils.aoa_to_sheet(sheetData);
+
+    // 设置列宽
+    worksheet['!cols'] = [
+      { wch: 10 }, // 支付方式
+      { wch: 10 }, // 各用金
+      { wch: 12 }, // 客房收入1
+      { wch: 12 }, // 休息房收入2
+      { wch: 12 }, // 租车收入3
+      { wch: 10 }, // 合计
+      { wch: 10 }, // 客房退押
+      { wch: 10 }, // 休息退押
+      { wch: 10 }, // 留存款
+      { wch: 30 }  // 备注
+    ];
+
+    // 合并标题单元格
+    worksheet['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 9 } }, // 标题行合并
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 1 } }, // 日期
+      { s: { r: 1, c: 2 }, e: { r: 1, c: 3 } }, // 班次
+      { s: { r: 4, c: 9 }, e: { r: 7, c: 9 } }  // 备注列合并
+    ];
+
+    // 添加到工作簿
+    XLSX.utils.book_append_sheet(workbook, worksheet, '交接班记录');
+
+    // 生成Excel文件
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    return buffer;
+
+  } catch (error) {
+    console.error('导出新版Excel失败:', error);
+    throw error;
+  }
+}
+
 module.exports = {
   getReceiptDetails,
   getStatistics,
   saveHandover,
   getHandoverHistory,
-  exportHandoverToExcel
+  exportHandoverToExcel,
+  exportNewHandoverToExcel
 };

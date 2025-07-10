@@ -54,6 +54,10 @@
                   v-if="props.row.status === 'checked-out'">
                   <q-tooltip>续住</q-tooltip>
                 </q-btn>
+                <q-btn flat round dense color="purple" icon="account_balance_wallet" @click="openRefundDepositDialog(props.row)"
+                  v-if="canRefundDeposit(props.row)">
+                  <q-tooltip>退押金</q-tooltip>
+                </q-btn>
               </q-btn-group>
             </q-td>
           </template>
@@ -96,6 +100,7 @@
       @check-in="checkInOrderFromDetails"
       @change-room="openChangeRoomDialog"
       @checkout="checkoutOrderFromDetails"
+      @refund-deposit="openRefundDepositFromDetails"
     />
 
 
@@ -126,6 +131,15 @@
       @refresh-rooms="handleRefreshExtendStayRooms"
     />
 
+    <!-- 退押金对话框 -->
+    <RefundDepositDialog
+      v-model="showRefundDepositDialog"
+      :order="refundDepositOrder"
+      :getStatusColor="getStatusColor"
+      :getOrderStatusText="viewStore.getOrderStatusText"
+      @refund-deposit="handleRefundDeposit"
+    />
+
     </div>
   </q-page>
 </template>
@@ -141,6 +155,7 @@ import OrderDetailsDialog from 'src/components/OrderDetailsDialog.vue';
 import ChangeRoomDialog from 'src/components/ChangeRoomDialog.vue';
 import Bill from 'src/components/Bill.vue';
 import ExtendStayDialog from 'src/components/ExtendStayDialog.vue';
+import RefundDepositDialog from 'src/components/RefundDepositDialog.vue';
 
 // 初始化 stores
 const orderStore = useOrderStore()
@@ -344,6 +359,10 @@ const showExtendStayDialog = ref(false)
 const extendStayOrder = ref(null)
 const extendStayRoomOptions = ref([])
 const loadingExtendStayRooms = ref(false)
+
+// 退押金相关变量
+const showRefundDepositDialog = ref(false)
+const refundDepositOrder = ref(null)
 
 // 办理退房
 async function checkoutOrder(order) {
@@ -908,6 +927,88 @@ async function handleRefreshExtendStayRooms(dateRange) {
     });
   } finally {
     loadingExtendStayRooms.value = false;
+  }
+}
+
+// 判断是否可以退押金
+function canRefundDeposit(order) {
+  // 已退房、已取消的订单，且押金大于0，且还未完全退押金
+  if (!order) return false
+
+  const hasDeposit = (order.deposit || 0) > 0
+  const refundedDeposit = order.refundedDeposit || 0
+  const canRefund = ['checked-out', 'cancelled'].includes(order.status)
+  const hasRemainingDeposit = refundedDeposit < (order.deposit || 0)
+
+  return hasDeposit && canRefund && hasRemainingDeposit
+}
+
+// 打开退押金对话框
+function openRefundDepositDialog(order) {
+  if (!canRefundDeposit(order)) {
+    $q.notify({
+      type: 'negative',
+      message: '该订单不满足退押金条件',
+      position: 'top'
+    })
+    return
+  }
+
+  refundDepositOrder.value = order
+  showRefundDepositDialog.value = true
+}
+
+// 从订单详情页面打开退押金对话框
+function openRefundDepositFromDetails() {
+  if (currentOrder.value) {
+    openRefundDepositDialog(currentOrder.value)
+  }
+}
+
+// 处理退押金
+async function handleRefundDeposit(refundData) {
+  try {
+    console.log('处理退押金请求:', refundData)
+
+    // TODO: 这里应该调用 orderStore 的退押金方法
+    // await orderStore.refundDeposit(refundData)
+
+    // 模拟API调用成功
+    const updatedOrder = {
+      ...refundDepositOrder.value,
+      refundedDeposit: (refundDepositOrder.value.refundedDeposit || 0) + refundData.actualRefundAmount
+    }
+
+    // 更新本地订单数据
+    const orderIndex = orderStore.orders.findIndex(order => order.orderNumber === refundData.orderNumber)
+    if (orderIndex !== -1) {
+      orderStore.orders[orderIndex] = updatedOrder
+    }
+
+    // 更新当前正在查看的订单详情
+    if (currentOrder.value && currentOrder.value.orderNumber === refundData.orderNumber) {
+      currentOrder.value = updatedOrder
+    }
+
+    // 关闭对话框
+    showRefundDepositDialog.value = false
+
+    // 刷新订单列表
+    await fetchAllOrders()
+
+    $q.notify({
+      type: 'positive',
+      message: `退押金成功！实际退款：¥${refundData.actualRefundAmount}`,
+      position: 'top'
+    })
+
+  } catch (error) {
+    console.error('退押金处理失败:', error)
+    $q.notify({
+      type: 'negative',
+      message: '退押金处理失败: ' + (error.message || '未知错误'),
+      position: 'top'
+    })
   }
 }
 

@@ -5,16 +5,15 @@ export const useViewStore = defineStore('view', () => {
   // 房间类型选项数组，用于类型筛选下拉框
   const roomTypeOptions = [
     { label: '所有房型', value: null },  // null值表示不筛选
-    { label: '阿苏晚筑', value: 'asu_wan_zhu' },
     { label: '阿苏晓筑', value: 'asu_xiao_zhu' },
-    { label: '行云阁有个院子', value: 'xing_yun_ge' },
+    { label: '行云阁', value: 'xing_yun_ge' },
+    { label: '有个院子', value: 'you_ge_yuan_zi' },
     { label: '声声慢投影大床', value: 'sheng_sheng_man' },
     { label: '忆江南大床房', value: 'yi_jiang_nan' },
     { label: '云居云端影音房', value: 'yun_ju_ying_yin' },
     { label: '泊野双床', value: 'bo_ye_shuang' },
     { label: '暖居家庭房', value: 'nuan_ju_jiating' },
     { label: '醉山塘', value: 'zui_shan_tang' },
-    { label: '休息房', value: 'rest' }  // 保留休息房
   ]
 
   // 房间状态选项数组，用于状态筛选下拉框
@@ -65,7 +64,15 @@ export const useViewStore = defineStore('view', () => {
   const paymentMethodOptions = [
     { label: '微邮付', value: 'weiyoufu', icon: 'mdi-alipay' },
     { label: '微信', value: 'wechat', icon: 'mdi-wechat' },
-    { label: '现金', value: 'cash', icon: 'mdi-cash' }
+    { label: '现金', value: 'cash', icon: 'mdi-cash' },
+    { label: '平台', value: 'platform', icon: 'mdi-cash' }
+  ]
+
+  // 退押金状态选项
+  const depositRefundStatusOptions = [
+    { label: '未退押金', value: 'not_refunded' },
+    { label: '部分退押金', value: 'partially_refunded' },
+    { label: '已全部退押金', value: 'fully_refunded' }
   ]
 
     // 房型数据映射（用于动态获取房型名称）
@@ -101,16 +108,15 @@ export const useViewStore = defineStore('view', () => {
 
     // 如果无法从数据库获取，使用硬编码映射作为备用
     switch (type) {
-      case 'asu_wan_zhu': return '阿苏晚筑'
       case 'asu_xiao_zhu': return '阿苏晓筑'
-      case 'xing_yun_ge': return '行云阁有个院子'
+      case 'xing_yun_ge': return '行云阁'
+      case 'you_ge_yuan_zi': return '有个院子'
       case 'sheng_sheng_man': return '声声慢投影大床'
       case 'yi_jiang_nan': return '忆江南大床房'
       case 'yun_ju_ying_yin': return '云居云端影音房'
       case 'bo_ye_shuang': return '泊野双床'
       case 'nuan_ju_jiating': return '暖居家庭房'
       case 'zui_shan_tang': return '醉山塘'
-      case 'rest': return '休息房'  // 保留休息房
       default: return type
     }
   }
@@ -162,6 +168,28 @@ export const useViewStore = defineStore('view', () => {
   }
 
   /**
+   * 获取押金退款状态
+   * @param {Object} order - 订单对象
+   * @returns {string} 押金退款状态
+   */
+  function getDepositRefundStatus(order) {
+    if (!order || (order.deposit || 0) <= 0) {
+      return 'not_applicable' // 无押金
+    }
+
+    const originalDeposit = order.deposit || 0
+    const refundedDeposit = order.refundedDeposit || 0
+
+    if (refundedDeposit <= 0) {
+      return 'not_refunded'
+    } else if (refundedDeposit >= originalDeposit) {
+      return 'fully_refunded'
+    } else {
+      return 'partially_refunded'
+    }
+  }
+
+  /**
    * 格式化日期时间显示
    * @param {string} dateString - 日期时间字符串，如 ISO 格式
    * @param {boolean} includeTime - 是否包含时间部分
@@ -205,6 +233,7 @@ export const useViewStore = defineStore('view', () => {
     statusOptions,
     orderStatusOptions,
     paymentMethodOptions,
+    depositRefundStatusOptions,
     roomTypeMap,
     updateRoomTypeMap,
     getRoomTypeName,
@@ -213,6 +242,7 @@ export const useViewStore = defineStore('view', () => {
     getOrderStatusText,
     getPaymentMethodName,
     getPaymentMethodIcon,
+    getDepositRefundStatus,
     formatDate
   }
 })

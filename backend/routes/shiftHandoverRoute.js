@@ -132,4 +132,23 @@ router.post('/export', async (req, res) => {
   }
 });
 
+// 新的导出Excel接口（表格样式）
+router.post('/export-new', async (req, res) => {
+  try {
+    const { exportNewHandoverToExcel } = require('../modules/shiftHandoverModule');
+    const buffer = await exportNewHandoverToExcel(req.body);
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="交接班记录_${req.body.date}_${req.body.shift}.xlsx"`);
+    res.send(buffer);
+  } catch (error) {
+    console.error('导出新版Excel失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '导出新版Excel失败',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;

@@ -1,237 +1,186 @@
 <template>
   <q-page class="shift-handover">
     <div class="q-pa-md">
-      <div class="row q-col-gutter-md">
-        <!-- 提示信息区域 -->
-        <div class="col-md-8 col-xs-12">
-          <q-card>
-            <q-card-section class="bg-info text-white">
-              <div class="row items-center justify-between">
-                <div class="text-h6">
-                  <q-icon name="info" class="q-mr-xs" />
-                  收款明细表已移至收入统计
-                </div>
-                <q-btn
-                  color="white"
-                  text-color="info"
-                  icon="trending_up"
-                  label="查看收入统计"
-                  size="sm"
-                  @click="goToRevenueStatistics"
-                />
-              </div>
-            </q-card-section>
-
-            <q-card-section>
-              <div class="text-body1 q-mb-md">
-                收款明细表功能已迁移到<strong>收入统计</strong>页面，您可以在那里：
-              </div>
-              <div class="q-ml-md">
-                <div class="text-body2 q-mb-xs">• 查看客房住宿和休息房的详细收款明细</div>
-                <div class="text-body2 q-mb-xs">• 按日期范围筛选收款记录</div>
-                <div class="text-body2 q-mb-xs">• 按支付方式统计收款金额</div>
-                <div class="text-body2 q-mb-xs">• 导出Excel收款明细表</div>
-              </div>
-            </q-card-section>
-          </q-card>
+      <!-- 标题和操作区域 -->
+      <div class="row items-center justify-between q-mb-md">
+        <div class="text-h4 text-weight-bold">交接班</div>
+        <div class="row q-gutter-md">
+          <q-btn color="primary" icon="print" label="打印" @click="printHandover" />
+          <q-btn color="green" icon="download" label="导出Excel" @click="exportToExcel" />
+          <q-btn color="orange" icon="save" label="保存交接记录" @click="saveHandover" />
         </div>
+      </div>
 
-        <!-- 统计区域 -->
-        <div class="col-md-4 col-xs-12">
-          <q-card>
-            <q-card-section class="bg-secondary text-white">
-              <div class="text-h6">
-                <q-icon name="summarize" class="q-mr-xs" />
-                交接班统计
-              </div>
-            </q-card-section>
+      <!-- 日期和班次信息 -->
+      <div class="row q-col-gutter-md q-mb-md">
+        <div class="col-md-3">
+          <q-input v-model="selectedDate" type="date" label="交接日期" filled @update:model-value="loadShiftData" />
+        </div>
+        <div class="col-md-3">
+          <q-select v-model="currentShift" :options="shiftOptions" label="当前班次" filled @update:model-value="loadShiftData" />
+        </div>
+        <div class="col-md-3">
+          <q-input v-model="handoverPerson" label="交班人" filled />
+        </div>
+        <div class="col-md-3">
+          <q-input v-model="receivePerson" label="接班人" filled />
+        </div>
+      </div>
 
-            <q-card-section class="q-pa-none">
-              <!-- 收入统计 -->
-              <q-list bordered separator>
-                <q-item-label header class="text-weight-bold bg-blue-1">收入统计</q-item-label>
+      <!-- 主要交接班表格 -->
+      <div class="shift-table-container">
+        <table class="shift-table">
+          <!-- 表头 -->
+          <thead>
+            <tr class="table-header">
+              <th colspan="8" class="text-center text-h6 text-weight-bold">交接班</th>
+              <th rowspan="2" class="notes-header">备忘录</th>
+            </tr>
+            <tr class="sub-header">
+              <th>各用金</th>
+              <th>客房收入1</th>
+              <th>休息房收入2</th>
+              <th>租车收入3</th>
+              <th>合计</th>
+              <th>客房退押</th>
+              <th>休息退押</th>
+              <th>留存款</th>
+            </tr>
+          </thead>
 
-                <q-item>
-                  <q-item-section>
-                    <q-item-label>备用金</q-item-label>
-                  </q-item-section>
-                  <q-item-section side>
-                    <q-input
-                      v-model.number="statistics.reserveCash"
-                      type="number"
-                      dense
-                      filled
-                      prefix="¥"
-                      class="text-right"
-                      style="width: 100px"
-                      @update:model-value="updateStatistics"
-                    />
-                  </q-item-section>
-                </q-item>
+          <!-- 支付方式行 -->
+          <tbody>
+            <!-- 现金 -->
+            <tr class="payment-row cash-row">
+              <td class="payment-label">现金</td>
+              <td>
+                <q-input v-model.number="paymentData.cash.reserveCash" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
+              </td>
+              <td class="auto-calculate">{{ paymentData.cash.hotelIncome.toFixed(0) }}</td>
+              <td class="auto-calculate">{{ paymentData.cash.restIncome.toFixed(0) }}</td>
+              <td class="total-cell">{{ paymentData.cash.total.toFixed(0) }}</td>
+              <td>
+                <q-input v-model.number="paymentData.cash.hotelDeposit" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
+              </td>
+              <td>
+                <q-input v-model.number="paymentData.cash.restDeposit" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
+              </td>
+              <td>
+                <q-input v-model.number="paymentData.cash.retainedAmount" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
+              </td>
+              <td rowspan="4" class="notes-cell">
+                <q-input v-model="notes" type="textarea" rows="8" placeholder="记录交接班相关信息..." borderless class="notes-input" />
+              </td>
+            </tr>
 
-                <q-item>
-                  <q-item-section>
-                    <q-item-label>客房住宿收入</q-item-label>
-                  </q-item-section>
-                  <q-item-section side>
-                    <q-item-label class="text-weight-bold text-positive">¥{{ statistics.hotelIncome.toFixed(2) }}</q-item-label>
-                  </q-item-section>
-                </q-item>
+            <!-- 微信 -->
+            <tr class="payment-row wechat-row">
+              <td class="payment-label">微信</td>
+              <td class="auto-calculate">{{ paymentData.wechat.reserveCash.toFixed(0) }}</td>
+              <td class="auto-calculate">{{ paymentData.wechat.hotelIncome.toFixed(0) }}</td>
+              <td class="auto-calculate">{{ paymentData.wechat.restIncome.toFixed(0) }}</td>
+              <td class="total-cell">{{ paymentData.wechat.total.toFixed(0) }}</td>
+              <td>
+                <q-input v-model.number="paymentData.wechat.hotelDeposit" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
+              </td>
+              <td>
+                <q-input v-model.number="paymentData.wechat.restDeposit" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
+              </td>
+              <td>
+                <q-input v-model.number="paymentData.wechat.retainedAmount" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
+              </td>
+            </tr>
 
-                <q-item>
-                  <q-item-section>
-                    <q-item-label>休息房收入</q-item-label>
-                  </q-item-section>
-                  <q-item-section side>
-                    <q-item-label class="text-weight-bold text-positive">¥{{ statistics.restIncome.toFixed(2) }}</q-item-label>
-                  </q-item-section>
-                </q-item>
+            <!-- 数码付 -->
+            <tr class="payment-row digital-row">
+              <td class="payment-label">数码付</td>
+              <td>
+                <q-input v-model.number="paymentData.digital.reserveCash" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
+              </td>
+              <td class="auto-calculate">{{ paymentData.digital.hotelIncome.toFixed(0) }}</td>
+              <td class="auto-calculate">{{ paymentData.digital.restIncome.toFixed(0) }}</td>
+              <td class="total-cell">{{ paymentData.digital.total.toFixed(0) }}</td>
+              <td>
+                <q-input v-model.number="paymentData.digital.hotelDeposit" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
+              </td>
+              <td>
+                <q-input v-model.number="paymentData.digital.restDeposit" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
+              </td>
+              <td>
+                <q-input v-model.number="paymentData.digital.retainedAmount" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
+              </td>
+            </tr>
 
-                <q-item>
-                  <q-item-section>
-                    <q-item-label>租车收入</q-item-label>
-                  </q-item-section>
-                  <q-item-section side>
-                    <q-input
-                      v-model.number="statistics.carRentalIncome"
-                      type="number"
-                      dense
-                      filled
-                      prefix="¥"
-                      class="text-right"
-                      style="width: 100px"
-                      @update:model-value="updateStatistics"
-                    />
-                  </q-item-section>
-                </q-item>
+            <!-- 其他方式 -->
+            <tr class="payment-row other-row">
+              <td class="payment-label">其他方式</td>
+              <td>
+                <q-input v-model.number="paymentData.other.reserveCash" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
+              </td>
+              <td class="auto-calculate">{{ paymentData.other.hotelIncome.toFixed(0) }}</td>
+              <td class="auto-calculate">{{ paymentData.other.restIncome.toFixed(0) }}</td>
+              <td class="total-cell">{{ paymentData.other.total.toFixed(0) }}</td>
+              <td>
+                <q-input v-model.number="paymentData.other.hotelDeposit" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
+              </td>
+              <td>
+                <q-input v-model.number="paymentData.other.restDeposit" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
+              </td>
+              <td>
+                <q-input v-model.number="paymentData.other.retainedAmount" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
+              </td>
+            </tr>
+          </tbody>
+        </table>
 
-                <q-item class="bg-amber-1">
-                  <q-item-section>
-                    <q-item-label class="text-weight-bold">合计</q-item-label>
-                  </q-item-section>
-                  <q-item-section side>
-                    <q-item-label class="text-h6 text-positive">¥{{ statistics.totalIncome.toFixed(2) }}</q-item-label>
-                  </q-item-section>
-                </q-item>
-
-                <q-item-label header class="text-weight-bold bg-orange-1">退押统计</q-item-label>
-
-                <q-item>
-                  <q-item-section>
-                    <q-item-label>客房退押</q-item-label>
-                  </q-item-section>
-                  <q-item-section side>
-                    <q-input
-                      v-model.number="statistics.hotelDeposit"
-                      type="number"
-                      dense
-                      filled
-                      prefix="¥"
-                      class="text-right"
-                      style="width: 100px"
-                      @update:model-value="updateStatistics"
-                    />
-                  </q-item-section>
-                </q-item>
-
-                <q-item>
-                  <q-item-section>
-                    <q-item-label>休息退押</q-item-label>
-                  </q-item-section>
-                  <q-item-section side>
-                    <q-input
-                      v-model.number="statistics.restDeposit"
-                      type="number"
-                      dense
-                      filled
-                      prefix="¥"
-                      class="text-right"
-                      style="width: 100px"
-                      @update:model-value="updateStatistics"
-                    />
-                  </q-item-section>
-                </q-item>
-
-                <q-item>
-                  <q-item-section>
-                    <q-item-label>留存款</q-item-label>
-                  </q-item-section>
-                  <q-item-section side>
-                    <q-input
-                      v-model.number="statistics.retainedAmount"
-                      type="number"
-                      dense
-                      filled
-                      prefix="¥"
-                      class="text-right"
-                      style="width: 100px"
-                      @update:model-value="updateStatistics"
-                    />
-                  </q-item-section>
-                </q-item>
-
-                <q-item class="bg-green-1">
-                  <q-item-section>
-                    <q-item-label class="text-weight-bold">交接款</q-item-label>
-                  </q-item-section>
-                  <q-item-section side>
-                    <q-item-label class="text-h6 text-green-8">¥{{ statistics.handoverAmount.toFixed(2) }}</q-item-label>
-                  </q-item-section>
-                </q-item>
-              </q-list>
-
-              <!-- 特殊统计项 -->
-              <div class="q-pa-md">
-                <div class="text-subtitle2 q-mb-sm">特殊统计</div>
-                <div class="row q-col-gutter-sm">
-                  <div class="col-6">
-                    <q-card class="bg-green-1 text-center">
-                      <q-card-section class="q-pa-sm">
-                        <div class="text-caption">好评</div>
-                        <q-input
-                          v-model.number="statistics.goodReviews"
-                          type="number"
-                          dense
-                          borderless
-                          class="text-center text-h6"
-                        />
-                      </q-card-section>
-                    </q-card>
-                  </div>
-                  <div class="col-6">
-                    <q-card class="bg-blue-1 text-center">
-                      <q-card-section class="q-pa-sm">
-                        <div class="text-caption">大美卡</div>
-                        <q-input
-                          v-model.number="statistics.vipCards"
-                          type="number"
-                          dense
-                          borderless
-                          class="text-center text-h6"
-                        />
-                      </q-card-section>
-                    </q-card>
-                  </div>
-                  <div class="col-6">
-                    <q-card class="bg-purple-1 text-center">
-                      <q-card-section class="q-pa-sm">
-                        <div class="text-caption">开房</div>
-                        <div class="text-h6">{{ statistics.totalRooms }}</div>
-                      </q-card-section>
-                    </q-card>
-                  </div>
-                  <div class="col-6">
-                    <q-card class="bg-orange-1 text-center">
-                      <q-card-section class="q-pa-sm">
-                        <div class="text-caption">休息房</div>
-                        <div class="text-h6">{{ statistics.restRooms }}</div>
-                      </q-card-section>
-                    </q-card>
-                  </div>
+        <!-- 汇总行 -->
+        <table class="shift-table summary-table">
+          <tbody>
+            <tr class="summary-row">
+              <td class="summary-label">合计</td>
+              <td class="summary-total">{{ totalSummary.reserveCash.toFixed(0) }}</td>
+              <td class="summary-total">{{ totalSummary.hotelIncome.toFixed(0) }}</td>
+              <td class="summary-total">{{ totalSummary.restIncome.toFixed(0) }}</td>
+              <td class="summary-grand-total">{{ totalSummary.grandTotal.toFixed(0) }}</td>
+              <td class="summary-total">{{ totalSummary.hotelDeposit.toFixed(0) }}</td>
+              <td class="summary-total">{{ totalSummary.restDeposit.toFixed(0) }}</td>
+              <td class="summary-total">{{ totalSummary.retainedAmount.toFixed(0) }}</td>
+              <td class="handover-amount">
+                <div class="text-center">
+                  <div class="text-caption">交接款</div>
+                  <div class="text-h6 text-weight-bold text-green-8">{{ handoverAmount.toFixed(0) }}</div>
                 </div>
-              </div>
-            </q-card-section>
-          </q-card>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- 特殊统计 -->
+        <div class="row q-mt-md q-col-gutter-md">
+          <div class="col-md-6">
+            <table class="special-stats-table">
+              <tbody>
+                <tr>
+                  <td class="stats-label">好评</td>
+                  <td class="stats-value">遗1</td>
+                  <td class="stats-label">得1</td>
+                  <td class="stats-label">开房</td>
+                  <td class="stats-number">{{ totalRooms }}</td>
+                  <td class="stats-label">收银员</td>
+                  <td rowspan="2" class="cashier-name">
+                    <q-input v-model="cashierName" dense borderless class="text-center" placeholder="张" />
+                  </td>
+                </tr>
+                <tr>
+                  <td class="stats-label">大美卡</td>
+                  <td class="stats-number">{{ vipCards }}</td>
+                  <td class="stats-label">休息房</td>
+                  <td class="stats-number">{{ restRooms }}</td>
+                  <td class="stats-label">备注</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
@@ -243,470 +192,294 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { date } from 'quasar'
 import { useQuasar } from 'quasar'
 import { useRouter } from 'vue-router'
-import api from '../api/index.js'
+import api, { shiftHandoverApi } from '../api/index.js'
 
 const $q = useQuasar()
 const router = useRouter()
 
 // 基础数据
-const currentDate = computed(() => {
-  return date.formatDate(new Date(), 'YYYY年MM月DD日')
-})
-
-const getCurrentDayOfWeek = () => {
-  const days = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
-  return days[new Date().getDay()]
-}
-
-const shiftTime = ref(date.formatDate(new Date(), 'HH:mm'))
-const roomType = ref('hotel')
-const loading = ref(false)
 const selectedDate = ref(date.formatDate(new Date(), 'YYYY-MM-DD'))
+const currentShift = ref('白班')
+const handoverPerson = ref('')
+const receivePerson = ref('')
+const cashierName = ref('张')
+const notes = ref('')
 
-// 月份选择相关
-const selectedMonth = ref({
-  label: date.formatDate(new Date(), 'YYYY年MM月'),
-  value: date.formatDate(new Date(), 'YYYY-MM')
+// 班次选项
+const shiftOptions = ['白班', '夜班']
+
+// 支付方式数据结构
+const paymentData = ref({
+  cash: {
+    reserveCash: 320,
+    hotelIncome: 0,
+    restIncome: 100,
+    total: 420,
+    hotelDeposit: 80,
+    restDeposit: 0,
+    retainedAmount: 320
+  },
+  wechat: {
+    reserveCash: 0,
+    hotelIncome: 2523,
+    restIncome: 0,
+    total: 2523,
+    hotelDeposit: 20,
+    restDeposit: 0,
+    retainedAmount: 2503
+  },
+  digital: {
+    reserveCash: 0,
+    hotelIncome: 300,
+    restIncome: 160,
+    total: 460,
+    hotelDeposit: 0,
+    restDeposit: 0,
+    retainedAmount: 460
+  },
+  other: {
+    reserveCash: 0,
+    hotelIncome: 0,
+    restIncome: 0,
+    total: 0,
+    hotelDeposit: 0,
+    restDeposit: 0,
+    retainedAmount: 0
+  }
 })
 
-// 生成月份选项（最近12个月）
-const monthOptions = computed(() => {
-  const options = []
-  const currentDate = new Date()
+// 特殊统计
+const totalRooms = ref(29)
+const restRooms = ref(3)
+const vipCards = ref(6)
 
-  // 生成过去11个月 + 当前月份
-  for (let i = 11; i >= 0; i--) {
-    const targetDate = date.subtractFromDate(currentDate, { months: i })
-    const monthValue = date.formatDate(targetDate, 'YYYY-MM')
-    const monthLabel = date.formatDate(targetDate, 'YYYY年MM月')
-
-    options.push({
-      label: monthLabel,
-      value: monthValue
-    })
+// 计算汇总数据
+const totalSummary = computed(() => {
+  const summary = {
+    reserveCash: 0,
+    hotelIncome: 0,
+    restIncome: 0,
+    grandTotal: 0,
+    hotelDeposit: 0,
+    restDeposit: 0,
+    retainedAmount: 0
   }
 
-  return options
-})
-
-// 分页设置
-const pagination = ref({
-  rowsPerPage: 0 // 显示所有行
-})
-
-// 明细表格列定义
-const receiptColumns = [
-  { name: 'roomNumber', label: '房号', field: 'room_number', align: 'center', style: 'width: 80px' },
-  { name: 'guestName', label: '客户姓名', field: 'guest_name', align: 'center', style: 'width: 100px' },
-  { name: 'orderNumber', label: '单号', field: 'order_number', align: 'left', style: 'width: 120px' },
-  { name: 'roomFee', label: '房费', field: 'room_fee', align: 'right', style: 'width: 100px' },
-  { name: 'deposit', label: '押金', field: 'deposit', align: 'right', style: 'width: 100px' },
-  { name: 'paymentMethod', label: '支付方式', field: 'payment_method', align: 'center', style: 'width: 100px' },
-  { name: 'totalAmount', label: '总额', field: 'total_amount', align: 'right', style: 'width: 120px' },
-  { name: 'checkInTime', label: '开房时间', field: 'check_in_date', align: 'center', style: 'width: 140px' },
-  { name: 'checkOutTime', label: '退房时间', field: 'check_out_date', align: 'center', style: 'width: 140px' }
-]
-
-// 明细数据
-const receiptDetails = ref([])
-
-// 统计数据
-const statistics = ref({
-  reserveCash: 1000,
-  hotelIncome: 0,
-  restIncome: 0,
-  carRentalIncome: 0,
-  totalIncome: 0,
-  hotelDeposit: 0,
-  restDeposit: 0,
-  retainedAmount: 0,
-  handoverAmount: 0,
-  goodReviews: 0,
-  vipCards: 0,
-  totalRooms: 0,
-  restRooms: 0
-})
-
-// 计算属性
-const totalAmount = computed(() => {
-  return receiptDetails.value.reduce((sum, item) => sum + (item.total_amount || 0), 0)
-})
-
-const paymentSummary = computed(() => {
-  const summary = {}
-  receiptDetails.value.forEach(item => {
-    const method = item.payment_method || '现金'
-    summary[method] = (summary[method] || 0) + (item.total_amount || 0)
+  Object.values(paymentData.value).forEach(payment => {
+    summary.reserveCash += payment.reserveCash || 0
+    summary.hotelIncome += payment.hotelIncome || 0
+    summary.restIncome += payment.restIncome || 0
+    summary.grandTotal += payment.total || 0
+    summary.hotelDeposit += payment.hotelDeposit || 0
+    summary.restDeposit += payment.restDeposit || 0
+    summary.retainedAmount += payment.retainedAmount || 0
   })
+
   return summary
 })
 
-const isToday = computed(() => {
-  return selectedDate.value === date.formatDate(new Date(), 'YYYY-MM-DD')
+// 交接款计算
+const handoverAmount = computed(() => {
+  return totalSummary.value.grandTotal - totalSummary.value.hotelDeposit -
+         totalSummary.value.restDeposit - totalSummary.value.retainedAmount
 })
 
-// 监听统计数据变化
-watch(statistics, () => {
-  updateHandoverAmount()
-}, { deep: true })
-
-// 跳转到收入统计页面
-function goToRevenueStatistics() {
-  router.push('/RevenueStatistics')
+// 计算各项合计
+function calculateTotals() {
+  Object.keys(paymentData.value).forEach(paymentType => {
+    const payment = paymentData.value[paymentType]
+    payment.total = (payment.reserveCash || 0) + (payment.hotelIncome || 0) + (payment.restIncome || 0)
+  })
 }
 
-// 获取支付方式对应的颜色
-function getPaymentMethodColor(method) {
-  const colors = {
-    '现金': 'green',
-    '微信': 'green-7',
-    '支付宝': 'blue',
-    '银行卡': 'purple',
-    '其他': 'grey'
-  }
-  return colors[method] || 'grey'
-}
-
-// 更新交接款金额
-function updateHandoverAmount() {
-  statistics.value.totalIncome =
-    statistics.value.hotelIncome +
-    statistics.value.restIncome +
-    statistics.value.carRentalIncome +
-    statistics.value.reserveCash
-
-  statistics.value.handoverAmount =
-    statistics.value.totalIncome -
-    statistics.value.hotelDeposit -
-    statistics.value.restDeposit -
-    statistics.value.retainedAmount
-}
-
-// 更新统计数据
-function updateStatistics() {
-  updateHandoverAmount()
-}
-
-// 切换房间类型
-async function switchRoomType(type, customStartDate = null, customEndDate = null) {
-  loading.value = true
+// 加载班次数据
+async function loadShiftData() {
   try {
-    // 确定查询的日期范围
-    let startDate, endDate
-
-    if (customStartDate && customEndDate) {
-      // 使用自定义日期范围
-      startDate = customStartDate
-      endDate = customEndDate
-    } else {
-      // 使用选中的日期（单天查询）
-      try {
-        const formattedDate = date.formatDate(new Date(selectedDate.value), 'YYYY-MM-DD')
-        startDate = endDate = formattedDate
-      } catch (e) {
-        // 如果日期无效，使用今天的日期
-        const today = date.formatDate(new Date(), 'YYYY-MM-DD')
-        selectedDate.value = today
-        startDate = endDate = today
-      }
-    }
-
-    console.log('🔍 交接班明细查询调试信息:')
-    console.log('查询类型:', type)
-    console.log('查询开始日期:', startDate)
-    console.log('查询结束日期:', endDate)
-    console.log('是否为范围查询:', startDate !== endDate)
-
-    const response = await api.get('/shift-handover/receipts', {
-      params: {
-        type: type,
-        startDate: startDate,
-        endDate: endDate
-      }
+    const response = await shiftHandoverApi.getStatistics({
+      date: selectedDate.value,
+      shift: currentShift.value
     })
 
-    console.log('📊 API返回的原始数据:', response)
-    console.log('📊 返回数据数量:', response?.length || 0)
-
-    if (response && response.length > 0) {
-      console.log('📋 第一条订单示例:', response[0])
-    } else {
-      console.log('❌ 未获取到任何明细数据')
-
-      // 调试：检查今天是否有订单数据
-      try {
-        const debugResponse = await api.get('/orders')
-        console.log('🔍 /orders API原始返回:', debugResponse)
-        console.log('🔍 返回数据类型:', typeof debugResponse)
-        console.log('🔍 是否为数组:', Array.isArray(debugResponse))
-
-        // 处理不同的数据结构
-        let orders = []
-        if (Array.isArray(debugResponse)) {
-          orders = debugResponse
-        } else if (debugResponse && debugResponse.data && Array.isArray(debugResponse.data)) {
-          orders = debugResponse.data
-        } else if (debugResponse && debugResponse.orders && Array.isArray(debugResponse.orders)) {
-          orders = debugResponse.orders
-        } else {
-          console.log('🚫 无法识别的订单数据结构')
-          return
-        }
-
-        console.log('🔍 订单总数:', orders.length)
-
-        if (orders.length > 0) {
-          console.log('📋 第一条订单示例:', orders[0])
-          console.log('📋 订单字段列表:', Object.keys(orders[0]))
-
-          // 查找指定日期范围内的订单
-          const rangeOrders = orders.filter(order => {
-            // 尝试不同的日期字段
-            const createTime = order.createTime || order.create_time || order.created_at || order.createdAt
-            if (!createTime) {
-              console.log('⚠️ 订单缺少创建时间字段:', order)
-              return false
-            }
-
-            try {
-              const orderDate = date.formatDate(new Date(createTime), 'YYYY-MM-DD')
-              return orderDate >= startDate && orderDate <= endDate
-            } catch (e) {
-              console.log('⚠️ 日期解析失败:', createTime, e)
-              return false
-            }
-          })
-
-          console.log(`🔍 ${startDate === endDate ? '当天' : '日期范围内'}创建的订单数量:`, rangeOrders.length)
-          console.log(`🔍 ${startDate === endDate ? '当天' : '日期范围内'}的订单:`, rangeOrders)
-
-          if (rangeOrders.length > 0) {
-              console.log(`📋 ${startDate === endDate ? '当天' : '日期范围内'}订单状态分布:`,
-                rangeOrders.reduce((acc, order) => {
-                  const status = order.status || '未知状态'
-                  acc[status] = (acc[status] || 0) + 1
-                  return acc
-                }, {})
-              )
-
-              // 详细检查每个订单的关键字段
-              console.log(`📋 ${startDate === endDate ? '当天' : '日期范围内'}订单详细信息:`)
-              rangeOrders.forEach((order, index) => {
-                console.log(`   订单${index + 1}:`, {
-                  id: order.id || order.order_id,
-                  guest_name: order.guest_name,
-                  status: order.status,
-                  create_time: order.create_time || order.createTime,
-                  room_number: order.room_number,
-                  room_price: order.room_price,
-                  check_in_date: order.check_in_date,
-                  check_out_date: order.check_out_date
-                })
-              })
-
-            // 检查符合明细表条件的订单
-            const validOrders = rangeOrders.filter(order => {
-              const status = order.status
-              return status === 'checked_in' || status === 'checked_out' || status === 'completed' ||
-                     status === 'checked-in' || status === 'checked-out'
-            })
-            console.log('🔍 符合明细表条件的订单数量:', validOrders.length)
-            console.log('🔍 符合条件的订单:', validOrders)
-
-            if (validOrders.length === 0) {
-              console.log('❌ 没有找到符合明细表条件的订单')
-              console.log('💡 可能的原因：')
-              console.log('   1. 订单状态不是 checked_in、checked_out、completed、checked-in 或 checked-out')
-              console.log('   2. 订单还在 pending、confirmed 等状态')
-              console.log('   3. 需要手动执行入住/退房操作')
-
-              // 输出所有状态以便分析
-              const allStatuses = rangeOrders.map(order => order.status).filter(Boolean)
-              console.log(`📋 ${startDate === endDate ? '当天' : '日期范围内'}所有订单的状态:`, [...new Set(allStatuses)])
-              console.log('💡 状态格式说明: 后端已兼容 checked-out 和 checked_out 两种格式')
-            } else {
-              console.log('✅ 找到符合条件的订单，应该显示在明细表中')
-            }
-          }
-        }
-      } catch (debugError) {
-        console.log('🚫 无法获取调试订单数据:', debugError)
-      }
-
-      // 调试：检查明细表API的查询条件
-      console.log('🔍 明细表API查询参数:')
-      console.log('   - type:', type)
-      console.log('   - startDate:', startDate)
-      console.log('   - endDate:', endDate)
-      console.log('   - 完整URL:', `/api/shift-handover/receipts?type=${type}&startDate=${startDate}&endDate=${endDate}`)
+    if (response) {
+      // 根据支付方式分组统计数据
+      updatePaymentData(response)
     }
-
-    receiptDetails.value = response.map(item => ({
-      ...item,
-      room_fee: parseFloat(item.room_fee || 0),
-      deposit: parseFloat(item.deposit || 0),
-      total_amount: parseFloat(item.total_amount || 0),
-      guest_name: item.guest_name || '未知客户',
-      check_in_date: item.check_in_date ? date.formatDate(new Date(item.check_in_date), 'MM-DD HH:mm') : '',
-      check_out_date: item.check_out_date ? date.formatDate(new Date(item.check_out_date), 'MM-DD HH:mm') : ''
-    }))
-
-    await loadStatistics(customStartDate, customEndDate)
   } catch (error) {
-    console.error('获取收款明细失败:', error)
+    console.error('加载班次数据失败:', error)
     $q.notify({
       type: 'negative',
-      message: '获取收款明细失败'
+      message: '加载班次数据失败'
     })
-  } finally {
-    loading.value = false
   }
 }
 
-// 加载统计数据
-async function loadStatistics(customStartDate = null, customEndDate = null) {
-  try {
-    // 确定查询的日期范围
-    let startDate, endDate
+// 更新支付数据
+function updatePaymentData(data) {
+  // 根据API返回的数据更新对应的支付方式统计
+  if (data.paymentSummary) {
+    Object.keys(data.paymentSummary).forEach(method => {
+      const amount = data.paymentSummary[method] || 0
 
-    if (customStartDate && customEndDate) {
-      // 使用自定义日期范围
-      startDate = customStartDate
-      endDate = customEndDate
-    } else {
-      // 使用选中的日期（单天查询）
-      try {
-        const formattedDate = date.formatDate(new Date(selectedDate.value), 'YYYY-MM-DD')
-        startDate = endDate = formattedDate
-      } catch (e) {
-        // 如果日期无效，使用今天的日期
-        const today = date.formatDate(new Date(), 'YYYY-MM-DD')
-        selectedDate.value = today
-        startDate = endDate = today
+      if (method === '现金' && paymentData.value.cash) {
+        paymentData.value.cash.hotelIncome = amount
+      } else if (method === '微信' && paymentData.value.wechat) {
+        paymentData.value.wechat.hotelIncome = amount
+      } else if (method === '支付宝' && paymentData.value.digital) {
+        paymentData.value.digital.hotelIncome = amount
+      }
+    })
+  }
+
+  // 更新统计数据
+  if (data.totalRooms) totalRooms.value = data.totalRooms
+  if (data.restRooms) restRooms.value = data.restRooms
+
+  calculateTotals()
+}
+
+// 保存交接记录
+async function saveHandover() {
+  try {
+    const handoverData = {
+      date: selectedDate.value,
+      shift: currentShift.value,
+      handoverPerson: handoverPerson.value,
+      receivePerson: receivePerson.value,
+      cashierName: cashierName.value,
+      notes: notes.value,
+      paymentData: paymentData.value,
+      totalSummary: totalSummary.value,
+      handoverAmount: handoverAmount.value,
+      specialStats: {
+        totalRooms: totalRooms.value,
+        restRooms: restRooms.value,
+        vipCards: vipCards.value
       }
     }
 
-    const response = await api.get('/shift-handover/statistics', {
-      params: {
-        startDate: startDate,
-        endDate: endDate
-      }
+    await shiftHandoverApi.saveHandover(handoverData)
+
+    $q.notify({
+      type: 'positive',
+      message: '交接记录保存成功'
     })
-
-    // 合并统计数据，保留用户输入的值
-    const currentReserveCash = statistics.value.reserveCash
-    const currentCarRentalIncome = statistics.value.carRentalIncome
-    const currentHotelDeposit = statistics.value.hotelDeposit
-    const currentRestDeposit = statistics.value.restDeposit
-    const currentRetainedAmount = statistics.value.retainedAmount
-    const currentGoodReviews = statistics.value.goodReviews
-    const currentVipCards = statistics.value.vipCards
-
-    Object.assign(statistics.value, {
-      ...response,
-      reserveCash: currentReserveCash,
-      carRentalIncome: currentCarRentalIncome,
-      hotelDeposit: currentHotelDeposit,
-      restDeposit: currentRestDeposit,
-      retainedAmount: currentRetainedAmount,
-      goodReviews: currentGoodReviews,
-      vipCards: currentVipCards
-    })
-
-    updateHandoverAmount()
   } catch (error) {
-    console.error('获取统计数据失败:', error)
+    console.error('保存交接记录失败:', error)
+    $q.notify({
+      type: 'negative',
+      message: '保存交接记录失败'
+    })
   }
 }
 
 // 打印交接单
 function printHandover() {
-  // 创建打印样式
   const printStyles = `
     <style>
       @media print {
-        body { margin: 0; font-family: Arial, sans-serif; font-size: 12px; }
+        body { margin: 0; font-family: Arial, sans-serif; font-size: 14px; }
         .print-header { text-align: center; margin-bottom: 20px; }
-        .print-title { font-size: 18px; font-weight: bold; }
-        .print-date { font-size: 14px; margin-top: 5px; }
-        .print-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
-        .print-table th, .print-table td { border: 1px solid #000; padding: 5px; text-align: center; }
+        .print-title { font-size: 20px; font-weight: bold; }
+        .print-info { margin: 10px 0; }
+        .print-table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+        .print-table th, .print-table td { border: 1px solid #000; padding: 8px; text-align: center; }
         .print-table th { background-color: #f0f0f0; }
-        .print-summary { display: flex; justify-content: space-between; }
-        .print-section { margin-bottom: 15px; }
-        .print-section h3 { margin: 0 0 10px 0; font-size: 14px; }
+        .notes-section { margin-top: 20px; }
         @page { margin: 15mm; }
       }
     </style>
   `
 
-  // 生成打印内容
   const printContent = `
     ${printStyles}
     <div class="print-header">
-      <div class="print-title">交接班记录单</div>
-      <div class="print-date">${currentDate.value}</div>
+      <div class="print-title">交接班记录</div>
+      <div class="print-info">
+        <span>日期: ${selectedDate.value}</span> &nbsp;&nbsp;
+        <span>班次: ${currentShift.value}</span> &nbsp;&nbsp;
+        <span>交班人: ${handoverPerson.value}</span> &nbsp;&nbsp;
+        <span>接班人: ${receivePerson.value}</span>
+      </div>
     </div>
 
-    <div class="print-section">
-      <h3>${roomType.value === 'hotel' ? '客房住宿' : '休息房'}收款明细</h3>
-      <table class="print-table">
-        <thead>
-          <tr>
-            <th>房号</th>
-            <th>客户姓名</th>
-            <th>单号</th>
-            <th>房费</th>
-            <th>押金</th>
-            <th>支付方式</th>
-            <th>总额</th>
-            <th>开房时间</th>
-            <th>退房时间</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${receiptDetails.value.map(item => `
-            <tr>
-              <td>${item.room_number}</td>
-              <td>${item.guest_name || '未知客户'}</td>
-              <td>${item.order_number}</td>
-              <td>¥${(item.room_fee || 0).toFixed(2)}</td>
-              <td>¥${(item.deposit || 0).toFixed(2)}</td>
-              <td>${item.payment_method}</td>
-              <td>¥${(item.total_amount || 0).toFixed(2)}</td>
-              <td>${item.check_in_date}</td>
-              <td>${item.check_out_date}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>
+    <table class="print-table">
+      <thead>
+        <tr>
+          <th colspan="8">交接班</th>
+        </tr>
+        <tr>
+          <th>各用金</th>
+          <th>客房收入1</th>
+          <th>休息房收入2</th>
+          <th>租车收入3</th>
+          <th>合计</th>
+          <th>客房退押</th>
+          <th>休息退押</th>
+          <th>留存款</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>现金</td>
+          <td>${paymentData.value.cash.reserveCash}</td>
+          <td>${paymentData.value.cash.hotelIncome}</td>
+          <td>${paymentData.value.cash.restIncome}</td>
+          <td>${paymentData.value.cash.total}</td>
+          <td>${paymentData.value.cash.hotelDeposit}</td>
+          <td>${paymentData.value.cash.restDeposit}</td>
+          <td>${paymentData.value.cash.retainedAmount}</td>
+        </tr>
+        <tr>
+          <td>微信</td>
+          <td>${paymentData.value.wechat.reserveCash}</td>
+          <td>${paymentData.value.wechat.hotelIncome}</td>
+          <td>${paymentData.value.wechat.restIncome}</td>
+          <td>${paymentData.value.wechat.total}</td>
+          <td>${paymentData.value.wechat.hotelDeposit}</td>
+          <td>${paymentData.value.wechat.restDeposit}</td>
+          <td>${paymentData.value.wechat.retainedAmount}</td>
+        </tr>
+        <tr>
+          <td>数码付</td>
+          <td>${paymentData.value.digital.reserveCash}</td>
+          <td>${paymentData.value.digital.hotelIncome}</td>
+          <td>${paymentData.value.digital.restIncome}</td>
+          <td>${paymentData.value.digital.total}</td>
+          <td>${paymentData.value.digital.hotelDeposit}</td>
+          <td>${paymentData.value.digital.restDeposit}</td>
+          <td>${paymentData.value.digital.retainedAmount}</td>
+        </tr>
+        <tr>
+          <td>其他方式</td>
+          <td>${paymentData.value.other.reserveCash}</td>
+          <td>${paymentData.value.other.hotelIncome}</td>
+          <td>${paymentData.value.other.restIncome}</td>
+          <td>${paymentData.value.other.total}</td>
+          <td>${paymentData.value.other.hotelDeposit}</td>
+          <td>${paymentData.value.other.restDeposit}</td>
+          <td>${paymentData.value.other.retainedAmount}</td>
+        </tr>
+        <tr style="font-weight: bold; background-color: #f0f0f0;">
+          <td>合计</td>
+          <td>${totalSummary.value.reserveCash}</td>
+          <td>${totalSummary.value.hotelIncome}</td>
+          <td>${totalSummary.value.restIncome}</td>
+          <td>${totalSummary.value.grandTotal}</td>
+          <td>${totalSummary.value.hotelDeposit}</td>
+          <td>${totalSummary.value.restDeposit}</td>
+          <td>${totalSummary.value.retainedAmount}</td>
+        </tr>
+      </tbody>
+    </table>
 
-    <div class="print-summary">
-      <div class="print-section">
-        <h3>统计信息</h3>
-        <div>备用金：¥${statistics.value.reserveCash.toFixed(2)}</div>
-        <div>客房收入：¥${statistics.value.hotelIncome.toFixed(2)}</div>
-        <div>休息房收入：¥${statistics.value.restIncome.toFixed(2)}</div>
-        <div>租车收入：¥${statistics.value.carRentalIncome.toFixed(2)}</div>
-        <div><strong>合计：¥${statistics.value.totalIncome.toFixed(2)}</strong></div>
-        <div>客房退押：¥${statistics.value.hotelDeposit.toFixed(2)}</div>
-        <div>休息退押：¥${statistics.value.restDeposit.toFixed(2)}</div>
-        <div>留存款：¥${statistics.value.retainedAmount.toFixed(2)}</div>
-        <div><strong>交接款：¥${statistics.value.handoverAmount.toFixed(2)}</strong></div>
-      </div>
-
-      <div class="print-section">
-        <h3>特殊统计</h3>
-        <div>好评：${statistics.value.goodReviews}</div>
-        <div>大美卡：${statistics.value.vipCards}</div>
-        <div>开房数：${statistics.value.totalRooms}</div>
-        <div>休息房数：${statistics.value.restRooms}</div>
-      </div>
+    <div class="notes-section">
+      <p><strong>交接款: ¥${handoverAmount.value.toFixed(2)}</strong></p>
+      <p><strong>开房数: ${totalRooms.value}</strong> &nbsp;&nbsp; <strong>休息房数: ${restRooms.value}</strong> &nbsp;&nbsp; <strong>大美卡: ${vipCards.value}</strong></p>
+      <p><strong>收银员: ${cashierName.value}</strong></p>
+      ${notes.value ? `<p><strong>备注:</strong> ${notes.value}</p>` : ''}
     </div>
   `
 
-  // 打开新窗口并打印
   const printWindow = window.open('', '_blank')
   printWindow.document.write(printContent)
   printWindow.document.close()
@@ -718,20 +491,29 @@ function printHandover() {
 // 导出Excel
 async function exportToExcel() {
   try {
-    const response = await api.post('/shift-handover/export', {
-      type: roomType.value,
-      details: receiptDetails.value,
-      statistics: statistics.value,
-      date: date.formatDate(new Date(), 'YYYY-MM-DD')
-    }, {
-      responseType: 'blob'
-    })
+    const handoverData = {
+      date: selectedDate.value,
+      shift: currentShift.value,
+      handoverPerson: handoverPerson.value,
+      receivePerson: receivePerson.value,
+      cashierName: cashierName.value,
+      notes: notes.value,
+      paymentData: paymentData.value,
+      totalSummary: totalSummary.value,
+      handoverAmount: handoverAmount.value,
+      specialStats: {
+        totalRooms: totalRooms.value,
+        restRooms: restRooms.value,
+        vipCards: vipCards.value
+      }
+    }
 
-    // 创建下载链接
+    const response = await shiftHandoverApi.exportNewHandover(handoverData)
+
     const url = window.URL.createObjectURL(new Blob([response]))
     const link = document.createElement('a')
     link.href = url
-    link.setAttribute('download', `交接班记录_${date.formatDate(new Date(), 'YYYY-MM-DD')}.xlsx`)
+    link.setAttribute('download', `交接班记录_${selectedDate.value}_${currentShift.value}.xlsx`)
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -750,214 +532,206 @@ async function exportToExcel() {
   }
 }
 
-// 按指定日期加载收款明细
-async function loadReceiptsByDate(dateValue) {
-  if (!dateValue) return
-
-  // 确保日期格式正确并更新selectedDate
-  let formattedDate
-  try {
-    const targetDate = new Date(dateValue)
-    formattedDate = date.formatDate(targetDate, 'YYYY-MM-DD')
-    selectedDate.value = formattedDate
-
-    // 同步更新月份选择器
-    selectedMonth.value = {
-      label: date.formatDate(targetDate, 'YYYY年MM月'),
-      value: date.formatDate(targetDate, 'YYYY-MM')
-    }
-  } catch (e) {
-    console.error('日期格式错误:', dateValue, e)
-    $q.notify({
-      type: 'negative',
-      message: '日期格式无效'
-    })
-    return
-  }
-
-  loading.value = true
-  try {
-    await switchRoomType(roomType.value)
-
-    $q.notify({
-      type: 'positive',
-      message: `已加载 ${formatDisplayDate(formattedDate)} 的收款明细`,
-      timeout: 1500
-    })
-  } catch (error) {
-    console.error('获取指定日期明细失败:', error)
-    $q.notify({
-      type: 'negative',
-      message: '获取指定日期明细失败'
-    })
-  } finally {
-    loading.value = false
-  }
-}
-
-// 设置今天
-function setToday() {
-  const today = new Date()
-  selectedDate.value = date.formatDate(today, 'YYYY-MM-DD')
-
-  // 更新月份选择器为当前月份
-  selectedMonth.value = {
-    label: date.formatDate(today, 'YYYY年MM月'),
-    value: date.formatDate(today, 'YYYY-MM')
-  }
-
-  loadReceiptsByDate(selectedDate.value)
-}
-
-// 设置昨天
-function setYesterday() {
-  const yesterday = date.subtractFromDate(new Date(), { days: 1 })
-  selectedDate.value = date.formatDate(yesterday, 'YYYY-MM-DD')
-
-  // 更新月份选择器为昨天对应的月份
-  selectedMonth.value = {
-    label: date.formatDate(yesterday, 'YYYY年MM月'),
-    value: date.formatDate(yesterday, 'YYYY-MM')
-  }
-
-  loadReceiptsByDate(selectedDate.value)
-}
-
-// 设置本周第一天（周一）
-function setThisWeek() {
-  const today = new Date()
-  const startOfWeek = date.startOfDate(today, 'week')
-  const endOfWeek = date.endOfDate(today, 'week')
-
-  // 设置显示日期为本周第一天
-  selectedDate.value = date.formatDate(startOfWeek, 'YYYY-MM-DD')
-
-  // 更新月份选择器为本周对应的月份
-  selectedMonth.value = {
-    label: date.formatDate(startOfWeek, 'YYYY年MM月'),
-    value: date.formatDate(startOfWeek, 'YYYY-MM')
-  }
-
-  // 查询整周的数据
-  const startDate = date.formatDate(startOfWeek, 'YYYY-MM-DD')
-  const endDate = date.formatDate(endOfWeek, 'YYYY-MM-DD')
-
-  console.log('📅 查询本周数据:', startDate, '到', endDate)
-
-  loading.value = true
-  switchRoomType(roomType.value, startDate, endDate).finally(() => {
-    loading.value = false
-  })
-
-  $q.notify({
-    type: 'positive',
-    message: `已加载本周(${date.formatDate(startOfWeek, 'MM月DD日')} - ${date.formatDate(endOfWeek, 'MM月DD日')})的收款明细`,
-    timeout: 2000
-  })
-}
-
-// 设置本月第一天
-function setThisMonth() {
-  const today = new Date()
-  const startOfMonth = date.startOfDate(today, 'month')
-  const endOfMonth = date.endOfDate(today, 'month')
-
-  // 设置显示日期为本月第一天
-  selectedDate.value = date.formatDate(startOfMonth, 'YYYY-MM-DD')
-
-  // 更新月份选择器
-  selectedMonth.value = {
-    label: date.formatDate(today, 'YYYY年MM月'),
-    value: date.formatDate(today, 'YYYY-MM')
-  }
-
-  // 但查询整个月的数据
-  const startDate = date.formatDate(startOfMonth, 'YYYY-MM-DD')
-  const endDate = date.formatDate(endOfMonth, 'YYYY-MM-DD')
-
-  console.log('📅 查询本月数据:', startDate, '到', endDate)
-
-  loading.value = true
-  switchRoomType(roomType.value, startDate, endDate).finally(() => {
-    loading.value = false
-  })
-
-  $q.notify({
-    type: 'positive',
-    message: `已加载本月(${date.formatDate(startOfMonth, 'MM月DD日')} - ${date.formatDate(endOfMonth, 'MM月DD日')})的收款明细`,
-    timeout: 2000
-  })
-}
-
-// 加载指定月份的数据
-async function loadMonthData(monthObj) {
-  if (!monthObj || !monthObj.value) return
-
-  loading.value = true
-  try {
-    // 解析选中的月份
-    const [year, month] = monthObj.value.split('-')
-    const targetMonth = new Date(parseInt(year), parseInt(month) - 1, 1)
-
-    // 获取该月的第一天和最后一天
-    const startOfMonth = date.startOfDate(targetMonth, 'month')
-    const endOfMonth = date.endOfDate(targetMonth, 'month')
-
-    // 设置显示日期为该月第一天
-    selectedDate.value = date.formatDate(startOfMonth, 'YYYY-MM-DD')
-
-    // 查询整个月的数据
-    const startDate = date.formatDate(startOfMonth, 'YYYY-MM-DD')
-    const endDate = date.formatDate(endOfMonth, 'YYYY-MM-DD')
-
-    console.log('📅 查询指定月份数据:', startDate, '到', endDate)
-
-    await switchRoomType(roomType.value, startDate, endDate)
-
-    $q.notify({
-      type: 'positive',
-      message: `已加载${monthObj.label}的收款明细`,
-      timeout: 2000
-    })
-  } catch (error) {
-    console.error('获取月份明细失败:', error)
-    $q.notify({
-      type: 'negative',
-      message: '获取月份明细失败'
-    })
-  } finally {
-    loading.value = false
-  }
-}
-
-// 格式化显示日期
-function formatDisplayDate(dateStr) {
-  if (!dateStr) return ''
-  try {
-    const targetDate = new Date(dateStr)
-    const today = new Date()
-    const yesterday = date.subtractFromDate(today, { days: 1 })
-
-    if (date.formatDate(targetDate, 'YYYY-MM-DD') === date.formatDate(today, 'YYYY-MM-DD')) {
-      return '今天'
-    } else if (date.formatDate(targetDate, 'YYYY-MM-DD') === date.formatDate(yesterday, 'YYYY-MM-DD')) {
-      return '昨天'
-    } else {
-      // 检查是否是月份的第一天，如果是则显示整月
-      const isFirstDayOfMonth = date.formatDate(targetDate, 'DD') === '01'
-      if (isFirstDayOfMonth) {
-        return date.formatDate(targetDate, 'MM月')
-      } else {
-        return date.formatDate(targetDate, 'MM月DD日')
-      }
-    }
-  } catch (e) {
-    return dateStr
-  }
-}
+// 监听支付数据变化
+watch(paymentData, () => {
+  calculateTotals()
+}, { deep: true })
 
 // 组件挂载时初始化
 onMounted(async () => {
-  await switchRoomType(roomType.value)
+  await loadShiftData()
 })
 </script>
+
+<style scoped>
+.shift-handover {
+  background-color: #f5f5f5;
+  min-height: 100vh;
+}
+
+.shift-table-container {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+}
+
+.shift-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 2px solid #333;
+  margin-bottom: 0;
+}
+
+.shift-table th,
+.shift-table td {
+  border: 1px solid #333;
+  padding: 8px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.table-header {
+  background-color: #f8f9fa;
+  font-weight: bold;
+  height: 40px;
+}
+
+.sub-header {
+  background-color: #e9ecef;
+  font-weight: bold;
+  height: 35px;
+  font-size: 14px;
+}
+
+.payment-row {
+  height: 45px;
+}
+
+.cash-row {
+  background-color: #fff3cd;
+}
+
+.wechat-row {
+  background-color: #d4edda;
+}
+
+.digital-row {
+  background-color: #cce7ff;
+}
+
+.other-row {
+  background-color: #f8d7da;
+}
+
+.payment-label {
+  font-weight: bold;
+  background-color: rgba(0, 0, 0, 0.05);
+  width: 100px;
+}
+
+.auto-calculate {
+  background-color: #f8f9fa;
+  font-weight: bold;
+}
+
+.total-cell {
+  background-color: #ffe6cc;
+  font-weight: bold;
+  color: #d63384;
+}
+
+.table-input {
+  text-align: center;
+  font-weight: bold;
+}
+
+.notes-header {
+  background-color: #e9ecef;
+  font-weight: bold;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  width: 150px;
+}
+
+.notes-cell {
+  width: 150px;
+  padding: 5px;
+}
+
+.notes-input {
+  width: 100%;
+  height: 100%;
+  resize: none;
+}
+
+.summary-table {
+  margin-top: 0;
+  border-top: none;
+}
+
+.summary-row {
+  background-color: #fff3e0;
+  font-weight: bold;
+  height: 50px;
+}
+
+.summary-label {
+  background-color: #ff9800;
+  color: white;
+  font-weight: bold;
+}
+
+.summary-total {
+  font-size: 16px;
+  color: #1976d2;
+}
+
+.summary-grand-total {
+  font-size: 18px;
+  color: #d32f2f;
+  font-weight: bold;
+}
+
+.handover-amount {
+  background-color: #c8e6c9;
+  border: 2px solid #4caf50;
+}
+
+.special-stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 2px solid #333;
+  margin-top: 20px;
+}
+
+.special-stats-table td {
+  border: 1px solid #333;
+  padding: 8px;
+  text-align: center;
+  height: 35px;
+}
+
+.stats-label {
+  background-color: #e3f2fd;
+  font-weight: bold;
+  width: 80px;
+}
+
+.stats-value {
+  background-color: #f3e5f5;
+  font-weight: bold;
+  width: 60px;
+}
+
+.stats-number {
+  background-color: #fff3e0;
+  font-weight: bold;
+  font-size: 16px;
+  color: #f57c00;
+  width: 80px;
+}
+
+.cashier-name {
+  background-color: #e8f5e8;
+  font-weight: bold;
+  font-size: 18px;
+  width: 100px;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .shift-table {
+    font-size: 12px;
+  }
+
+  .shift-table th,
+  .shift-table td {
+    padding: 4px;
+  }
+
+  .notes-cell {
+    width: 120px;
+  }
+}
+</style>
