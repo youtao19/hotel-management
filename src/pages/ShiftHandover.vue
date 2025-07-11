@@ -168,34 +168,6 @@
           </tbody>
         </table>
 
-        <!-- 特殊统计 -->
-        <div class="row q-mt-md q-col-gutter-md">
-          <div class="col-md-6">
-            <table class="special-stats-table">
-              <tbody>
-                <tr>
-                  <td class="stats-label">好评</td>
-                  <td class="stats-value">遗1</td>
-                  <td class="stats-label">得1</td>
-                  <td class="stats-label">开房</td>
-                  <td class="stats-number">{{ totalRooms }}</td>
-                  <td class="stats-label">收银员</td>
-                  <td rowspan="2" class="cashier-name">
-                    <q-input v-model="cashierName" dense borderless class="text-center" placeholder="张" />
-                  </td>
-                </tr>
-                <tr>
-                  <td class="stats-label">大美卡</td>
-                  <td class="stats-number">{{ vipCards }}</td>
-                  <td class="stats-label">休息房</td>
-                  <td class="stats-number">{{ restRooms }}</td>
-                  <td class="stats-label">备注</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
         <!-- 今日待办事项 -->
         <div class="row q-mt-lg">
           <div class="col-12">
@@ -270,6 +242,36 @@
             </div>
           </div>
         </div>
+
+        <!-- 特殊统计 -->
+        <div class="row q-mt-md q-col-gutter-md">
+          <div class="col-md-6">
+            <table class="special-stats-table">
+              <tbody>
+                <tr>
+                  <td class="stats-label">好评</td>
+                  <td class="stats-value">遗1</td>
+                  <td class="stats-label">得1</td>
+                  <td class="stats-label">开房</td>
+                  <td class="stats-number">{{ totalRooms }}</td>
+                  <td class="stats-label">收银员</td>
+                  <td rowspan="2" class="cashier-name">
+                    <q-input v-model="cashierName" dense borderless class="text-center" placeholder="张" />
+                  </td>
+                </tr>
+                <tr>
+                  <td class="stats-label">大美卡</td>
+                  <td class="stats-number">{{ vipCards }}</td>
+                  <td class="stats-label">休息房</td>
+                  <td class="stats-number">{{ restRooms }}</td>
+                  <td class="stats-label">备注</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+
       </div>
     </div>
 

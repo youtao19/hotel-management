@@ -5,30 +5,32 @@
       <!-- 页面标题 -->
       <!-- <h1 class="text-h4 q-mb-md">房间状态</h1> -->
 
-    <!-- 日期选择器 -->
-    <div class="date-selector q-mb-md">
+      <!-- 日期筛选器（始终显示） -->
+    <div class="date-filters q-mb-md">
       <q-card flat bordered>
         <q-card-section class="q-pa-md">
           <div class="row q-col-gutter-md items-center">
-            <div class="col-md-4 col-sm-6 col-xs-12">
+            <!-- 日期范围选择器 -->
+            <div class="col-md-6 col-sm-8 col-xs-12">
               <q-input
-                v-model="selectedDate"
                 outlined
                 dense
-                label="查询日期"
+                label="查看日期范围内房间状态"
                 readonly
-                :model-value="formattedSelectedDate"
+                :model-value="formattedDateRange || '点击选择日期范围'"
+                placeholder="YYYY-MM-DD 至 YYYY-MM-DD"
+                clearable
+                clear-icon="close"
+                @clear="clearDateRange"
               >
-                <template v-slot:prepend>
-                  <q-icon name="event" color="primary" />
-                </template>
                 <template v-slot:append>
                   <q-icon name="event" class="cursor-pointer">
                     <q-popup-proxy cover transition-show="scale" transition-hide="scale">
                       <q-date
-                        v-model="selectedDate"
+                        v-model="dateRange"
+                        range
+                        default-view="Calendar"
                         today-btn
-                        @update:model-value="onDateChange"
                       >
                         <div class="row items-center justify-end q-pa-sm">
                           <q-btn v-close-popup label="确定" color="primary" flat/>
@@ -39,27 +41,23 @@
                 </template>
               </q-input>
             </div>
-            <div class="col-md-2 col-sm-3 col-xs-12">
+
+            <!-- 应用筛选按钮 -->
+            <div class="col-md-6 col-sm-4 col-xs-12">
               <q-btn
                 color="primary"
-                icon="today"
-                label="今天"
-                @click="setToday"
-                outline
-                dense
+                icon="search"
+                label="查看房间状态"
+                @click="applyFilters"
+                class="full-width"
               />
-            </div>
-            <div class="col-md-6 col-sm-3 col-xs-12">
-              <div class="text-body2 text-grey-7">
-                <q-icon name="info" class="q-mr-xs" />
-                <span v-if="!showDateFilter">显示 {{ formattedSelectedDate }} 的房间状态</span>
-                <span v-else>可选择日期范围查看房间状态</span>
-              </div>
             </div>
           </div>
         </q-card-section>
       </q-card>
     </div>
+
+
 
     <!-- 简约筛选工具栏 -->
     <div class="compact-filters q-mb-lg">
@@ -185,81 +183,9 @@
       </q-card>
     </div>
 
-    <!-- 日期筛选器（可选展开） -->
-    <div class="date-filters q-mb-md" v-if="showDateFilter">
-      <q-card flat bordered>
-        <q-card-section class="q-pa-md">
-          <div class="row q-col-gutter-md items-center">
-            <!-- 日期范围选择器 -->
-            <div class="col-md-6 col-sm-8 col-xs-12">
-              <q-input
-                outlined
-                dense
-                label="查看日期范围内房间状态"
-                readonly
-                :model-value="formattedDateRange || '点击选择日期范围'"
-                placeholder="YYYY-MM-DD 至 YYYY-MM-DD"
-                clearable
-                clear-icon="close"
-                @clear="clearDateRange"
-              >
-                <template v-slot:append>
-                  <q-icon name="event" class="cursor-pointer">
-                    <q-popup-proxy cover transition-show="scale" transition-hide="scale">
-                      <q-date
-                        v-model="dateRange"
-                        range
-                        default-view="Calendar"
-                        today-btn
-                      >
-                        <div class="row items-center justify-end q-pa-sm">
-                          <q-btn v-close-popup label="确定" color="primary" flat/>
-                        </div>
-                      </q-date>
-                    </q-popup-proxy>
-                  </q-icon>
-                </template>
-              </q-input>
-            </div>
 
-            <!-- 应用筛选按钮 -->
-            <div class="col-md-3 col-sm-4 col-xs-12">
-              <q-btn
-                color="primary"
-                icon="search"
-                label="查看房间状态"
-                @click="applyFilters"
-                class="full-width"
-              />
-            </div>
 
-            <!-- 关闭日期筛选 -->
-            <div class="col-md-3 col-xs-12">
-              <q-btn
-                flat
-                color="grey"
-                icon="expand_less"
-                label="收起"
-                @click="showDateFilter = false"
-                class="full-width"
-              />
-            </div>
-          </div>
-        </q-card-section>
-      </q-card>
-    </div>
 
-    <!-- 展开日期筛选按钮 -->
-    <div class="text-center q-mb-md" v-if="!showDateFilter">
-      <q-btn
-        flat
-        color="primary"
-        icon="expand_more"
-        label="按日期范围查看房间状态"
-        size="sm"
-        @click="showDateFilter = true"
-      />
-    </div>
 
     <!-- 房间网格视图部分 -->
     <div class="room-grid">
@@ -527,7 +453,6 @@ const dateRange = ref(null)     // 日期范围筛选，初始为null表示不�
 const selectedDate = ref(new Date().toISOString().substring(0, 10)) // 当前选择的查询日期，默认为今天
 
 // 添加简约界面相关的响应式数据
-const showDateFilter = ref(false)
 const selectedRoomType = ref(null)  // 当前选中的房型
 
 // 房间日历相关的响应式数据
@@ -611,7 +536,6 @@ onMounted(async () => {
       const dateRegex = /^\d{4}-\d{2}-\d{2}$/
       if (dateRegex.test(startDate) && dateRegex.test(endDate)) {
         dateRange.value = { from: startDate, to: endDate }
-        showDateFilter.value = true
 
         console.log('从URL恢复日期范围筛选:', startDate, '到', endDate)
 
@@ -1101,7 +1025,6 @@ const resetAllFilters = async () => {
   filterType.value = null
   filterStatus.value = null
   dateRange.value = null
-  showDateFilter.value = false
 
   // 更新URL，清除所有筛选参数
   router.replace({
@@ -1517,7 +1440,6 @@ async function loadRoomDataForDate(date) {
 
     // 重置日期范围筛选，因为这是单日期查询
     dateRange.value = null
-    showDateFilter.value = false
 
     // 更新URL参数，清除日期范围筛选
     router.replace({
