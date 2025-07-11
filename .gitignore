@@ -40,3 +40,5 @@ backend/database/postgreDB/dbConfig.js
 
 .vscode
 
+.xlsx
+
