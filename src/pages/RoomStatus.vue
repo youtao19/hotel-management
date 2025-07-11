@@ -52,7 +52,8 @@
             <div class="col-md-6 col-sm-3 col-xs-12">
               <div class="text-body2 text-grey-7">
                 <q-icon name="info" class="q-mr-xs" />
-                显示 {{ formattedSelectedDate }} 的房间状态
+                <span v-if="!showDateFilter">显示 {{ formattedSelectedDate }} 的房间状态</span>
+                <span v-else>可选择日期范围查看房间状态</span>
               </div>
             </div>
           </div>
@@ -194,7 +195,7 @@
               <q-input
                 outlined
                 dense
-                label="可用日期范围"
+                label="查看日期范围内房间状态"
                 readonly
                 :model-value="formattedDateRange || '点击选择日期范围'"
                 placeholder="YYYY-MM-DD 至 YYYY-MM-DD"
@@ -225,8 +226,8 @@
             <div class="col-md-3 col-sm-4 col-xs-12">
               <q-btn
                 color="primary"
-                icon="filter_alt"
-                label="应用日期筛选"
+                icon="search"
+                label="查看房间状态"
                 @click="applyFilters"
                 class="full-width"
               />
@@ -254,7 +255,7 @@
         flat
         color="primary"
         icon="expand_more"
-        label="展开日期筛选"
+        label="按日期范围查看房间状态"
         size="sm"
         @click="showDateFilter = true"
       />
@@ -548,6 +549,50 @@ const formattedSelectedDate = computed(() => {
   })
 })
 
+/**
+ * 统一的日期格式化函数
+ * 将各种格式的日期转换为 YYYY-MM-DD 格式
+ * @param {string|Date} dateInput - 输入的日期
+ * @returns {string} YYYY-MM-DD 格式的日期字符串
+ */
+function formatDateToISO(dateInput) {
+  if (!dateInput) return ''
+
+  try {
+    let dateObj
+
+    if (dateInput instanceof Date) {
+      dateObj = dateInput
+    } else if (typeof dateInput === 'string') {
+      // 处理YYYY/MM/DD格式
+      if (dateInput.includes('/')) {
+        const parts = dateInput.split('/')
+        if (parts.length === 3) {
+          // 确保是YYYY-MM-DD格式
+          const formattedDate = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`
+          dateObj = new Date(formattedDate)
+        } else {
+          dateObj = new Date(dateInput)
+        }
+      } else {
+        dateObj = new Date(dateInput)
+      }
+    } else {
+      return ''
+    }
+
+    if (isNaN(dateObj.getTime())) {
+      console.warn('无效的日期:', dateInput)
+      return ''
+    }
+
+    return dateObj.toISOString().split('T')[0]
+  } catch (error) {
+    console.error('日期格式化失败:', error, dateInput)
+    return ''
+  }
+}
+
 // 组件初始化
 onMounted(async () => {
   console.log('RoomStatus组件已挂载，当前选择日期:', selectedDate.value)
@@ -556,9 +601,32 @@ onMounted(async () => {
     // 先获取房型数据
     await roomStore.fetchRoomTypes()
 
-    // 然后按当前日期加载房间数据
-    console.log('开始加载当前日期的房间数据:', selectedDate.value)
-    await loadRoomDataForDate(selectedDate.value)
+        // 检查URL中是否有日期范围参数
+    const urlDateRange = route.query.dateRange
+    if (urlDateRange && urlDateRange.includes('_')) {
+      // 解析日期范围参数
+      const [startDate, endDate] = urlDateRange.split('_')
+
+      // 验证日期格式
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/
+      if (dateRegex.test(startDate) && dateRegex.test(endDate)) {
+        dateRange.value = { from: startDate, to: endDate }
+        showDateFilter.value = true
+
+        console.log('从URL恢复日期范围筛选:', startDate, '到', endDate)
+
+        // 应用日期范围筛选，显示所有房间状态
+        await roomStore.getRoomStatusByDateRange(startDate, endDate, route.query.type)
+      } else {
+        console.warn('URL中的日期格式无效:', { startDate, endDate })
+        // 如果日期格式无效，按当前日期加载
+        await loadRoomDataForDate(selectedDate.value)
+      }
+    } else {
+      // 按当前日期加载房间数据
+      console.log('开始加载当前日期的房间数据:', selectedDate.value)
+      await loadRoomDataForDate(selectedDate.value)
+    }
 
     console.log('房间状态页面初始化完成')
   } catch (error) {
@@ -621,67 +689,163 @@ watch(() => route.query, (newQuery) => {
   }
 }, { immediate: true, deep: true })  // immediate确保组件初始化时立即执行一次，deep确保深度监听对象变化
 
-// 监听日期范围变化
-// watch(dateRange, (newValue) => {
-//   console.log('日期范围变化:', newValue)
-// }, { deep: true })
-
 /**
- * 添加对筛选条件变化的监听，用于调试
+ * 应用日期筛选
  */
-// watch(filterStatus, (newValue) => {
-//   console.log('筛选状态变化为:', newValue)
-// }, { immediate: true })
+async function applyFilters() {
+  try {
+    console.log('应用日期筛选 - 原始dateRange:', dateRange.value)
+
+    if (!dateRange.value || !dateRange.value.from || !dateRange.value.to) {
+      $q.notify({
+        type: 'warning',
+        message: '请先选择日期范围',
+        position: 'top'
+      })
+      return
+    }
+
+    // 使用统一的日期格式化函数
+    console.log('处理前的日期:', { from: dateRange.value.from, to: dateRange.value.to })
+
+    const startDate = formatDateToISO(dateRange.value.from)
+    const endDate = formatDateToISO(dateRange.value.to)
+
+    console.log('处理后的日期:', { startDate, endDate })
+
+    // 验证日期格式和有效性
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/
+    if (!startDate || !endDate || !dateRegex.test(startDate) || !dateRegex.test(endDate)) {
+      console.error('日期格式验证失败:', { startDate, endDate })
+      $q.notify({
+        type: 'negative',
+        message: '日期格式错误或日期无效，请重新选择',
+        position: 'top'
+      })
+      return
+    }
+
+    // 验证日期逻辑
+    if (new Date(startDate) > new Date(endDate)) {
+      $q.notify({
+        type: 'warning',
+        message: '结束日期不能早于开始日期',
+        position: 'top'
+      })
+      return
+    }
+
+    console.log('最终查询日期范围:', startDate, '到', endDate)
+    console.log('选择的房型:', selectedRoomType.value)
+
+    // 显示加载状态
+    roomStore.loading = true
+
+    // 使用新的getRoomStatusByDateRange方法获取所有房间的状态
+    await roomStore.getRoomStatusByDateRange(startDate, endDate, selectedRoomType.value)
+
+    // 根据日期范围的长度提供不同的提示信息
+    let statusMessage
+    if (startDate === endDate) {
+      statusMessage = `已显示 ${startDate} 当天所有房间的状态 (${roomStore.rooms.length} 间)`
+    } else {
+      statusMessage = `已显示 ${startDate} 至 ${endDate} 期间所有房间的状态 (${roomStore.rooms.length} 间)`
+    }
+
+    $q.notify({
+      type: 'positive',
+      message: statusMessage,
+      position: 'top'
+    })
+
+    // 更新URL参数以保持状态
+    router.replace({
+      path: route.path,
+      query: {
+        ...route.query,
+        dateRange: `${startDate}_${endDate}`,
+        type: selectedRoomType.value || undefined
+      }
+    })
+
+  } catch (error) {
+    console.error('应用日期筛选失败:', error)
+
+    // 更详细的错误信息
+    let errorMessage = '应用日期筛选失败'
+    if (error.response) {
+      console.error('错误响应:', error.response)
+      if (error.response.status === 400) {
+        errorMessage = error.response.data?.message || '请求参数错误'
+      } else if (error.response.status === 500) {
+        errorMessage = '服务器内部错误'
+      }
+    } else if (error.message) {
+      errorMessage = error.message
+    }
+
+    $q.notify({
+      type: 'negative',
+      message: errorMessage,
+      position: 'top'
+    })
+  } finally {
+    roomStore.loading = false
+  }
+}
+
+// 监听日期范围变化
+watch(dateRange, (newValue) => {
+  console.log('日期范围变化:', newValue)
+}, { deep: true })
 
 /**
  * 计算属性：根据筛选条件过滤房间列表
- * 同时考虑URL参数和本地筛选状态
- * URL参数优先级高于本地状态，确保从其他页面跳转时筛选正常工作
- * 增加了日期范围筛选功能
+ * 优先使用URL参数，支持房型和状态筛选
+ * 日期筛选通过重新加载数据实现，不在这里处理
  * @returns {Array} 过滤后的房间数组
  */
 const filteredRooms = computed(() => {
-  // 获取URL中的状态参数，优先于filterStatus变量
+  // 安全检查：确保 roomStore.rooms 存在且为数组
+  if (!roomStore.rooms || !Array.isArray(roomStore.rooms)) {
+    console.log('roomStore.rooms 未初始化，返回空数组')
+    return []
+  }
+
+  // 获取URL中的状态参数，优先于组件状态
   const urlStatus = route.query.status;
   const urlType = route.query.type;
-  const urlDateRange = route.query.dateRange;
 
-  // 使用roomStore的filterRooms方法替代本地过滤逻辑
+  // 构建筛选条件
   const filters = {};
 
-  // 设置房型筛选
+  // 设置房型筛选 - URL参数优先
   if (urlType) {
     filters.type = urlType;
+  } else if (selectedRoomType.value) {
+    filters.type = selectedRoomType.value;
   } else if (filterType.value) {
     filters.type = filterType.value;
   }
 
-  // 设置状态筛选，优先使用URL中的状态
+  // 设置状态筛选 - URL参数优先
   if (urlStatus) {
     filters.status = urlStatus;
   } else if (filterStatus.value) {
     filters.status = filterStatus.value;
   }
 
-  // 设置日期范围筛选
-  if (urlDateRange) {
-    filters.dateRange = urlDateRange;
-    console.log('已经设置日期范围')
-  } else if (dateRange.value) {
-    filters.dateRange = dateRange.value;
-  }
-
-  // 如果没有任何筛选条件 (仅指房型和状态)，并且 roomStore.rooms 本身可能已经是按日期筛选过的
-  // 或者包含了所有房间。roomStore.filterRooms 现在只处理 type 和 status。
+  // 如果没有任何筛选条件，直接返回所有房间
   if (!filters.type && !filters.status) {
-    console.log('没有房型或状态筛选条件，直接返回 roomStore.rooms:', roomStore.rooms.length);
-    return roomStore.rooms; // roomStore.rooms 可能已按日期筛选或为全部房间
+    console.log('没有筛选条件，返回所有房间:', roomStore.rooms.length);
+    return roomStore.rooms;
   }
 
-  // 获取基本过滤结果 - roomStore.filterRooms 现在只按房型和状态筛选
-  let result = roomStore.filterRooms(filters);
+  // 应用筛选条件
+  const result = roomStore.filterRooms(filters);
+  console.log('应用筛选后的房间数量:', result?.length || 0, '筛选条件:', filters);
 
-  return result;
+  return result || [];
 })
 
 /**
@@ -701,6 +865,13 @@ const statusOptions = computed(() => [
  */
 const roomTypeSelectOptions = computed(() => {
   const allOption = { label: '全部房型', value: null }
+
+  // 安全检查：确保 availableRoomTypeOptions 存在且为数组
+  if (!availableRoomTypeOptions.value || !Array.isArray(availableRoomTypeOptions.value)) {
+    console.log('availableRoomTypeOptions 未初始化，返回基础选项')
+    return [allOption]
+  }
+
   const typeOptions = availableRoomTypeOptions.value.map(option => ({
     ...option,
     label: option.label + ` (${roomStore.getAvailableRoomCountByType(option.value)}/${roomStore.getTotalRoomCountByType(option.value)})`
@@ -712,6 +883,12 @@ const roomTypeSelectOptions = computed(() => {
  * 快速切换按钮组的选项
  */
 const topRoomTypeToggleOptions = computed(() => {
+  // 安全检查：确保 availableRoomTypeOptions 存在且为数组
+  if (!availableRoomTypeOptions.value || !Array.isArray(availableRoomTypeOptions.value)) {
+    console.log('availableRoomTypeOptions 未初始化，返回基础选项')
+    return [{ label: '全部', value: null }]
+  }
+
   const topTypes = availableRoomTypeOptions.value.slice(0, 3)
   return [
     { label: '全部', value: null },
@@ -727,12 +904,26 @@ const topRoomTypeToggleOptions = computed(() => {
  */
 const getSelectedRoomTypeName = () => {
   if (!selectedRoomType.value) return ''
+
+  // 安全检查：确保 availableRoomTypeOptions 存在
+  if (!availableRoomTypeOptions.value || !Array.isArray(availableRoomTypeOptions.value)) {
+    console.log('availableRoomTypeOptions 未初始化，无法获取房型名称')
+    return ''
+  }
+
   const roomType = availableRoomTypeOptions.value.find(type => type.value === selectedRoomType.value)
   return roomType ? roomType.label : ''
 }
 
 const getSelectedRoomTypePrice = () => {
   if (!selectedRoomType.value) return null
+
+  // 安全检查：确保 availableRoomTypeOptions 存在
+  if (!availableRoomTypeOptions.value || !Array.isArray(availableRoomTypeOptions.value)) {
+    console.log('availableRoomTypeOptions 未初始化，无法获取房型价格')
+    return null
+  }
+
   const roomType = availableRoomTypeOptions.value.find(type => type.value === selectedRoomType.value)
   return roomType ? roomType.basePrice : null
 }
@@ -905,7 +1096,7 @@ const onRoomTypeSelect = (value) => {
 /**
  * 重置所有筛选
  */
-const resetAllFilters = () => {
+const resetAllFilters = async () => {
   selectedRoomType.value = null
   filterType.value = null
   filterStatus.value = null
@@ -916,6 +1107,15 @@ const resetAllFilters = () => {
   router.replace({
     path: route.path,
     query: {}
+  })
+
+  // 重新加载当前日期的房间数据
+  await loadRoomDataForDate(selectedDate.value)
+
+  $q.notify({
+    type: 'positive',
+    message: '已重置所有筛选条件',
+    position: 'top'
   })
 }
 
@@ -1157,6 +1357,18 @@ const availableRoomTypeOptions = computed(() => {
   if (dbRoomTypes.length > 0) {
     // 如果数据库房型数据已加载，使用数据库数据
     console.log('使用数据库房型数据创建房型卡片')
+
+    // 安全检查：确保 roomStore.rooms 存在且为数组
+    if (!roomStore.rooms || !Array.isArray(roomStore.rooms)) {
+      console.log('roomStore.rooms 未初始化，返回基础房型选项')
+      return dbRoomTypes.map(roomType => ({
+        label: roomType.type_name || viewStore.getRoomTypeName(roomType.type_code),
+        value: roomType.type_code,
+        description: roomType.description || '',
+        basePrice: roomType.base_price || 0
+      }))
+    }
+
     const result = dbRoomTypes
       .filter(roomType => {
         // 检查该房型是否有房间存在
@@ -1174,9 +1386,16 @@ const availableRoomTypeOptions = computed(() => {
     console.log('最终房型卡片数据:', result)
     return result
   } else {
-    // 如果数据库房型数据未加载，使用viewStore中的房型选项作为备用
+    // 如果数据库房型数据未加载，使用备用房型选项
     // 但只显示有房间的房型
     console.log('数据库房型数据未加载，使用备用房型选项')
+
+    // 安全检查：确保 roomStore.rooms 存在且为数组
+    if (!roomStore.rooms || !Array.isArray(roomStore.rooms)) {
+      console.log('roomStore.rooms 也未初始化，返回基础备用选项')
+      return []
+    }
+
     return roomTypeOptions.filter(option => {
       if (option.value === null) return false // 排除"所有房型"选项
       const totalRoomCount = roomStore.rooms.filter(room => room.type_code === option.value).length
@@ -1227,6 +1446,12 @@ function setTypeFilter(type) {
 
 // 总可用房间数
 const totalAvailableRooms = computed(() => {
+  // 安全检查：确保 roomStore.rooms 存在且为数组
+  if (!roomStore.rooms || !Array.isArray(roomStore.rooms)) {
+    console.log('roomStore.rooms 未初始化，返回0个可用房间')
+    return 0
+  }
+
   return roomStore.rooms.filter(room =>
     roomStore.getRoomDisplayStatus(room) === 'available'
   ).length
@@ -1289,7 +1514,25 @@ function getRoomDateStatus(dateInput) {
 async function loadRoomDataForDate(date) {
   try {
     console.log('加载日期房间数据:', date)
+
+    // 重置日期范围筛选，因为这是单日期查询
+    dateRange.value = null
+    showDateFilter.value = false
+
+    // 更新URL参数，清除日期范围筛选
+    router.replace({
+      path: route.path,
+      query: {
+        ...route.query,
+        dateRange: undefined,
+        queryDate: date
+      }
+    })
+
     await roomStore.fetchAllRooms(date)
+
+    console.log(`已加载 ${date} 的房间数据，共 ${roomStore.rooms.length} 个房间`)
+
   } catch (error) {
     console.error('加载房间数据失败:', error)
     $q.notify({

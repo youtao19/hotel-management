@@ -272,7 +272,184 @@ export const useRoomStore = defineStore('room', () => {
     }
   }
 
-  // 获取所有房间类型
+  /**
+   * 获取指定日期范围内所有房间的状态
+   * 这个方法用于查看指定时间段内所有房间的状态，而不仅仅是可用房间
+   * @param {string} startDate - 开始日期 YYYY-MM-DD
+   * @param {string} endDate - 结束日期 YYYY-MM-DD
+   * @param {string} [typeCode] - 可选的房型代码
+   * @returns {Promise<Array>} 所有房间在该时间段的状态列表
+   */
+  async function getRoomStatusByDateRange(startDate, endDate, typeCode = null) {
+    try {
+      console.log('查询日期范围内所有房间状态:', { startDate, endDate, typeCode });
+
+      // 如果开始日期和结束日期相同，使用单日期查询
+      if (startDate === endDate) {
+        console.log('单日期查询，使用fetchAllRooms方法');
+        await fetchAllRooms(startDate);
+
+        // 如果指定了房型，进行筛选
+        if (typeCode) {
+          rooms.value = rooms.value.filter(room => room.type_code === typeCode);
+        }
+
+        return rooms.value;
+      }
+
+      // 对于日期范围查询，我们需要更复杂的逻辑
+      // 首先获取所有房间的基本信息
+      await fetchAllRooms(); // 获取当前所有房间
+
+      // 然后获取在该日期范围内的所有订单信息
+      await orderStore.fetchAllOrders(); // 确保有最新的订单数据
+
+      // 处理每个房间在该日期范围内的状态
+      const processedRooms = rooms.value.map(room => {
+        return processRoomDataForDateRange(room, startDate, endDate);
+      });
+
+      // 如果指定了房型，进行筛选
+      if (typeCode) {
+        rooms.value = processedRooms.filter(room => room.type_code === typeCode);
+      } else {
+        rooms.value = processedRooms;
+      }
+
+      console.log(`处理完成，共 ${rooms.value.length} 个房间`);
+      return rooms.value;
+
+    } catch (error) {
+      console.error('获取日期范围房间状态失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 获取指定日期范围内的可用房间
+   * @param {string} startDate - 入住日期 YYYY-MM-DD
+   * @param {string} endDate - 退房日期 YYYY-MM-DD
+   * @param {string} [typeCode] - 可选的房型代码
+   * @returns {Promise<Array>} 可用房间列表
+   */
+  async function getAvailableRoomsByDate(startDate, endDate, typeCode = null) {
+    try {
+      console.log('查询可用房间:', { startDate, endDate, typeCode });
+
+      // 构建查询参数
+      const params = new URLSearchParams({
+        startDate,
+        endDate
+      });
+
+      if (typeCode) {
+        params.append('typeCode', typeCode);
+      }
+
+      console.log('API请求参数:', params.toString());
+
+      const response = await roomApi.getAvailableRooms(params.toString());
+
+      console.log('API响应:', response);
+
+      const availableRooms = response.data || [];
+
+      // 处理返回的可用房间数据
+      const processedRooms = availableRooms.map(room => {
+        return processRoomDataForDate(room, startDate);
+      });
+
+      console.log(`找到 ${processedRooms.length} 个可用房间`);
+      return processedRooms;
+
+    } catch (error) {
+      console.error('获取可用房间失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 处理房间在指定日期范围内的状态
+   * @param {Object} room - 房间对象
+   * @param {string} startDate - 开始日期
+   * @param {string} endDate - 结束日期
+   * @returns {Object} 处理后的房间对象
+   */
+  function processRoomDataForDateRange(room, startDate, endDate) {
+    // 查找在该日期范围内与房间相关的订单
+    const relevantOrders = orderStore.orders.filter(order => {
+      if (order.roomNumber !== room.room_number) return false;
+
+      // 检查订单日期范围是否与查询日期范围有重叠
+      const orderStartDate = order.checkInDate;
+      const orderEndDate = order.checkOutDate;
+
+      if (!orderStartDate || !orderEndDate) return false;
+
+      // 判断日期范围是否有重叠
+      return (orderStartDate <= endDate && orderEndDate >= startDate);
+    });
+
+    console.log(`房间 ${room.room_number} 在 ${startDate} 到 ${endDate} 期间的相关订单:`, relevantOrders.length);
+
+    // 初始化默认值
+    let displayStatus = room.status;
+    let orderStatus = null;
+    let guestName = null;
+    let checkOutDate = null;
+    let checkInDate = null;
+    let orderId = null;
+
+    // 如果有相关订单，处理状态
+    if (relevantOrders.length > 0) {
+      // 优先处理已入住的订单
+      const checkedInOrder = relevantOrders.find(order => order.status === ORDER_STATES.CHECKED_IN);
+      const pendingOrder = relevantOrders.find(order => order.status === ORDER_STATES.PENDING);
+
+      const activeOrder = checkedInOrder || pendingOrder || relevantOrders[0];
+
+      if (activeOrder) {
+        orderStatus = activeOrder.status;
+        guestName = activeOrder.guestName;
+        checkOutDate = activeOrder.checkOutDate;
+        checkInDate = activeOrder.checkInDate;
+        orderId = activeOrder.orderNumber;
+
+        // 根据订单状态确定房间显示状态
+        const mappedStatus = ORDER_TO_ROOM_STATE_MAP[orderStatus];
+        if (mappedStatus) {
+          displayStatus = mappedStatus;
+        }
+      }
+    } else {
+      // 没有相关订单，根据房间自身状态处理
+      if (room.status === ROOM_STATES.CLEANING || room.status === ROOM_STATES.REPAIR) {
+        displayStatus = room.status;
+      } else {
+        displayStatus = ROOM_STATES.AVAILABLE;
+      }
+    }
+
+    return {
+      ...room,
+      currentGuest: guestName,
+      checkOutDate: checkOutDate,
+      checkInDate: checkInDate,
+      orderStatus: orderStatus,
+      orderId: orderId,
+      displayStatus: displayStatus,
+      queryDateRange: `${startDate}_${endDate}` // 记录查询日期范围
+    };
+  }
+
+  /**
+   * 获取所有房间类型
+   * @function fetchRoomTypes
+   * @async
+   * @throws {Error} 如果房间类型数据获取失败或格式错误
+   * @returns {Promise<Array>} 返回所有房间类型列表
+   * @description 获取所有房间类型数据，并更新视图store中的房型映射
+   */
   async function fetchRoomTypes() {
     try {
       const response = await roomApi.getRoomTypes()
@@ -365,46 +542,6 @@ export const useRoomStore = defineStore('room', () => {
 
       return true
     })
-  }
-
-  /**
-   * 获取指定日期范围内的可用房间
-   * @param {string} startDate - 入住日期 YYYY-MM-DD
-   * @param {string} endDate - 退房日期 YYYY-MM-DD
-   * @param {string} [typeCode] - 可选的房型代码
-   * @returns {Promise<Array>} 可用房间列表
-   */
-  async function getAvailableRoomsByDate(startDate, endDate, typeCode = null) {
-    try {
-      console.log('查询可用房间:', { startDate, endDate, typeCode });
-
-      // 构建查询参数
-      const params = new URLSearchParams({
-        startDate,
-        endDate
-      });
-
-      if (typeCode) {
-        params.append('typeCode', typeCode);
-      }
-
-      const response = await roomApi.getAvailableRooms(params.toString());
-      const availableRoomsArray = response.data;
-
-      if (!Array.isArray(availableRoomsArray)) {
-        console.error('获取可用房间数据格式不正确，期望数组但得到:', availableRoomsArray);
-        throw new Error('获取可用房间数据格式不正确');
-      }
-
-      console.log(`Store: 找到 ${availableRoomsArray.length} 个可用房间，将更新主房间列表`);
-      // 直接用后端返回的、已按日期筛选的房间列表更新 store 中的 rooms
-      rooms.value = availableRoomsArray.map(room => processRoomData(room, {})); // 确保返回的房间也经过 processRoomData 处理
-
-      return rooms.value; // 返回更新后的 rooms.value
-    } catch (error) {
-      console.error('获取可用房间失败:', error);
-      throw error;
-    }
   }
 
   /**
@@ -859,6 +996,7 @@ export const useRoomStore = defineStore('room', () => {
     syncAllRoomStatus,
     syncRoomStatus,
     refreshData,
-    getAvailableRoomsByDate
+    getAvailableRoomsByDate,
+    getRoomStatusByDateRange
   }
 })
