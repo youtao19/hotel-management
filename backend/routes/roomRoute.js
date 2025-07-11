@@ -8,12 +8,33 @@ const VALID_ROOM_STATES = ['available', 'occupied', 'cleaning', 'repair', 'reser
 // 获取所有房间
 router.get('/', async (req, res) => {
   try {
-    const rooms = await roomModule.getAllRooms();
+    const { date } = req.query;
+
+    // 如果提供了日期参数，验证日期格式
+    if (date) {
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!dateRegex.test(date)) {
+        return res.status(400).json({ message: '日期格式必须为 YYYY-MM-DD' });
+      }
+
+      const queryDate = new Date(date);
+      if (isNaN(queryDate.getTime())) {
+        return res.status(400).json({ message: '无效的日期' });
+      }
+
+      console.log(`查询 ${date} 日期的房间状态`);
+    }
+
+    const rooms = await roomModule.getAllRooms(date);
 
     if (rooms.length === 0) {
       res.json({ data: [], message: '没有查询到房间数据' });
     } else {
-      res.json({ data: rooms });
+      res.json({
+        data: rooms,
+        queryDate: date || null,
+        message: date ? `查询到 ${date} 的房间状态` : '查询到当前房间状态'
+      });
     }
   } catch (err) {
     console.error('获取房间数据错误:', err);

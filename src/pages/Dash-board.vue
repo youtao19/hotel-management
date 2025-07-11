@@ -486,9 +486,10 @@ onMounted(() => {
     房间状态: roomStore.countByStatus
   });
 
-  // 确保房间数据已加载
+  // 确保房间数据已加载 - 使用当前日期查询
   if (roomStore.rooms.length === 0) {
-    roomStore.fetchAllRooms();
+    const today = new Date().toISOString().substring(0, 10);
+    roomStore.fetchAllRooms(today);
   }
 })
 

@@ -330,8 +330,8 @@ export const useOrderStore = defineStore('order', () => {
       })
   }
 
-  // 初始化
-  initialize()
+  // 不再自动初始化，由组件控制初始化时机
+  // initialize()
 
   return {
     orders,

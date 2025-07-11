@@ -38,7 +38,10 @@ api.interceptors.response.use(
 // 房间相关接口
 export const roomApi = {
   // 获取所有房间
-  getAllRooms: () => api.get('/rooms'),
+  getAllRooms: (date = null) => {
+    const url = date ? `/rooms?date=${date}` : '/rooms';
+    return api.get(url);
+  },
 
   // 根据ID获取房间
   getRoomById: (id) => api.get(`/rooms/${id}`),

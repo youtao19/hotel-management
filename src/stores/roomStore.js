@@ -98,37 +98,57 @@ export const useRoomStore = defineStore('room', () => {
    * 获取所有房间数据
    * @function fetchAllRooms
    * @async
+   * @param {string} [queryDate] - 查询日期 YYYY-MM-DD，如果不提供则查询当前状态
    * @throws {Error} 如果房间数据获取失败或格式错误
    * @returns {Promise<Array>} 返回所有房间列表
-   * @description 获取所有房间数据，并根据活跃订单设置房间的显示状态
+   * @description 获取所有房间数据，并根据订单设置房间的显示状态
    */
-  async function fetchAllRooms() {
+  async function fetchAllRooms(queryDate = null) {
     try {
       loading.value = true
       error.value = null
 
-      // 先确保有最新的订单数据
-      await fetchActiveOrders()
+      console.log('获取房间数据，查询日期:', queryDate || '当前状态')
 
-      // 获取所有房间数据
-      const response = await roomApi.getAllRooms()
+      // 如果没有指定日期，先确保有最新的订单数据
+      if (!queryDate) {
+        await fetchActiveOrders()
+      }
+
+      // 获取房间数据（可能包含指定日期的状态）
+      const response = await roomApi.getAllRooms(queryDate)
 
       if (!response || !response.data) {
         throw new Error('房间数据获取失败或格式错误')
       }
 
-      // 创建房间号到订单的映射，优化查找效率
-      const roomToOrderMap = {}
-      activeOrders.value.forEach(order => {
-        if (order.roomNumber) {
-          roomToOrderMap[order.roomNumber] = order
-        }
-      })
+      console.log('API返回的房间数据:', response.data.length, '个房间')
+      if (response.queryDate) {
+        console.log('查询日期:', response.queryDate)
+      }
 
-      // 处理房间数据，设置显示状态
-      rooms.value = response.data.map(room => {
-        return processRoomData(room, roomToOrderMap)
-      })
+      let processedRooms;
+
+      if (queryDate) {
+        // 如果指定了日期，后端已经返回了该日期的房间状态，直接处理
+        processedRooms = response.data.map(room => {
+          return processRoomDataForDate(room, queryDate)
+        })
+      } else {
+        // 如果没有指定日期，使用原有的处理逻辑
+        const roomToOrderMap = {}
+        activeOrders.value.forEach(order => {
+          if (order.roomNumber) {
+            roomToOrderMap[order.roomNumber] = order
+          }
+        })
+
+        processedRooms = response.data.map(room => {
+          return processRoomData(room, roomToOrderMap)
+        })
+      }
+
+      rooms.value = processedRooms
 
       // 统计显示状态
       const statusCounts = {}
@@ -137,6 +157,7 @@ export const useRoomStore = defineStore('room', () => {
         statusCounts[status] = (statusCounts[status] || 0) + 1
       })
 
+      console.log('房间状态统计:', statusCounts)
       return rooms.value
     } catch (err) {
       console.error('获取房间数据失败:', err)
@@ -206,6 +227,48 @@ export const useRoomStore = defineStore('room', () => {
       orderStatus: orderStatus,
       orderId: orderId,
       displayStatus: displayStatus
+    }
+  }
+
+  // 处理指定日期的房间数据
+  function processRoomDataForDate(room, queryDate) {
+    // 初始化默认值
+    let displayStatus = room.status
+    let orderStatus = room.order_status || null
+    let guestName = room.guest_name || null
+    let checkOutDate = room.check_out_date || null
+    let orderId = room.order_id || null
+    let checkInDate = room.check_in_date || null
+
+    // 如果房间有订单信息（来自后端按日期查询的结果）
+    if (room.order_status) {
+      console.log(`房间 ${room.room_number} 在 ${queryDate} 的订单状态: ${room.order_status}`)
+
+      // 根据订单状态确定房间显示状态
+      const mappedStatus = ORDER_TO_ROOM_STATE_MAP[room.order_status]
+      if (mappedStatus) {
+        displayStatus = mappedStatus
+        console.log(`房间 ${room.room_number} 状态映射: ${room.order_status} -> ${displayStatus}`)
+      }
+    } else {
+      // 没有关联订单，根据房间自身状态处理
+      if (room.status === ROOM_STATES.CLEANING || room.status === ROOM_STATES.REPAIR) {
+        displayStatus = room.status
+      } else {
+        displayStatus = ROOM_STATES.AVAILABLE
+      }
+      console.log(`房间 ${room.room_number} 在 ${queryDate} 无订单，状态: ${displayStatus}`)
+    }
+
+    return {
+      ...room,
+      currentGuest: guestName,
+      checkOutDate: checkOutDate,
+      checkInDate: checkInDate,
+      orderStatus: orderStatus,
+      orderId: orderId,
+      displayStatus: displayStatus,
+      queryDate // 记录查询日期
     }
   }
 
@@ -744,8 +807,8 @@ export const useRoomStore = defineStore('room', () => {
       })
   }
 
-  // 立即初始化
-  initialize()
+  // 不再自动初始化，由组件控制初始化时机
+  // initialize()
 
 
 

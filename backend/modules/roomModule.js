@@ -2,9 +2,10 @@
 const { query } = require('../database/postgreDB/pg');
 /**
  * 获取所有房间
+ * @param {string} [queryDate] - 查询日期 YYYY-MM-DD，如果不提供则查询当前活跃订单
  * @returns {Promise<Array>} 所有房间列表
  */
-async function getAllRooms() {
+async function getAllRooms(queryDate = null) {
   try {
     // 使用两次查询，先获取全部房间，然后获取已有订单的房间，最后合并数据
     // 这样可以确保不会漏掉任何房间
@@ -16,22 +17,47 @@ async function getAllRooms() {
 
     const allRooms = roomsResult.rows;
 
-    // 2. 获取房间与当前有效订单的关联信息
-    console.log('开始获取房间关联的订单信息...');
-    const ordersSQL = `
-      SELECT DISTINCT ON (o.room_number)
-        o.room_number,
-        o.guest_name,
-        o.check_out_date,
-        o.status as order_status,
-        o.order_id
-      FROM orders o
-      WHERE o.status IN ('pending', 'checked-in')
-      ORDER BY o.room_number, o.create_time DESC
-    `;
+    // 2. 获取房间与订单的关联信息
+    let ordersSQL;
+    let queryParams = [];
 
-    const ordersResult = await query(ordersSQL);
-    console.log(`查询到 ${ordersResult.rows.length} 个活跃订单`);
+    if (queryDate) {
+      // 如果指定了查询日期，获取该日期的房间状态
+      console.log(`开始获取 ${queryDate} 日期的房间关联订单信息...`);
+      ordersSQL = `
+        SELECT DISTINCT ON (o.room_number)
+          o.room_number,
+          o.guest_name,
+          o.check_out_date,
+          o.status as order_status,
+          o.order_id,
+          o.check_in_date
+        FROM orders o
+        WHERE o.check_in_date <= $1::date
+          AND o.check_out_date > $1::date
+          AND o.status IN ('pending', 'checked-in', 'checked-out')
+        ORDER BY o.room_number, o.create_time DESC
+      `;
+      queryParams = [queryDate];
+    } else {
+      // 如果没有指定日期，获取当前活跃订单
+      console.log('开始获取房间关联的当前活跃订单信息...');
+      ordersSQL = `
+        SELECT DISTINCT ON (o.room_number)
+          o.room_number,
+          o.guest_name,
+          o.check_out_date,
+          o.status as order_status,
+          o.order_id,
+          o.check_in_date
+        FROM orders o
+        WHERE o.status IN ('pending', 'checked-in')
+        ORDER BY o.room_number, o.create_time DESC
+      `;
+    }
+
+    const ordersResult = await query(ordersSQL, queryParams);
+    console.log(`查询到 ${ordersResult.rows.length} 个相关订单`);
 
     const ordersByRoom = {};
 
@@ -49,7 +75,8 @@ async function getAllRooms() {
           guest_name: order.guest_name,
           check_out_date: order.check_out_date,
           order_status: order.order_status,
-          order_id: order.order_id
+          order_id: order.order_id,
+          check_in_date: order.check_in_date
         };
       }
       return room;
@@ -63,7 +90,8 @@ async function getAllRooms() {
           room_number: room.room_number,
           status: room.status,
           order_status: room.order_status,
-          guest_name: room.guest_name
+          guest_name: room.guest_name,
+          query_date: queryDate || 'current'
         }))
       );
     }

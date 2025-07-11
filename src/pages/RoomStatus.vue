@@ -5,6 +5,61 @@
       <!-- 页面标题 -->
       <!-- <h1 class="text-h4 q-mb-md">房间状态</h1> -->
 
+    <!-- 日期选择器 -->
+    <div class="date-selector q-mb-md">
+      <q-card flat bordered>
+        <q-card-section class="q-pa-md">
+          <div class="row q-col-gutter-md items-center">
+            <div class="col-md-4 col-sm-6 col-xs-12">
+              <q-input
+                v-model="selectedDate"
+                outlined
+                dense
+                label="查询日期"
+                readonly
+                :model-value="formattedSelectedDate"
+              >
+                <template v-slot:prepend>
+                  <q-icon name="event" color="primary" />
+                </template>
+                <template v-slot:append>
+                  <q-icon name="event" class="cursor-pointer">
+                    <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+                      <q-date
+                        v-model="selectedDate"
+                        today-btn
+                        @update:model-value="onDateChange"
+                      >
+                        <div class="row items-center justify-end q-pa-sm">
+                          <q-btn v-close-popup label="确定" color="primary" flat/>
+                        </div>
+                      </q-date>
+                    </q-popup-proxy>
+                  </q-icon>
+                </template>
+              </q-input>
+            </div>
+            <div class="col-md-2 col-sm-3 col-xs-12">
+              <q-btn
+                color="primary"
+                icon="today"
+                label="今天"
+                @click="setToday"
+                outline
+                dense
+              />
+            </div>
+            <div class="col-md-6 col-sm-3 col-xs-12">
+              <div class="text-body2 text-grey-7">
+                <q-icon name="info" class="q-mr-xs" />
+                显示 {{ formattedSelectedDate }} 的房间状态
+              </div>
+            </div>
+          </div>
+        </q-card-section>
+      </q-card>
+    </div>
+
     <!-- 简约筛选工具栏 -->
     <div class="compact-filters q-mb-lg">
       <q-card flat bordered>
@@ -466,8 +521,9 @@ const ROOM_STATES = roomStore.ROOM_STATES
 const filterType = ref(null)    // 房间类型筛选，初始为null表示不筛选
 const filterStatus = ref(null)  // 房间状态筛选，初始为null表示不筛选
 const dateRange = ref(null)     // 日期范围筛选，初始为null表示不筛选
-const loading = ref(false)      // 加载状态
-const error = ref(null)         // 错误信息
+
+// 日期选择相关的响应式数据
+const selectedDate = ref(new Date().toISOString().substring(0, 10)) // 当前选择的查询日期，默认为今天
 
 // 添加简约界面相关的响应式数据
 const showDateFilter = ref(false)
@@ -480,13 +536,34 @@ const calendarDate = ref(new Date().toISOString().substr(0, 10)) // YYYY-MM-DD �
 const roomBookingData = ref([]) // 存储房间的预订数据
 const selectedDateInfo = ref(null) // 存储选中日期的详细信息
 
+// 格式化选中日期显示
+const formattedSelectedDate = computed(() => {
+  if (!selectedDate.value) return ''
+  const date = new Date(selectedDate.value)
+  return date.toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    weekday: 'long'
+  })
+})
+
 // 组件初始化
 onMounted(async () => {
-  console.log('RoomStatus组件已挂载')
-  // 初始化房间数据
-  await roomStore.fetchAllRooms()
-  await roomStore.fetchRoomTypes()
-  await orderStore.fetchAllOrders()
+  console.log('RoomStatus组件已挂载，当前选择日期:', selectedDate.value)
+
+  try {
+    // 先获取房型数据
+    await roomStore.fetchRoomTypes()
+
+    // 然后按当前日期加载房间数据
+    console.log('开始加载当前日期的房间数据:', selectedDate.value)
+    await loadRoomDataForDate(selectedDate.value)
+
+    console.log('房间状态页面初始化完成')
+  } catch (error) {
+    console.error('房间状态页面初始化失败:', error)
+  }
 })
 
 /**
@@ -1206,6 +1283,38 @@ function getRoomDateStatus(dateInput) {
 }
 
 /**
+ * 日期选择相关方法
+ */
+// 加载指定日期的房间数据
+async function loadRoomDataForDate(date) {
+  try {
+    console.log('加载日期房间数据:', date)
+    await roomStore.fetchAllRooms(date)
+  } catch (error) {
+    console.error('加载房间数据失败:', error)
+    $q.notify({
+      type: 'negative',
+      message: '加载房间数据失败',
+      position: 'top'
+    })
+  }
+}
+
+// 日期变化处理
+async function onDateChange(newDate) {
+  console.log('日期变化:', newDate)
+  selectedDate.value = newDate
+  await loadRoomDataForDate(newDate)
+}
+
+// 设置为今天
+async function setToday() {
+  const today = new Date().toISOString().substring(0, 10)
+  selectedDate.value = today
+  await loadRoomDataForDate(today)
+}
+
+/**
  * 房间操作方法
  */
 // 预订房间
@@ -1239,7 +1348,7 @@ async function checkOut(roomId) {
         position: 'top'
       })
       // 刷新房间数据
-      await roomStore.fetchAllRooms()
+      await loadRoomDataForDate(selectedDate.value)
     } else {
       $q.notify({
         type: 'negative',
@@ -1269,7 +1378,7 @@ async function setRoomCleaning(roomId) {
         position: 'top'
       })
       // 刷新房间数据
-      await roomStore.fetchAllRooms()
+      await loadRoomDataForDate(selectedDate.value)
     } else {
       $q.notify({
         type: 'negative',
@@ -1299,7 +1408,7 @@ async function setMaintenance(roomId) {
         position: 'top'
       })
       // 刷新房间数据
-      await roomStore.fetchAllRooms()
+      await loadRoomDataForDate(selectedDate.value)
     } else {
       $q.notify({
         type: 'negative',
@@ -1329,7 +1438,7 @@ async function clearMaintenance(roomId) {
         position: 'top'
       })
       // 刷新房间数据
-      await roomStore.fetchAllRooms()
+      await loadRoomDataForDate(selectedDate.value)
     } else {
       $q.notify({
         type: 'negative',
@@ -1359,7 +1468,7 @@ async function clearCleaning(roomId) {
         position: 'top'
       })
       // 刷新房间数据
-      await roomStore.fetchAllRooms()
+      await loadRoomDataForDate(selectedDate.value)
     } else {
       $q.notify({
         type: 'negative',
@@ -1535,6 +1644,21 @@ async function clearCleaning(roomId) {
 .date-filters .q-card {
   border-radius: 8px;
   border: 1px dashed #e0e0e0;
+}
+
+/* 日期选择器样式 */
+.date-selector .q-card {
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e0e0e0;
+}
+
+.date-selector .q-input {
+  font-weight: 500;
+}
+
+.date-selector .q-field__native {
+  color: #1976d2;
 }
 
 /* 响应式设计 */
