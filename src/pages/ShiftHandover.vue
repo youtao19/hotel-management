@@ -107,7 +107,7 @@
 
             <!-- 支付宝 -->
             <tr class="payment-row digital-row">
-              <td class="payment-label">支付宝</td>
+              <td class="payment-label">微邮付</td>
               <td class="editable-cell">
                 <q-input v-model.number="paymentData.digital.reserveCash" type="number" dense borderless class="table-input" @update:model-value="calculateTotals" />
               </td>
@@ -169,10 +169,10 @@
         <div class="row q-mt-lg">
           <div class="col-12">
             <div class="task-management-container">
-              <div class="task-management-header">
-                <q-icon name="task_alt" size="24px" class="q-mr-sm" />
-                <span class="text-h6 text-weight-bold">今日待办事项</span>
-              </div>
+                              <div class="task-management-header">
+                  <q-icon name="task_alt" size="24px" class="q-mr-sm" />
+                  <span class="text-h6 text-weight-bold">今日待办事项</span>
+                </div>
 
               <div class="task-management-content">
                 <div class="task-list-horizontal">

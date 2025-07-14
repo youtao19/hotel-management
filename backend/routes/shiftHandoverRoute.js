@@ -5,7 +5,8 @@ const {
   getStatistics,
   saveHandover,
   getHandoverHistory,
-  exportHandoverToExcel
+  exportHandoverToExcel,
+  getPreviousHandoverData
 } = require('../modules/shiftHandoverModule');
 
 // 获取收款明细
@@ -126,6 +127,36 @@ router.get('/history', async (req, res) => {
     console.error('获取交接班历史记录失败:', error);
     res.status(500).json({
       message: '获取交接班历史记录失败',
+      error: error.message
+    });
+  }
+});
+
+// 获取前一天的交接班记录
+router.get('/previous-handover', async (req, res) => {
+  try {
+    const { date } = req.query;
+
+    if (!date) {
+      return res.status(400).json({
+        error: '请提供日期参数'
+      });
+    }
+
+    // 验证日期格式
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(date)) {
+      return res.status(400).json({
+        error: '无效的日期格式，应为 YYYY-MM-DD'
+      });
+    }
+
+    const previousData = await getPreviousHandoverData(date);
+    res.json(previousData);
+  } catch (error) {
+    console.error('获取前一天交接班记录失败:', error);
+    res.status(500).json({
+      message: '获取前一天交接班记录失败',
       error: error.message
     });
   }

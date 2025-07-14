@@ -175,6 +175,9 @@ export const shiftHandoverApi = {
   // 获取统计数据
   getStatistics: (params) => api.get('/shift-handover/statistics', { params }),
 
+  // 获取前一天的交接班记录
+  getPreviousHandoverData: (params) => api.get('/shift-handover/previous-handover', { params }),
+
   // 保存交接班记录
   saveHandover: (handoverData) => api.post('/shift-handover/save', handoverData),
 

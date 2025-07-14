@@ -18,7 +18,8 @@
         "postinstall": "quasar prepare",
         "start": "concurrently \"npm run devStart\" \"npm run dev\"",
         "devStart": "cross-env NODE_ENV=dev nodemon server.js",
-        "export-schema": "node scripts/exportSchema.js"
+        "export-schema": "node scripts/exportSchema.js",
+        "migrate:shift-handover": "node scripts/migrateShiftHandover.js"
     },
     "dependencies": {
         "@quasar/extras": "^1.16.4",

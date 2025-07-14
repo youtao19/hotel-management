@@ -125,7 +125,8 @@ const historyColumns = [
     label: 'ID',
     field: 'id',
     sortable: true,
-    align: 'left'
+    align: 'left',
+    style: 'width: 80px'
   },
   {
     name: 'shift_date',
@@ -133,7 +134,14 @@ const historyColumns = [
     field: 'shift_date',
     sortable: true,
     align: 'center',
-    format: (val) => val ? new Date(val).toLocaleDateString() : ''
+    format: (val) => val ? new Date(val).toLocaleDateString('zh-CN') : ''
+  },
+  {
+    name: 'shift_time',
+    label: '班次时间',
+    field: 'shift_time',
+    sortable: true,
+    align: 'center'
   },
   {
     name: 'cashier_name',
@@ -143,17 +151,43 @@ const historyColumns = [
     align: 'center'
   },
   {
+    name: 'handover_person',
+    label: '交班人',
+    field: 'handover_person',
+    sortable: true,
+    align: 'center',
+    format: (val) => val || '-'
+  },
+  {
+    name: 'receive_person',
+    label: '接班人',
+    field: 'receive_person',
+    sortable: true,
+    align: 'center',
+    format: (val) => val || '-'
+  },
+  {
     name: 'type',
     label: '类型',
     field: 'type',
     sortable: true,
-    align: 'center'
+    align: 'center',
+    format: (val) => val === 'hotel' ? '客房' : '休息房'
+  },
+  {
+    name: 'total_income',
+    label: '总收入',
+    field: 'total_income',
+    sortable: true,
+    align: 'center',
+    format: (val) => val ? `¥${parseFloat(val).toFixed(0)}` : '¥0'
   },
   {
     name: 'actions',
     label: '操作',
     field: 'actions',
-    align: 'center'
+    align: 'center',
+    style: 'width: 200px'
   }
 ]
 

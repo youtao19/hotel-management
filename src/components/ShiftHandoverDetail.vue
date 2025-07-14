@@ -34,7 +34,7 @@
         <!-- 基本信息 -->
         <div v-if="recordData" class="basic-info q-mb-md">
           <div class="row q-col-gutter-md">
-            <div class="col-md-3">
+            <div class="col-md-2">
               <q-input
                 label="交接日期"
                 :model-value="formatDate(recordData.shift_date)"
@@ -43,7 +43,16 @@
                 outlined
               />
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
+              <q-input
+                label="班次时间"
+                :model-value="recordData.shift_time || '-'"
+                readonly
+                dense
+                outlined
+              />
+            </div>
+            <div class="col-md-2">
               <q-input
                 label="收银员"
                 :model-value="recordData.cashier_name"
@@ -55,7 +64,7 @@
             <div class="col-md-3">
               <q-input
                 label="交班人"
-                :model-value="recordData.handover_person"
+                :model-value="recordData.handover_person || '-'"
                 readonly
                 dense
                 outlined
@@ -64,7 +73,7 @@
             <div class="col-md-3">
               <q-input
                 label="接班人"
-                :model-value="recordData.receive_person"
+                :model-value="recordData.receive_person || '-'"
                 readonly
                 dense
                 outlined
@@ -75,15 +84,18 @@
 
         <!-- HTML快照显示 -->
         <div v-if="recordData && recordData.html_snapshot" class="html-snapshot">
+          <div class="text-h6 q-mb-md text-primary">
+            <q-icon name="table_view" class="q-mr-sm" />
+            交接班记录快照
+          </div>
           <div class="snapshot-container" v-html="sanitizedHtml"></div>
         </div>
 
         <!-- 备用：结构化数据显示 -->
-        <div v-else-if="recordData && recordData.details" class="structured-data">
-          <div class="text-h6 q-mb-md">交接班数据</div>
+        <div v-else-if="recordData && (recordData.details || recordData.paymentData)" class="structured-data">
 
           <!-- 支付数据表格 -->
-          <div v-if="recordData.details.paymentData" class="payment-data q-mb-lg">
+          <div v-if="recordData.paymentData || (recordData.details && recordData.details.paymentData)" class="payment-data q-mb-lg">
             <table class="detail-table">
               <thead>
                 <tr class="table-header">
@@ -228,6 +240,11 @@ function closeDialog() {
 function formatDate(dateStr) {
   if (!dateStr) return ''
   return new Date(dateStr).toLocaleDateString('zh-CN')
+}
+
+function formatCurrency(value) {
+  if (value === null || value === undefined) return '0.00'
+  return new Intl.NumberFormat('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)
 }
 
 function getPaymentMethodName(key) {

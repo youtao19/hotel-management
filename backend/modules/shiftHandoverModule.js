@@ -209,6 +209,8 @@ async function saveHandover(handoverData) {
     totalSummary,
     handoverAmount,
     specialStats,
+    taskList,
+    htmlSnapshot,
 
     // 旧格式字段 (向后兼容)
     type = 'hotel',
@@ -225,6 +227,8 @@ async function saveHandover(handoverData) {
   const finalShiftTime = shift_time || new Date().toTimeString().slice(0, 5);
   const finalShiftDate = date || shift_date;
   const finalRemarks = notes || remarks;
+  const finalHandoverPerson = handoverPerson || '';
+  const finalReceivePerson = receivePerson || '';
 
   // 验证必填字段
   if (!finalCashierName || finalCashierName.trim() === '' || finalCashierName === '未知') {
@@ -236,8 +240,8 @@ async function saveHandover(handoverData) {
     // 基本信息
     date: finalShiftDate,
     shift: shift || '白班',
-    handoverPerson: handoverPerson || '',
-    receivePerson: receivePerson || '',
+    handoverPerson: finalHandoverPerson,
+    receivePerson: finalReceivePerson,
     cashierName: finalCashierName,
     notes: finalRemarks,
 
@@ -246,6 +250,7 @@ async function saveHandover(handoverData) {
     totalSummary: totalSummary || {},
     handoverAmount: handoverAmount || 0,
     specialStats: specialStats || {},
+    taskList: taskList || [],
 
     // 兼容旧格式
     type,
@@ -261,8 +266,11 @@ async function saveHandover(handoverData) {
       remarks,
       cashier_name,
       shift_time,
-      shift_date
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+      shift_date,
+      html_snapshot,
+      handover_person,
+      receive_person
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     RETURNING *;
   `;
 
@@ -274,7 +282,10 @@ async function saveHandover(handoverData) {
       finalRemarks,
       finalCashierName.trim(),
       finalShiftTime,
-      finalShiftDate
+      finalShiftDate,
+      htmlSnapshot || null, // HTML快照
+      finalHandoverPerson,
+      finalReceivePerson
     ]);
 
     return result.rows[0];
@@ -363,8 +374,30 @@ async function getHandoverHistory(startDate, endDate, page = 1, limit = 10, cash
     const countResult = await query(countSql, countParams);
     const total = parseInt(countResult.rows[0].total);
 
+    // 处理返回数据，确保details字段正确解析
+    const processedRows = result.rows.map(row => {
+      try {
+        // 解析details字段中的完整数据
+        const details = typeof row.details === 'string' ? JSON.parse(row.details) : row.details;
+
+        return {
+          ...row,
+          details: details,
+          // 兼容性处理：如果details中包含新格式数据，提取到顶层
+          paymentData: details.paymentData || null,
+          taskList: details.taskList || null,
+          specialStats: details.specialStats || null,
+          // 确保html_snapshot字段正确返回
+          html_snapshot: row.html_snapshot
+        };
+      } catch (parseError) {
+        console.error('解析交接班详情数据失败:', parseError);
+        return row;
+      }
+    });
+
     return {
-      data: result.rows,
+      data: processedRows,
       total: total,
       page: page,
       limit: limit
@@ -499,7 +532,7 @@ async function exportNewHandoverToExcel(handoverData) {
       ],
       // 数码付行
       [
-        '数码付',
+        '微邮付',
         paymentData.digital.reserveCash || 0,
         paymentData.digital.hotelIncome || 0,
         paymentData.digital.restIncome || 0,
@@ -510,30 +543,17 @@ async function exportNewHandoverToExcel(handoverData) {
         paymentData.digital.retainedAmount || 0,
         ''
       ],
-      // 其他方式行
-      [
-        '其他方式',
-        paymentData.other.reserveCash || 0,
-        paymentData.other.hotelIncome || 0,
-        paymentData.other.restIncome || 0,
-        0,
-        paymentData.other.total || 0,
-        paymentData.other.hotelDeposit || 0,
-        paymentData.other.restDeposit || 0,
-        paymentData.other.retainedAmount || 0,
-        ''
-      ],
       // 合计行
       [
         '合计',
-        totalSummary.reserveCash || 0,
-        totalSummary.hotelIncome || 0,
-        totalSummary.restIncome || 0,
+        (paymentData.cash.reserveCash || 0) + (paymentData.wechat.reserveCash || 0) + (paymentData.digital.reserveCash || 0),
+        (paymentData.cash.hotelIncome || 0) + (paymentData.wechat.hotelIncome || 0) + (paymentData.digital.hotelIncome || 0),
+        (paymentData.cash.restIncome || 0) + (paymentData.wechat.restIncome || 0) + (paymentData.digital.restIncome || 0),
         0,
-        totalSummary.grandTotal || 0,
-        totalSummary.hotelDeposit || 0,
-        totalSummary.restDeposit || 0,
-        totalSummary.retainedAmount || 0,
+        (paymentData.cash.total || 0) + (paymentData.wechat.total || 0) + (paymentData.digital.total || 0),
+        (paymentData.cash.hotelDeposit || 0) + (paymentData.wechat.hotelDeposit || 0) + (paymentData.digital.hotelDeposit || 0),
+        (paymentData.cash.restDeposit || 0) + (paymentData.wechat.restDeposit || 0) + (paymentData.digital.restDeposit || 0),
+        (paymentData.cash.retainedAmount || 0) + (paymentData.wechat.retainedAmount || 0) + (paymentData.digital.retainedAmount || 0),
         `交接款: ${handoverAmount || 0}`
       ],
       [],
@@ -584,11 +604,60 @@ async function exportNewHandoverToExcel(handoverData) {
   }
 }
 
+/**
+ * 获取前一天的交接班记录（用于获取备用金）
+ * @param {string} currentDate - 当前日期
+ * @returns {Promise<Object|null>} 前一天的交接班记录
+ */
+async function getPreviousHandoverData(currentDate) {
+  // 计算前一天的日期
+  const current = new Date(currentDate);
+  const previous = new Date(current);
+  previous.setDate(current.getDate() - 1);
+  const previousDateStr = previous.toISOString().split('T')[0];
+
+  const sql = `
+    SELECT *
+    FROM shift_handover h
+    WHERE h.shift_date = $1
+    ORDER BY h.id DESC
+    LIMIT 1
+  `;
+
+  try {
+    const result = await query(sql, [previousDateStr]);
+
+    if (result.rows.length > 0) {
+      const record = result.rows[0];
+
+      // 解析details字段
+      let details = {};
+      try {
+        details = typeof record.details === 'string' ? JSON.parse(record.details) : record.details;
+      } catch (parseError) {
+        console.error('解析前一天交接班详情数据失败:', parseError);
+      }
+
+      return {
+        ...record,
+        details: details,
+        paymentData: details.paymentData || null
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.error('获取前一天交接班记录失败:', error);
+    throw error;
+  }
+}
+
 module.exports = {
   getReceiptDetails,
   getStatistics,
   saveHandover,
   getHandoverHistory,
   exportHandoverToExcel,
-  exportNewHandoverToExcel
+  exportNewHandoverToExcel,
+  getPreviousHandoverData
 };
