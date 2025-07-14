@@ -8,22 +8,19 @@
           <q-btn color="primary" icon="print" label="打印" @click="printHandover" />
           <q-btn color="green" icon="download" label="导出Excel" @click="exportToExcel" />
           <q-btn color="orange" icon="save" label="保存交接记录" @click="saveHandover" />
-          <q-btn color="blue" icon="history" label="历史记录" @click="showHistoryDialog = true" />
+          <q-btn color="blue" icon="history" label="历史记录" @click="openHistoryDialog" />
         </div>
       </div>
 
-      <!-- 日期和班次信息 -->
+      <!-- 日期和人员信息 -->
       <div class="row q-col-gutter-md q-mb-md">
-        <div class="col-md-3">
+        <div class="col-md-4">
           <q-input v-model="selectedDate" type="date" label="交接日期" filled @update:model-value="loadShiftData" />
         </div>
-        <div class="col-md-3">
-          <q-select v-model="currentShift" :options="shiftOptions" label="当前班次" filled @update:model-value="loadShiftData" />
-        </div>
-        <div class="col-md-3">
+        <div class="col-md-4">
           <q-input v-model="handoverPerson" label="交班人" filled />
         </div>
-        <div class="col-md-3">
+        <div class="col-md-4">
           <q-input v-model="receivePerson" label="接班人" filled />
         </div>
       </div>
@@ -275,121 +272,8 @@
       </div>
     </div>
 
-    <!-- 历史记录对话框 -->
-    <q-dialog v-model="showHistoryDialog" maximized>
-      <q-card class="history-dialog">
-        <q-card-section class="row items-center q-pb-none">
-          <div class="text-h6">交接班历史记录</div>
-          <q-space />
-          <q-btn icon="close" flat round dense v-close-popup />
-        </q-card-section>
-
-        <q-card-section class="q-pt-none">
-          <!-- 搜索和筛选 -->
-          <div class="row q-gutter-md q-mb-md">
-            <q-input
-              v-model="historyFilter.cashierName"
-              label="收银员姓名"
-              dense
-              outlined
-              style="width: 200px"
-              @update:model-value="loadHistoryRecords"
-            />
-            <q-input
-              v-model="historyFilter.startDate"
-              label="开始日期"
-              type="date"
-              dense
-              outlined
-              style="width: 200px"
-              @update:model-value="loadHistoryRecords"
-            />
-            <q-input
-              v-model="historyFilter.endDate"
-              label="结束日期"
-              type="date"
-              dense
-              outlined
-              style="width: 200px"
-              @update:model-value="loadHistoryRecords"
-            />
-            <q-btn color="primary" icon="search" label="搜索" @click="loadHistoryRecords" />
-            <q-btn color="secondary" icon="refresh" label="刷新" @click="refreshHistory" />
-          </div>
-
-          <!-- 历史记录表格 -->
-          <q-table
-            :rows="historyRecords"
-            :columns="historyColumns"
-            row-key="id"
-            :loading="historyLoading"
-            :pagination="historyPagination"
-            @request="onHistoryRequest"
-            binary-state-sort
-            class="history-table"
-          >
-            <template v-slot:body-cell-actions="props">
-              <q-td :props="props">
-                <q-btn
-                  size="sm"
-                  color="primary"
-                  icon="visibility"
-                  label="查看"
-                  @click="viewHistoryRecord(props.row)"
-                  class="q-mr-sm"
-                />
-                <q-btn
-                  size="sm"
-                  color="green"
-                  icon="download"
-                  label="导出"
-                  @click="exportHistoryRecord(props.row)"
-                />
-              </q-td>
-            </template>
-          </q-table>
-        </q-card-section>
-      </q-card>
-    </q-dialog>
-
-    <!-- 历史记录详情对话框 -->
-    <q-dialog v-model="showHistoryDetailDialog" maximized>
-      <q-card class="history-detail-dialog">
-        <q-card-section class="row items-center q-pb-none">
-          <div class="text-h6">交接班记录详情</div>
-          <q-space />
-          <q-btn icon="close" flat round dense v-close-popup />
-        </q-card-section>
-
-        <q-card-section v-if="selectedHistoryRecord">
-          <div class="row q-col-gutter-md q-mb-md">
-            <div class="col-md-3">
-              <q-input label="日期" :model-value="selectedHistoryRecord.shift_date" readonly />
-            </div>
-            <div class="col-md-3">
-              <q-input label="班次时间" :model-value="selectedHistoryRecord.shift_time" readonly />
-            </div>
-            <div class="col-md-3">
-              <q-input label="收银员" :model-value="selectedHistoryRecord.cashier_name" readonly />
-            </div>
-            <div class="col-md-3">
-              <q-input label="类型" :model-value="selectedHistoryRecord.type" readonly />
-            </div>
-          </div>
-
-          <!-- 显示详细数据 -->
-          <div v-if="selectedHistoryRecord.details" class="q-mt-md">
-            <div class="text-h6 q-mb-md">交接班数据</div>
-            <pre class="history-data">{{ JSON.stringify(selectedHistoryRecord.details, null, 2) }}</pre>
-          </div>
-
-          <div v-if="selectedHistoryRecord.remarks" class="q-mt-md">
-            <div class="text-h6 q-mb-md">备注</div>
-            <div class="remarks-content">{{ selectedHistoryRecord.remarks }}</div>
-          </div>
-        </q-card-section>
-      </q-card>
-    </q-dialog>
+    <!-- 历史记录组件 -->
+    <ShiftHandoverHistory ref="historyDialogRef" @close="onHistoryDialogClose" />
   </q-page>
 </template>
 
@@ -398,12 +282,12 @@ import { ref, onMounted, watch } from 'vue'
 import { date } from 'quasar'
 import { useQuasar } from 'quasar'
 import { shiftHandoverApi } from '../api/index.js'
+import ShiftHandoverHistory from '../components/ShiftHandoverHistory.vue'
 
 const $q = useQuasar()
 
 // 基础数据
 const selectedDate = ref(date.formatDate(new Date(), 'YYYY-MM-DD'))
-const currentShift = ref('白班')
 const handoverPerson = ref('')
 const receivePerson = ref('')
 const cashierName = ref('张')
@@ -444,77 +328,12 @@ const taskList = ref([
   }
 ])
 
-// 历史记录相关
-const showHistoryDialog = ref(false)
-const showHistoryDetailDialog = ref(false)
-const historyRecords = ref([])
-const historyLoading = ref(false)
-const selectedHistoryRecord = ref(null)
+// 历史记录组件引用
+const historyDialogRef = ref(null)
 
-// 历史记录筛选条件
-const historyFilter = ref({
-  cashierName: '',
-  startDate: '',
-  endDate: ''
-})
 
-// 历史记录分页
-const historyPagination = ref({
-  sortBy: 'id',
-  descending: true,
-  page: 1,
-  rowsPerPage: 10,
-  rowsNumber: 0
-})
 
-// 历史记录表格列定义
-const historyColumns = [
-  {
-    name: 'id',
-    label: 'ID',
-    field: 'id',
-    sortable: true,
-    align: 'left'
-  },
-  {
-    name: 'shift_date',
-    label: '日期',
-    field: 'shift_date',
-    sortable: true,
-    align: 'center',
-    format: (val) => val ? new Date(val).toLocaleDateString() : ''
-  },
-  {
-    name: 'shift_time',
-    label: '班次时间',
-    field: 'shift_time',
-    sortable: true,
-    align: 'center'
-  },
-  {
-    name: 'cashier_name',
-    label: '收银员',
-    field: 'cashier_name',
-    sortable: true,
-    align: 'center'
-  },
-  {
-    name: 'type',
-    label: '类型',
-    field: 'type',
-    sortable: true,
-    align: 'center'
-  },
-  {
-    name: 'actions',
-    label: '操作',
-    field: 'actions',
-    align: 'center'
-  }
-]
 
-// 班次选项
-const shiftOptions = ['白班', '夜班']
 
 // 支付方式数据结构
 const paymentData = ref({
@@ -589,12 +408,11 @@ const vipCards = ref(6)
 
 
 
-// 加载班次数据
+// 加载数据
 async function loadShiftData() {
   try {
     const response = await shiftHandoverApi.getStatistics({
-      date: selectedDate.value,
-      shift: currentShift.value
+      date: selectedDate.value
     })
 
     if (response) {
@@ -602,10 +420,10 @@ async function loadShiftData() {
       updatePaymentData(response)
     }
   } catch (error) {
-    console.error('加载班次数据失败:', error)
+    console.error('加载数据失败:', error)
     $q.notify({
       type: 'negative',
-      message: '加载班次数据失败'
+      message: '加载数据失败'
     })
   }
 }
@@ -634,12 +452,109 @@ function updatePaymentData(data) {
   calculateTotals()
 }
 
+// 生成HTML快照
+function generateHtmlSnapshot() {
+  try {
+    // 获取交接班表格容器
+    const tableContainer = document.querySelector('.shift-table-container')
+    if (!tableContainer) {
+      console.warn('未找到交接班表格容器')
+      return null
+    }
+
+    // 克隆容器以避免影响原始DOM
+    const clonedContainer = tableContainer.cloneNode(true)
+
+    // 移除不需要的交互元素（如输入框的交互功能）
+    const inputs = clonedContainer.querySelectorAll('input')
+    inputs.forEach(input => {
+      const span = document.createElement('span')
+      span.textContent = input.value || '0'
+      span.className = 'static-value'
+      input.parentNode.replaceChild(span, input)
+    })
+
+    // 添加基本信息
+    const basicInfo = `
+      <div class="handover-header" style="text-align: center; margin-bottom: 20px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+        <h2 style="margin: 0 0 10px 0;">交接班记录</h2>
+        <div style="display: flex; justify-content: space-around; flex-wrap: wrap;">
+          <span><strong>日期:</strong> ${selectedDate.value}</span>
+          <span><strong>交班人:</strong> ${handoverPerson.value}</span>
+          <span><strong>接班人:</strong> ${receivePerson.value}</span>
+          <span><strong>收银员:</strong> ${cashierName.value}</span>
+        </div>
+      </div>
+    `
+
+    // 添加任务信息
+    const taskInfo = taskList.value.length > 0 ? `
+      <div class="task-section" style="margin-top: 20px; padding: 15px; background: #f9f9f9; border-radius: 8px;">
+        <h3 style="margin: 0 0 15px 0;">今日待办事项</h3>
+        <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+          ${taskList.value.map(task => `
+            <div style="display: flex; align-items: center; padding: 8px 12px; background: ${task.completed ? '#e8f5e8' : '#fff'}; border: 1px solid #ddd; border-radius: 6px; ${task.completed ? 'opacity: 0.7;' : ''}">
+              <span style="margin-right: 8px;">${task.completed ? '✓' : '○'}</span>
+              <span style="${task.completed ? 'text-decoration: line-through; color: #666;' : ''}">${task.title}</span>
+              ${task.time ? `<span style="margin-left: 8px; font-size: 12px; color: #666;">(${task.time})</span>` : ''}
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : ''
+
+    // 添加统计信息
+    const statsInfo = `
+      <div class="stats-section" style="margin-top: 20px; padding: 15px; background: #f0f8ff; border-radius: 8px;">
+        <h3 style="margin: 0 0 15px 0;">统计信息</h3>
+        <div style="display: flex; justify-content: space-around; flex-wrap: wrap;">
+          <div style="text-align: center; padding: 10px;">
+            <div style="font-size: 24px; font-weight: bold; color: #2196f3;">${totalRooms.value}</div>
+            <div>开房数</div>
+          </div>
+          <div style="text-align: center; padding: 10px;">
+            <div style="font-size: 24px; font-weight: bold; color: #ff9800;">${restRooms.value}</div>
+            <div>休息房数</div>
+          </div>
+          <div style="text-align: center; padding: 10px;">
+            <div style="font-size: 24px; font-weight: bold; color: #4caf50;">${vipCards.value}</div>
+            <div>大美卡</div>
+          </div>
+        </div>
+      </div>
+    `
+
+    // 组合完整的HTML
+    const fullHtml = `
+      <div class="handover-snapshot" style="font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto;">
+        ${basicInfo}
+        ${clonedContainer.outerHTML}
+        ${taskInfo}
+        ${statsInfo}
+        ${notes.value ? `
+          <div class="notes-section" style="margin-top: 20px; padding: 15px; background: #fff3cd; border-radius: 8px;">
+            <h3 style="margin: 0 0 10px 0;">备注</h3>
+            <div>${notes.value}</div>
+          </div>
+        ` : ''}
+      </div>
+    `
+
+    return fullHtml
+  } catch (error) {
+    console.error('生成HTML快照失败:', error)
+    return null
+  }
+}
+
 // 保存交接记录
 async function saveHandover() {
   try {
+    // 生成HTML快照
+    const htmlSnapshot = generateHtmlSnapshot()
+
     const handoverData = {
       date: selectedDate.value,
-      shift: currentShift.value,
       handoverPerson: handoverPerson.value,
       receivePerson: receivePerson.value,
       cashierName: cashierName.value,
@@ -650,7 +565,8 @@ async function saveHandover() {
         totalRooms: totalRooms.value,
         restRooms: restRooms.value,
         vipCards: vipCards.value
-      }
+      },
+      htmlSnapshot: htmlSnapshot // 添加HTML快照
     }
 
     await shiftHandoverApi.saveHandover(handoverData)
@@ -692,7 +608,6 @@ function printHandover() {
       <div class="print-title">交接班记录</div>
       <div class="print-info">
         <span>日期: ${selectedDate.value}</span> &nbsp;&nbsp;
-        <span>班次: ${currentShift.value}</span> &nbsp;&nbsp;
         <span>交班人: ${handoverPerson.value}</span> &nbsp;&nbsp;
         <span>接班人: ${receivePerson.value}</span>
       </div>
@@ -791,7 +706,6 @@ async function exportToExcel() {
   try {
     const handoverData = {
       date: selectedDate.value,
-      shift: currentShift.value,
       handoverPerson: handoverPerson.value,
       receivePerson: receivePerson.value,
       cashierName: cashierName.value,
@@ -810,7 +724,7 @@ async function exportToExcel() {
     const url = window.URL.createObjectURL(new Blob([response]))
     const link = document.createElement('a')
     link.href = url
-    link.setAttribute('download', `交接班记录_${selectedDate.value}_${currentShift.value}.xlsx`)
+    link.setAttribute('download', `交接班记录_${selectedDate.value}.xlsx`)
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -865,71 +779,15 @@ function updateTaskStatus(taskId, completed) {
 }
 
 // 历史记录相关方法
-async function loadHistoryRecords() {
-  historyLoading.value = true
-  try {
-    const params = {
-      page: historyPagination.value.page,
-      limit: historyPagination.value.rowsPerPage,
-      sortBy: historyPagination.value.sortBy,
-      descending: historyPagination.value.descending,
-      ...historyFilter.value
-    }
-
-    const response = await shiftHandoverApi.getHandoverHistory(params)
-    historyRecords.value = response.data || []
-    historyPagination.value.rowsNumber = response.total || 0
-  } catch (error) {
-    console.error('加载历史记录失败:', error)
-    $q.notify({
-      type: 'negative',
-      message: '加载历史记录失败'
-    })
-  } finally {
-    historyLoading.value = false
+function openHistoryDialog() {
+  if (historyDialogRef.value) {
+    historyDialogRef.value.openDialog()
   }
 }
 
-async function onHistoryRequest(props) {
-  const { page, rowsPerPage, sortBy, descending } = props.pagination
-
-  historyPagination.value.page = page
-  historyPagination.value.rowsPerPage = rowsPerPage
-  historyPagination.value.sortBy = sortBy
-  historyPagination.value.descending = descending
-
-  await loadHistoryRecords()
-}
-
-function refreshHistory() {
-  historyFilter.value = {
-    cashierName: '',
-    startDate: '',
-    endDate: ''
-  }
-  historyPagination.value.page = 1
-  loadHistoryRecords()
-}
-
-function viewHistoryRecord(record) {
-  selectedHistoryRecord.value = record
-  showHistoryDetailDialog.value = true
-}
-
-async function exportHistoryRecord(record) {
-  try {
-    await shiftHandoverApi.exportHandover(record)
-    $q.notify({
-      type: 'positive',
-      message: '导出成功'
-    })
-  } catch (error) {
-    console.error('导出失败:', error)
-    $q.notify({
-      type: 'negative',
-      message: '导出失败'
-    })
-  }
+function onHistoryDialogClose() {
+  // 历史记录对话框关闭时的处理
+  console.log('历史记录对话框已关闭')
 }
 
 // 监听支付数据变化
@@ -937,12 +795,7 @@ watch(paymentData, () => {
   calculateTotals()
 }, { deep: true })
 
-// 监听历史记录对话框打开
-watch(showHistoryDialog, (newVal) => {
-  if (newVal) {
-    loadHistoryRecords()
-  }
-})
+
 
 // 组件挂载时初始化
 onMounted(async () => {
@@ -1303,37 +1156,5 @@ onMounted(async () => {
   }
 }
 
-/* 历史记录对话框样式 */
-.history-dialog {
-  width: 100%;
-  height: 100%;
-}
 
-.history-table {
-  margin-top: 16px;
-}
-
-.history-detail-dialog {
-  width: 100%;
-  height: 100%;
-}
-
-.history-data {
-  background-color: #f5f5f5;
-  padding: 16px;
-  border-radius: 8px;
-  font-family: 'Courier New', monospace;
-  font-size: 12px;
-  max-height: 400px;
-  overflow-y: auto;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-}
-
-.remarks-content {
-  background-color: #f9f9f9;
-  padding: 12px;
-  border-radius: 6px;
-  border-left: 4px solid #2196f3;
-}
 </style>

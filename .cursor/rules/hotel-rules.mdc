@@ -32,7 +32,9 @@ user : postgres
 password : 1219
 
 
-使用终端时，始终使用powershell的语法
+使用终端时，始终使用bash的语法
+
+代码修改完成后不用启动服务器，我自己会启动。
 
 
 
