@@ -474,34 +474,25 @@ function generateHtmlSnapshot() {
       input.parentNode.replaceChild(span, input)
     })
 
-    // 添加基本信息
-    const basicInfo = `
-      <div class="handover-header" style="text-align: center; margin-bottom: 20px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
-        <h2 style="margin: 0 0 10px 0;">交接班记录</h2>
-        <div style="display: flex; justify-content: space-around; flex-wrap: wrap;">
-          <span><strong>日期:</strong> ${selectedDate.value}</span>
-          <span><strong>交班人:</strong> ${handoverPerson.value}</span>
-          <span><strong>接班人:</strong> ${receivePerson.value}</span>
-          <span><strong>收银员:</strong> ${cashierName.value}</span>
-        </div>
-      </div>
-    `
+    // 移除任务相关的交互元素（包括add按钮和任务卡片）
+    const taskCards = clonedContainer.querySelectorAll('.task-card, .add-task-card')
+    taskCards.forEach(card => {
+      if (card.parentNode) {
+        card.parentNode.removeChild(card)
+      }
+    })
 
-    // 添加任务信息
-    const taskInfo = taskList.value.length > 0 ? `
-      <div class="task-section" style="margin-top: 20px; padding: 15px; background: #f9f9f9; border-radius: 8px;">
-        <h3 style="margin: 0 0 15px 0;">今日待办事项</h3>
-        <div style="display: flex; flex-wrap: wrap; gap: 10px;">
-          ${taskList.value.map(task => `
-            <div style="display: flex; align-items: center; padding: 8px 12px; background: ${task.completed ? '#e8f5e8' : '#fff'}; border: 1px solid #ddd; border-radius: 6px; ${task.completed ? 'opacity: 0.7;' : ''}">
-              <span style="margin-right: 8px;">${task.completed ? '✓' : '○'}</span>
-              <span style="${task.completed ? 'text-decoration: line-through; color: #666;' : ''}">${task.title}</span>
-              ${task.time ? `<span style="margin-left: 8px; font-size: 12px; color: #666;">(${task.time})</span>` : ''}
-            </div>
-          `).join('')}
-        </div>
-      </div>
-    ` : ''
+    // 移除今日待办事项整个区域
+    const taskSections = clonedContainer.querySelectorAll('.task-section, [class*="task"]')
+    taskSections.forEach(section => {
+      if (section.parentNode) {
+        section.parentNode.removeChild(section)
+      }
+    })
+
+
+
+
 
     // 添加统计信息
     const statsInfo = `
@@ -527,9 +518,7 @@ function generateHtmlSnapshot() {
     // 组合完整的HTML
     const fullHtml = `
       <div class="handover-snapshot" style="font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto;">
-        ${basicInfo}
         ${clonedContainer.outerHTML}
-        ${taskInfo}
         ${statsInfo}
         ${notes.value ? `
           <div class="notes-section" style="margin-top: 20px; padding: 15px; background: #fff3cd; border-radius: 8px;">

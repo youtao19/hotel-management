@@ -30,7 +30,7 @@
         </div>
       </q-card-section>
 
-      <q-card-section class="q-pt-sm" style="max-height: 80vh; overflow-y: auto;">
+      <q-card-section class="q-pt-sm detail-content">
         <!-- 基本信息 -->
         <div v-if="recordData" class="basic-info q-mb-md">
           <div class="row q-col-gutter-md">
@@ -91,8 +91,12 @@
           <div class="snapshot-container" v-html="sanitizedHtml"></div>
         </div>
 
-        <!-- 备用：结构化数据显示 -->
+        <!-- 备用：结构化数据显示（仅在没有HTML快照时显示） -->
         <div v-else-if="recordData && (recordData.details || recordData.paymentData)" class="structured-data">
+          <div class="text-h6 q-mb-md text-orange">
+            <q-icon name="warning" class="q-mr-sm" />
+            备用数据显示（HTML快照不可用）
+          </div>
 
           <!-- 支付数据表格 -->
           <div v-if="recordData.paymentData || (recordData.details && recordData.details.paymentData)" class="payment-data q-mb-lg">
@@ -131,26 +135,7 @@
             </table>
           </div>
 
-          <!-- 任务列表 -->
-          <div v-if="recordData.details.taskList && recordData.details.taskList.length > 0" class="task-list q-mb-lg">
-            <div class="text-h6 q-mb-md">今日待办事项</div>
-            <div class="task-items">
-              <div
-                v-for="task in recordData.details.taskList"
-                :key="task.id"
-                class="task-item"
-                :class="{ 'completed': task.completed }"
-              >
-                <q-icon
-                  :name="task.completed ? 'check_circle' : 'radio_button_unchecked'"
-                  :color="task.completed ? 'green' : 'grey'"
-                  class="q-mr-sm"
-                />
-                <span class="task-title">{{ task.title }}</span>
-                <span v-if="task.time" class="task-time q-ml-sm text-grey-6">({{ task.time }})</span>
-              </div>
-            </div>
-          </div>
+
 
           <!-- 特殊统计 -->
           <div v-if="recordData.details.specialStats" class="special-stats">
@@ -202,10 +187,7 @@
 
 <script setup>
 import { ref, computed, defineEmits, defineExpose } from 'vue'
-import { useQuasar } from 'quasar'
 import DOMPurify from 'dompurify'
-
-const $q = useQuasar()
 
 // 定义事件
 const emit = defineEmits(['close', 'export'])
@@ -240,11 +222,6 @@ function closeDialog() {
 function formatDate(dateStr) {
   if (!dateStr) return ''
   return new Date(dateStr).toLocaleDateString('zh-CN')
-}
-
-function formatCurrency(value) {
-  if (value === null || value === undefined) return '0.00'
-  return new Intl.NumberFormat('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)
 }
 
 function getPaymentMethodName(key) {
@@ -452,5 +429,41 @@ defineExpose({
 .snapshot-container :deep(.static-value) {
   font-weight: bold;
   color: #333;
+}
+
+/* 解决双滚动条问题 */
+.detail-content {
+  max-height: calc(90vh - 120px);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* 确保HTML快照容器不产生额外滚动条 */
+.html-snapshot {
+  overflow: visible;
+}
+
+.snapshot-container {
+  overflow: visible;
+  max-width: 100%;
+}
+
+/* 优化滚动条样式 */
+.detail-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.detail-content::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.detail-content::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+.detail-content::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
 }
 </style>
