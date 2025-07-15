@@ -115,7 +115,7 @@ export const useOrderStore = defineStore('order', () => {
         check_in_date: checkInDateISO,                    // 从 checkInDate 映射
         check_out_date: checkOutDateISO,                  // 从 checkOutDate 映射
         status: statusValue,
-        payment_method: typeof order.paymentMethod === 'object' ? order.paymentMethod.value?.toString() : order.paymentMethod?.toString(),
+        payment_method: viewStore.normalizePaymentMethodForDB(typeof order.paymentMethod === 'object' ? order.paymentMethod.value?.toString() : order.paymentMethod?.toString()),
         room_price: parseFloat(order.roomPrice) || 0,     // 确保是数字
         deposit: parseFloat(order.deposit) || 0,          // 确保是数字
         remarks: order.remarks?.toString() || '',

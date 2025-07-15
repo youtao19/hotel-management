@@ -151,8 +151,17 @@ router.get('/previous-handover', async (req, res) => {
       });
     }
 
+    console.log(`接收到获取前一天交接班记录请求，当前日期: ${date}`);
+
     const previousData = await getPreviousHandoverData(date);
-    res.json(previousData);
+
+    if (previousData) {
+      console.log(`成功获取前一天交接班记录: ID=${previousData.id}, 日期=${previousData.shift_date}`);
+      res.json(previousData);
+    } else {
+      console.log(`未找到日期 ${date} 的前一天交接班记录`);
+      res.json(null);
+    }
   } catch (error) {
     console.error('获取前一天交接班记录失败:', error);
     res.status(500).json({

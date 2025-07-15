@@ -68,6 +68,99 @@ export const useViewStore = defineStore('view', () => {
     { label: '平台', value: 'platform', icon: 'mdi-cash' }
   ]
 
+  /**
+   * 获取支付方式名称
+   * @param {string} method - 支付方式代码或中文名称
+   * @returns {string} 支付方式名称
+   */
+  function getPaymentMethodName(method) {
+    // 如果输入的是英文值，返回对应的中文标签
+    const option = paymentMethodOptions.find(opt => opt.value === method)
+    if (option) {
+      return option.label
+    }
+
+    // 如果输入的是中文标签，直接返回
+    const labelOption = paymentMethodOptions.find(opt => opt.label === method)
+    if (labelOption) {
+      return labelOption.label
+    }
+
+    // 处理其他常见的支付方式
+    const commonMethods = {
+      '支付宝': '支付宝',
+      'alipay': '支付宝',
+      '银行卡': '银行卡',
+      'card': '银行卡',
+      'bank_card': '银行卡',
+      'credit_card': '银行卡'
+    }
+
+    if (commonMethods[method]) {
+      return commonMethods[method]
+    }
+
+    return method
+  }
+
+  /**
+   * 获取支付方式的值（英文）
+   * @param {string} methodLabel - 支付方式的中文标签
+   * @returns {string} 支付方式的英文值
+   */
+  function getPaymentMethodValue(methodLabel) {
+    const option = paymentMethodOptions.find(opt => opt.label === methodLabel)
+    if (option) {
+      return option.value
+    }
+
+    // 处理其他常见的支付方式
+    const commonMethods = {
+      '支付宝': 'alipay',
+      '银行卡': 'card',
+      '信用卡': 'card'
+    }
+
+    if (commonMethods[methodLabel]) {
+      return commonMethods[methodLabel]
+    }
+
+    return methodLabel.toLowerCase()
+  }
+
+  /**
+   * 将支付方式值转换为数据库期望的中文格式
+   * @param {string} method - 支付方式代码或标签
+   * @returns {string} 数据库期望的中文支付方式
+   */
+  function normalizePaymentMethodForDB(method) {
+    if (!method) return '现金'
+
+    // 支付方式映射表 - 统一转换为数据库期望的中文格式
+    const methodMap = {
+      // 英文值到中文
+      'cash': '现金',
+      'wechat': '微信',
+      'weiyoufu': '微邮付',
+      'alipay': '支付宝',
+      'card': '银行卡',
+      'bank_card': '银行卡',
+      'credit_card': '银行卡',
+      'platform': '平台',
+
+      // 中文标签保持不变
+      '现金': '现金',
+      '微信': '微信',
+      '微邮付': '支付宝', // 微邮付在数据库中按支付宝处理
+      '支付宝': '支付宝',
+      '银行卡': '银行卡',
+      '信用卡': '银行卡',
+      '平台': '平台'
+    }
+
+    return methodMap[method] || '现金'
+  }
+
   // 退押金状态选项
   const depositRefundStatusOptions = [
     { label: '未退押金', value: 'not_refunded' },
@@ -145,16 +238,6 @@ export const useViewStore = defineStore('view', () => {
    */
   function getStatusColor(status) {
     return ORDER_STATUS_COLORS[status] || 'grey';
-  }
-
-  /**
-   * 获取支付方式名称
-   * @param {string} method - 支付方式代码
-   * @returns {string} 支付方式名称
-   */
-  function getPaymentMethodName(method) {
-    const option = paymentMethodOptions.find(opt => opt.value === method)
-    return option ? option.label : method
   }
 
   /**
@@ -243,6 +326,8 @@ export const useViewStore = defineStore('view', () => {
     getPaymentMethodName,
     getPaymentMethodIcon,
     getDepositRefundStatus,
-    formatDate
+    formatDate,
+    getPaymentMethodValue,
+    normalizePaymentMethodForDB
   }
 })
