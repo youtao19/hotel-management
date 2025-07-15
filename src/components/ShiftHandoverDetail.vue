@@ -161,6 +161,33 @@
               </div>
             </div>
           </div>
+
+          <!-- 备忘录显示 -->
+          <div v-if="taskListData && taskListData.length > 0" class="memo-section q-mt-lg">
+            <div class="text-h6 q-mb-md">📝 备忘录</div>
+            <div class="memo-items">
+              <div
+                v-for="(task, index) in taskListData"
+                :key="index"
+                class="memo-item"
+                :class="{ 'memo-completed': task.completed }"
+              >
+                <div class="memo-icon">
+                  <q-icon :name="task.completed ? 'check_circle' : 'radio_button_unchecked'"
+                         :color="task.completed ? 'green' : 'grey'" />
+                </div>
+                <div class="memo-content">
+                  <div class="memo-title" :class="{ 'completed': task.completed }">
+                    {{ task.title }}
+                  </div>
+                  <div v-if="task.time" class="memo-time">
+                    <q-icon name="schedule" size="14px" class="q-mr-xs" />
+                    {{ task.time }}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- 备注信息 -->
@@ -205,6 +232,22 @@ const sanitizedHtml = computed(() => {
     ALLOWED_TAGS: ['div', 'span', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'br', 'strong', 'em', 'ul', 'ol', 'li'],
     ALLOWED_ATTR: ['class', 'style', 'id']
   })
+})
+
+// 计算属性：获取备忘录数据
+const taskListData = computed(() => {
+  if (!recordData.value) return []
+
+  // 尝试从不同的地方获取备忘录数据
+  if (recordData.value.details && recordData.value.details.taskList) {
+    return recordData.value.details.taskList
+  }
+
+  if (recordData.value.taskList) {
+    return recordData.value.taskList
+  }
+
+  return []
 })
 
 // 方法
@@ -465,5 +508,67 @@ defineExpose({
 
 .detail-content::-webkit-scrollbar-thumb:hover {
   background: #a8a8a8;
+}
+
+/* 备忘录样式 */
+.memo-section {
+  background: #f3f9f3;
+  border: 1px solid #a5d6a7;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.memo-items {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.memo-item {
+  display: flex;
+  align-items: flex-start;
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 12px;
+  transition: all 0.2s ease;
+}
+
+.memo-item:hover {
+  border-color: #81c784;
+  box-shadow: 0 2px 4px rgba(129, 199, 132, 0.2);
+}
+
+.memo-item.memo-completed {
+  opacity: 0.7;
+  background: #f5f5f5;
+}
+
+.memo-icon {
+  margin-right: 12px;
+  margin-top: 2px;
+}
+
+.memo-content {
+  flex: 1;
+}
+
+.memo-title {
+  font-size: 14px;
+  line-height: 1.4;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.memo-title.completed {
+  text-decoration: line-through;
+  color: #999;
+}
+
+.memo-time {
+  font-size: 12px;
+  color: #666;
+  display: flex;
+  align-items: center;
 }
 </style>

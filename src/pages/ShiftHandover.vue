@@ -165,13 +165,13 @@
           </tbody>
         </table>
 
-        <!-- 今日待办事项 -->
+        <!-- 备忘录 -->
         <div class="row q-mt-lg">
           <div class="col-12">
             <div class="task-management-container">
                               <div class="task-management-header">
-                  <q-icon name="task_alt" size="24px" class="q-mr-sm" />
-                  <span class="text-h6 text-weight-bold">今日待办事项</span>
+                  <q-icon name="edit_note" size="24px" class="q-mr-sm" />
+                  <span class="text-h6 text-weight-bold">备忘录</span>
                 </div>
 
               <div class="task-management-content">
@@ -211,7 +211,7 @@
                   <div class="add-task-card">
                     <q-input
                       v-model="newTaskTitle"
-                      placeholder="添加新任务..."
+                      placeholder="添加新备忘录..."
                       dense
                       borderless
                       class="add-task-input"
@@ -293,39 +293,9 @@ const receivePerson = ref('')
 const cashierName = ref('张')
 const notes = ref('')
 
-// 任务列表相关
+// 备忘录列表相关
 const newTaskTitle = ref('')
 const taskList = ref([
-  {
-    id: 1,
-    title: '检查101房间空调',
-    time: '10:00',
-    completed: false
-  },
-  {
-    id: 2,
-    title: '接待VIP客人',
-    time: '12:30',
-    completed: false
-  },
-  {
-    id: 3,
-    title: '安排会议室布置',
-    time: '14:00',
-    completed: true
-  },
-  {
-    id: 4,
-    title: '处理客户投诉',
-    time: '15:30',
-    completed: false
-  },
-  {
-    id: 5,
-    title: '检查库存',
-    time: '16:00',
-    completed: false
-  }
 ])
 
 // 历史记录组件引用
@@ -482,13 +452,39 @@ function generateHtmlSnapshot() {
       }
     })
 
-    // 移除今日待办事项整个区域
-    const taskSections = clonedContainer.querySelectorAll('.task-section, [class*="task"]')
-    taskSections.forEach(section => {
-      if (section.parentNode) {
-        section.parentNode.removeChild(section)
-      }
-    })
+    // 将备忘录内容替换为静态版本，而不是完全移除
+    const taskManagementContainer = clonedContainer.querySelector('.task-management-container')
+    if (taskManagementContainer && taskList.value.length > 0) {
+      // 生成备忘录的静态HTML
+      const memoHtml = `
+        <div class="task-management-header" style="display: flex; align-items: center; justify-content: center; margin-bottom: 16px; color: #2c3e50; background-color: #e8f5e8; border-bottom: 2px solid #a5d6a7; padding: 12px; border-radius: 8px 8px 0 0;">
+          <span style="font-size: 1.25rem; font-weight: bold;">📝 备忘录</span>
+        </div>
+        <div class="task-management-content" style="min-height: 100px; padding: 16px;">
+          ${taskList.value.map(task => `
+            <div style="display: flex; align-items: center; background: #f1f8e9; border: 1px solid #81c784; border-radius: 8px; padding: 12px; margin-bottom: 8px; min-width: 200px;">
+              <span style="margin-right: 10px; font-size: 16px;">${task.completed ? '✅' : '⭕'}</span>
+              <div style="flex: 1;">
+                <div style="font-size: 14px; line-height: 1.4; margin-bottom: 4px; font-weight: 500; ${task.completed ? 'text-decoration: line-through; color: #999;' : ''}">${task.title}</div>
+                ${task.time ? `<div style="font-size: 12px; color: #666;">⏰ ${task.time}</div>` : ''}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `
+      taskManagementContainer.innerHTML = memoHtml
+    } else if (taskManagementContainer) {
+      // 如果没有备忘录，显示空状态
+      const emptyMemoHtml = `
+        <div class="task-management-header" style="display: flex; align-items: center; justify-content: center; margin-bottom: 16px; color: #2c3e50; background-color: #e8f5e8; border-bottom: 2px solid #a5d6a7; padding: 12px; border-radius: 8px 8px 0 0;">
+          <span style="font-size: 1.25rem; font-weight: bold;">📝 备忘录</span>
+        </div>
+        <div class="task-management-content" style="min-height: 100px; padding: 16px; text-align: center; color: #666;">
+          <div style="font-style: italic;">暂无备忘录</div>
+        </div>
+      `
+      taskManagementContainer.innerHTML = emptyMemoHtml
+    }
 
 
 
@@ -669,7 +665,7 @@ function printHandover() {
       ${notes.value ? `<p><strong>备注:</strong> ${notes.value}</p>` : ''}
       ${taskList.value.length > 0 ? `
         <div style="margin-top: 15px;">
-          <p><strong>今日待办事项:</strong></p>
+          <p><strong>备忘录:</strong></p>
           <ul style="margin: 5px 0; padding-left: 20px;">
             ${taskList.value.map(task => `
               <li style="margin: 3px 0; ${task.completed ? 'text-decoration: line-through; color: #999;' : ''}">
@@ -732,7 +728,7 @@ async function exportToExcel() {
   }
 }
 
-// 任务管理方法
+// 备忘录管理方法
 function addNewTask() {
   if (!newTaskTitle.value.trim()) return
 
@@ -754,7 +750,7 @@ function deleteTask(index) {
 function editTask(index) {
   // 可以扩展为内联编辑功能
   const task = taskList.value[index]
-  const newTitle = prompt('编辑任务:', task.title)
+  const newTitle = prompt('编辑备忘录:', task.title)
   if (newTitle && newTitle.trim()) {
     task.title = newTitle.trim()
   }
@@ -963,10 +959,13 @@ onMounted(async () => {
 .task-management-header {
   display: flex;
   align-items: center;
+  justify-content: center;
   margin-bottom: 16px;
-  color: #2196f3;
-  border-bottom: 2px solid #e3f2fd;
-  padding-bottom: 12px;
+  color: #2c3e50;
+  background-color: #e8f5e8;
+  border-bottom: 2px solid #a5d6a7;
+  padding: 12px;
+  border-radius: 8px 8px 0 0;
 }
 
 .task-management-content {
@@ -983,8 +982,8 @@ onMounted(async () => {
 .task-card {
   display: flex;
   align-items: center;
-  background: #f8f9fa;
-  border: 1px solid #e0e0e0;
+  background: #f1f8e9;
+  border: 1px solid #81c784;
   border-radius: 8px;
   padding: 12px;
   min-width: 200px;
@@ -994,19 +993,19 @@ onMounted(async () => {
 }
 
 .task-card:hover {
-  background: #e3f2fd;
-  border-color: #2196f3;
-  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.2);
+  background: #e8f5e8;
+  border-color: #66bb6a;
+  box-shadow: 0 2px 8px rgba(102, 187, 106, 0.2);
 }
 
 .task-card.task-completed {
   opacity: 0.7;
-  background: #f0f0f0;
+  background: #f5f5f5;
   border-color: #ccc;
 }
 
 .task-card.task-completed:hover {
-  background: #e8e8e8;
+  background: #eeeeee;
 }
 
 .task-checkbox {
@@ -1058,8 +1057,8 @@ onMounted(async () => {
 .add-task-card {
   display: flex;
   align-items: center;
-  background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
-  border: 2px dashed #2196f3;
+  background: #f3f9f3;
+  border: 2px dashed #a5d6a7;
   border-radius: 8px;
   padding: 12px;
   min-width: 200px;
@@ -1068,13 +1067,29 @@ onMounted(async () => {
 }
 
 .add-task-card:hover {
-  background: linear-gradient(135deg, #bbdefb 0%, #e1bee7 100%);
-  border-color: #1976d2;
+  background: #e8f5e8;
+  border-color: #81c784;
 }
 
 .add-task-input {
   font-size: 14px;
   width: 100%;
+  text-align: center;
+}
+
+.add-task-input :deep(.q-field__control) {
+  background: transparent;
+}
+
+.add-task-input :deep(.q-field__native) {
+  text-align: center;
+  color: #388e3c;
+  font-weight: 500;
+}
+
+.add-task-input :deep(.q-field__native::placeholder) {
+  color: #66bb6a;
+  opacity: 0.8;
 }
 
 

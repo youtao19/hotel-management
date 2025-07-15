@@ -219,13 +219,13 @@
         </div>
       </div>
 
-      <!-- 今日待办事项 -->
+      <!-- 备忘录 -->
       <div class="col-md-4 col-xs-12">
         <q-card>
-          <q-card-section class="bg-primary text-white">
+          <q-card-section class="bg-yellow text-black">
             <div class="text-h6">
-              <q-icon name="task_alt" class="q-mr-xs" />
-              今日待办事项
+              <q-icon name="edit_note" class="q-mr-xs" />
+              备忘录
             </div>
           </q-card-section>
           <q-list separator>
@@ -270,7 +270,7 @@
             <q-separator />
             <q-item>
               <q-item-section>
-                <q-input v-model="newTaskForm.title" dense placeholder="添加新任务..." @keyup.enter="addTask">
+                <q-input v-model="newTaskForm.title" dense placeholder="添加新备忘录..." @keyup.enter="addTask">
                   <template v-slot:after>
                     <q-select
                       v-model="newTaskForm.priority"
@@ -400,16 +400,11 @@ const roomStats = computed(() => {
   }
 })
 
-// 今日待办事项
+// 备忘录
 const todayTasks = ref([
-  { title: '检查101房间空调', time: '10:00', priority: 'high', completed: false },
-  { title: '接待VIP客人', time: '12:30', priority: 'high', completed: false },
-  { title: '安排会议室布置', time: '14:00', priority: 'medium', completed: true },
-  { title: '处理客户投诉', time: '15:30', priority: 'high', completed: false },
-  { title: '检查库存', time: '16:00', priority: 'low', completed: false }
 ])
 
-// 新任务输入
+// 新备忘录输入
 const newTaskForm = ref({
   title: '',
   priority: 'medium'
@@ -422,7 +417,7 @@ const priorityOptions = ref([
   { label: '低', value: 'low', color: 'positive' }
 ])
 
-// 添加新任务
+// 添加新备忘录
 function addTask() {
   if (newTaskForm.value.title.trim()) {
     todayTasks.value.push({
@@ -436,7 +431,7 @@ function addTask() {
   }
 }
 
-// 删除任务
+// 删除备忘录
 function deleteTask(index) {
   todayTasks.value.splice(index, 1)
 }
