@@ -13,11 +13,14 @@ const {
  * GET /api/revenue/daily?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
  */
 router.get('/daily', async (req, res) => {
+    console.log('📊 收到每日收入统计请求');
+    console.log('请求参数:', req.query);
     try {
         const { startDate, endDate } = req.query;
 
         // 参数验证
         if (!startDate || !endDate) {
+            console.log('❌ 参数验证失败: 缺少日期参数');
             return res.status(400).json({
                 message: '请提供开始日期和结束日期',
                 error: 'startDate and endDate are required'
@@ -27,13 +30,16 @@ router.get('/daily', async (req, res) => {
         // 日期格式验证
         const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
         if (!dateRegex.test(startDate) || !dateRegex.test(endDate)) {
+            console.log('❌ 日期格式验证失败:', { startDate, endDate });
             return res.status(400).json({
                 message: '日期格式错误，请使用YYYY-MM-DD格式',
                 error: 'Invalid date format'
             });
         }
 
+        console.log('📅 开始获取每日收入数据:', { startDate, endDate });
         const dailyRevenue = await getDailyRevenue(startDate, endDate);
+        console.log('✅ 每日收入数据获取成功:', dailyRevenue.length, '条记录');
 
         res.json({
             message: '获取每日收入统计成功',
@@ -45,7 +51,7 @@ router.get('/daily', async (req, res) => {
             }
         });
     } catch (error) {
-        console.error('获取每日收入统计失败:', error);
+        console.error('❌ 获取每日收入统计失败:', error);
         res.status(500).json({
             message: '获取每日收入统计失败',
             error: error.message
@@ -193,11 +199,14 @@ router.get('/overview', async (req, res) => {
  * GET /api/revenue/room-type?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
  */
 router.get('/room-type', async (req, res) => {
+    console.log('🏨 收到房型收入统计请求');
+    console.log('请求参数:', req.query);
     try {
         const { startDate, endDate } = req.query;
 
         // 参数验证
         if (!startDate || !endDate) {
+            console.log('❌ 参数验证失败: 缺少日期参数');
             return res.status(400).json({
                 message: '请提供开始日期和结束日期',
                 error: 'startDate and endDate are required'
@@ -207,6 +216,7 @@ router.get('/room-type', async (req, res) => {
         // 日期格式验证
         const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
         if (!dateRegex.test(startDate) || !dateRegex.test(endDate)) {
+            console.log('❌ 日期格式验证失败:', { startDate, endDate });
             return res.status(400).json({
                 message: '日期格式错误，请使用YYYY-MM-DD格式',
                 error: 'Invalid date format'

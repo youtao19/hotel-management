@@ -708,6 +708,53 @@ async function exportNewHandoverToExcel(handoverData) {
 }
 
 /**
+ * 获取当天的交接班记录（用于恢复已保存的数据）
+ * @param {string} currentDate - 当前日期
+ * @returns {Promise<Object|null>} 当天的交接班记录
+ */
+async function getCurrentHandoverData(currentDate) {
+  console.log(`查找当天交接班记录: 日期=${currentDate}`);
+
+  const sql = `
+    SELECT *
+    FROM shift_handover h
+    WHERE h.shift_date::date = $1::date
+    ORDER BY h.updated_at DESC
+    LIMIT 1
+  `;
+
+  try {
+    const result = await query(sql, [currentDate]);
+    console.log(`当天交接班记录查询结果: 找到${result.rows.length}条记录`);
+
+    if (result.rows.length > 0) {
+      const record = result.rows[0];
+      console.log(`找到当天交接班记录: ID=${record.id}, 日期=${record.shift_date}, 类型=${record.type}`);
+
+      // 解析details字段
+      let details = {};
+      try {
+        details = typeof record.details === 'string' ? JSON.parse(record.details) : record.details;
+      } catch (parseError) {
+        console.error('解析当天交接班详情数据失败:', parseError);
+      }
+
+      return {
+        ...record,
+        details: details,
+        paymentData: details.paymentData || null
+      };
+    }
+
+    console.log('未找到当天的交接班记录');
+    return null;
+  } catch (error) {
+    console.error('获取当天交接班记录失败:', error);
+    throw error;
+  }
+}
+
+/**
  * 获取前一天的交接班记录（用于获取备用金）
  * @param {string} currentDate - 当前日期
  * @returns {Promise<Object|null>} 前一天的交接班记录
@@ -786,11 +833,326 @@ async function getPreviousHandoverData(currentDate) {
       };
     }
 
-    console.log('未找到任何可用的前期交接班记录');
+    // 如果找不到前一天的记录，检查当天是否有已保存的数据
+    console.log('未找到前一天记录，检查当天是否有已保存的数据');
+    const currentDaySql = `
+      SELECT *
+      FROM shift_handover h
+      WHERE h.shift_date::date = $1::date
+      ORDER BY h.updated_at DESC
+      LIMIT 1
+    `;
+
+    const currentDayResult = await query(currentDaySql, [currentDate]);
+
+    if (currentDayResult.rows.length > 0) {
+      const currentRecord = currentDayResult.rows[0];
+      console.log(`找到当天交接班记录: ID=${currentRecord.id}, 日期=${currentRecord.shift_date}, 类型=${currentRecord.type}`);
+
+      // 解析details字段
+      let currentDetails = {};
+      try {
+        currentDetails = typeof currentRecord.details === 'string' ?
+          JSON.parse(currentRecord.details) : currentRecord.details;
+      } catch (parseError) {
+        console.error('解析当天交接班详情数据失败:', parseError);
+      }
+
+      return {
+        ...currentRecord,
+        details: currentDetails,
+        paymentData: currentDetails.paymentData || null,
+        isCurrentDay: true // 标记这是当天的数据
+      };
+    }
+
+    console.log('未找到任何可用的交接班记录');
     return null;
   } catch (error) {
     console.error('获取前一天交接班记录失败:', error);
     throw error;
+  }
+}
+
+/**
+ * 导入收款明细到交接班
+ * @param {Object} importData - 导入数据
+ * @returns {Promise<Object>} 导入结果
+ */
+async function importReceiptsToShiftHandover(importData) {
+  try {
+    console.log('📥 开始导入收款明细到交接班:', importData.date)
+    console.log('📊 接收到的完整数据:', JSON.stringify(importData, null, 2))
+
+    const { date, paymentAnalysis, statistics } = importData
+
+    // 验证paymentAnalysis数据
+    if (!paymentAnalysis) {
+      throw new Error('缺少paymentAnalysis数据')
+    }
+
+    console.log('💰 支付分析数据:', JSON.stringify(paymentAnalysis, null, 2))
+    console.log('📈 统计数据:', JSON.stringify(statistics, null, 2))
+
+    // 检查当天是否已有交接班记录
+    const existingQuery = `
+      SELECT id, details
+      FROM shift_handover
+      WHERE shift_date = $1
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `
+
+    const existingResult = await query(existingQuery, [date])
+
+    let handoverId = null
+    let existingPaymentData = {}
+
+    if (existingResult.rows.length > 0) {
+      // 已有记录，更新现有记录
+      handoverId = existingResult.rows[0].id
+      try {
+        const existingDetails = existingResult.rows[0].details || {}
+        existingPaymentData = existingDetails.paymentData || {}
+        if (typeof existingPaymentData === 'string') {
+          existingPaymentData = JSON.parse(existingPaymentData)
+        }
+      } catch (e) {
+        console.warn('解析现有支付数据失败:', e.message)
+        existingPaymentData = {}
+      }
+      console.log('✏️ 更新现有交接班记录，ID:', handoverId)
+    } else {
+      // 新建记录
+      console.log('🆕 创建新的交接班记录')
+    }
+
+    // 将收款明细数据转换为交接班格式
+    const updatedPaymentData = {
+      cash: {
+        reserveCash: existingPaymentData.cash?.reserveCash || 320, // 保持现有备用金或默认值
+        hotelIncome: Math.round(paymentAnalysis['现金']?.hotelIncome || 0),
+        restIncome: Math.round(paymentAnalysis['现金']?.restIncome || 0),
+        carRentIncome: existingPaymentData.cash?.carRentIncome || 0,
+        total: 0, // 会在前端重新计算
+        hotelDeposit: Math.round(paymentAnalysis['现金']?.hotelDeposit || 0),
+        restDeposit: Math.round(paymentAnalysis['现金']?.restDeposit || 0),
+        retainedAmount: 320 // 固定值
+      },
+      wechat: {
+        reserveCash: existingPaymentData.wechat?.reserveCash || 0,
+        hotelIncome: Math.round(paymentAnalysis['微信']?.hotelIncome || 0),
+        restIncome: Math.round(paymentAnalysis['微信']?.restIncome || 0),
+        carRentIncome: existingPaymentData.wechat?.carRentIncome || 0,
+        total: 0,
+        hotelDeposit: Math.round(paymentAnalysis['微信']?.hotelDeposit || 0),
+        restDeposit: Math.round(paymentAnalysis['微信']?.restDeposit || 0),
+        retainedAmount: existingPaymentData.wechat?.retainedAmount || 0
+      },
+      digital: {
+        reserveCash: existingPaymentData.digital?.reserveCash || 0,
+        hotelIncome: Math.round(paymentAnalysis['支付宝']?.hotelIncome || 0),
+        restIncome: Math.round(paymentAnalysis['支付宝']?.restIncome || 0),
+        carRentIncome: existingPaymentData.digital?.carRentIncome || 0,
+        total: 0,
+        hotelDeposit: Math.round(paymentAnalysis['支付宝']?.hotelDeposit || 0),
+        restDeposit: Math.round(paymentAnalysis['支付宝']?.restDeposit || 0),
+        retainedAmount: existingPaymentData.digital?.retainedAmount || 0
+      },
+      other: {
+        reserveCash: existingPaymentData.other?.reserveCash || 0,
+        hotelIncome: Math.round((paymentAnalysis['银行卡']?.hotelIncome || 0) + (paymentAnalysis['其他']?.hotelIncome || 0)),
+        restIncome: Math.round((paymentAnalysis['银行卡']?.restIncome || 0) + (paymentAnalysis['其他']?.restIncome || 0)),
+        carRentIncome: existingPaymentData.other?.carRentIncome || 0,
+        total: 0,
+        hotelDeposit: Math.round((paymentAnalysis['银行卡']?.hotelDeposit || 0) + (paymentAnalysis['其他']?.hotelDeposit || 0)),
+        restDeposit: Math.round((paymentAnalysis['银行卡']?.restDeposit || 0) + (paymentAnalysis['其他']?.restDeposit || 0)),
+        retainedAmount: existingPaymentData.other?.retainedAmount || 0
+      }
+    }
+
+    // 计算各支付方式的总计
+    Object.keys(updatedPaymentData).forEach(paymentType => {
+      const payment = updatedPaymentData[paymentType]
+      payment.total = (payment.reserveCash || 0) + (payment.hotelIncome || 0) +
+                     (payment.restIncome || 0) + (payment.carRentIncome || 0)
+    })
+
+    // 更新详细信息
+    const updatedDetails = {
+      ...(existingResult.rows[0]?.details || {}),
+      paymentData: updatedPaymentData,
+      importInfo: {
+        importDate: new Date().toISOString(),
+        sourceDate: date,
+        sourceType: statistics.receiptType,
+        importedAmounts: paymentAnalysis
+      }
+    }
+
+    if (handoverId) {
+      // 更新现有记录
+      const updateQuery = `
+        UPDATE shift_handover
+        SET details = $1, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $2
+        RETURNING id
+      `
+
+      const updateResult = await query(updateQuery, [
+        JSON.stringify(updatedDetails),
+        handoverId
+      ])
+
+      console.log('✅ 更新交接班记录成功，ID:', updateResult.rows[0].id)
+      return { id: updateResult.rows[0].id, action: 'updated' }
+    } else {
+      // 创建新记录，需要设置必填字段
+      const insertQuery = `
+        INSERT INTO shift_handover (
+          shift_date,
+          type,
+          details,
+          statistics,
+          cashier_name,
+          shift_time,
+          created_at,
+          updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        RETURNING id
+      `
+
+      // 为新记录设置必要的默认值
+      const defaultStatistics = {
+        totalRooms: statistics.totalRooms || 0,
+        restRooms: statistics.restRooms || 0,
+        receiptType: statistics.receiptType || 'hotel'
+      }
+
+      const insertResult = await query(insertQuery, [
+        date,                              // shift_date
+        'import',                          // type
+        JSON.stringify(updatedDetails),    // details
+        JSON.stringify(defaultStatistics), // statistics
+        '系统导入',                         // cashier_name
+        'auto'                             // shift_time
+      ])
+
+      console.log('✅ 创建交接班记录成功，ID:', insertResult.rows[0].id)
+      return { id: insertResult.rows[0].id, action: 'created' }
+    }
+
+  } catch (error) {
+    console.error('导入收款明细到交接班失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 保存金额修改（不保存完整的交接班记录）
+ * @param {Object} amountData - 金额数据
+ * @returns {Promise<Object>} 保存结果
+ */
+async function saveAmountChanges(amountData) {
+  try {
+    console.log('💾 保存金额修改:', amountData.date)
+
+    const { date, paymentData, notes } = amountData
+
+    // 检查当天是否已有记录
+    const existingQuery = `
+      SELECT id, details
+      FROM shift_handover
+      WHERE shift_date = $1
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `
+
+    const existingResult = await query(existingQuery, [date])
+
+    if (existingResult.rows.length > 0) {
+      // 更新现有记录的金额数据
+      const handoverId = existingResult.rows[0].id
+
+      let existingDetails = {}
+      try {
+        existingDetails = existingResult.rows[0].details || {}
+        if (typeof existingDetails === 'string') {
+          existingDetails = JSON.parse(existingDetails)
+        }
+      } catch (e) {
+        console.warn('解析现有详情数据失败:', e.message)
+        existingDetails = {}
+      }
+
+      const updatedDetails = {
+        ...existingDetails,
+        paymentData: paymentData,
+        lastAmountUpdate: new Date().toISOString(),
+        notes: notes
+      }
+
+      const updateQuery = `
+        UPDATE shift_handover
+        SET details = $1, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $2
+        RETURNING id
+      `
+
+      const updateResult = await query(updateQuery, [
+        JSON.stringify(updatedDetails),
+        handoverId
+      ])
+
+      console.log('✅ 金额修改保存成功，ID:', updateResult.rows[0].id)
+      return { id: updateResult.rows[0].id, action: 'amount_updated' }
+    } else {
+      // 创建新记录（仅包含金额数据），需要设置必填字段
+      const details = {
+        paymentData: paymentData,
+        lastAmountUpdate: new Date().toISOString(),
+        notes: notes,
+        type: 'amount_only'
+      }
+
+      const insertQuery = `
+        INSERT INTO shift_handover (
+          shift_date,
+          type,
+          details,
+          statistics,
+          cashier_name,
+          shift_time,
+          created_at,
+          updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        RETURNING id
+      `
+
+      // 设置必要的默认值
+      const defaultStatistics = {
+        type: 'amount_only',
+        lastUpdate: new Date().toISOString()
+      }
+
+      const insertResult = await query(insertQuery, [
+        date,                              // shift_date
+        'amount_only',                     // type
+        JSON.stringify(details),           // details
+        JSON.stringify(defaultStatistics), // statistics
+        '系统',                            // cashier_name
+        'amount'                           // shift_time (must be ≤10 chars)
+      ])
+
+      console.log('✅ 新建金额记录成功，ID:', insertResult.rows[0].id)
+      return { id: insertResult.rows[0].id, action: 'amount_created' }
+    }
+
+  } catch (error) {
+    console.error('保存金额修改失败:', error)
+    throw error
   }
 }
 
@@ -801,5 +1163,8 @@ module.exports = {
   getHandoverHistory,
   exportHandoverToExcel,
   exportNewHandoverToExcel,
-  getPreviousHandoverData
+  getPreviousHandoverData,
+  getCurrentHandoverData,
+  importReceiptsToShiftHandover,
+  saveAmountChanges
 };

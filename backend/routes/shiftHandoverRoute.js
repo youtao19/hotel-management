@@ -6,7 +6,10 @@ const {
   saveHandover,
   getHandoverHistory,
   exportHandoverToExcel,
-  getPreviousHandoverData
+  getPreviousHandoverData,
+  getCurrentHandoverData,
+  importReceiptsToShiftHandover,
+  saveAmountChanges
 } = require('../modules/shiftHandoverModule');
 
 // 获取收款明细
@@ -171,6 +174,45 @@ router.get('/previous-handover', async (req, res) => {
   }
 });
 
+// 获取当天的交接班记录
+router.get('/current-handover', async (req, res) => {
+  try {
+    const { date } = req.query;
+
+    if (!date) {
+      return res.status(400).json({
+        error: '请提供日期参数'
+      });
+    }
+
+    // 验证日期格式
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(date)) {
+      return res.status(400).json({
+        error: '无效的日期格式，应为 YYYY-MM-DD'
+      });
+    }
+
+    console.log(`接收到获取当天交接班记录请求，日期: ${date}`);
+
+    const currentData = await getCurrentHandoverData(date);
+
+    if (currentData) {
+      console.log(`成功获取当天交接班记录: ID=${currentData.id}, 日期=${currentData.shift_date}`);
+      res.json(currentData);
+    } else {
+      console.log(`未找到日期 ${date} 的交接班记录`);
+      res.json(null);
+    }
+  } catch (error) {
+    console.error('获取当天交接班记录失败:', error);
+    res.status(500).json({
+      message: '获取当天交接班记录失败',
+      error: error.message
+    });
+  }
+});
+
 // 导出Excel
 router.post('/export', async (req, res) => {
   try {
@@ -203,6 +245,104 @@ router.post('/export-new', async (req, res) => {
     res.status(500).json({
       success: false,
       message: '导出新版Excel失败',
+      error: error.message
+    });
+  }
+});
+
+// 导入收款明细到交接班
+router.post('/import-receipts', async (req, res) => {
+  try {
+    const importData = req.body;
+
+    // 验证必要字段
+    if (!importData.date) {
+      return res.status(400).json({
+        success: false,
+        message: '缺少必要参数：date'
+      });
+    }
+
+    if (!importData.paymentAnalysis) {
+      return res.status(400).json({
+        success: false,
+        message: '缺少必要参数：paymentAnalysis'
+      });
+    }
+
+    // 验证日期格式
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(importData.date)) {
+      return res.status(400).json({
+        success: false,
+        message: '无效的日期格式，应为 YYYY-MM-DD'
+      });
+    }
+
+    console.log(`接收到导入收款明细请求，日期: ${importData.date}`);
+
+    const result = await importReceiptsToShiftHandover(importData);
+
+    res.status(200).json({
+      success: true,
+      message: '收款明细导入成功',
+      data: result
+    });
+
+  } catch (error) {
+    console.error('导入收款明细到交接班失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '导入收款明细到交接班失败',
+      error: error.message
+    });
+  }
+});
+
+// 保存金额修改
+router.post('/save-amounts', async (req, res) => {
+  try {
+    const amountData = req.body;
+
+    // 验证必要字段
+    if (!amountData.date) {
+      return res.status(400).json({
+        success: false,
+        message: '缺少必要参数：date'
+      });
+    }
+
+    if (!amountData.paymentData) {
+      return res.status(400).json({
+        success: false,
+        message: '缺少必要参数：paymentData'
+      });
+    }
+
+    // 验证日期格式
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(amountData.date)) {
+      return res.status(400).json({
+        success: false,
+        message: '无效的日期格式，应为 YYYY-MM-DD'
+      });
+    }
+
+    console.log(`接收到保存金额修改请求，日期: ${amountData.date}`);
+
+    const result = await saveAmountChanges(amountData);
+
+    res.status(200).json({
+      success: true,
+      message: '金额修改保存成功',
+      data: result
+    });
+
+  } catch (error) {
+    console.error('保存金额修改失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '保存金额修改失败',
       error: error.message
     });
   }

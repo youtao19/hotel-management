@@ -19,8 +19,7 @@ const routes = [
       { path: 'CreateOrder', component: () => import('pages/CreateOrder.vue') },
       { path: 'shift-handover', component: () => import('pages/ShiftHandover.vue') },
       { path: 'review-management', component: () => import('pages/ReviewManagement.vue') },
-      { path: 'revenue-statistics', component: () => import('pages/RevenueStatistics.vue') },
-      { path: 'test-revenue', component: () => import('pages/TestRevenue.vue') }
+      { path: 'revenue-statistics', component: () => import('pages/RevenueStatistics.vue') }
     ]
   },
 

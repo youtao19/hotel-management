@@ -140,45 +140,24 @@
         </q-card-section>
       </q-card>
 
-      <!-- 支付方式统计 -->
-      <div class="row q-col-gutter-md q-mb-lg">
-        <div class="col-lg-6 col-md-12">
-          <q-card>
-            <q-card-section>
-              <div class="text-h6 q-mb-md">
-                <q-icon name="payment" class="q-mr-sm" />
-                支付方式分布
-                <q-tooltip class="bg-white text-primary" anchor="bottom left" self="top left">
-                  <div class="text-body2">
-                    <strong>统计说明</strong>：按开房时间统计支付方式分布
-                  </div>
-                </q-tooltip>
-              </div>
-              <div class="chart-container" style="height: 300px;">
-                <canvas ref="paymentChart"></canvas>
-              </div>
-            </q-card-section>
-          </q-card>
-        </div>
-
-        <div class="col-lg-6 col-md-12">
-          <q-card>
-            <q-card-section>
-              <div class="text-h6 q-mb-md">
-                <q-icon name="hotel" class="q-mr-sm" />
-                房型收入分布
-                <q-tooltip class="bg-white text-primary" anchor="bottom left" self="top left">
-                  <div class="text-body2">
-                    <strong>统计说明</strong>：按开房时间统计房型收入分布
-                  </div>
-                </q-tooltip>
-              </div>
-              <div class="chart-container" style="height: 300px;">
-                <canvas ref="roomTypeChart"></canvas>
-              </div>
-            </q-card-section>
-          </q-card>
-        </div>
+      <!-- 房型收入分布 -->
+      <div class="q-mb-lg">
+        <q-card>
+          <q-card-section>
+            <div class="text-h6 q-mb-md">
+              <q-icon name="hotel" class="q-mr-sm" />
+              房型收入分布
+              <q-tooltip class="bg-white text-primary" anchor="bottom left" self="top left">
+                <div class="text-body2">
+                  <strong>统计说明</strong>：按开房时间统计房型收入分布
+                </div>
+              </q-tooltip>
+            </div>
+            <div class="chart-container" style="height: 300px;">
+              <canvas ref="roomTypeChart"></canvas>
+            </div>
+          </q-card-section>
+        </q-card>
       </div>
 
       <!-- 收款明细表 -->
@@ -293,6 +272,15 @@
                   size="sm"
                   @click="exportReceiptToExcel"
                   :disable="receiptDetails.length === 0"
+                />
+                <q-btn
+                  color="purple"
+                  icon="input"
+                  label="导入到交接班"
+                  size="sm"
+                  @click="importToShiftHandover"
+                  :disable="receiptDetails.length === 0"
+                  :loading="importLoading"
                 />
                 <q-chip
                   :color="receiptIsToday ? 'positive' : 'info'"
@@ -421,7 +409,7 @@
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useQuasar, date } from 'quasar'
-import { revenueApi } from '../api/index'
+import { revenueApi, shiftHandoverApi } from '../api/index'
 import api from '../api/index'
 import Chart from 'chart.js/auto'
 import { useViewStore } from '../stores/viewStore'
@@ -441,6 +429,7 @@ const roomTypeData = ref([])
 
 // 收款明细表相关数据
 const receiptLoading = ref(false)
+const importLoading = ref(false)
 const receiptType = ref('hotel') // 'hotel' 或 'rest'
 const receiptDetails = ref([])
 const receiptSelectedDate = ref(date.formatDate(new Date(), 'YYYY-MM-DD')) // 当前选中的日期
@@ -461,12 +450,10 @@ const periodOptions = [
 
 // 图表引用
 const revenueChart = ref(null)
-const paymentChart = ref(null)
 const roomTypeChart = ref(null)
 
 // 图表实例
 let revenueChartInstance = null
-let paymentChartInstance = null
 let roomTypeChartInstance = null
 
 // 收款明细表格列定义
@@ -626,7 +613,14 @@ const fetchQuickStats = async () => {
 
 // 获取收入数据
 const fetchRevenueData = async () => {
+  console.log('fetchRevenueData 被调用')
+  console.log('日期范围检查:', {
+    start: dateRange.value.start,
+    end: dateRange.value.end
+  })
+
   if (!dateRange.value.start || !dateRange.value.end) {
+    console.log('日期范围无效，显示警告')
     $q.notify({
       type: 'warning',
       message: '请选择日期范围',
@@ -646,12 +640,15 @@ const fetchRevenueData = async () => {
     let response
     switch (selectedPeriod.value) {
       case 'daily':
+        console.log('调用每日收入API...')
         response = await revenueApi.getDailyRevenue(dateRange.value.start, dateRange.value.end)
         break
       case 'weekly':
+        console.log('调用每周收入API...')
         response = await revenueApi.getWeeklyRevenue(dateRange.value.start, dateRange.value.end)
         break
       case 'monthly':
+        console.log('调用每月收入API...')
         response = await revenueApi.getMonthlyRevenue(dateRange.value.start, dateRange.value.end)
         break
     }
@@ -661,31 +658,35 @@ const fetchRevenueData = async () => {
     console.log('收入数据设置完成:', revenueData.value.length, '条记录')
 
     // 获取房型收入数据
+    console.log('开始获取房型收入数据...')
     const roomTypeResponse = await revenueApi.getRoomTypeRevenue(dateRange.value.start, dateRange.value.end)
     console.log('房型收入API响应:', roomTypeResponse)
     roomTypeData.value = roomTypeResponse.data || []
     console.log('房型数据设置完成:', roomTypeData.value.length, '条记录')
 
     // 更新图表
+    console.log('开始更新图表...')
     await nextTick()
     updateCharts()
+    console.log('图表更新完成')
 
   } catch (error) {
     console.error('获取收入数据失败:', error)
+    console.error('错误详情:', error.response || error.message || error)
     $q.notify({
       type: 'negative',
-      message: '获取收入数据失败',
+      message: '获取收入数据失败: ' + (error.message || '未知错误'),
       position: 'top'
     })
   } finally {
     loading.value = false
+    console.log('fetchRevenueData 完成')
   }
 }
 
 // 更新图表
 const updateCharts = () => {
   updateRevenueChart()
-  updatePaymentChart()
   updateRoomTypeChart()
 }
 
@@ -790,70 +791,6 @@ const updateRevenueChart = () => {
               }
             }
           }
-        }
-      }
-    }
-  })
-}
-
-// 更新支付方式图表
-const updatePaymentChart = () => {
-  if (!paymentChart.value || !revenueData.value || revenueData.value.length === 0) return
-
-  // 销毁现有图表
-  if (paymentChartInstance) {
-    paymentChartInstance.destroy()
-  }
-
-  const ctx = paymentChart.value.getContext('2d')
-
-  // 计算支付方式总收入
-  const paymentData = revenueData.value.reduce((acc, item) => {
-    acc.weiyoufu = (acc.weiyoufu || 0) + (item.weiyoufu_revenue || 0)
-    acc.wechat = (acc.wechat || 0) + (item.wechat_revenue || 0)
-    acc.cash = (acc.cash || 0) + (item.cash_revenue || 0)
-    return acc
-  }, { weiyoufu: 0, wechat: 0, cash: 0 })
-
-  // 从viewStore获取支付方式标签
-  const paymentLabels = viewStore.paymentMethodOptions.map(option => option.label)
-  const paymentValues = viewStore.paymentMethodOptions.map(option => paymentData[option.value] || 0)
-
-  paymentChartInstance = new Chart(ctx, {
-    type: 'doughnut',
-    data: {
-      labels: paymentLabels,
-      datasets: [{
-        data: paymentValues,
-        backgroundColor: [
-          'rgba(255, 152, 0, 0.8)',  // 微邮付
-          'rgba(76, 175, 80, 0.6)',  // 微信
-          'rgba(76, 175, 80, 0.8)'   // 现金
-        ],
-        borderColor: [
-          'rgba(255, 152, 0, 1)',    // 微邮付
-          'rgba(76, 175, 80, 0.8)',  // 微信
-          'rgba(76, 175, 80, 1)'     // 现金
-        ],
-        borderWidth: 2
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        tooltip: {
-          callbacks: {
-            label: function(context) {
-              const value = context.parsed
-              const total = context.dataset.data.reduce((a, b) => a + b, 0)
-              const percentage = ((value / total) * 100).toFixed(1)
-              return `${context.label}: ¥${formatCurrency(value)} (${percentage}%)`
-            }
-          }
-        },
-        legend: {
-          position: 'bottom'
         }
       }
     }
@@ -1180,6 +1117,135 @@ const exportReceiptToExcel = async () => {
       message: '导出Excel失败',
       position: 'top'
     })
+  }
+}
+
+// 导入收款明细到交接班
+const importToShiftHandover = async () => {
+  try {
+    importLoading.value = true
+
+    // 分析收款明细数据，按支付方式和业务类型分类
+    const paymentAnalysis = {
+      现金: { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 },
+      微信: { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 },
+      支付宝: { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 },
+      银行卡: { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 },
+      其他: { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 }
+    }
+
+    // 统计房间数量
+    let totalRooms = 0
+    let restRooms = 0
+
+    console.log('🔍 开始分析收款明细:', receiptDetails.value.length, '条记录')
+
+    receiptDetails.value.forEach(receipt => {
+      const originalPaymentMethod = receipt.payment_method
+      const mappedPaymentMethod = viewStore.getPaymentMethodName(originalPaymentMethod) || '现金'
+      const totalAmount = parseFloat(receipt.total_amount || 0)
+      const roomFee = parseFloat(receipt.room_fee || 0)
+      const deposit = parseFloat(receipt.deposit || 0)
+
+      console.log(`📊 处理记录: 原支付方式=${originalPaymentMethod}, 映射后=${mappedPaymentMethod}, 总额=${totalAmount}`)
+
+      // 将支付方式统一为后端期望的格式
+      let normalizedPaymentMethod = '现金'
+      switch (mappedPaymentMethod) {
+        case '现金':
+          normalizedPaymentMethod = '现金'
+          break
+        case '微信':
+          normalizedPaymentMethod = '微信'
+          break
+        case '微邮付':  // 微邮付按支付宝处理
+        case '支付宝':
+          normalizedPaymentMethod = '支付宝'
+          break
+        case '银行卡':
+        case '平台':
+          normalizedPaymentMethod = '银行卡'
+          break
+        default:
+          normalizedPaymentMethod = '其他'
+      }
+
+      console.log(`💰 最终支付方式: ${normalizedPaymentMethod}`)
+
+      // 确保支付方式存在
+      if (!paymentAnalysis[normalizedPaymentMethod]) {
+        paymentAnalysis[normalizedPaymentMethod] = { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 }
+      }
+
+      // 判断是否为休息房（根据当前选择的类型或者价格判断）
+      const isRestRoom = receiptType.value === 'rest' || roomFee <= 150
+
+      if (isRestRoom) {
+        paymentAnalysis[normalizedPaymentMethod].restIncome += totalAmount
+        restRooms++
+        console.log(`🏨 休息房收入: ${normalizedPaymentMethod} += ${totalAmount}`)
+      } else {
+        paymentAnalysis[normalizedPaymentMethod].hotelIncome += totalAmount
+        totalRooms++
+        console.log(`🏨 客房收入: ${normalizedPaymentMethod} += ${totalAmount}`)
+      }
+    })
+
+    console.log('📈 分析结果:', paymentAnalysis)
+
+    // 调用后端API导入数据
+    const importData = {
+      date: receiptSelectedDate.value,
+      paymentAnalysis: paymentAnalysis,
+      statistics: {
+        totalRooms: totalRooms,
+        restRooms: restRooms,
+        receiptType: receiptType.value
+      }
+    }
+
+    const response = await shiftHandoverApi.importReceiptsToShiftHandover(importData)
+
+    if (response.success) {
+      $q.notify({
+        type: 'positive',
+        message: `已成功导入${receiptSelectedDate.value}的收款明细到交接班`,
+        caption: `共导入 ${receiptDetails.value.length} 条记录`,
+        position: 'top',
+        timeout: 3000
+      })
+    } else {
+      throw new Error(response.message || '导入失败')
+    }
+
+    // 可以选择跳转到交接班页面
+    $q.dialog({
+      title: '导入成功',
+      message: '收款明细已导入到交接班，是否立即前往交接班页面查看？',
+      cancel: {
+        label: '留在当前页面',
+        color: 'grey',
+        flat: true
+      },
+      ok: {
+        label: '前往交接班',
+        color: 'primary'
+      }
+    }).onOk(() => {
+      // 使用router跳转到交接班页面
+      window.open('/shift-handover', '_blank')
+    })
+
+  } catch (error) {
+    console.error('导入到交接班失败:', error)
+    $q.notify({
+      type: 'negative',
+      message: '导入到交接班失败',
+      caption: error.response?.data?.message || error.message,
+      position: 'top'
+    })
+  } finally {
+    importLoading.value = false
   }
 }
 

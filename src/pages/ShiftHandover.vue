@@ -7,6 +7,7 @@
         <div class="row q-gutter-md">
           <q-btn color="primary" icon="print" label="打印" @click="printHandover" />
           <q-btn color="green" icon="download" label="导出Excel" @click="exportToExcel" />
+          <q-btn color="purple" icon="edit" label="保存金额修改" @click="saveAmountChanges" :loading="savingAmounts" />
           <q-btn color="orange" icon="save" label="保存交接记录" @click="saveHandover" />
           <q-btn color="blue" icon="history" label="历史记录" @click="openHistoryDialog" />
         </div>
@@ -292,6 +293,7 @@ const handoverPerson = ref('')
 const receivePerson = ref('')
 const cashierName = ref('张')
 const notes = ref('')
+const savingAmounts = ref(false)
 
 // 备忘录列表相关
 const newTaskTitle = ref('')
@@ -399,16 +401,17 @@ async function loadShiftData() {
       })
     ])
 
-    console.log('API响应数据:', {
+        console.log('API响应数据:', {
       statisticsResponse: statisticsResponse ? '已获取' : '未获取',
       receiptsResponse: receiptsResponse ? `获取了${receiptsResponse.length || 0}条记录` : '未获取',
       previousHandoverResponse: previousHandoverResponse ? `ID=${previousHandoverResponse.id || '未知'}` : '未获取'
     })
 
     if (previousHandoverResponse) {
-      console.log('前一天交接班记录详情:', {
+      console.log('交接班记录详情:', {
         id: previousHandoverResponse.id,
         date: previousHandoverResponse.shift_date,
+        isCurrentDay: previousHandoverResponse.isCurrentDay || false,
         hasPaymentData: !!previousHandoverResponse.paymentData,
         hasDetailsPaymentData: !!(previousHandoverResponse.details && previousHandoverResponse.details.paymentData),
         cashRetainedAmount: previousHandoverResponse.paymentData?.cash?.retainedAmount ||
@@ -419,28 +422,28 @@ async function loadShiftData() {
     if (statisticsResponse) {
       // 更新支付数据
       updatePaymentData(statisticsResponse, receiptsResponse, previousHandoverResponse)
-
-      // 如果成功获取了前一天的交接班记录，显示提示
-      // const hasValidPaymentData = previousHandoverResponse &&
-      //                            (previousHandoverResponse.paymentData ||
-      //                             (previousHandoverResponse.details && previousHandoverResponse.details.paymentData))
-
-      // if (hasValidPaymentData) {
-      //   $q.notify({
-      //     type: 'info',
-      //     message: '已根据前一天的交接班记录设置备用金',
-      //     caption: '现金来自昨日留存款，其他方式来自昨日交接款',
-      //     timeout: 3000
-      //   })
-      // } else {
-      //   $q.notify({
-      //     type: 'warning',
-      //     message: '未找到前一天的交接班记录',
-      //     caption: '使用默认备用金设置',
-      //     timeout: 2000
-      //   })
-      // }
     }
+
+    // 如果成功获取了前一天的交接班记录，显示提示
+    // const hasValidPaymentData = previousHandoverResponse &&
+    //                            (previousHandoverResponse.paymentData ||
+    //                             (previousHandoverResponse.details && previousHandoverResponse.details.paymentData))
+
+    // if (hasValidPaymentData) {
+    //   $q.notify({
+    //     type: 'info',
+    //     message: '已根据前一天的交接班记录设置备用金',
+    //     caption: '现金来自昨日留存款，其他方式来自昨日交接款',
+    //     timeout: 3000
+    //   })
+    // } else {
+    //   $q.notify({
+    //     type: 'warning',
+    //     message: '未找到前一天的交接班记录',
+    //     caption: '使用默认备用金设置',
+    //     timeout: 2000
+    //   })
+    // }
   } catch (error) {
     console.error('加载数据失败:', error)
 
@@ -466,6 +469,38 @@ async function loadShiftData() {
 // 更新支付数据
 function updatePaymentData(statistics, receipts, previousHandover) {
   console.log('🔄 开始更新支付数据...')
+
+  // 检查是否是当天已保存的数据
+  if (previousHandover && previousHandover.isCurrentDay && previousHandover.details && previousHandover.details.paymentData) {
+    console.log('🔄 发现当天已保存的数据，恢复支付数据')
+    const savedPaymentData = previousHandover.details.paymentData
+
+    // 直接恢复已保存的支付数据
+    Object.keys(savedPaymentData).forEach(paymentType => {
+      if (paymentData.value[paymentType]) {
+        paymentData.value[paymentType] = {
+          ...paymentData.value[paymentType],
+          ...savedPaymentData[paymentType]
+        }
+      }
+    })
+
+    // 恢复其他信息
+    if (previousHandover.details.notes) {
+      notes.value = previousHandover.details.notes
+    }
+
+    calculateTotals()
+
+    $q.notify({
+      type: 'positive',
+      message: '已恢复当天保存的交接班数据',
+      caption: `记录ID: ${previousHandover.id}`,
+      timeout: 3000
+    })
+
+    return // 直接返回，不执行下面的统计数据更新逻辑
+  }
 
   // 重置所有支付数据（设置默认备用金）
   resetPaymentData()
@@ -904,6 +939,49 @@ async function saveHandover() {
       type: 'negative',
       message: '保存交接记录失败'
     })
+  }
+}
+
+// 保存金额修改（不保存完整的交接班记录）
+async function saveAmountChanges() {
+  try {
+    savingAmounts.value = true
+
+    // 🔒 保存前强制确保现金留存款为320
+    paymentData.value.cash.retainedAmount = 320
+
+    // 准备金额数据
+    const amountData = {
+      date: selectedDate.value,
+      paymentData: paymentData.value,
+      notes: `金额修改保存 - ${new Date().toLocaleString()}`
+    }
+
+    console.log('保存金额修改:', amountData)
+
+    // 调用新的API端点
+    const result = await shiftHandoverApi.saveAmountChanges(amountData)
+
+    $q.notify({
+      type: 'positive',
+      message: '金额修改保存成功',
+      caption: '可以继续修改金额或保存完整的交接记录',
+      position: 'top',
+      timeout: 3000
+    })
+
+    console.log('金额修改保存成功:', result)
+
+  } catch (error) {
+    console.error('保存金额修改失败:', error)
+    $q.notify({
+      type: 'negative',
+      message: '保存金额修改失败',
+      caption: error.message,
+      position: 'top'
+    })
+  } finally {
+    savingAmounts.value = false
   }
 }
 
