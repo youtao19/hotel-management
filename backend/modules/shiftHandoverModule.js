@@ -760,25 +760,63 @@ async function getCurrentHandoverData(currentDate) {
  * @returns {Promise<Object|null>} 前一天的交接班记录
  */
 async function getPreviousHandoverData(currentDate) {
-  // 计算前一天的日期
-  const current = new Date(currentDate);
-  const previous = new Date(current);
-  previous.setDate(current.getDate() - 1);
-  const previousDateStr = previous.toISOString().split('T')[0];
+  console.log(`查找交接班记录: 当前日期=${currentDate}`);
 
-  console.log(`查找前一天交接班记录: 当前日期=${currentDate}, 前一天=${previousDateStr}`);
-
-  // 修改SQL查询，使用日期范围而不是精确匹配，以处理可能的时区差异
-  const sql = `
+  // 🔥 首先检查当天是否有已保存的数据（优先级最高）
+  const currentDaySql = `
     SELECT *
     FROM shift_handover h
     WHERE h.shift_date::date = $1::date
-       OR DATE_TRUNC('day', h.shift_date) = DATE_TRUNC('day', $1::timestamp)
-    ORDER BY h.id DESC
+    ORDER BY h.updated_at DESC
     LIMIT 1
   `;
 
   try {
+    const currentDayResult = await query(currentDaySql, [currentDate]);
+    console.log(`当天交接班记录查询结果: 找到${currentDayResult.rows.length}条记录`);
+
+    if (currentDayResult.rows.length > 0) {
+      const currentRecord = currentDayResult.rows[0];
+      console.log(`找到当天交接班记录: ID=${currentRecord.id}, 日期=${currentRecord.shift_date}, 类型=${currentRecord.type}`);
+
+      // 解析details字段
+      let currentDetails = {};
+      try {
+        currentDetails = typeof currentRecord.details === 'string' ?
+          JSON.parse(currentRecord.details) : currentRecord.details;
+      } catch (parseError) {
+        console.error('解析当天交接班详情数据失败:', parseError);
+      }
+
+      return {
+        ...currentRecord,
+        details: currentDetails,
+        paymentData: currentDetails.paymentData || null,
+        isCurrentDay: true // 标记这是当天的数据
+      };
+    }
+
+    // 如果当天没有记录，再查找前一天的记录（用于设置备用金）
+    console.log('当天没有记录，查找前一天的交接班记录');
+
+    // 计算前一天的日期
+    const current = new Date(currentDate);
+    const previous = new Date(current);
+    previous.setDate(current.getDate() - 1);
+    const previousDateStr = previous.toISOString().split('T')[0];
+
+    console.log(`查找前一天交接班记录: 前一天=${previousDateStr}`);
+
+    // 修改SQL查询，使用日期范围而不是精确匹配，以处理可能的时区差异
+    const sql = `
+      SELECT *
+      FROM shift_handover h
+      WHERE h.shift_date::date = $1::date
+         OR DATE_TRUNC('day', h.shift_date) = DATE_TRUNC('day', $1::timestamp)
+      ORDER BY h.id DESC
+      LIMIT 1
+    `;
+
     const result = await query(sql, [previousDateStr]);
     console.log(`前一天交接班记录查询结果: 找到${result.rows.length}条记录`);
 
@@ -830,39 +868,6 @@ async function getPreviousHandoverData(currentDate) {
         ...fallbackRecord,
         details: fallbackDetails,
         paymentData: fallbackDetails.paymentData || null
-      };
-    }
-
-    // 如果找不到前一天的记录，检查当天是否有已保存的数据
-    console.log('未找到前一天记录，检查当天是否有已保存的数据');
-    const currentDaySql = `
-      SELECT *
-      FROM shift_handover h
-      WHERE h.shift_date::date = $1::date
-      ORDER BY h.updated_at DESC
-      LIMIT 1
-    `;
-
-    const currentDayResult = await query(currentDaySql, [currentDate]);
-
-    if (currentDayResult.rows.length > 0) {
-      const currentRecord = currentDayResult.rows[0];
-      console.log(`找到当天交接班记录: ID=${currentRecord.id}, 日期=${currentRecord.shift_date}, 类型=${currentRecord.type}`);
-
-      // 解析details字段
-      let currentDetails = {};
-      try {
-        currentDetails = typeof currentRecord.details === 'string' ?
-          JSON.parse(currentRecord.details) : currentRecord.details;
-      } catch (parseError) {
-        console.error('解析当天交接班详情数据失败:', parseError);
-      }
-
-      return {
-        ...currentRecord,
-        details: currentDetails,
-        paymentData: currentDetails.paymentData || null,
-        isCurrentDay: true // 标记这是当天的数据
       };
     }
 

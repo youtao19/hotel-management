@@ -470,10 +470,14 @@ async function loadShiftData() {
 function updatePaymentData(statistics, receipts, previousHandover) {
   console.log('🔄 开始更新支付数据...')
 
-  // 检查是否是当天已保存的数据
-  if (previousHandover && previousHandover.isCurrentDay && previousHandover.details && previousHandover.details.paymentData) {
+  // 检查当天是否有已保存的数据（来自"保存金额"或"保存交接记录"）
+  const todaysSavedPaymentData = previousHandover && previousHandover.isCurrentDay
+    ? (previousHandover.details && previousHandover.details.paymentData) || previousHandover.paymentData
+    : null
+
+  if (todaysSavedPaymentData) {
     console.log('🔄 发现当天已保存的数据，恢复支付数据')
-    const savedPaymentData = previousHandover.details.paymentData
+    const savedPaymentData = todaysSavedPaymentData
 
     // 直接恢复已保存的支付数据
     Object.keys(savedPaymentData).forEach(paymentType => {
@@ -486,8 +490,25 @@ function updatePaymentData(statistics, receipts, previousHandover) {
     })
 
     // 恢复其他信息
-    if (previousHandover.details.notes) {
+    if (previousHandover.details && previousHandover.details.notes) {
       notes.value = previousHandover.details.notes
+    }
+
+    // 🔒 恢复数据时，只有在用户没有手动设置过现金备用金的情况下才强制设置为320
+    // 如果用户已经保存了自定义的现金备用金，则保持用户的设置
+    if (!savedPaymentData.cash || savedPaymentData.cash.reserveCash === undefined || savedPaymentData.cash.reserveCash === null) {
+      console.log('🔧 用户未设置现金备用金，使用默认值320')
+      paymentData.value.cash.reserveCash = 320
+    } else {
+      console.log('✅ 保持用户设置的现金备用金:', savedPaymentData.cash.reserveCash)
+    }
+
+    // 🔒 对于现金留存款，只有在用户没有手动设置过的情况下才强制设置为320
+    if (!savedPaymentData.cash || savedPaymentData.cash.retainedAmount === undefined || savedPaymentData.cash.retainedAmount === null) {
+      console.log('🔧 用户未设置现金留存款，使用默认值320')
+      paymentData.value.cash.retainedAmount = 320
+    } else {
+      console.log('✅ 保持用户设置的现金留存款:', savedPaymentData.cash.retainedAmount)
     }
 
     calculateTotals()
@@ -899,9 +920,6 @@ function generateHtmlSnapshot() {
 // 保存交接记录
 async function saveHandover() {
   try {
-    // 🔒 保存前强制确保现金留存款为320
-    paymentData.value.cash.retainedAmount = 320
-
     // 调试：保存前检查备用金
     console.log('保存前的现金备用金:', paymentData.value.cash.reserveCash)
     console.log('保存前的现金留存款:', paymentData.value.cash.retainedAmount)
@@ -947,10 +965,7 @@ async function saveAmountChanges() {
   try {
     savingAmounts.value = true
 
-    // 🔒 保存前强制确保现金留存款为320
-    paymentData.value.cash.retainedAmount = 320
-
-    // 准备金额数据
+    // 准备金额数据（保存用户实际输入的值，不强制修改）
     const amountData = {
       date: selectedDate.value,
       paymentData: paymentData.value,
@@ -1203,55 +1218,6 @@ watch(paymentData, () => {
 // 组件挂载时初始化
 onMounted(async () => {
   await loadShiftData()
-
-  // 强制修正备用金的函数
-  const fixReserveCash = async () => {
-    try {
-      console.log('开始修正备用金检查...')
-      const previousHandoverResponse = await shiftHandoverApi.getPreviousHandoverData({
-        date: selectedDate.value
-      })
-
-      if (previousHandoverResponse) {
-        const prevPaymentData = previousHandoverResponse.paymentData ||
-                               (previousHandoverResponse.details && previousHandoverResponse.details.paymentData) ||
-                               null
-
-        if (prevPaymentData && prevPaymentData.cash) {
-          // 🔒 现金备用金应该始终是320
-          const correctReserveCash = 320
-          const currentReserveCash = paymentData.value.cash.reserveCash
-
-          console.log(`备用金检查: 当前=${currentReserveCash}, 应该=${correctReserveCash}`)
-
-          if (currentReserveCash !== correctReserveCash) {
-            console.log(`修正备用金: ${currentReserveCash} -> ${correctReserveCash}`)
-            paymentData.value.cash.reserveCash = correctReserveCash
-            paymentData.value.cash.retainedAmount = 320  // 同时修正留存款
-            calculateTotals()
-
-            $q.notify({
-              type: 'warning',
-              message: `已修正现金备用金: ${currentReserveCash} -> ${correctReserveCash}`,
-              caption: '现金留存款固定为320',
-              timeout: 4000
-            })
-          } else {
-            console.log('✅ 备用金已正确设置')
-          }
-        }
-      }
-    } catch (error) {
-      console.error('修正备用金失败:', error)
-    }
-  }
-
-  // 延迟执行修正
-  setTimeout(fixReserveCash, 1000)
-
-  // 也在数据加载完成后再次检查
-  setTimeout(fixReserveCash, 3000)
-
   // 确保总计正确计算
   calculateTotals()
 })
