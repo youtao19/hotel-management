@@ -246,6 +246,7 @@ async function getAvailableRooms(startDate, endDate, typeCode = null) {
         SELECT r.room_id, r.room_number, r.type_code, r.status, r.price, r.is_closed
         FROM rooms r
         WHERE r.is_closed = FALSE
+          AND r.status != 'repair'
           AND NOT EXISTS (
             SELECT 1
             FROM orders o
@@ -264,6 +265,7 @@ async function getAvailableRooms(startDate, endDate, typeCode = null) {
         SELECT r.room_id, r.room_number, r.type_code, r.status, r.price, r.is_closed
         FROM rooms r
         WHERE r.is_closed = FALSE
+          AND r.status != 'repair'
           AND NOT EXISTS (
             SELECT 1
             FROM orders o

@@ -99,6 +99,9 @@ export const orderApi = {
 
   // 办理退房
   checkOut: (orderId, checkOutData) => api.patch(`/orders/${orderId}/check-out`, checkOutData),
+
+  // 退押金
+  refundDeposit: (orderNumber, refundData) => api.post(`/orders/${orderNumber}/refund-deposit`, refundData),
 }
 
 // 用户相关接口

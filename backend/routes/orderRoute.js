@@ -181,4 +181,52 @@ router.post('/:orderNumber/status', authenticationMiddleware, [
     }
 });
 
+// POST /api/orders/:orderNumber/refund-deposit - 退押金
+router.post('/:orderNumber/refund-deposit', [
+  body('refundAmount').isNumeric().withMessage('退押金金额必须是数字'),
+  body('actualRefundAmount').isNumeric().withMessage('实际退款金额必须是数字'),
+  body('method').notEmpty().withMessage('退押金方式不能为空'),
+  body('operator').notEmpty().withMessage('操作员不能为空')
+], async (req, res) => {
+  try {
+    const { orderNumber } = req.params;
+    console.log(`处理订单 ${orderNumber} 的退押金请求`);
+
+    // 验证请求数据
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        message: '请求数据验证失败',
+        errors: errors.array()
+      });
+    }
+
+    const refundData = {
+      orderNumber,
+      ...req.body,
+      refundTime: new Date().toISOString()
+    };
+
+    // 调用退押金方法
+    const updatedOrder = await orderModule.refundDeposit(refundData);
+
+    res.json({
+      message: '退押金处理成功',
+      order: updatedOrder,
+      refundData: {
+        actualRefundAmount: refundData.actualRefundAmount,
+        method: refundData.method,
+        refundTime: refundData.refundTime
+      }
+    });
+
+  } catch (error) {
+    console.error('退押金处理失败:', error);
+    res.status(500).json({
+      message: '退押金处理失败',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;

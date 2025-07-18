@@ -375,12 +375,149 @@ async function updateOrderStatus(orderId, newStatus) {
   }
 }
 
+/**
+ * 退押金
+ * @param {Object} refundData - 退押金数据
+ * @returns {Promise<Object>} 更新后的订单对象
+ */
+async function refundDeposit(refundData) {
+  try {
+    console.log('处理退押金请求:', refundData);
+
+    const {
+      orderNumber,
+      refundAmount,
+      deductAmount = 0,
+      actualRefundAmount,
+      method,
+      notes,
+      operator,
+      refundTime
+    } = refundData;
+
+    // 验证必要字段
+    if (!orderNumber || !refundAmount || !actualRefundAmount || !method || !operator) {
+      throw new Error('退押金数据不完整');
+    }
+
+    // 获取订单信息
+    const orderQuery = 'SELECT * FROM orders WHERE order_id = $1';
+    const orderResult = await query(orderQuery, [orderNumber]);
+
+    if (orderResult.rows.length === 0) {
+      throw new Error(`订单号 '${orderNumber}' 不存在`);
+    }
+
+    const order = orderResult.rows[0];
+
+    // 验证订单状态（只有已退房或已取消的订单才能退押金）
+    if (!['checked-out', 'cancelled'].includes(order.status)) {
+      throw new Error('只有已退房或已取消的订单才能退押金');
+    }
+
+    // 验证押金金额
+    const originalDeposit = parseFloat(order.deposit) || 0;
+    const currentRefundedDeposit = parseFloat(order.refunded_deposit) || 0;
+    const availableRefund = originalDeposit - currentRefundedDeposit;
+
+    if (refundAmount > availableRefund) {
+      throw new Error(`退押金金额不能超过可退金额 ¥${availableRefund}`);
+    }
+
+    // 检查字段是否存在，如果不存在则先添加
+    try {
+      const checkFields = await query(`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name = 'orders' AND column_name IN ('refunded_deposit', 'refund_records')
+      `);
+
+      const existingFields = checkFields.rows.map(row => row.column_name);
+
+      if (!existingFields.includes('refunded_deposit')) {
+        console.log('添加 refunded_deposit 字段...');
+        await query(`ALTER TABLE orders ADD COLUMN refunded_deposit DECIMAL(10,2) DEFAULT 0`);
+      }
+
+      if (!existingFields.includes('refund_records')) {
+        console.log('添加 refund_records 字段...');
+        await query(`ALTER TABLE orders ADD COLUMN refund_records JSONB DEFAULT '[]'::jsonb`);
+      }
+    } catch (fieldError) {
+      console.error('检查/添加字段失败:', fieldError);
+    }
+
+    // 更新订单的退押金信息
+    const newRefundedDeposit = currentRefundedDeposit + actualRefundAmount;
+
+    const updateQuery = `
+      UPDATE orders
+      SET refunded_deposit = $1,
+          refund_records = COALESCE(refund_records, '[]'::jsonb) || $2::jsonb
+      WHERE order_id = $3
+      RETURNING *
+    `;
+
+    // 构建退押金记录
+    const refundRecord = {
+      refundTime: refundTime || new Date().toISOString(),
+      refundAmount,
+      deductAmount,
+      actualRefundAmount,
+      method,
+      notes: notes || '',
+      operator
+    };
+
+    const updateResult = await query(updateQuery, [
+      newRefundedDeposit,
+      JSON.stringify([refundRecord]),
+      orderNumber
+    ]);
+
+    if (updateResult.rows.length === 0) {
+      throw new Error('更新订单退押金信息失败');
+    }
+
+    console.log('退押金处理成功:', {
+      orderNumber,
+      originalDeposit,
+      newRefundedDeposit,
+      actualRefundAmount
+    });
+
+    // 自动记录到交接班系统（延迟加载避免循环依赖）
+    try {
+      // 使用 setImmediate 延迟执行，避免循环依赖
+      setImmediate(async () => {
+        try {
+          const shiftHandoverModule = require('./shiftHandoverModule');
+          await shiftHandoverModule.recordRefundDepositToHandover(refundData);
+          console.log('✅ 退押金已自动记录到交接班系统');
+        } catch (handoverError) {
+          console.error('⚠️ 记录退押金到交接班系统失败，但退押金处理成功:', handoverError);
+        }
+      });
+    } catch (handoverError) {
+      console.error('⚠️ 记录退押金到交接班系统失败，但退押金处理成功:', handoverError);
+      // 不抛出错误，因为退押金本身已经成功
+    }
+
+    return updateResult.rows[0];
+
+  } catch (error) {
+    console.error('退押金处理失败:', error);
+    throw error;
+  }
+}
+
 const table = {
   checkTableExists,
   createOrder,
   getAllOrders,
   getOrderById,
   updateOrderStatus,
+  refundDeposit,
   isRestRoom
 };
 

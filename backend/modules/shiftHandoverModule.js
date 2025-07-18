@@ -788,10 +788,33 @@ async function getPreviousHandoverData(currentDate) {
         console.error('解析当天交接班详情数据失败:', parseError);
       }
 
+      // 如果当天记录包含退押金数据，需要重新生成统计信息
+      let enhancedStatistics = null;
+      if (currentDetails.refundDeposits && currentDetails.refundDeposits.length > 0) {
+        console.log(`当天记录包含 ${currentDetails.refundDeposits.length} 条退押金记录，重新生成统计信息`);
+
+        // 重新获取当天的完整统计数据
+        try {
+          const todayStats = await getStatistics(currentDate);
+          enhancedStatistics = todayStats;
+
+          // 将退押金数据合并到统计中
+          currentDetails.refundDeposits.forEach(refund => {
+            const method = normalizePaymentMethod(refund.method);
+            if (enhancedStatistics.paymentDetails && enhancedStatistics.paymentDetails[method]) {
+              enhancedStatistics.paymentDetails[method].hotelDeposit += refund.actualRefundAmount;
+            }
+          });
+        } catch (statsError) {
+          console.error('重新生成统计信息失败:', statsError);
+        }
+      }
+
       return {
         ...currentRecord,
         details: currentDetails,
         paymentData: currentDetails.paymentData || null,
+        statistics: enhancedStatistics || currentRecord.statistics,
         isCurrentDay: true // 标记这是当天的数据
       };
     }
@@ -1161,6 +1184,161 @@ async function saveAmountChanges(amountData) {
   }
 }
 
+/**
+ * 记录退押金到交接班系统
+ * @param {Object} refundData - 退押金数据
+ * @returns {Promise<Object>} 更新结果
+ */
+async function recordRefundDepositToHandover(refundData) {
+  try {
+    console.log('📝 开始记录退押金到交接班系统:', refundData);
+
+    const {
+      orderNumber,
+      actualRefundAmount,
+      method,
+      notes,
+      operator,
+      refundTime
+    } = refundData;
+
+    // 获取退押金日期（使用当前日期，而不是退押金时间的日期）
+    // 这样确保退押金记录到当天的交接班中
+    const refundDate = new Date().toISOString().split('T')[0];
+
+    // 检查当天是否已有交接班记录
+    const existingQuery = `
+      SELECT id, details
+      FROM shift_handover
+      WHERE shift_date = $1
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `;
+
+    const existingResult = await query(existingQuery, [refundDate]);
+    let handoverId = null;
+    let existingDetails = {};
+
+    if (existingResult.rows.length > 0) {
+      handoverId = existingResult.rows[0].id;
+      existingDetails = existingResult.rows[0].details || {};
+      console.log('📋 找到现有交接班记录，ID:', handoverId);
+    }
+
+    // 构建退押金记录
+    const refundRecord = {
+      orderNumber,
+      actualRefundAmount,
+      method,
+      notes: notes || '',
+      operator,
+      refundTime,
+      type: 'deposit_refund'
+    };
+
+    // 标准化支付方式名称
+    const standardizedMethod = normalizePaymentMethod(method);
+
+    // 更新交接班详情
+    const updatedDetails = {
+      ...existingDetails,
+      refundDeposits: [
+        ...(existingDetails.refundDeposits || []),
+        refundRecord
+      ],
+      // 更新支付数据中的退押金统计
+      paymentData: {
+        ...existingDetails.paymentData,
+        [standardizedMethod]: {
+          ...existingDetails.paymentData?.[standardizedMethod],
+          // 增加退押金金额（作为支出）
+          refundDeposit: (existingDetails.paymentData?.[standardizedMethod]?.refundDeposit || 0) + actualRefundAmount,
+          // 更新总计（减去退押金）
+          total: (existingDetails.paymentData?.[standardizedMethod]?.total || 0) - actualRefundAmount
+        }
+      },
+      lastRefundUpdate: new Date().toISOString()
+    };
+
+    // 同时更新统计数据中的 paymentDetails（用于前端显示）
+    if (existingDetails.statistics && existingDetails.statistics.paymentDetails) {
+      if (!updatedDetails.statistics) {
+        updatedDetails.statistics = { ...existingDetails.statistics };
+      }
+      if (!updatedDetails.statistics.paymentDetails) {
+        updatedDetails.statistics.paymentDetails = { ...existingDetails.statistics.paymentDetails };
+      }
+
+      // 确保支付方式存在
+      if (!updatedDetails.statistics.paymentDetails[standardizedMethod]) {
+        updatedDetails.statistics.paymentDetails[standardizedMethod] = {
+          hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0
+        };
+      }
+
+      // 更新退押金统计（增加退押金金额）
+      updatedDetails.statistics.paymentDetails[standardizedMethod].hotelDeposit += actualRefundAmount;
+    }
+
+
+
+    if (handoverId) {
+      // 更新现有记录
+      const updateQuery = `
+        UPDATE shift_handover
+        SET details = $1, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $2
+        RETURNING id
+      `;
+
+      const updateResult = await query(updateQuery, [
+        JSON.stringify(updatedDetails),
+        handoverId
+      ]);
+
+      console.log('✅ 更新交接班记录成功，ID:', updateResult.rows[0].id);
+      return { id: updateResult.rows[0].id, action: 'updated' };
+    } else {
+      // 创建新记录
+      const insertQuery = `
+        INSERT INTO shift_handover (
+          shift_date,
+          type,
+          details,
+          statistics,
+          cashier_name,
+          shift_time,
+          created_at,
+          updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        RETURNING id
+      `;
+
+      const defaultStatistics = {
+        type: 'refund_only',
+        lastUpdate: new Date().toISOString()
+      };
+
+      const insertResult = await query(insertQuery, [
+        refundDate,                        // shift_date
+        'refund',                          // type
+        JSON.stringify(updatedDetails),    // details
+        JSON.stringify(defaultStatistics), // statistics
+        operator,                          // cashier_name
+        'refund'                           // shift_time
+      ]);
+
+      console.log('✅ 创建交接班记录成功，ID:', insertResult.rows[0].id);
+      return { id: insertResult.rows[0].id, action: 'created' };
+    }
+
+  } catch (error) {
+    console.error('记录退押金到交接班系统失败:', error);
+    throw error;
+  }
+}
+
 module.exports = {
   getReceiptDetails,
   getStatistics,
@@ -1171,5 +1349,6 @@ module.exports = {
   getPreviousHandoverData,
   getCurrentHandoverData,
   importReceiptsToShiftHandover,
-  saveAmountChanges
+  saveAmountChanges,
+  recordRefundDepositToHandover
 };

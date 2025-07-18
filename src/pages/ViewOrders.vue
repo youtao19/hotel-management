@@ -970,24 +970,15 @@ async function handleRefundDeposit(refundData) {
   try {
     console.log('处理退押金请求:', refundData)
 
-    // TODO: 这里应该调用 orderStore 的退押金方法
-    // await orderStore.refundDeposit(refundData)
-
-    // 模拟API调用成功
-    const updatedOrder = {
-      ...refundDepositOrder.value,
-      refundedDeposit: (refundDepositOrder.value.refundedDeposit || 0) + refundData.actualRefundAmount
-    }
-
-    // 更新本地订单数据
-    const orderIndex = orderStore.orders.findIndex(order => order.orderNumber === refundData.orderNumber)
-    if (orderIndex !== -1) {
-      orderStore.orders[orderIndex] = updatedOrder
-    }
+    // 调用 orderStore 的退押金方法
+    await orderStore.refundDeposit(refundData)
 
     // 更新当前正在查看的订单详情
     if (currentOrder.value && currentOrder.value.orderNumber === refundData.orderNumber) {
-      currentOrder.value = updatedOrder
+      const updatedOrder = orderStore.getOrderByNumber(refundData.orderNumber)
+      if (updatedOrder) {
+        currentOrder.value = updatedOrder
+      }
     }
 
     // 关闭对话框
@@ -998,7 +989,7 @@ async function handleRefundDeposit(refundData) {
 
     $q.notify({
       type: 'positive',
-      message: `退押金成功！实际退款：¥${refundData.actualRefundAmount}`,
+      message: `退押金成功！实际退款：¥${refundData.actualRefundAmount}，已自动记录到交接班系统`,
       position: 'top'
     })
 

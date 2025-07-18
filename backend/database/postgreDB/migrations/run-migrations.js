@@ -4,6 +4,7 @@
 const { createPool } = require('../pg');
 const addIsClosedToRooms = require('./add_is_closed_to_rooms');
 const removeActualTimesFromOrders = require('./remove_actual_times_from_orders');
+const addRefundFieldsToOrders = require('./add_refund_fields_to_orders');
 
 /**
  * 执行所有迁移
@@ -18,6 +19,7 @@ async function runMigrations() {
     // 执行所有迁移
     await addIsClosedToRooms.migrate();
     await removeActualTimesFromOrders.migrate();
+    await addRefundFieldsToOrders.migrate();
 
     console.log('所有迁移执行完成');
     process.exit(0);

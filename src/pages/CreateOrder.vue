@@ -199,6 +199,19 @@
               <div class="col-md-6 col-xs-12">
                 <q-select v-model="orderData.roomNumber" :options="availableRoomOptions" label="房间号" filled emit-value
                   map-options :rules="[val => !!val || '请选择房间号']" :disable="!orderData.roomType">
+                  <!-- 自定义选项显示 -->
+                  <template v-slot:option="scope">
+                    <q-item v-bind="scope.itemProps">
+                      <q-item-section>
+                        <q-item-label>{{ scope.opt.label }}</q-item-label>
+                      </q-item-section>
+                      <q-item-section side v-if="scope.opt.status === 'cleaning'">
+                        <q-chip size="sm" color="orange" text-color="white" icon="cleaning_services">
+                          清扫中
+                        </q-chip>
+                      </q-item-section>
+                    </q-item>
+                  </template>
                   <!-- 没有可用房间时显示的内容 -->
                   <template v-slot:no-option>
                     <q-item>
@@ -279,8 +292,7 @@ const $q = useQuasar() // For notifications
 // 检查是否为开发环境
 const isDev = ref(process.env.NODE_ENV === 'development')
 
-// 使用roomStore中的状态常量
-const { ROOM_STATES } = roomStore
+// roomStore 已导入，可以直接使用其方法
 
 const availableRoomsByDate = ref([]); // 存储当前时间范围下所有可用房间
 
@@ -492,13 +504,20 @@ const availableRoomOptions = computed(() => {
   if (!orderData.value.roomType) return [];
   return availableRoomsByDate.value
     .filter(room => room.type_code === orderData.value.roomType)
-    .map(room => ({
-      label: `${room.room_number} (${viewStore.getRoomTypeName(room.type_code)})`,
-      value: room.room_number,
-      type: room.type_code,
-      price: room.price,
-      id: room.room_id
-    }));
+    .map(room => {
+      // 获取房间状态文本
+      const statusText = room.status === 'cleaning' ? ' [清扫中]' :
+                        room.status === 'repair' ? ' [维修中]' : '';
+
+      return {
+        label: `${room.room_number} (${viewStore.getRoomTypeName(room.type_code)})${statusText}`,
+        value: room.room_number,
+        type: room.type_code,
+        price: room.price,
+        id: room.room_id,
+        status: room.status
+      };
+    });
 });
 
 // 计算当前选择房型的可用房间数量
@@ -583,20 +602,32 @@ async function submitOrder() {
   // 获取选择的房间 (client-side check before API call)
   const selectedRoom = roomStore.getRoomByNumber(orderData.value.roomNumber)
 
-  // 确认选择的房间确实是可用状态 (client-side check)
-  const displayStatus = roomStore.getRoomDisplayStatus(selectedRoom)
-  if (displayStatus !== ROOM_STATES.AVAILABLE) {
+  // 检查房间是否存在
+  if (!selectedRoom) {
     $q.notify({
       type: 'negative',
-      message: `房间 ${orderData.value.roomNumber} 当前状态为 ${roomStore.getRoomStatusText(selectedRoom)}，无法预订`,
+      message: `房间 ${orderData.value.roomNumber} 不存在`,
       position: 'top'
     });
     return
   }
 
+  // 检查房间是否关闭
+  if (selectedRoom.is_closed) {
+    $q.notify({
+      type: 'negative',
+      message: `房间 ${orderData.value.roomNumber} 已关闭，无法预订`,
+      position: 'top'
+    });
+    return
+  }
+
+  // 注意：移除了对房间状态的严格检查，允许清扫中的房间创建订单
+  // 冲突检测将由后端API处理，确保不会创建真正冲突的订单
+
   try {
     // 使用 orderStore.addOrder 创建订单
-    const newOrder = await orderStore.addOrder({
+    await orderStore.addOrder({
       ...orderData.value,
       createTime: date.formatDate(now, 'YYYY-MM-DD HH:mm:ss'),
       paymentMethod: typeof orderData.value.paymentMethod === 'object' ?
