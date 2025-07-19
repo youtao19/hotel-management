@@ -201,6 +201,9 @@ export const shiftHandoverApi = {
 
   // 保存金额修改
   saveAmountChanges: (amountData) => api.post('/shift-handover/save-amounts', amountData),
+
+  // 删除交接班记录
+  deleteHandoverRecord: (recordId) => api.delete(`/shift-handover/${recordId}`),
 }
 
 export default api;

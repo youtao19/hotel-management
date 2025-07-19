@@ -1339,6 +1339,55 @@ async function recordRefundDepositToHandover(refundData) {
   }
 }
 
+/**
+ * 删除交接班记录
+ * @param {number} recordId - 记录ID
+ * @returns {Promise<Object>} 删除结果
+ */
+async function deleteHandoverRecord(recordId) {
+  try {
+    console.log(`开始删除交接班记录，ID: ${recordId}`);
+
+    // 首先检查记录是否存在
+    const checkQuery = 'SELECT id, shift_date, cashier_name FROM shift_handover WHERE id = $1';
+    const checkResult = await query(checkQuery, [recordId]);
+
+    if (checkResult.rows.length === 0) {
+      console.log(`交接班记录不存在，ID: ${recordId}`);
+      return {
+        success: false,
+        message: '交接班记录不存在'
+      };
+    }
+
+    const record = checkResult.rows[0];
+    console.log(`找到交接班记录: ID=${record.id}, 日期=${record.shift_date}, 收银员=${record.cashier_name}`);
+
+    // 执行删除操作
+    const deleteQuery = 'DELETE FROM shift_handover WHERE id = $1';
+    const deleteResult = await query(deleteQuery, [recordId]);
+
+    if (deleteResult.rowCount > 0) {
+      console.log(`✅ 交接班记录删除成功，ID: ${recordId}`);
+      return {
+        success: true,
+        message: '交接班记录删除成功',
+        deletedRecord: record
+      };
+    } else {
+      console.log(`❌ 交接班记录删除失败，ID: ${recordId}`);
+      return {
+        success: false,
+        message: '删除操作失败'
+      };
+    }
+
+  } catch (error) {
+    console.error('删除交接班记录失败:', error);
+    throw error;
+  }
+}
+
 module.exports = {
   getReceiptDetails,
   getStatistics,
@@ -1350,5 +1399,6 @@ module.exports = {
   getCurrentHandoverData,
   importReceiptsToShiftHandover,
   saveAmountChanges,
-  recordRefundDepositToHandover
+  recordRefundDepositToHandover,
+  deleteHandoverRecord
 };

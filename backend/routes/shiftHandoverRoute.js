@@ -9,7 +9,8 @@ const {
   getPreviousHandoverData,
   getCurrentHandoverData,
   importReceiptsToShiftHandover,
-  saveAmountChanges
+  saveAmountChanges,
+  deleteHandoverRecord
 } = require('../modules/shiftHandoverModule');
 
 // 获取收款明细
@@ -343,6 +344,45 @@ router.post('/save-amounts', async (req, res) => {
     res.status(500).json({
       success: false,
       message: '保存金额修改失败',
+      error: error.message
+    });
+  }
+});
+
+// 删除交接班记录
+router.delete('/:recordId', async (req, res) => {
+  try {
+    const { recordId } = req.params;
+
+    // 验证记录ID
+    if (!recordId || isNaN(parseInt(recordId))) {
+      return res.status(400).json({
+        success: false,
+        message: '无效的记录ID'
+      });
+    }
+
+    console.log(`接收到删除交接班记录请求，记录ID: ${recordId}`);
+
+    const result = await deleteHandoverRecord(parseInt(recordId));
+
+    if (result.success) {
+      res.status(200).json({
+        success: true,
+        message: '交接班记录删除成功'
+      });
+    } else {
+      res.status(404).json({
+        success: false,
+        message: result.message || '记录不存在'
+      });
+    }
+
+  } catch (error) {
+    console.error('删除交接班记录失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '删除交接班记录失败',
       error: error.message
     });
   }

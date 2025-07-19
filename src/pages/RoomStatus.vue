@@ -10,27 +10,27 @@
       <q-card flat bordered>
         <q-card-section class="q-pa-md">
           <div class="row q-col-gutter-md items-center">
-            <!-- 日期范围选择器 -->
+            <!-- 单个日期选择器 -->
             <div class="col-md-6 col-sm-8 col-xs-12">
               <q-input
                 outlined
                 dense
-                label="查看日期范围内房间状态"
+                label="查看指定日期房间状态"
                 readonly
-                :model-value="formattedDateRange || '点击选择日期范围'"
-                placeholder="YYYY-MM-DD 至 YYYY-MM-DD"
+                :model-value="formattedSelectedDate || '点击选择日期'"
+                placeholder="YYYY-MM-DD"
                 clearable
                 clear-icon="close"
-                @clear="clearDateRange"
+                @clear="clearSelectedDate"
               >
                 <template v-slot:append>
                   <q-icon name="event" class="cursor-pointer">
                     <q-popup-proxy cover transition-show="scale" transition-hide="scale">
                       <q-date
-                        v-model="dateRange"
-                        range
+                        v-model="selectedDate"
                         default-view="Calendar"
                         today-btn
+                        @update:model-value="onDateChange"
                       >
                         <div class="row items-center justify-end q-pa-sm">
                           <q-btn v-close-popup label="确定" color="primary" flat/>
@@ -42,13 +42,14 @@
               </q-input>
             </div>
 
-            <!-- 应用筛选按钮 -->
+            <!-- 查询按钮 -->
             <div class="col-md-6 col-sm-4 col-xs-12">
               <q-btn
                 color="primary"
                 icon="search"
-                label="查看房间状态"
-                @click="applyFilters"
+                label="查询房间状态"
+                @click="queryRoomStatus"
+                :loading="roomStore.loading"
                 class="full-width"
               />
             </div>
@@ -447,7 +448,6 @@ const ROOM_STATES = roomStore.ROOM_STATES
 // 筛选条件状态变量
 const filterType = ref(null)    // 房间类型筛选，初始为null表示不筛选
 const filterStatus = ref(null)  // 房间状态筛选，初始为null表示不筛选
-const dateRange = ref(null)     // 日期范围筛选，初始为null表示不筛选
 
 // 日期选择相关的响应式数据
 const selectedDate = ref(new Date().toISOString().substring(0, 10)) // 当前选择的查询日期，默认为今天
@@ -462,10 +462,21 @@ const calendarDate = ref(new Date().toISOString().substr(0, 10)) // YYYY-MM-DD �
 const roomBookingData = ref([]) // 存储房间的预订数据
 const selectedDateInfo = ref(null) // 存储选中日期的详细信息
 
-// 格式化选中日期显示
+// 格式化选中日期显示（仅用于界面显示）
 const formattedSelectedDate = computed(() => {
   if (!selectedDate.value) return ''
-  const date = new Date(selectedDate.value)
+
+  // 确保selectedDate.value是YYYY-MM-DD格式
+  let dateStr = selectedDate.value
+  if (dateStr.includes('/')) {
+    dateStr = dateStr.replace(/\//g, '-')
+  }
+
+  const date = new Date(dateStr)
+  if (isNaN(date.getTime())) {
+    return selectedDate.value // 如果日期无效，返回原始值
+  }
+
   return date.toLocaleDateString('zh-CN', {
     year: 'numeric',
     month: 'long',
@@ -526,23 +537,17 @@ onMounted(async () => {
     // 先获取房型数据
     await roomStore.fetchRoomTypes()
 
-        // 检查URL中是否有日期范围参数
-    const urlDateRange = route.query.dateRange
-    if (urlDateRange && urlDateRange.includes('_')) {
-      // 解析日期范围参数
-      const [startDate, endDate] = urlDateRange.split('_')
-
+        // 检查URL中是否有查询日期参数
+    const urlQueryDate = route.query.queryDate
+    if (urlQueryDate) {
       // 验证日期格式
       const dateRegex = /^\d{4}-\d{2}-\d{2}$/
-      if (dateRegex.test(startDate) && dateRegex.test(endDate)) {
-        dateRange.value = { from: startDate, to: endDate }
-
-        console.log('从URL恢复日期范围筛选:', startDate, '到', endDate)
-
-        // 应用日期范围筛选，显示所有房间状态
-        await roomStore.getRoomStatusByDateRange(startDate, endDate, route.query.type)
+      if (dateRegex.test(urlQueryDate)) {
+        selectedDate.value = urlQueryDate
+        console.log('从URL恢复查询日期:', urlQueryDate)
+        await loadRoomDataForDate(urlQueryDate)
       } else {
-        console.warn('URL中的日期格式无效:', { startDate, endDate })
+        console.warn('URL中的日期格式无效:', urlQueryDate)
         // 如果日期格式无效，按当前日期加载
         await loadRoomDataForDate(selectedDate.value)
       }
@@ -558,18 +563,7 @@ onMounted(async () => {
   }
 })
 
-/**
- * 格式化日期范围显示
- */
-const formattedDateRange = computed(() => {
-  if (!dateRange.value) return ''
-
-  const { from, to } = dateRange.value
-
-  if (from && to) {
-    return `${from} 至 ${to}`
-  }
-})
+// 删除不再使用的日期范围格式化函数
 
 /**
  * 监听路由查询参数变化，用于同步URL参数和组件状态
@@ -607,96 +601,45 @@ watch(() => route.query, (newQuery) => {
     filterType.value = newQuery.type || null
   }
 
-  // 处理日期参数
-  if (newQuery.dateRange && newQuery.dateRange !== dateRange.value) {
-    dateRange.value = newQuery.dateRange
+  // 处理查询日期参数
+  if (newQuery.queryDate && newQuery.queryDate !== selectedDate.value) {
+    selectedDate.value = newQuery.queryDate
+    loadRoomDataForDate(newQuery.queryDate)
   }
 }, { immediate: true, deep: true })  // immediate确保组件初始化时立即执行一次，deep确保深度监听对象变化
 
 /**
- * 应用日期筛选
+ * 查询房间状态（单日期查询）
  */
-async function applyFilters() {
+async function queryRoomStatus() {
   try {
-    console.log('应用日期筛选 - 原始dateRange:', dateRange.value)
-
-    if (!dateRange.value || !dateRange.value.from || !dateRange.value.to) {
+    if (!selectedDate.value) {
       $q.notify({
         type: 'warning',
-        message: '请先选择日期范围',
+        message: '请先选择查询日期',
         position: 'top'
       })
       return
     }
 
-    // 使用统一的日期格式化函数
-    console.log('处理前的日期:', { from: dateRange.value.from, to: dateRange.value.to })
-
-    const startDate = formatDateToISO(dateRange.value.from)
-    const endDate = formatDateToISO(dateRange.value.to)
-
-    console.log('处理后的日期:', { startDate, endDate })
-
-    // 验证日期格式和有效性
-    const dateRegex = /^\d{4}-\d{2}-\d{2}$/
-    if (!startDate || !endDate || !dateRegex.test(startDate) || !dateRegex.test(endDate)) {
-      console.error('日期格式验证失败:', { startDate, endDate })
-      $q.notify({
-        type: 'negative',
-        message: '日期格式错误或日期无效，请重新选择',
-        position: 'top'
-      })
-      return
-    }
-
-    // 验证日期逻辑
-    if (new Date(startDate) > new Date(endDate)) {
-      $q.notify({
-        type: 'warning',
-        message: '结束日期不能早于开始日期',
-        position: 'top'
-      })
-      return
-    }
-
-    console.log('最终查询日期范围:', startDate, '到', endDate)
-    console.log('选择的房型:', selectedRoomType.value)
+    console.log('查询日期房间状态:', selectedDate.value)
 
     // 显示加载状态
     roomStore.loading = true
 
-    // 使用新的getRoomStatusByDateRange方法获取所有房间的状态
-    await roomStore.getRoomStatusByDateRange(startDate, endDate, selectedRoomType.value)
-
-    // 根据日期范围的长度提供不同的提示信息
-    let statusMessage
-    if (startDate === endDate) {
-      statusMessage = `已显示 ${startDate} 当天所有房间的状态 (${roomStore.rooms.length} 间)`
-    } else {
-      statusMessage = `已显示 ${startDate} 至 ${endDate} 期间所有房间的状态 (${roomStore.rooms.length} 间)`
-    }
+    // 加载指定日期的房间数据
+    await loadRoomDataForDate(selectedDate.value)
 
     $q.notify({
       type: 'positive',
-      message: statusMessage,
+      message: `已显示 ${selectedDate.value} 当天所有房间的状态 (${roomStore.rooms.length} 间)`,
       position: 'top'
     })
 
-    // 更新URL参数以保持状态
-    router.replace({
-      path: route.path,
-      query: {
-        ...route.query,
-        dateRange: `${startDate}_${endDate}`,
-        type: selectedRoomType.value || undefined
-      }
-    })
-
   } catch (error) {
-    console.error('应用日期筛选失败:', error)
+    console.error('查询房间状态失败:', error)
 
-    // 更详细的错误信息
-    let errorMessage = '应用日期筛选失败'
+    let errorMessage = '查询房间状态失败'
     if (error.response) {
       console.error('错误响应:', error.response)
       if (error.response.status === 400) {
@@ -718,10 +661,10 @@ async function applyFilters() {
   }
 }
 
-// 监听日期范围变化
-watch(dateRange, (newValue) => {
-  console.log('日期范围变化:', newValue)
-}, { deep: true })
+// 监听选中日期变化
+watch(selectedDate, (newValue) => {
+  console.log('选中日期变化:', newValue)
+})
 
 /**
  * 计算属性：根据筛选条件过滤房间列表
@@ -986,20 +929,25 @@ function resetFilters() {
   // 重置所有筛选条件
   filterType.value = null;
   filterStatus.value = null;
-  dateRange.value = null;
+  selectedDate.value = new Date().toISOString().substring(0, 10); // 重置为今天
 
   // 更新URL，清除所有筛选参数
   router.replace({
     path: route.path,
     query: {}
   });
+
+  // 重新加载今天的数据
+  loadRoomDataForDate(selectedDate.value);
 }
 
 /**
- * 清除日期范围选择
+ * 清除选中日期
  */
-function clearDateRange() {
-  dateRange.value = null;
+async function clearSelectedDate() {
+  const today = new Date().toISOString().substring(0, 10); // 重置为今天
+  selectedDate.value = today;
+  await loadRoomDataForDate(today); // 重新加载今天的数据
 }
 
 /**
@@ -1024,7 +972,7 @@ const resetAllFilters = async () => {
   selectedRoomType.value = null
   filterType.value = null
   filterStatus.value = null
-  dateRange.value = null
+  selectedDate.value = new Date().toISOString().substring(0, 10) // 重置为今天
 
   // 更新URL，清除所有筛选参数
   router.replace({
@@ -1438,15 +1386,11 @@ async function loadRoomDataForDate(date) {
   try {
     console.log('加载日期房间数据:', date)
 
-    // 重置日期范围筛选，因为这是单日期查询
-    dateRange.value = null
-
-    // 更新URL参数，清除日期范围筛选
+    // 更新URL参数，设置查询日期
     router.replace({
       path: route.path,
       query: {
         ...route.query,
-        dateRange: undefined,
         queryDate: date
       }
     })
@@ -1468,8 +1412,31 @@ async function loadRoomDataForDate(date) {
 // 日期变化处理
 async function onDateChange(newDate) {
   console.log('日期变化:', newDate)
-  selectedDate.value = newDate
-  await loadRoomDataForDate(newDate)
+
+  // 确保日期格式为 YYYY-MM-DD
+  let formattedDate = newDate
+  if (newDate) {
+    // 如果是Date对象，转换为YYYY-MM-DD格式
+    if (newDate instanceof Date) {
+      formattedDate = newDate.toISOString().substring(0, 10)
+    } else if (typeof newDate === 'string') {
+      // 如果是字符串，确保格式正确
+      if (newDate.includes('/')) {
+        // 将 YYYY/MM/DD 转换为 YYYY-MM-DD
+        formattedDate = newDate.replace(/\//g, '-')
+      }
+      // 验证日期格式
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/
+      if (!dateRegex.test(formattedDate)) {
+        console.warn('日期格式不正确:', newDate, '转换后:', formattedDate)
+        return
+      }
+    }
+  }
+
+  console.log('格式化后的日期:', formattedDate)
+  selectedDate.value = formattedDate
+  await loadRoomDataForDate(formattedDate)
 }
 
 // 设置为今天

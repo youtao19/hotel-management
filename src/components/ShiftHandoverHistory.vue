@@ -69,6 +69,14 @@
                 icon="download"
                 label="导出"
                 @click="exportHistoryRecord(props.row)"
+                class="q-mr-sm"
+              />
+              <q-btn
+                size="sm"
+                color="negative"
+                icon="delete"
+                label="删除"
+                @click="confirmDeleteRecord(props.row)"
               />
             </q-td>
           </template>
@@ -83,6 +91,41 @@
     @close="onDetailDialogClose"
     @export="onExportDetail"
   />
+
+  <!-- 删除确认对话框 -->
+  <q-dialog v-model="showDeleteDialog" persistent>
+    <q-card style="min-width: 400px;">
+      <q-card-section class="row items-center">
+        <q-avatar icon="warning" color="negative" text-color="white" />
+        <span class="q-ml-sm text-h6">确认删除</span>
+      </q-card-section>
+
+      <q-card-section class="q-pt-none">
+        <div class="text-body1">
+          确定要删除这条交接班记录吗？
+        </div>
+        <div class="text-body2 text-grey-7 q-mt-sm" v-if="recordToDelete">
+          <div><strong>日期：</strong>{{ formatDate(recordToDelete.shift_date) }}</div>
+          <div><strong>收银员：</strong>{{ recordToDelete.cashier_name }}</div>
+          <div><strong>类型：</strong>{{ recordToDelete.type === 'hotel' ? '客房' : '休息房' }}</div>
+        </div>
+        <div class="text-negative q-mt-md">
+          <q-icon name="warning" class="q-mr-xs" />
+          此操作不可撤销，请谨慎操作！
+        </div>
+      </q-card-section>
+
+      <q-card-actions align="right">
+        <q-btn flat label="取消" color="primary" @click="cancelDelete" />
+        <q-btn
+          label="确认删除"
+          color="negative"
+          @click="deleteRecord"
+          :loading="deleting"
+        />
+      </q-card-actions>
+    </q-card>
+  </q-dialog>
 </template>
 
 <script setup>
@@ -101,6 +144,11 @@ const showDialog = ref(false)
 const historyRecords = ref([])
 const historyLoading = ref(false)
 const detailDialogRef = ref(null)
+
+// 删除相关
+const showDeleteDialog = ref(false)
+const recordToDelete = ref(null)
+const deleting = ref(false)
 
 // 历史记录筛选条件
 const historyFilter = ref({
@@ -278,6 +326,54 @@ function onDetailDialogClose() {
 function onExportDetail(record) {
   // 处理详情导出
   exportHistoryRecord(record)
+}
+
+// 删除相关方法
+function confirmDeleteRecord(record) {
+  recordToDelete.value = record
+  showDeleteDialog.value = true
+}
+
+function cancelDelete() {
+  showDeleteDialog.value = false
+  recordToDelete.value = null
+}
+
+async function deleteRecord() {
+  if (!recordToDelete.value) return
+
+  deleting.value = true
+  try {
+    await shiftHandoverApi.deleteHandoverRecord(recordToDelete.value.id)
+
+    $q.notify({
+      type: 'positive',
+      message: '删除成功',
+      position: 'top'
+    })
+
+    // 刷新列表
+    await loadHistoryRecords()
+
+    // 关闭对话框
+    showDeleteDialog.value = false
+    recordToDelete.value = null
+  } catch (error) {
+    console.error('删除交接班记录失败:', error)
+    $q.notify({
+      type: 'negative',
+      message: '删除失败: ' + (error.response?.data?.message || error.message || '未知错误'),
+      position: 'top'
+    })
+  } finally {
+    deleting.value = false
+  }
+}
+
+// 格式化日期的辅助方法
+function formatDate(dateStr) {
+  if (!dateStr) return ''
+  return new Date(dateStr).toLocaleDateString('zh-CN')
 }
 
 function closeDetailDialog() {
