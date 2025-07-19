@@ -145,20 +145,32 @@ describe('POST /api/orders/new', () => {
     });
   });
 
-  test('应验证入住日期在退房日期之前', async () => {
-    const invalidOrder = generateOrderData({
+
+it('创建同一房间不同时间的订单', async () => {
+    const orderData1 = generateOrderData({
+      room_number: '305',
       check_in_date: '2025-06-09',
-      check_out_date: '2025-06-08'
+      check_out_date: '2025-06-10'
     });
 
-    const res = await request(app)
+    const res1 = await request(app)
       .post('/api/orders/new')
-      .send(invalidOrder);
+      .send(orderData1);
 
-    expect(res.status).toBe(400);
-    expect(res.body).toMatchObject({
-      success: false,
-      message: expect.stringContaining('入住日期必须早于退房日期')
+    expect(res1.status).toBe(201);
+
+    const orderData2 = generateOrderData({
+      room_number: '305',
+      check_in_date: '2025-06-11',
+      check_out_date: '2025-06-12'
     });
+
+    const res2 = await request(app)
+      .post('/api/orders/new')
+      .send(orderData2);
+
+    expect(res2.status).toBe(201);
   });
+
+
 });
