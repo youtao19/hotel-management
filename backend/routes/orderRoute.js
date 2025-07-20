@@ -147,7 +147,7 @@ router.post('/new', async (req, res) => {
   }
 });
 
-// PUT /api/orders/:orderNumber/status - 更新订单状态
+// POST /api/orders/:orderNumber/status - 更新订单状态
 router.post('/:orderNumber/status', authenticationMiddleware, [
     body('newStatus')
         .notEmpty().withMessage('新状态不能为空')

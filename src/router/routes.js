@@ -23,8 +23,8 @@ const routes = [
     ]
   },
 
-  // Always leave this as last one,
-  // but you can also remove it
+  // 请始终将此项保留为最后一项，
+  // 但你也可以将其移除
   {
     path: '/:catchAll(.*)*',
     redirect: '/login'

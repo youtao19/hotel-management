@@ -19,6 +19,9 @@
         "start": "concurrently \"npm run devStart\" \"npm run dev\"",
         "devStart": "cross-env NODE_ENV=dev nodemon server.js",
         "export-schema": "node scripts/exportSchema.js",
+        "export-structure": "node scripts/exportStructure.js",
+        "export-all": "node scripts/exportAll.js",
+        "db:backup": "node scripts/exportAll.js",
         "migrate:shift-handover": "node scripts/migrateShiftHandover.js"
     },
     "dependencies": {

@@ -130,16 +130,16 @@ describe('POST /api/orders/new', () => {
   });
 
   test('应验证房型是否存在', async () => {
-    const invalidOrder = generateOrderData({
+    const invalidOrder = generateOrderData({ // 生成无效的订单数据
       room_type: 'non_existent_type'
     });
 
-    const res = await request(app)
+    const res = await request(app) // 发送请求
       .post('/api/orders/new')
       .send(invalidOrder);
 
-    expect(res.status).toBe(400);
-    expect(res.body).toMatchObject({
+    expect(res.status).toBe(400); // 400 表示请求错误
+    expect(res.body).toMatchObject({ // 检查响应体是否包含错误信息
       success: false,
       message: expect.stringContaining('房型')
     });
@@ -157,7 +157,7 @@ it('创建同一房间不同时间的订单', async () => {
       .post('/api/orders/new')
       .send(orderData1);
 
-    expect(res1.status).toBe(201);
+    expect(res1.status).toBe(201); // 201 表示创建成功
 
     const orderData2 = generateOrderData({
       room_number: '305',
@@ -169,7 +169,7 @@ it('创建同一房间不同时间的订单', async () => {
       .post('/api/orders/new')
       .send(orderData2);
 
-    expect(res2.status).toBe(201);
+    expect(res2.status).toBe(201); // 201 表示创建成功
   });
 
 
