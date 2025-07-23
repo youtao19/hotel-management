@@ -175,19 +175,29 @@
                 </div>
               </q-tooltip>
             </div>
-            <div class="row q-gutter-sm items-center">
-              <q-btn-toggle
-                v-model="receiptType"
-                :options="[
-                  {label: '客房住宿', value: 'hotel'},
-                  {label: '休息房', value: 'rest'}
-                ]"
-                color="primary"
-                text-color="white"
-                toggle-color="primary"
-                size="sm"
-                @update:model-value="switchReceiptType"
-              />
+            <div class="row q-gutter-xs items-center">
+              <div class="receipt-type-buttons">
+                <q-btn
+                  :color="receiptType === 'hotel' ? 'primary' : 'white'"
+                  :text-color="receiptType === 'hotel' ? 'white' : 'primary'"
+                  :outline="receiptType !== 'hotel'"
+                  unelevated
+                  size="sm"
+                  label="客房住宿"
+                  class="receipt-type-btn receipt-type-btn-left"
+                  @click="switchReceiptType('hotel')"
+                />
+                <q-btn
+                  :color="receiptType === 'rest' ? 'primary' : 'white'"
+                  :text-color="receiptType === 'rest' ? 'white' : 'primary'"
+                  :outline="receiptType !== 'rest'"
+                  unelevated
+                  size="sm"
+                  label="休息房"
+                  class="receipt-type-btn receipt-type-btn-right"
+                  @click="switchReceiptType('rest')"
+                />
+              </div>
               <q-btn
                 color="primary"
                 icon="refresh"
@@ -1010,8 +1020,14 @@ const fetchReceiptDetails = async (customStartDate = null, customEndDate = null)
 }
 
 // 切换收款明细类型
-const switchReceiptType = async () => {
-  await fetchReceiptDetails()
+const switchReceiptType = async (type) => {
+  if (type && type !== receiptType.value) {
+    receiptType.value = type
+    await fetchReceiptDetails()
+  } else if (!type) {
+    // 如果没有传递参数，说明是从 q-btn-toggle 调用的
+    await fetchReceiptDetails()
+  }
 }
 
 // 刷新收款明细
@@ -1402,6 +1418,28 @@ onMounted(async () => {
 
 .receipt-date-controls .q-chip {
   margin-left: 8px;
+}
+
+/* 收款类型切换按钮样式 */
+.receipt-type-buttons {
+  display: inline-flex;
+  border: 1px solid #1976d2;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.receipt-type-btn {
+  border-radius: 0 !important;
+  border: none !important;
+  min-width: 80px;
+}
+
+.receipt-type-btn-left {
+  border-right: 1px solid #1976d2 !important;
+}
+
+.receipt-type-btn:deep(.q-btn__wrapper) {
+  padding: 6px 12px;
 }
 
 /* 响应式设计 */

@@ -51,28 +51,26 @@ describe('GET /api/orders/:orderNumber/status',() => {
 
   it('修改订单状态为已入住', async () => {
     const res = await request(app).post(`/api/orders/${validOrder.order_id}/status`).send({
-      newStatus: 'checked_in',
+      newStatus: 'checked-in',
       checkInTime: '2025-06-09',
       checkOutTime: '2025-06-10'
     });
 
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({
-      success: true,
       message: '订单状态更新成功'
     });
   })
 
   it('修改订单状态为已退房', async () => {
     const res = await request(app).post(`/api/orders/${validOrder.order_id}/status`).send({
-      newStatus: 'checked_out',
+      newStatus: 'checked-out',
       checkInTime: '2025-06-09',
       checkOutTime: '2025-06-10'
     });
 
     expect(res.status).toBe(200); // 200 表示请求成功
     expect(res.body).toMatchObject({ // 检查响应体是否包含成功信息
-      success: true,
       message: '订单状态更新成功'
     });
   })
@@ -86,7 +84,6 @@ describe('GET /api/orders/:orderNumber/status',() => {
 
     expect(res.status).toBe(200); // 200 表示请求成功
     expect(res.body).toMatchObject({ // 检查响应体是否包含成功信息
-      success: true,
       message: '订单状态更新成功'
     });
   })

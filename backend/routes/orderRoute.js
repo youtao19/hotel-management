@@ -214,9 +214,9 @@ router.post('/:orderNumber/refund-deposit', [
       message: '退押金处理成功',
       order: updatedOrder,
       refundData: {
-        actualRefundAmount: refundData.actualRefundAmount,
-        method: refundData.method,
-        refundTime: refundData.refundTime
+        actualRefundAmount: refundData.actualRefundAmount, // 实际退款金额
+        method: refundData.method, // 退款方式
+        refundTime: refundData.refundTime // 退款时间
       }
     });
 

@@ -1,4 +1,5 @@
 const { query } = require('../database/postgreDB/pg');
+const shiftHandoverModule = require('./shiftHandoverModule');
 
 const tableName = "orders";
 
@@ -387,12 +388,12 @@ async function refundDeposit(refundData) {
     const {
       orderNumber,
       refundAmount,
-      deductAmount = 0,
-      actualRefundAmount,
-      method,
-      notes,
-      operator,
-      refundTime
+      deductAmount = 0, // 扣除金额
+      actualRefundAmount, // 实际退款金额
+      method, // 退款方式
+      notes, // 备注
+      operator, // 操作员
+      refundTime // 退款时间
     } = refundData;
 
     // 验证必要字段
@@ -416,40 +417,31 @@ async function refundDeposit(refundData) {
     }
 
     // 验证押金金额
-    const originalDeposit = parseFloat(order.deposit) || 0;
-    const currentRefundedDeposit = parseFloat(order.refunded_deposit) || 0;
-    const availableRefund = originalDeposit - currentRefundedDeposit;
+    const originalDeposit = parseFloat(order.deposit) || 0; // 原始押金
+    const currentRefundedDeposit = parseFloat(order.refunded_deposit) || 0; // 当前已退押金
+    const availableRefund = originalDeposit - currentRefundedDeposit; // 可退押金
 
     if (refundAmount > availableRefund) {
       throw new Error(`退押金金额不能超过可退金额 ¥${availableRefund}`);
     }
 
-    // 检查字段是否存在，如果不存在则先添加
-    try {
-      const checkFields = await query(`
-        SELECT column_name
-        FROM information_schema.columns
-        WHERE table_name = 'orders' AND column_name IN ('refunded_deposit', 'refund_records')
-      `);
-
-      const existingFields = checkFields.rows.map(row => row.column_name);
-
-      if (!existingFields.includes('refunded_deposit')) {
-        console.log('添加 refunded_deposit 字段...');
-        await query(`ALTER TABLE orders ADD COLUMN refunded_deposit DECIMAL(10,2) DEFAULT 0`);
-      }
-
-      if (!existingFields.includes('refund_records')) {
-        console.log('添加 refund_records 字段...');
-        await query(`ALTER TABLE orders ADD COLUMN refund_records JSONB DEFAULT '[]'::jsonb`);
-      }
-    } catch (fieldError) {
-      console.error('检查/添加字段失败:', fieldError);
-    }
-
     // 更新订单的退押金信息
-    const newRefundedDeposit = currentRefundedDeposit + actualRefundAmount;
+    const newRefundedDeposit = currentRefundedDeposit + actualRefundAmount; // 新的已退押金金额
 
+    /*
+      这段SQL代码的作用是：
+      1. 更新orders表中指定order_id的订单的已退押金金额（refunded_deposit 字段）。
+      2. 将本次退押金的记录追加到refund_records字段（类型为JSONB的数组）。
+         - COALESCE(refund_records, '[]'::jsonb) 保证即使原本没有退押金记录也能正常追加。
+         - $2::jsonb 是本次退押金的记录（以JSON数组形式传入），通过 || 操作符追加到原有数组后面。
+      3. WHERE order_id = $3 指定只更新对应订单号的记录。
+      4. RETURNING * 表示返回更新后的整条订单记录。
+
+      参数说明：
+      $1: 新的已退押金金额
+      $2: 本次退押金记录（JSON数组）
+      $3: 订单号
+    */
     const updateQuery = `
       UPDATE orders
       SET refunded_deposit = $1,
@@ -469,10 +461,11 @@ async function refundDeposit(refundData) {
       operator
     };
 
+    // 更新订单退押金信息
     const updateResult = await query(updateQuery, [
-      newRefundedDeposit,
-      JSON.stringify([refundRecord]),
-      orderNumber
+      newRefundedDeposit, // 新的已退押金金额
+      JSON.stringify([refundRecord]), // 本次退押金的记录（JSON数组）
+      orderNumber // 订单号
     ]);
 
     if (updateResult.rows.length === 0) {
@@ -491,8 +484,7 @@ async function refundDeposit(refundData) {
       // 使用 setImmediate 延迟执行，避免循环依赖
       setImmediate(async () => {
         try {
-          const shiftHandoverModule = require('./shiftHandoverModule');
-          await shiftHandoverModule.recordRefundDepositToHandover(refundData);
+          await shiftHandoverModule.recordRefundDepositToHandover(refundData); // 记录退押金到交接班系统
           console.log('✅ 退押金已自动记录到交接班系统');
         } catch (handoverError) {
           console.error('⚠️ 记录退押金到交接班系统失败，但退押金处理成功:', handoverError);

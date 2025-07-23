@@ -19,6 +19,8 @@ const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
     deposit DECIMAL(10,2),
     create_time TIMESTAMP NOT NULL,
     remarks TEXT,
+    refunded_deposit DECIMAL(10,2) DEFAULT 0,
+    refund_records JSONB DEFAULT '[]'::jsonb,
     FOREIGN KEY (room_type) REFERENCES room_types(type_code),
     FOREIGN KEY (room_number) REFERENCES rooms(room_number),
     CONSTRAINT unique_order_constraint UNIQUE (guest_name, check_in_date, check_out_date, room_type)

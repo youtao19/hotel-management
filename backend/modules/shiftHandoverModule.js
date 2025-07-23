@@ -1202,11 +1202,20 @@ async function recordRefundDepositToHandover(refundData) {
       refundTime
     } = refundData;
 
-    // 获取退押金日期（使用当前日期，而不是退押金时间的日期）
-    // 这样确保退押金记录到当天的交接班中
-    const refundDate = new Date().toISOString().split('T')[0];
+    // 首先获取订单信息以获取退房日期
+    const orderQuery = 'SELECT check_out_date FROM orders WHERE order_id = $1';
+    const orderResult = await query(orderQuery, [orderNumber]);
 
-    // 检查当天是否已有交接班记录
+    if (orderResult.rows.length === 0) {
+      throw new Error(`订单号 '${orderNumber}' 不存在`);
+    }
+
+    const order = orderResult.rows[0];
+    // 使用订单的退房日期作为退押金日期
+    const refundDate = order.check_out_date.toISOString().split('T')[0];
+    console.log(`📅 使用订单退房日期作为交接班日期: ${refundDate}`);
+
+    // 检查退房日期是否已有交接班记录
     const existingQuery = `
       SELECT id, details
       FROM shift_handover
@@ -1215,25 +1224,25 @@ async function recordRefundDepositToHandover(refundData) {
       LIMIT 1
     `;
 
-    const existingResult = await query(existingQuery, [refundDate]);
-    let handoverId = null;
-    let existingDetails = {};
+    const existingResult = await query(existingQuery, [refundDate]); // 检查退房日期是否已有交接班记录
+    let handoverId = null; // 交接班记录ID
+    let existingDetails = {}; // 现有交接班详情
 
     if (existingResult.rows.length > 0) {
-      handoverId = existingResult.rows[0].id;
-      existingDetails = existingResult.rows[0].details || {};
-      console.log('📋 找到现有交接班记录，ID:', handoverId);
+      handoverId = existingResult.rows[0].id; // 交接班记录ID
+      existingDetails = existingResult.rows[0].details || {}; // 现有交接班详情
+      console.log('📋 找到退房日期的现有交接班记录，ID:', handoverId);
     }
 
     // 构建退押金记录
     const refundRecord = {
-      orderNumber,
-      actualRefundAmount,
-      method,
-      notes: notes || '',
-      operator,
-      refundTime,
-      type: 'deposit_refund'
+      orderNumber, // 订单号
+      actualRefundAmount, // 实际退款金额
+      method, // 退款方式
+      notes: notes || '', // 备注
+      operator, // 操作员
+      refundTime, // 退款时间
+      type: 'deposit_refund' // 类型
     };
 
     // 标准化支付方式名称
@@ -1299,7 +1308,7 @@ async function recordRefundDepositToHandover(refundData) {
       console.log('✅ 更新交接班记录成功，ID:', updateResult.rows[0].id);
       return { id: updateResult.rows[0].id, action: 'updated' };
     } else {
-      // 创建新记录
+      // 为退房日期创建新的交接班记录
       const insertQuery = `
         INSERT INTO shift_handover (
           shift_date,
@@ -1329,7 +1338,7 @@ async function recordRefundDepositToHandover(refundData) {
         'refund'                           // shift_time
       ]);
 
-      console.log('✅ 创建交接班记录成功，ID:', insertResult.rows[0].id);
+      console.log('✅ 为退房日期创建交接班记录成功，ID:', insertResult.rows[0].id);
       return { id: insertResult.rows[0].id, action: 'created' };
     }
 
