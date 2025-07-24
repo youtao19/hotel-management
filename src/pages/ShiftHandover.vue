@@ -136,9 +136,6 @@ function calculateTotals() {
       payment.total = (payment.reserveCash || 0) + (payment.hotelIncome || 0) + (payment.restIncome || 0) + (payment.carRentIncome || 0)
     }
   })
-
-  // 注意：留存款(retainedAmount)不在这里计算，由用户手动输入
-  // 交接款会在模板中自动计算：合计 - 客房退押 - 休息退押 - 留存款
 }
 
 // 特殊统计
@@ -171,7 +168,7 @@ async function loadShiftData() {
       })
     ])
 
-        console.log('API响应数据:', {
+    console.log('API响应数据:', {
       statisticsResponse: statisticsResponse ? '已获取' : '未获取',
       receiptsResponse: receiptsResponse ? `获取了${receiptsResponse.length || 0}条记录` : '未获取',
       previousHandoverResponse: previousHandoverResponse ? `ID=${previousHandoverResponse.id || '未知'}` : '未获取'
@@ -204,9 +201,17 @@ async function loadShiftData() {
       })
       if (statisticsResponse) {
         updatePaymentData(statisticsResponse, null, null)
+      } else {
+        // 如果统计数据也获取失败，至少保持默认的备用金设置
+        console.log('统计数据获取失败，保持默认设置')
+        // 不调用 updatePaymentData，保持初始的默认值
+        calculateTotals()
       }
     } catch (fallbackError) {
       console.error('备用加载失败:', fallbackError)
+      // 保持默认设置，不重置数据
+      console.log('保持默认的支付数据设置')
+      calculateTotals()
     }
 
     $q.notify({
@@ -273,9 +278,13 @@ function updatePaymentData(statistics, receipts, previousHandover) {
     return // 直接返回，不执行下面的统计数据更新逻辑
   }
 
-  // 重置所有支付数据（设置默认备用金）
-  resetPaymentData()
-  console.log('📝 已重置支付数据，现金备用金:', paymentData.value.cash.reserveCash)
+  // 只有在有统计数据时才重置支付数据，否则保持当前状态
+  if (statistics) {
+    resetPaymentData()
+    console.log('📝 已重置支付数据，现金备用金:', paymentData.value.cash.reserveCash)
+  } else {
+    console.log('📝 无统计数据，保持当前支付数据状态')
+  }
 
   // 保存前一天的备用金数据，稍后设置
   let correctReserveCash = {

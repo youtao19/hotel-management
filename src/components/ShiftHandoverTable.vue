@@ -26,7 +26,7 @@
           <td class="payment-label">现金</td>
           <td class="editable-cell">
             <q-input
-              :value="paymentData.cash.reserveCash"
+              :model-value="paymentData.cash.reserveCash"
               @update:model-value="(val) => updatePaymentField('cash', 'reserveCash', val)"
               type="number"
               dense
@@ -36,7 +36,7 @@
           </td>
           <td class="editable-cell">
             <q-input
-              :value="paymentData.cash.hotelIncome"
+              :model-value="paymentData.cash.hotelIncome"
               @update:model-value="(val) => updatePaymentField('cash', 'hotelIncome', val)"
               type="number"
               dense
@@ -46,7 +46,7 @@
           </td>
           <td class="editable-cell">
             <q-input
-              :value="paymentData.cash.restIncome"
+              :model-value="paymentData.cash.restIncome"
               @update:model-value="(val) => updatePaymentField('cash', 'restIncome', val)"
               type="number"
               dense
@@ -56,7 +56,7 @@
           </td>
           <td class="editable-cell">
             <q-input
-              :value="paymentData.cash.carRentIncome"
+              :model-value="paymentData.cash.carRentIncome"
               @update:model-value="(val) => updatePaymentField('cash', 'carRentIncome', val)"
               type="number"
               dense
@@ -67,7 +67,7 @@
           <td class="total-cell">{{ paymentData.cash.total.toFixed(0) }}</td>
           <td class="editable-cell">
             <q-input
-              :value="paymentData.cash.hotelDeposit"
+              :model-value="paymentData.cash.hotelDeposit"
               @update:model-value="(val) => updatePaymentField('cash', 'hotelDeposit', val)"
               type="number"
               dense
@@ -77,7 +77,7 @@
           </td>
           <td class="editable-cell">
             <q-input
-              :value="paymentData.cash.restDeposit"
+              :model-value="paymentData.cash.restDeposit"
               @update:model-value="(val) => updatePaymentField('cash', 'restDeposit', val)"
               type="number"
               dense
@@ -87,7 +87,7 @@
           </td>
           <td class="editable-cell">
             <q-input
-              :value="paymentData.cash.retainedAmount"
+              :model-value="paymentData.cash.retainedAmount"
               @update:model-value="(val) => updatePaymentField('cash', 'retainedAmount', val)"
               type="number"
               dense
@@ -102,7 +102,7 @@
           <td class="payment-label">微信</td>
           <td class="editable-cell">
             <q-input
-              :value="paymentData.wechat.reserveCash"
+              :model-value="paymentData.wechat.reserveCash"
               @update:model-value="(val) => updatePaymentField('wechat', 'reserveCash', val)"
               type="number"
               dense
@@ -112,7 +112,7 @@
           </td>
           <td class="editable-cell">
             <q-input
-              :value="paymentData.wechat.hotelIncome"
+              :model-value="paymentData.wechat.hotelIncome"
               @update:model-value="(val) => updatePaymentField('wechat', 'hotelIncome', val)"
               type="number"
               dense
@@ -122,7 +122,7 @@
           </td>
           <td class="editable-cell">
             <q-input
-              :value="paymentData.wechat.restIncome"
+              :model-value="paymentData.wechat.restIncome"
               @update:model-value="(val) => updatePaymentField('wechat', 'restIncome', val)"
               type="number"
               dense
@@ -132,7 +132,7 @@
           </td>
           <td class="editable-cell">
             <q-input
-              :value="paymentData.wechat.carRentIncome"
+              :model-value="paymentData.wechat.carRentIncome"
               @update:model-value="(val) => updatePaymentField('wechat', 'carRentIncome', val)"
               type="number"
               dense
@@ -143,7 +143,7 @@
           <td class="total-cell">{{ paymentData.wechat.total.toFixed(0) }}</td>
           <td class="editable-cell">
             <q-input
-              :value="paymentData.wechat.hotelDeposit"
+              :model-value="paymentData.wechat.hotelDeposit"
               @update:model-value="(val) => updatePaymentField('wechat', 'hotelDeposit', val)"
               type="number"
               dense
@@ -153,7 +153,7 @@
           </td>
           <td class="editable-cell">
             <q-input
-              :value="paymentData.wechat.restDeposit"
+              :model-value="paymentData.wechat.restDeposit"
               @update:model-value="(val) => updatePaymentField('wechat', 'restDeposit', val)"
               type="number"
               dense
@@ -163,7 +163,7 @@
           </td>
           <td class="editable-cell">
             <q-input
-              :value="paymentData.wechat.retainedAmount"
+              :model-value="paymentData.wechat.retainedAmount"
               @update:model-value="(val) => updatePaymentField('wechat', 'retainedAmount', val)"
               type="number"
               dense
@@ -178,7 +178,7 @@
           <td class="payment-label">微邮付</td>
           <td class="editable-cell">
             <q-input
-              :value="paymentData.digital.reserveCash"
+              :model-value="paymentData.digital.reserveCash"
               @update:model-value="(val) => updatePaymentField('digital', 'reserveCash', val)"
               type="number"
               dense
@@ -188,7 +188,7 @@
           </td>
           <td class="editable-cell">
             <q-input
-              :value="paymentData.digital.hotelIncome"
+              :model-value="paymentData.digital.hotelIncome"
               @update:model-value="(val) => updatePaymentField('digital', 'hotelIncome', val)"
               type="number"
               dense
@@ -198,7 +198,7 @@
           </td>
           <td class="editable-cell">
             <q-input
-              :value="paymentData.digital.restIncome"
+              :model-value="paymentData.digital.restIncome"
               @update:model-value="(val) => updatePaymentField('digital', 'restIncome', val)"
               type="number"
               dense
@@ -208,7 +208,7 @@
           </td>
           <td class="editable-cell">
             <q-input
-              :value="paymentData.digital.carRentIncome"
+              :model-value="paymentData.digital.carRentIncome"
               @update:model-value="(val) => updatePaymentField('digital', 'carRentIncome', val)"
               type="number"
               dense
@@ -219,7 +219,7 @@
           <td class="total-cell">{{ paymentData.digital.total.toFixed(0) }}</td>
           <td class="editable-cell">
             <q-input
-              :value="paymentData.digital.hotelDeposit"
+              :model-value="paymentData.digital.hotelDeposit"
               @update:model-value="(val) => updatePaymentField('digital', 'hotelDeposit', val)"
               type="number"
               dense
@@ -229,7 +229,7 @@
           </td>
           <td class="editable-cell">
             <q-input
-              :value="paymentData.digital.restDeposit"
+              :model-value="paymentData.digital.restDeposit"
               @update:model-value="(val) => updatePaymentField('digital', 'restDeposit', val)"
               type="number"
               dense
@@ -239,7 +239,7 @@
           </td>
           <td class="editable-cell">
             <q-input
-              :value="paymentData.digital.retainedAmount"
+              :model-value="paymentData.digital.retainedAmount"
               @update:model-value="(val) => updatePaymentField('digital', 'retainedAmount', val)"
               type="number"
               dense
@@ -254,7 +254,7 @@
           <td class="payment-label">其他方式</td>
           <td class="editable-cell">
             <q-input
-              :value="paymentData.other.reserveCash"
+              :model-value="paymentData.other.reserveCash"
               @update:model-value="(val) => updatePaymentField('other', 'reserveCash', val)"
               type="number"
               dense
@@ -264,7 +264,7 @@
           </td>
           <td class="editable-cell">
             <q-input
-              :value="paymentData.other.hotelIncome"
+              :model-value="paymentData.other.hotelIncome"
               @update:model-value="(val) => updatePaymentField('other', 'hotelIncome', val)"
               type="number"
               dense
@@ -274,7 +274,7 @@
           </td>
           <td class="editable-cell">
             <q-input
-              :value="paymentData.other.restIncome"
+              :model-value="paymentData.other.restIncome"
               @update:model-value="(val) => updatePaymentField('other', 'restIncome', val)"
               type="number"
               dense
@@ -284,7 +284,7 @@
           </td>
           <td class="editable-cell">
             <q-input
-              :value="paymentData.other.carRentIncome"
+              :model-value="paymentData.other.carRentIncome"
               @update:model-value="(val) => updatePaymentField('other', 'carRentIncome', val)"
               type="number"
               dense
@@ -295,7 +295,7 @@
           <td class="total-cell">{{ paymentData.other.total.toFixed(0) }}</td>
           <td class="editable-cell">
             <q-input
-              :value="paymentData.other.hotelDeposit"
+              :model-value="paymentData.other.hotelDeposit"
               @update:model-value="(val) => updatePaymentField('other', 'hotelDeposit', val)"
               type="number"
               dense
@@ -305,7 +305,7 @@
           </td>
           <td class="editable-cell">
             <q-input
-              :value="paymentData.other.restDeposit"
+              :model-value="paymentData.other.restDeposit"
               @update:model-value="(val) => updatePaymentField('other', 'restDeposit', val)"
               type="number"
               dense
@@ -315,7 +315,7 @@
           </td>
           <td class="editable-cell">
             <q-input
-              :value="paymentData.other.retainedAmount"
+              :model-value="paymentData.other.retainedAmount"
               @update:model-value="(val) => updatePaymentField('other', 'retainedAmount', val)"
               type="number"
               dense
@@ -370,7 +370,7 @@
               <!-- 添加新任务卡片 -->
               <div class="add-task-card">
                 <q-input
-                  :value="newTaskTitle"
+                  :value="localNewTaskTitle"
                   @update:model-value="$emit('update:newTaskTitle', $event)"
                   placeholder="添加新备忘录..."
                   dense
@@ -390,7 +390,7 @@
                       icon="add"
                       color="primary"
                       @click="addNewTask"
-                      :disable="!newTaskTitle.trim()"
+                      :disable="!localNewTaskTitle.trim()"
                     />
                   </template>
                 </q-input>
@@ -413,7 +413,7 @@
               <td class="stats-label">收银员</td>
               <td class="cashier-name">
                 <q-input
-                  :value="cashierName"
+                  :value="localCashierName"
                   @update:model-value="$emit('update:cashierName', $event)"
                   dense
                   borderless
@@ -430,7 +430,7 @@
               <td class="stats-label">备注</td>
               <td class="notes-cell">
                 <q-input
-                  :value="notes"
+                  :value="localNotes"
                   @update:model-value="$emit('update:notes', $event)"
                   dense
                   borderless
@@ -447,7 +447,7 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 
 const props = defineProps({
   paymentData: {
@@ -495,17 +495,43 @@ const emit = defineEmits([
   'editTask'
 ])
 
-// 本地数据
-const localPaymentData = ref(JSON.parse(JSON.stringify(props.paymentData)))
+// --- 创建计算属性来引用 props ---
+const paymentData = computed(() => props.paymentData)
 
-// 监听父组件数据变化
-watch(() => props.paymentData, (newVal) => {
-  if (JSON.stringify(localPaymentData.value) !== JSON.stringify(newVal)) {
-    localPaymentData.value = JSON.parse(JSON.stringify(newVal))
-  }
-}, { deep: true })
+const localCashierName = ref(props.cashierName)
+const localNotes = ref(props.notes)
+const localNewTaskTitle = ref(props.newTaskTitle)
 
-// 更新支付数据字段
+// --- Watchers to sync props to local state ---
+// 移除 paymentData 的 watcher，因为现在使用计算属性
+
+watch(() => props.cashierName, (newVal) => {
+  localCashierName.value = newVal
+})
+
+watch(() => props.notes, (newVal) => {
+  localNotes.value = newVal
+})
+
+watch(() => props.newTaskTitle, (newVal) => {
+  localNewTaskTitle.value = newVal
+})
+
+// --- 移除 localPaymentData 的 watcher，因为现在使用计算属性 ---
+
+watch(localCashierName, (newVal) => {
+  emit('update:cashierName', newVal)
+})
+
+watch(localNotes, (newVal) => {
+  emit('update:notes', newVal)
+})
+
+watch(localNewTaskTitle, (newVal) => {
+  emit('update:newTaskTitle', newVal)
+})
+
+// --- Methods for tasks (forwarded) ---
 function updatePaymentField(paymentType, field, value) {
   const newPaymentData = JSON.parse(JSON.stringify(props.paymentData))
   newPaymentData[paymentType][field] = Number(value) || 0
@@ -522,22 +548,10 @@ function updatePaymentField(paymentType, field, value) {
   emit('update:paymentData', newPaymentData)
 }
 
-// 转发任务相关事件
-function updateTaskStatus(taskId, completed) {
-  emit('updateTaskStatus', taskId, completed)
-}
-
-function addNewTask() {
-  emit('addNewTask')
-}
-
-function deleteTask(index) {
-  emit('deleteTask', index)
-}
-
-function editTask(index) {
-  emit('editTask', index)
-}
+function updateTaskStatus(taskId, completed) { emit('updateTaskStatus', taskId, completed) }
+function addNewTask() { emit('addNewTask') }
+function deleteTask(index) { emit('deleteTask', index) }
+function editTask(index) { emit('editTask', index) }
 </script>
 
 <style scoped>
