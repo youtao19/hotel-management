@@ -48,6 +48,10 @@ describe('GET /api/orders/:orderNumber/status',() => {
   });
 
 
+  afterAll(async () => {
+    await query('DELETE FROM orders');
+    await closePool();
+  });
 
   it('修改订单状态为已入住', async () => {
     const res = await request(app).post(`/api/orders/${validOrder.order_id}/status`).send({
@@ -88,9 +92,5 @@ describe('GET /api/orders/:orderNumber/status',() => {
     });
   })
 
-  afterAll(async () => {
-    await query('DELETE FROM orders');
-    await closePool();
-  });
 
 })

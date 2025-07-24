@@ -24,21 +24,11 @@ function normalizePaymentMethod(paymentMethod) {
     '微信': '微信',
     'wx': '微信',
 
-    // 支付宝相关
-    'alipay': '支付宝',
-    'zhifubao': '支付宝',
-    '支付宝': '支付宝',
-    'weiyoufu': '支付宝', // 微邮付归类为支付宝
-    '微邮付': '支付宝',
-
-    // 银行卡相关
-    'card': '银行卡',
-    'bank_card': '银行卡',
-    'credit_card': '银行卡',
-    'debit_card': '银行卡',
-    '银行卡': '银行卡',
-    '信用卡': '银行卡',
-    '借记卡': '银行卡',
+    // 微邮付相关
+    'alipay': '微邮付',
+    'zhifubao': '微邮付',
+    '微邮付': '微邮付',
+    'weiyoufu': '微邮付',
 
     // 平台相关
     'platform': '其他',
@@ -57,11 +47,8 @@ function normalizePaymentMethod(paymentMethod) {
   if (method.includes('微信') || method.includes('wechat') || method.includes('weixin')) {
     return '微信';
   }
-  if (method.includes('支付宝') || method.includes('alipay') || method.includes('微邮付')) {
-    return '支付宝';
-  }
-  if (method.includes('银行') || method.includes('卡') || method.includes('card')) {
-    return '银行卡';
+  if (method.includes('微邮付') || method.includes('weiyoufu') || method.includes('微邮付')) {
+    return '微邮付';
   }
 
   // 默认归类为其他
@@ -79,47 +66,45 @@ async function getReceiptDetails(type, startDate, endDate) {
   // 根据类型确定分类条件 - 基于订单业务属性而非房间类型
   let typeCondition = '';
   if (type === 'hotel') {
-    // 客房：跨日期的订单或房价高于150的订单
+    // 客房：跨日期的订单
     typeCondition = `(
       o.check_in_date::date != o.check_out_date::date
-      OR o.room_price > 150
     )`;
   } else if (type === 'rest') {
-    // 休息房：同日期且房价低于等于150的订单
+    // 休息房：同日期的订单
     typeCondition = `(
       o.check_in_date::date = o.check_out_date::date
-      AND o.room_price <= 150
     )`;
   } else {
     typeCondition = "1=1"; // 显示所有类型
   }
 
+
   const sql = `
     SELECT
-      o.order_id as id,
-      o.order_id as order_number,
-      o.room_number,
-      o.guest_name,
-      COALESCE(b.room_fee, o.room_price, 0) as room_fee,
-      COALESCE(b.deposit, o.deposit, 0) as deposit,
-      COALESCE(b.pay_way, o.payment_method, '现金') as payment_method,
-      COALESCE(b.total_income, (COALESCE(b.room_fee, o.room_price, 0) + COALESCE(b.deposit, o.deposit, 0))) as total_amount,
-      o.check_in_date,
-      o.check_out_date,
-      o.create_time as created_at,
-      r.type_code,
-      CASE
-        WHEN (o.check_in_date::date != o.check_out_date::date
-              OR COALESCE(b.room_fee, o.room_price, 0) > 150) THEN 'hotel'
+      o.order_id as id,                        -- 订单ID
+      o.order_id as order_number,              -- 订单编号（与ID相同）
+      o.room_number,                           -- 房间号
+      o.guest_name,                            -- 客人姓名
+      b.room_fee as room_fee,                  -- 房费（仅取bills表的room_fee）
+      b.deposit as deposit,                    -- 押金（仅取bills表的deposit）
+      b.pay_way as payment_method,             -- 支付方式（仅取bills表的pay_way）
+      b.total_income as total_amount,          -- 总金额（仅取bills表的total_income）
+      o.check_in_date,                         -- 入住时间
+      o.check_out_date,                        -- 退房时间
+      o.create_time as created_at,             -- 订单创建时间
+      r.type_code,                             -- 房型代码
+      CASE                                     -- 开始判断业务类型
+        WHEN (o.check_in_date::date != o.check_out_date::date) THEN 'hotel'
         ELSE 'rest'
-      END as business_type
+      END as business_type                                        -- 业务类型：如果入住和退房日期不同则为'住宿房'，否则为'休息'
     FROM orders o
-    JOIN rooms r ON o.room_number = r.room_number
-    LEFT JOIN bills b ON o.order_id = b.order_id
-    WHERE ${typeCondition}
-    AND o.check_in_date::date BETWEEN $1::date AND $2::date
-    AND o.status IN ('checked-in', 'checked-out', 'pending')
-    ORDER BY o.check_in_date DESC;
+    JOIN rooms r ON o.room_number = r.room_number                 -- 通过房间号与rooms表（房间信息表）关联，获取房型代码等信息
+    LEFT JOIN bills b ON o.order_id = b.order_id                  -- 左连接bills表（账单表），优先使用账单表中的数据
+    WHERE ${typeCondition}                                        -- 业务类型条件（由函数参数type决定，hotel为跨天订单，rest为当天订单，默认全部）
+    AND o.check_in_date::date BETWEEN $1::date AND $2::date       -- 入住日期在指定的开始和结束日期之间
+    AND o.status IN ('checked-in', 'checked-out', 'pending')      -- 订单状态为已入住、已退房、待入住（即有效订单）
+    ORDER BY o.check_in_date DESC;                                -- 按入住时间倒序排列
   `;
 
   try {
@@ -127,8 +112,8 @@ async function getReceiptDetails(type, startDate, endDate) {
 
     // 标准化支付方式
     const processedRows = result.rows.map(row => ({
-      ...row,
-      payment_method: normalizePaymentMethod(row.payment_method)
+      ...row, // 复制所有原始字段
+      payment_method: normalizePaymentMethod(row.payment_method) // 标准化支付方式(重新赋值)
     }));
 
     return processedRows;
@@ -152,40 +137,37 @@ async function getStatistics(startDate, endDate = null) {
   const orderStatsSql = `
     SELECT
       CASE
-        WHEN (o.check_in_date::date != o.check_out_date::date
-              OR COALESCE(b.room_fee, o.room_price, 0) > 150) THEN 'hotel'
+        WHEN (o.check_in_date::date != o.check_out_date::date) THEN 'hotel'
         ELSE 'rest'
       END as business_type,
-      SUM(COALESCE(b.room_fee, o.room_price, 0)) as room_fee_income,
-      SUM(COALESCE(b.deposit, o.deposit, 0)) as deposit_income,
-      SUM(COALESCE(b.total_income, (COALESCE(b.room_fee, o.room_price, 0) + COALESCE(b.deposit, o.deposit, 0)))) as total_income,
-      SUM(CASE WHEN b.refund_deposit = true THEN COALESCE(b.deposit, o.deposit, 0) ELSE 0 END) as refunded_deposit,
+      SUM(b.room_fee) as room_fee_income,
+      SUM(b.deposit) as deposit_income,
+      SUM(b.total_income) as total_income,
+      SUM(CASE WHEN b.refund_deposit = true THEN b.deposit ELSE 0 END) as refunded_deposit,
       COUNT(*) as count,
-      COALESCE(b.pay_way, o.payment_method, '现金') as payment_method
+      b.pay_way as payment_method
     FROM orders o
     LEFT JOIN bills b ON o.order_id = b.order_id
     WHERE o.check_in_date::date BETWEEN $1::date AND $2::date
     AND o.status IN ('checked-in', 'checked-out', 'pending')
-    GROUP BY business_type, COALESCE(b.pay_way, o.payment_method, '现金');
+    GROUP BY business_type, b.pay_way;
   `;
 
   // 获取指定日期范围的房间统计 - 基于业务类型
   const roomStatsSql = `
     SELECT
       CASE
-        WHEN (o.check_in_date::date != o.check_out_date::date
-              OR COALESCE(b.room_fee, o.room_price, 0) > 150) THEN 'hotel'
+        WHEN (o.check_in_date::date != o.check_out_date::date) THEN 'hotel'
         ELSE 'rest'
       END as business_type,
       COUNT(*) as room_count
     FROM orders o
-    LEFT JOIN bills b ON o.order_id = b.order_id
     WHERE o.check_in_date::date BETWEEN $1::date AND $2::date
     AND o.status IN ('checked-in', 'checked-out', 'pending')
     GROUP BY business_type;
   `;
 
-  try {
+  try { // 获取指定日期范围的订单统计和房间统计
     const [orderStatsResult, roomStatsResult] = await Promise.all([
       query(orderStatsSql, [startDate, finalEndDate]),
       query(roomStatsSql, [startDate, finalEndDate])
@@ -193,41 +175,37 @@ async function getStatistics(startDate, endDate = null) {
 
     // 初始化统计数据
     const statistics = {
-      reserveCash: 1000, // 默认备用金
-      hotelIncome: 0,
-      restIncome: 0,
-      carRentalIncome: 0,
-      totalIncome: 0,
-      hotelDeposit: 0,
-      restDeposit: 0,
-      retainedAmount: 0,
-      handoverAmount: 0,
-      goodReviews: 0,
-      vipCards: 0,
-      totalRooms: 0,
-      restRooms: 0,
-      paymentBreakdown: {
+      hotelIncome: 0, // 酒店收入
+      restIncome: 0, // 休息收入
+      carRentalIncome: 0, // 租车收入
+      totalIncome: 0, // 总收入
+      hotelDeposit: 0, // 酒店押金
+      restDeposit: 0, // 休息押金
+      retainedAmount: 0, // 保留金额
+      handoverAmount: 0, // 交接款金额
+      goodReviews: 0, // 好评
+      totalRooms: 0, // 总房间数
+      restRooms: 0, // 休息房间数
+      paymentBreakdown: { // 按支付方式分类总收入（不包括退押金）
         '现金': 0,
         '微信': 0,
-        '支付宝': 0,
-        '银行卡': 0,
+        '微邮付': 0,
         '其他': 0
       },
       // 新增：按支付方式和业务类型的详细分解
-      paymentDetails: {
+      paymentDetails: { // 按支付方式和业务类型的详细分解
         '现金': { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 },
         '微信': { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 },
-        '支付宝': { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 },
-        '银行卡': { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 },
+        '微邮付': { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 },
         '其他': { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 }
       }
     };
 
     // 处理订单统计结果 - 基于业务类型和支付方式
     orderStatsResult.rows.forEach(row => {
-      const income = Number(row.total_income || 0);
-      const deposit = Number(row.refunded_deposit || 0);
-      const rawPaymentMethod = row.payment_method || '现金';
+      const income = Number(row.total_income || 0); // 总收入
+      const deposit = Number(row.refunded_deposit || 0); // 退押金
+      const rawPaymentMethod = row.payment_method || '现金'; // 原始支付方式
       const paymentMethod = normalizePaymentMethod(rawPaymentMethod); // 标准化支付方式
       const businessType = row.business_type || 'hotel';
 
@@ -249,11 +227,12 @@ async function getStatistics(startDate, endDate = null) {
         statistics.paymentBreakdown['其他'] += income;
       }
 
-      // 按支付方式和业务类型的详细分解
+
       let targetPaymentMethod = paymentMethod;
       if (!statistics.paymentDetails.hasOwnProperty(paymentMethod)) {
         targetPaymentMethod = '其他';
       }
+
 
       if (businessType === 'hotel') {
         statistics.paymentDetails[targetPaymentMethod].hotelIncome += income;   // 总收入（房费+押金）
@@ -979,12 +958,12 @@ async function importReceiptsToShiftHandover(importData) {
       },
       digital: {
         reserveCash: existingPaymentData.digital?.reserveCash || 0,
-        hotelIncome: Math.round(paymentAnalysis['支付宝']?.hotelIncome || 0),
-        restIncome: Math.round(paymentAnalysis['支付宝']?.restIncome || 0),
+        hotelIncome: Math.round(paymentAnalysis['微邮付']?.hotelIncome || 0),
+        restIncome: Math.round(paymentAnalysis['微邮付']?.restIncome || 0),
         carRentIncome: existingPaymentData.digital?.carRentIncome || 0,
         total: 0,
-        hotelDeposit: Math.round(paymentAnalysis['支付宝']?.hotelDeposit || 0),
-        restDeposit: Math.round(paymentAnalysis['支付宝']?.restDeposit || 0),
+        hotelDeposit: Math.round(paymentAnalysis['微邮付']?.hotelDeposit || 0),
+        restDeposit: Math.round(paymentAnalysis['微邮付']?.restDeposit || 0),
         retainedAmount: existingPaymentData.digital?.retainedAmount || 0
       },
       other: {

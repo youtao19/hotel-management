@@ -2,12 +2,15 @@ const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const orderModule = require('../modules/orderModule');
-const { authenticationMiddleware } = require('../modules/authentication'); // Correctly import authenticationMiddleware
+const { authenticationMiddleware } = require('../modules/authentication');
 
 // 定义有效的订单状态
 const VALID_ORDER_STATES = ['pending', 'checked-in', 'checked-out', 'cancelled'];
 
-// GET /api/orders - 获取所有订单
+/**
+ * 获取所有订单
+ * GET /api/orders
+ */
 router.get('/', async (req, res) => {
   try {
     console.log('获取所有订单请求');
@@ -33,7 +36,10 @@ router.get('/', async (req, res) => {
   }
 });
 
-// 获取特定ID的订单
+/**
+ * 获取特定ID的订单
+ * GET /api/orders/:id
+ */
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -147,7 +153,10 @@ router.post('/new', async (req, res) => {
   }
 });
 
-// POST /api/orders/:orderNumber/status - 更新订单状态
+/**
+ * 更新订单状态
+ * POST /api/orders/:/status
+ */
 router.post('/:orderNumber/status', authenticationMiddleware, [
     body('newStatus')
         .notEmpty().withMessage('新状态不能为空')
@@ -181,7 +190,10 @@ router.post('/:orderNumber/status', authenticationMiddleware, [
     }
 });
 
-// POST /api/orders/:orderNumber/refund-deposit - 退押金
+/**
+ * 退押金
+ * POST /api/orders/:orderNumber/refund-deposit
+ */
 router.post('/:orderNumber/refund-deposit', [
   body('refundAmount').isNumeric().withMessage('退押金金额必须是数字'),
   body('actualRefundAmount').isNumeric().withMessage('实际退款金额必须是数字'),

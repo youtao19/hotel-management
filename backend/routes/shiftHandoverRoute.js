@@ -13,7 +13,14 @@ const {
   deleteHandoverRecord
 } = require('../modules/shiftHandoverModule');
 
-// 获取收款明细
+/**
+ * 获取收款明细
+ * 用于收款明细表
+ * @param {string} type - 业务类型：hotel（跨天订单）、rest（同天订单）
+ * @param {string} startDate - 开始日期
+ * @param {string} endDate - 结束日期
+ * @param {string} date - 日期（可选，与startDate/endDate等效）
+ */
 router.get('/receipts', async (req, res) => {
   try {
     const { type, startDate, endDate, date } = req.query;
@@ -54,7 +61,12 @@ router.get('/receipts', async (req, res) => {
   }
 });
 
-// 获取统计数据
+/**
+ * 获取统计数据
+ * @param {string} date - 日期（可选，与startDate/endDate等效）
+ * @param {string} startDate - 开始日期
+ * @param {string} endDate - 结束日期
+ */
 router.get('/statistics', async (req, res) => {
   try {
     const { date, startDate, endDate } = req.query;
