@@ -558,115 +558,7 @@ function resetPaymentData() {
   calculateTotals()
 }
 
-// 生成HTML快照
-function generateHtmlSnapshot() {
-  try {
-    // 获取交接班表格容器
-    const tableContainer = document.querySelector('.shift-table-container')
-    if (!tableContainer) {
-      console.warn('未找到交接班表格容器')
-      return null
-    }
 
-    // 克隆容器以避免影响原始DOM
-    const clonedContainer = tableContainer.cloneNode(true)
-
-    // 移除不需要的交互元素（如输入框的交互功能）
-    const inputs = clonedContainer.querySelectorAll('input')
-    inputs.forEach(input => {
-      const span = document.createElement('span')
-      span.textContent = input.value || '0'
-      span.className = 'static-value'
-      input.parentNode.replaceChild(span, input)
-    })
-
-    // 移除任务相关的交互元素（包括add按钮和任务卡片）
-    const taskCards = clonedContainer.querySelectorAll('.task-card, .add-task-card')
-    taskCards.forEach(card => {
-      if (card.parentNode) {
-        card.parentNode.removeChild(card)
-      }
-    })
-
-    // 将备忘录内容替换为静态版本，而不是完全移除
-    const taskManagementContainer = clonedContainer.querySelector('.task-management-container')
-    if (taskManagementContainer && taskList.value.length > 0) {
-      // 生成备忘录的静态HTML
-      const memoHtml = `
-        <div class="task-management-header" style="display: flex; align-items: center; justify-content: center; margin-bottom: 16px; color: #2c3e50; background-color: #e8f5e8; border-bottom: 2px solid #a5d6a7; padding: 12px; border-radius: 8px 8px 0 0;">
-          <span style="font-size: 1.25rem; font-weight: bold;">📝 备忘录</span>
-        </div>
-        <div class="task-management-content" style="min-height: 100px; padding: 16px;">
-          ${taskList.value.map(task => `
-            <div style="display: flex; align-items: center; background: #f1f8e9; border: 1px solid #81c784; border-radius: 8px; padding: 12px; margin-bottom: 8px; min-width: 200px;">
-              <span style="margin-right: 10px; font-size: 16px;">${task.completed ? '✅' : '⭕'}</span>
-              <div style="flex: 1;">
-                <div style="font-size: 14px; line-height: 1.4; margin-bottom: 4px; font-weight: 500; ${task.completed ? 'text-decoration: line-through; color: #999;' : ''}">${task.title}</div>
-                ${task.time ? `<div style="font-size: 12px; color: #666;">⏰ ${task.time}</div>` : ''}
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      `
-      taskManagementContainer.innerHTML = memoHtml
-    } else if (taskManagementContainer) {
-      // 如果没有备忘录，显示空状态
-      const emptyMemoHtml = `
-        <div class="task-management-header" style="display: flex; align-items: center; justify-content: center; margin-bottom: 16px; color: #2c3e50; background-color: #e8f5e8; border-bottom: 2px solid #a5d6a7; padding: 12px; border-radius: 8px 8px 0 0;">
-          <span style="font-size: 1.25rem; font-weight: bold;">📝 备忘录</span>
-        </div>
-        <div class="task-management-content" style="min-height: 100px; padding: 16px; text-align: center; color: #666;">
-          <div style="font-style: italic;">暂无备忘录</div>
-        </div>
-      `
-      taskManagementContainer.innerHTML = emptyMemoHtml
-    }
-
-
-
-
-
-    // 添加统计信息
-    const statsInfo = `
-      <div class="stats-section" style="margin-top: 20px; padding: 15px; background: #f0f8ff; border-radius: 8px;">
-        <h3 style="margin: 0 0 15px 0;">统计信息</h3>
-        <div style="display: flex; justify-content: space-around; flex-wrap: wrap;">
-          <div style="text-align: center; padding: 10px;">
-            <div style="font-size: 24px; font-weight: bold; color: #2196f3;">${totalRooms.value}</div>
-            <div>开房数</div>
-          </div>
-          <div style="text-align: center; padding: 10px;">
-            <div style="font-size: 24px; font-weight: bold; color: #ff9800;">${restRooms.value}</div>
-            <div>休息房数</div>
-          </div>
-          <div style="text-align: center; padding: 10px;">
-            <div style="font-size: 24px; font-weight: bold; color: #4caf50;">${vipCards.value}</div>
-            <div>大美卡</div>
-          </div>
-        </div>
-      </div>
-    `
-
-    // 组合完整的HTML
-    const fullHtml = `
-      <div class="handover-snapshot" style="font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto;">
-        ${clonedContainer.outerHTML}
-        ${statsInfo}
-        ${notes.value ? `
-          <div class="notes-section" style="margin-top: 20px; padding: 15px; background: #fff3cd; border-radius: 8px;">
-            <h3 style="margin: 0 0 10px 0;">备注</h3>
-            <div>${notes.value}</div>
-          </div>
-        ` : ''}
-      </div>
-    `
-
-    return fullHtml
-  } catch (error) {
-    console.error('生成HTML快照失败:', error)
-    return null
-  }
-}
 
 // 保存交接记录
 async function saveHandover() {
@@ -674,9 +566,6 @@ async function saveHandover() {
     // 调试：保存前检查备用金
     console.log('保存前的现金备用金:', paymentData.value.cash.reserveCash)
     console.log('保存前的现金留存款:', paymentData.value.cash.retainedAmount)
-
-    // 生成HTML快照
-    const htmlSnapshot = generateHtmlSnapshot()
 
     const handoverData = {
       date: selectedDate.value,
@@ -690,8 +579,7 @@ async function saveHandover() {
         totalRooms: totalRooms.value,
         restRooms: restRooms.value,
         vipCards: vipCards.value
-      },
-      htmlSnapshot: htmlSnapshot // 添加HTML快照
+      }
     }
 
     console.log('即将保存的支付数据:', handoverData.paymentData.cash)

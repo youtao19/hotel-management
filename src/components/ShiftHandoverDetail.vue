@@ -82,17 +82,25 @@
           </div>
         </div>
 
-        <!-- HTML快照显示 -->
-        <div v-if="recordData && recordData.html_snapshot" class="html-snapshot">
+        <!-- 使用ShiftHandoverTable组件重新渲染数据 -->
+        <div v-if="recordData && recordData.details" class="handover-table-display">
           <div class="text-h6 q-mb-md text-primary">
             <q-icon name="table_view" class="q-mr-sm" />
-            交接班记录快照
+            交接班记录详情
           </div>
-          <div class="snapshot-container" v-html="sanitizedHtml"></div>
+          <ShiftHandoverTableReadonly
+            :payment-data="recordData.details.paymentData || {}"
+            :task-list="recordData.details.taskList || []"
+            :total-rooms="recordData.details.specialStats?.totalRooms || 0"
+            :rest-rooms="recordData.details.specialStats?.restRooms || 0"
+            :vip-cards="recordData.details.specialStats?.vipCards || 0"
+            :cashier-name="recordData.cashier_name || ''"
+            :notes="recordData.details.notes || recordData.remarks || ''"
+          />
         </div>
 
-        <!-- 备用：结构化数据显示（仅在没有HTML快照时显示） -->
-        <div v-else-if="recordData && (recordData.details || recordData.paymentData)" class="structured-data">
+        <!-- 备用：结构化数据显示（仅在没有详情数据时显示） -->
+        <div v-else-if="recordData" class="structured-data">
           <div class="text-h6 q-mb-md text-orange">
             <q-icon name="warning" class="q-mr-sm" />
             备用数据显示（HTML快照不可用）
@@ -214,7 +222,7 @@
 
 <script setup>
 import { ref, computed, defineEmits, defineExpose } from 'vue'
-import DOMPurify from 'dompurify'
+import ShiftHandoverTableReadonly from './ShiftHandoverTableReadonly.vue'
 
 // 定义事件
 const emit = defineEmits(['close', 'export'])
@@ -223,16 +231,7 @@ const emit = defineEmits(['close', 'export'])
 const showDialog = ref(false)
 const recordData = ref(null)
 
-// 计算属性：安全的HTML内容
-const sanitizedHtml = computed(() => {
-  if (!recordData.value?.html_snapshot) return ''
 
-  // 使用DOMPurify清理HTML内容，防止XSS攻击
-  return DOMPurify.sanitize(recordData.value.html_snapshot, {
-    ALLOWED_TAGS: ['div', 'span', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'br', 'strong', 'em', 'ul', 'ol', 'li'],
-    ALLOWED_ATTR: ['class', 'style', 'id']
-  })
-})
 
 // 计算属性：获取备忘录数据
 const taskListData = computed(() => {
@@ -286,32 +285,8 @@ function calculateHandoverAmount(payment) {
 }
 
 function printDetail() {
-  if (recordData.value?.html_snapshot) {
-    // 如果有HTML快照，直接打印HTML内容
-    const printWindow = window.open('', '_blank')
-    const printContent = `
-      <html>
-        <head>
-          <title>交接班记录详情</title>
-          <style>
-            body { font-family: Arial, sans-serif; margin: 20px; }
-            @media print { body { margin: 0; } }
-          </style>
-        </head>
-        <body>
-          ${sanitizedHtml.value}
-        </body>
-      </html>
-    `
-    printWindow.document.write(printContent)
-    printWindow.document.close()
-    printWindow.focus()
-    printWindow.print()
-    printWindow.close()
-  } else {
-    // 打印当前对话框内容
-    window.print()
-  }
+  // 打印当前对话框内容
+  window.print()
 }
 
 function exportDetail() {
