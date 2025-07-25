@@ -370,8 +370,7 @@
               <!-- 添加新任务卡片 -->
               <div class="add-task-card">
                 <q-input
-                  :value="localNewTaskTitle"
-                  @update:model-value="$emit('update:newTaskTitle', $event)"
+                  v-model="localNewTaskTitle"
                   placeholder="添加新备忘录..."
                   dense
                   borderless
@@ -407,14 +406,30 @@
           <tbody>
             <tr>
               <td class="stats-label">好评</td>
-              <td colspan='2' class="stats-value">邀1得1</td>
+              <td colspan='2' class="stats-value">
+                <q-input
+                  v-model="localGoodReview"
+                  dense
+                  borderless
+                  class="text-center"
+                  placeholder="邀1得1"
+                />
+              </td>
               <td class="stats-label">开房</td>
-              <td class="stats-number">{{ totalRooms }}</td>
+              <td colspan='2' class="stats-number">
+                <q-input
+                  v-model.number="localTotalRooms"
+                  type="number"
+                  dense
+                  borderless
+                  class="text-center"
+                  placeholder="0"
+                />
+              </td>
               <td class="stats-label">收银员</td>
               <td class="cashier-name">
                 <q-input
-                  :value="localCashierName"
-                  @update:model-value="$emit('update:cashierName', $event)"
+                  v-model="localCashierName"
                   dense
                   borderless
                   class="text-center"
@@ -424,14 +439,31 @@
             </tr>
             <tr>
               <td class="stats-label">大美卡</td>
-              <td colspan='2' class="stats-number">{{ vipCards }}</td>
+              <td colspan='2' class="stats-number">
+                <q-input
+                  v-model.number="localVipCards"
+                  type="number"
+                  dense
+                  borderless
+                  class="text-center"
+                  placeholder="0"
+                />
+              </td>
               <td class="stats-label">休息房</td>
-              <td class="stats-number">{{ restRooms }}</td>
+              <td colspan='2' class="stats-number">
+                <q-input
+                  v-model.number="localRestRooms"
+                  type="number"
+                  dense
+                  borderless
+                  class="text-center"
+                  placeholder="0"
+                />
+              </td>
               <td class="stats-label">备注</td>
               <td class="notes-cell">
                 <q-input
-                  :value="localNotes"
-                  @update:model-value="$emit('update:notes', $event)"
+                  v-model="localNotes"
                   dense
                   borderless
                   class="notes-input"
@@ -481,6 +513,10 @@ const props = defineProps({
   notes: {
     type: String,
     required: true
+  },
+  goodReview: {
+    type: String,
+    default: '邀1得1'
   }
 })
 
@@ -489,6 +525,10 @@ const emit = defineEmits([
   'update:cashierName',
   'update:notes',
   'update:newTaskTitle',
+  'update:totalRooms',
+  'update:restRooms',
+  'update:vipCards',
+  'update:goodReview',
   'updateTaskStatus',
   'addNewTask',
   'deleteTask',
@@ -501,6 +541,10 @@ const paymentData = computed(() => props.paymentData)
 const localCashierName = ref(props.cashierName)
 const localNotes = ref(props.notes)
 const localNewTaskTitle = ref(props.newTaskTitle)
+const localTotalRooms = ref(props.totalRooms)
+const localRestRooms = ref(props.restRooms)
+const localVipCards = ref(props.vipCards)
+const localGoodReview = ref(props.goodReview)
 
 // --- Watchers to sync props to local state ---
 // 移除 paymentData 的 watcher，因为现在使用计算属性
@@ -517,6 +561,22 @@ watch(() => props.newTaskTitle, (newVal) => {
   localNewTaskTitle.value = newVal
 })
 
+watch(() => props.totalRooms, (newVal) => {
+  localTotalRooms.value = newVal
+})
+
+watch(() => props.restRooms, (newVal) => {
+  localRestRooms.value = newVal
+})
+
+watch(() => props.vipCards, (newVal) => {
+  localVipCards.value = newVal
+})
+
+watch(() => props.goodReview, (newVal) => {
+  localGoodReview.value = newVal
+})
+
 // --- 移除 localPaymentData 的 watcher，因为现在使用计算属性 ---
 
 watch(localCashierName, (newVal) => {
@@ -529,6 +589,22 @@ watch(localNotes, (newVal) => {
 
 watch(localNewTaskTitle, (newVal) => {
   emit('update:newTaskTitle', newVal)
+})
+
+watch(localTotalRooms, (newVal) => {
+  emit('update:totalRooms', newVal)
+})
+
+watch(localRestRooms, (newVal) => {
+  emit('update:restRooms', newVal)
+})
+
+watch(localVipCards, (newVal) => {
+  emit('update:vipCards', newVal)
+})
+
+watch(localGoodReview, (newVal) => {
+  emit('update:goodReview', newVal)
 })
 
 // --- Methods for tasks (forwarded) ---

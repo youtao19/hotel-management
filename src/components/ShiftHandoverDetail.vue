@@ -96,6 +96,7 @@
             :vip-cards="recordData.details.specialStats?.vipCards || 0"
             :cashier-name="recordData.cashier_name || ''"
             :notes="recordData.details.notes || recordData.remarks || ''"
+            :good-review="recordData.details.specialStats?.goodReview || '邀1得1'"
           />
         </div>
 

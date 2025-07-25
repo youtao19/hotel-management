@@ -118,7 +118,7 @@
           <tbody>
             <tr>
               <td class="stats-label">好评</td>
-              <td colspan='2' class="stats-value">邀1得1</td>
+              <td colspan='2' class="stats-value">{{ goodReview || '邀1得1' }}</td>
               <td class="stats-label">开房</td>
               <td class="stats-number">{{ totalRooms }}</td>
               <td class="stats-label">收银员</td>
@@ -173,6 +173,10 @@ const props = defineProps({
   notes: {
     type: String,
     default: ''
+  },
+  goodReview: {
+    type: String,
+    default: '邀1得1'
   }
 })
 </script>

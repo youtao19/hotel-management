@@ -251,7 +251,12 @@ router.post('/export-new', async (req, res) => {
     const buffer = await exportNewHandoverToExcel(req.body);
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="交接班记录_${req.body.date}_${req.body.shift}.xlsx"`);
+
+    // 对中文文件名进行URL编码，避免HTTP头部字符问题
+    const filename = `交接班记录_${req.body.date}_${req.body.shift}.xlsx`;
+    const encodedFilename = encodeURIComponent(filename);
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedFilename}`);
+
     res.send(buffer);
   } catch (error) {
     console.error('导出新版Excel失败:', error);

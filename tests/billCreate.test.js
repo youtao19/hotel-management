@@ -18,10 +18,52 @@ describe('POST /api/bills/create', () => {
     await closePool();
   });
 
+  // 创建测试房型和房间的辅助函数
+  async function createTestRoomType(typeCode = 'TEST_STANDARD') {
+    try {
+      const result = await query(
+        `INSERT INTO room_types (type_code, type_name, base_price, description, is_closed)
+         VALUES ($1, $2, $3, $4, $5) ON CONFLICT (type_code) DO NOTHING RETURNING *`,
+        [typeCode, '测试标准房', '200.00', '测试用房型', false]
+      );
+      console.log(`创建房型: ${typeCode}`, result.rows.length > 0 ? '成功' : '已存在');
+    } catch (error) {
+      console.error(`创建房型失败: ${typeCode}`, error.message);
+      throw error;
+    }
+  }
+
+  async function createTestRoom(roomNumber, typeCode = 'TEST_STANDARD') {
+    try {
+      // 生成一个唯一的room_id
+      const roomId = parseInt(roomNumber) + 10000; // 确保不与现有房间冲突
+
+      const result = await query(
+        `INSERT INTO rooms (room_id, room_number, type_code, status, price, is_closed)
+         VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (room_number) DO UPDATE SET
+         type_code = EXCLUDED.type_code, status = EXCLUDED.status, price = EXCLUDED.price
+         RETURNING *`,
+        [roomId, roomNumber, typeCode, 'available', '200.00', false]
+      );
+      console.log(`创建房间: ${roomNumber}`, result.rows.length > 0 ? '成功' : '更新');
+    } catch (error) {
+      console.error(`创建房间失败: ${roomNumber}`, error.message);
+      throw error;
+    }
+  }
+
   // 创建测试订单的辅助函数
   async function createTestOrder(orderId, roomNumber = '101', offsetDays = 0) {
     const baseDate = new Date();
     baseDate.setDate(baseDate.getDate() + offsetDays);
+
+    // 确保房型和房间存在
+    const typeCode = 'TEST_STANDARD';
+    await createTestRoomType(typeCode);
+    await createTestRoom(roomNumber, typeCode);
+
+    // 等待一小段时间确保房间创建完成
+    await new Promise(resolve => setTimeout(resolve, 100));
 
     const orderData = {
       order_id: orderId,
@@ -29,7 +71,7 @@ describe('POST /api/bills/create', () => {
       guest_name: '张三',
       id_number: '123456789012345678',
       phone: '13800138000',
-      room_type: 'standard',
+      room_type: typeCode, // 使用实际存在的房型
       room_number: roomNumber,
       check_in_date: baseDate.toISOString(),
       check_out_date: new Date(baseDate.getTime() + 24 * 60 * 60 * 1000).toISOString(),
@@ -41,16 +83,22 @@ describe('POST /api/bills/create', () => {
       remarks: '测试订单'
     };
 
-    const response = await request(app)
-      .post('/api/orders/new')
-      .send(orderData)
-      .set('Accept', 'application/json');
+    // 确保房间存在后再创建订单
+    try {
+      const response = await request(app)
+        .post('/api/orders/new')
+        .send(orderData)
+        .set('Accept', 'application/json');
 
-    if (response.status !== 201) {
-      throw new Error(`Failed to create test order: ${response.status} ${JSON.stringify(response.body)}`);
+      if (response.status !== 201) {
+        throw new Error(`Failed to create test order: ${response.status} ${JSON.stringify(response.body)}`);
+      }
+
+      return response.body;
+    } catch (error) {
+      console.error('创建测试订单失败:', error.message);
+      throw error;
     }
-
-    return response.body;
   }
 
   it('成功创建一个新账单', async () => {

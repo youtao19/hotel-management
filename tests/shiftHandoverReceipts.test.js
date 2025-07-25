@@ -1,29 +1,18 @@
 const request = require('supertest');
 const app = require('../app');
-const { initializeHotelDB, closePool, query } = require('../backend/database/postgreDB/pg');
+const { query } = require('../backend/database/postgreDB/pg');
 
 // 测试收款明细接口
 describe('GET /api/shift-handover/receipts\n测试收款明细接口', () => {
-  beforeAll(async () => { // 初始化数据库
-    await initializeHotelDB();
-  });
-
   beforeEach(async () => { // 每次测试前清空数据
-    await query('DELETE FROM bills');
-    await query('DELETE FROM orders');
-  });
-
-  afterAll(async () => {
-    await query('DELETE FROM bills');
-    await query('DELETE FROM orders');
-    await closePool();
+    await global.cleanupTestData();
   });
 
   // 辅助函数：插入一条房型、房间、订单和账单
   async function insertTestData({
     order_id = 'TEST_ORDER_1',
     room_number = '403',
-    type_code = 'xing_yun_ge',
+    type_code = 'TEST_RECEIPTS_TYPE',
     check_in_date = '2025-07-01',
     check_out_date = '2025-07-02',
     guest_name = '张三',
@@ -32,8 +21,8 @@ describe('GET /api/shift-handover/receipts\n测试收款明细接口', () => {
     pay_way = '现金',
     total_income = '400.00',
   } = {}) {
-    await query(`INSERT INTO room_types(type_code, type_name, base_price, description) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`, [type_code, '标准房', 200, '测试房型']);
-    await query(`INSERT INTO rooms(room_id, room_number, type_code, status, price) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING`, [201, room_number, type_code, 'clean', 200]);
+    await query(`INSERT INTO room_types(type_code, type_name, base_price, description, is_closed) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (type_code) DO NOTHING`, [type_code, '测试收款房型', 200, '测试房型', false]);
+    await query(`INSERT INTO rooms(room_id, room_number, type_code, status, price, is_closed) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (room_number) DO UPDATE SET type_code = EXCLUDED.type_code`, [10201, room_number, type_code, 'clean', 200, false]);
     await query(`INSERT INTO orders(order_id, order_source, guest_name, id_number, phone, room_type, room_number, check_in_date, check_out_date, status, payment_method, room_price, deposit, create_time, remarks) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,now(),$14)`, [order_id, 'front_desk', guest_name, '123456789012345678', '13800138000', type_code, room_number, check_in_date, check_out_date, 'checked-in', pay_way, room_fee, deposit, '测试订单']);
     await query(`INSERT INTO bills(order_id, room_number, guest_name, deposit, refund_deposit, room_fee, total_income, pay_way, create_time, remarks) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,now(),$9)`, [order_id, room_number, guest_name, deposit, false, room_fee, total_income, pay_way, '测试账单']);
   }

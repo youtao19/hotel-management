@@ -7,7 +7,7 @@
         <div class="row q-gutter-md">
           <q-btn color="primary" icon="print" label="打印" @click="printHandover" />
           <q-btn color="green" icon="download" label="导出Excel" @click="exportToExcel" />
-          <q-btn color="purple" icon="edit" label="保存金额修改" @click="saveAmountChanges" :loading="savingAmounts" />
+          <q-btn color="purple" icon="save" label="保存页面" @click="savePageData" :loading="savingAmounts" />
           <q-btn color="orange" icon="save" label="保存交接记录" @click="saveHandover" />
           <q-btn color="blue" icon="history" label="历史记录" @click="openHistoryDialog" />
         </div>
@@ -33,9 +33,10 @@
         v-model:newTaskTitle="newTaskTitle"
         v-model:cashierName="cashierName"
         v-model:notes="notes"
-        :totalRooms="totalRooms"
-        :restRooms="restRooms"
-        :vipCards="vipCards"
+        v-model:totalRooms="totalRooms"
+        v-model:restRooms="restRooms"
+        v-model:vipCards="vipCards"
+        v-model:goodReview="goodReview"
         @updateTaskStatus="updateTaskStatus"
         @addNewTask="addNewTask"
         @deleteTask="deleteTask"
@@ -65,6 +66,7 @@ const receivePerson = ref('')
 const cashierName = ref('张')
 const notes = ref('')
 const savingAmounts = ref(false)
+const goodReview = ref('邀1得1')
 
 // 备忘录列表相关
 const newTaskTitle = ref('')
@@ -232,6 +234,7 @@ function updatePaymentData(statistics, receipts, previousHandover) {
 
   if (todaysSavedPaymentData) {
     console.log('🔄 发现当天已保存的数据，恢复支付数据')
+    console.log('📋 当天保存的完整数据:', previousHandover.details)
     const savedPaymentData = todaysSavedPaymentData
 
     // 直接恢复已保存的支付数据
@@ -244,9 +247,56 @@ function updatePaymentData(statistics, receipts, previousHandover) {
       }
     })
 
-    // 恢复其他信息
-    if (previousHandover.details && previousHandover.details.notes) {
-      notes.value = previousHandover.details.notes
+    // 恢复其他页面信息
+    if (previousHandover.details) {
+      const details = previousHandover.details
+      console.log('📋 恢复页面数据:', details)
+
+      // 恢复基本信息
+      if (details.notes) {
+        notes.value = details.notes
+        console.log('📝 恢复备注:', details.notes)
+      }
+      if (details.handoverPerson) {
+        handoverPerson.value = details.handoverPerson
+        console.log('👤 恢复交接人:', details.handoverPerson)
+      }
+      if (details.receivePerson) {
+        receivePerson.value = details.receivePerson
+        console.log('👤 恢复接收人:', details.receivePerson)
+      }
+      if (details.cashierName) {
+        cashierName.value = details.cashierName
+        console.log('👤 恢复收银员:', details.cashierName)
+      }
+
+      // 恢复备忘录
+      if (details.taskList && Array.isArray(details.taskList)) {
+        taskList.value = details.taskList
+        console.log('📋 恢复备忘录:', details.taskList.length, '条')
+      }
+
+      // 恢复特殊统计数据
+      if (details.specialStats) {
+        const stats = details.specialStats
+        console.log('📊 恢复特殊统计:', stats)
+        if (stats.totalRooms !== undefined) {
+          totalRooms.value = stats.totalRooms
+          console.log('🏠 恢复开房数:', stats.totalRooms)
+        }
+        if (stats.restRooms !== undefined) {
+          restRooms.value = stats.restRooms
+          console.log('🛏️ 恢复休息房数:', stats.restRooms)
+        }
+        if (stats.vipCards !== undefined) {
+          vipCards.value = stats.vipCards
+          console.log('💳 恢复大美卡:', stats.vipCards)
+        }
+        if (stats.goodReview !== undefined) {
+          goodReview.value = stats.goodReview
+          console.log('⭐ 恢复好评:', stats.goodReview)
+        }
+      }
     }
 
     // 🔒 恢复数据时，只有在用户没有手动设置过现金备用金的情况下才强制设置为320
@@ -578,7 +628,8 @@ async function saveHandover() {
       specialStats: {
         totalRooms: totalRooms.value,
         restRooms: restRooms.value,
-        vipCards: vipCards.value
+        vipCards: vipCards.value,
+        goodReview: goodReview.value
       }
     }
 
@@ -599,38 +650,48 @@ async function saveHandover() {
   }
 }
 
-// 保存金额修改（不保存完整的交接班记录）
-async function saveAmountChanges() {
+// 保存页面数据（保存所有页面数据，包括金额、统计数据等）
+async function savePageData() {
   try {
     savingAmounts.value = true
 
-    // 准备金额数据（保存用户实际输入的值，不强制修改）
-    const amountData = {
+    // 准备完整的页面数据
+    const pageData = {
       date: selectedDate.value,
+      handoverPerson: handoverPerson.value,
+      receivePerson: receivePerson.value,
+      cashierName: cashierName.value,
+      notes: notes.value,
+      taskList: taskList.value,
       paymentData: paymentData.value,
-      notes: `金额修改保存 - ${new Date().toLocaleString()}`
+      specialStats: {
+        totalRooms: totalRooms.value,
+        restRooms: restRooms.value,
+        vipCards: vipCards.value,
+        goodReview: goodReview.value
+      }
     }
 
-    console.log('保存金额修改:', amountData)
+    console.log('保存页面数据:', pageData)
 
-    // 调用新的API端点
-    const result = await shiftHandoverApi.saveAmountChanges(amountData)
+    // 调用保存API端点
+    const result = await shiftHandoverApi.saveAmountChanges(pageData)
 
     $q.notify({
       type: 'positive',
-      message: '金额修改保存成功',
-      caption: '可以继续修改金额或保存完整的交接记录',
+      message: '页面数据保存成功',
+      caption: '所有数据已保存到数据库',
       position: 'top',
       timeout: 3000
     })
 
-    console.log('金额修改保存成功:', result)
+    console.log('页面数据保存成功:', result)
 
   } catch (error) {
-    console.error('保存金额修改失败:', error)
+    console.error('保存页面数据失败:', error)
     $q.notify({
       type: 'negative',
-      message: '保存金额修改失败',
+      message: '保存页面数据失败',
       caption: error.message,
       position: 'top'
     })
@@ -641,119 +702,8 @@ async function saveAmountChanges() {
 
 // 打印交接单
 function printHandover() {
-  const printStyles = `
-    <style>
-      @media print {
-        body { margin: 0; font-family: Arial, sans-serif; font-size: 14px; }
-        .print-header { text-align: center; margin-bottom: 20px; }
-        .print-title { font-size: 20px; font-weight: bold; }
-        .print-info { margin: 10px 0; }
-        .print-table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-        .print-table th, .print-table td { border: 1px solid #000; padding: 8px; text-align: center; }
-        .print-table th { background-color: #f0f0f0; }
-        .notes-section { margin-top: 20px; }
-        @page { margin: 15mm; }
-      }
-    </style>
-  `
-
-  const printContent = `
-    ${printStyles}
-    <div class="print-header">
-      <div class="print-title">交接班记录</div>
-      <div class="print-info">
-        <span>日期: ${selectedDate.value}</span> &nbsp;&nbsp;
-        <span>交班人: ${handoverPerson.value}</span> &nbsp;&nbsp;
-        <span>接班人: ${receivePerson.value}</span>
-      </div>
-    </div>
-
-    <table class="print-table">
-      <thead>
-        <tr>
-          <th colspan="8">交接班</th>
-        </tr>
-        <tr>
-          <th>备用金(来自昨日)</th>
-          <th>客房收入1 (房费+押金)</th>
-          <th>休息房收入2 (房费+押金)</th>
-          <th>租车收入3</th>
-          <th>合计</th>
-          <th>客房退押 (实退金额)</th>
-          <th>休息退押 (实退金额)</th>
-          <th>留存款</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>现金</td>
-          <td>${paymentData.value.cash.reserveCash}</td>
-          <td>${paymentData.value.cash.hotelIncome}</td>
-          <td>${paymentData.value.cash.restIncome}</td>
-          <td>${paymentData.value.cash.total}</td>
-          <td>${paymentData.value.cash.hotelDeposit}</td>
-          <td>${paymentData.value.cash.restDeposit}</td>
-          <td>${paymentData.value.cash.retainedAmount}</td>
-        </tr>
-        <tr>
-          <td>微信</td>
-          <td>${paymentData.value.wechat.reserveCash}</td>
-          <td>${paymentData.value.wechat.hotelIncome}</td>
-          <td>${paymentData.value.wechat.restIncome}</td>
-          <td>${paymentData.value.wechat.total}</td>
-          <td>${paymentData.value.wechat.hotelDeposit}</td>
-          <td>${paymentData.value.wechat.restDeposit}</td>
-          <td>${paymentData.value.wechat.retainedAmount}</td>
-        </tr>
-        <tr>
-          <td>数码付</td>
-          <td>${paymentData.value.digital.reserveCash}</td>
-          <td>${paymentData.value.digital.hotelIncome}</td>
-          <td>${paymentData.value.digital.restIncome}</td>
-          <td>${paymentData.value.digital.total}</td>
-          <td>${paymentData.value.digital.hotelDeposit}</td>
-          <td>${paymentData.value.digital.restDeposit}</td>
-          <td>${paymentData.value.digital.retainedAmount}</td>
-        </tr>
-        <tr>
-          <td>其他方式</td>
-          <td>${paymentData.value.other.reserveCash}</td>
-          <td>${paymentData.value.other.hotelIncome}</td>
-          <td>${paymentData.value.other.restIncome}</td>
-          <td>${paymentData.value.other.total}</td>
-          <td>${paymentData.value.other.hotelDeposit}</td>
-          <td>${paymentData.value.other.restDeposit}</td>
-          <td>${paymentData.value.other.retainedAmount}</td>
-        </tr>
-
-      </tbody>
-    </table>
-
-    <div class="notes-section">
-      <p><strong>开房数: ${totalRooms.value}</strong> &nbsp;&nbsp; <strong>休息房数: ${restRooms.value}</strong> &nbsp;&nbsp; <strong>大美卡: ${vipCards.value}</strong></p>
-      <p><strong>收银员: ${cashierName.value}</strong></p>
-      ${notes.value ? `<p><strong>备注:</strong> ${notes.value}</p>` : ''}
-      ${taskList.value.length > 0 ? `
-        <div style="margin-top: 15px;">
-          <p><strong>备忘录:</strong></p>
-          <ul style="margin: 5px 0; padding-left: 20px;">
-            ${taskList.value.map(task => `
-              <li style="margin: 3px 0; ${task.completed ? 'text-decoration: line-through; color: #999;' : ''}">
-                ${task.completed ? '✓' : '○'} ${task.title} ${task.time ? `(${task.time})` : ''}
-              </li>
-            `).join('')}
-          </ul>
-        </div>
-      ` : ''}
-    </div>
-  `
-
-  const printWindow = window.open('', '_blank')
-  printWindow.document.write(printContent)
-  printWindow.document.close()
-  printWindow.focus()
-  printWindow.print()
-  printWindow.close()
+  // 直接调用浏览器打印当前页面
+  window.print()
 }
 
 // 导出Excel
@@ -868,7 +818,68 @@ onMounted(async () => {
   min-height: 100vh;
 }
 
+/* 打印样式 */
+@media print {
+  .shift-handover {
+    background-color: white !important;
+    min-height: auto !important;
+  }
 
+  /* 隐藏不需要打印的元素 */
+  .q-btn, .q-card-actions, .q-toolbar, .q-header {
+    display: none !important;
+  }
 
+  /* 打印时的页面设置 */
+  @page {
+    margin: 15mm;
+    size: A4;
+  }
 
+  /* 确保表格在打印时正确显示 */
+  .shift-table-container {
+    box-shadow: none !important;
+    border: 1px solid #000 !important;
+  }
+
+  .shift-table {
+    font-size: 12px !important;
+  }
+
+  .shift-table th,
+  .shift-table td {
+    border: 1px solid #000 !important;
+    padding: 4px !important;
+  }
+
+  /* 打印时的标题样式 */
+  .q-card-section:first-child {
+    text-align: center;
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 20px;
+  }
+
+  /* 确保备忘录在打印时正确显示 */
+  .task-management-container {
+    box-shadow: none !important;
+    border: 1px solid #000 !important;
+    page-break-inside: avoid;
+  }
+
+  .task-card {
+    border: 1px solid #ccc !important;
+    background: white !important;
+  }
+
+  /* 特殊统计表格打印样式 */
+  .special-stats-table {
+    font-size: 12px !important;
+  }
+
+  .special-stats-table td {
+    border: 1px solid #000 !important;
+    padding: 4px !important;
+  }
+}
 </style>

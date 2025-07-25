@@ -22,7 +22,9 @@
         "export-structure": "node scripts/exportStructure.js",
         "export-all": "node scripts/exportAll.js",
         "db:backup": "node scripts/exportAll.js",
-        "migrate:shift-handover": "node scripts/migrateShiftHandover.js"
+        "migrate:shift-handover": "node scripts/migrateShiftHandover.js",
+        "remove-html-snapshot": "node scripts/removeHtmlSnapshotFields.js",
+        "fix-pay-way-field": "node scripts/fixPayWayFieldLength.js"
     },
     "dependencies": {
         "@quasar/extras": "^1.16.4",

@@ -348,11 +348,8 @@ async function saveHandover(handoverData) {
       remarks,
       cashier_name,
       shift_time,
-      shift_date,
-      html_snapshot,
-      handover_person,
-      receive_person
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      shift_date
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7)
     RETURNING *;
   `;
 
@@ -364,12 +361,10 @@ async function saveHandover(handoverData) {
       finalRemarks,
       finalCashierName.trim(),
       finalShiftTime,
-      finalShiftDate,
-      htmlSnapshot || null, // HTML快照
-      finalHandoverPerson,
-      finalReceivePerson
+      finalShiftDate
     ]);
 
+    console.log('✅ 交接班记录保存成功，ID:', result.rows[0].id);
     return result.rows[0];
   } catch (error) {
     console.error('保存交接班记录失败:', error);
@@ -469,8 +464,7 @@ async function getHandoverHistory(startDate, endDate, page = 1, limit = 10, cash
           paymentData: details.paymentData || null,
           taskList: details.taskList || null,
           specialStats: details.specialStats || null,
-          // 确保html_snapshot字段正确返回
-          html_snapshot: row.html_snapshot
+          // 移除html_snapshot字段引用
         };
       } catch (parseError) {
         console.error('解析交接班详情数据失败:', parseError);
@@ -1057,15 +1051,24 @@ async function importReceiptsToShiftHandover(importData) {
 }
 
 /**
- * 保存金额修改（不保存完整的交接班记录）
- * @param {Object} amountData - 金额数据
+ * 保存页面数据（保存完整的页面数据，包括金额、统计数据等）
+ * @param {Object} pageData - 页面数据
  * @returns {Promise<Object>} 保存结果
  */
-async function saveAmountChanges(amountData) {
+async function saveAmountChanges(pageData) {
   try {
-    console.log('💾 保存金额修改:', amountData.date)
+    console.log('💾 保存页面数据:', pageData.date)
 
-    const { date, paymentData, notes } = amountData
+    const {
+      date,
+      paymentData,
+      notes,
+      handoverPerson,
+      receivePerson,
+      cashierName,
+      taskList,
+      specialStats
+    } = pageData
 
     // 检查当天是否已有记录
     const existingQuery = `
@@ -1096,31 +1099,43 @@ async function saveAmountChanges(amountData) {
       const updatedDetails = {
         ...existingDetails,
         paymentData: paymentData,
-        lastAmountUpdate: new Date().toISOString(),
-        notes: notes
+        notes: notes,
+        handoverPerson: handoverPerson,
+        receivePerson: receivePerson,
+        cashierName: cashierName,
+        taskList: taskList || [],
+        specialStats: specialStats || {},
+        lastPageUpdate: new Date().toISOString()
       }
 
       const updateQuery = `
         UPDATE shift_handover
-        SET details = $1, updated_at = CURRENT_TIMESTAMP
-        WHERE id = $2
+        SET details = $1, type = $2, cashier_name = $3, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $4
         RETURNING id
       `
 
       const updateResult = await query(updateQuery, [
         JSON.stringify(updatedDetails),
+        'page_data',
+        cashierName || '系统',
         handoverId
       ])
 
-      console.log('✅ 金额修改保存成功，ID:', updateResult.rows[0].id)
-      return { id: updateResult.rows[0].id, action: 'amount_updated' }
+      console.log('✅ 页面数据保存成功，ID:', updateResult.rows[0].id)
+      return { id: updateResult.rows[0].id, action: 'page_data_updated' }
     } else {
-      // 创建新记录（仅包含金额数据），需要设置必填字段
+      // 创建新记录（包含完整页面数据），需要设置必填字段
       const details = {
         paymentData: paymentData,
-        lastAmountUpdate: new Date().toISOString(),
         notes: notes,
-        type: 'amount_only'
+        handoverPerson: handoverPerson,
+        receivePerson: receivePerson,
+        cashierName: cashierName,
+        taskList: taskList || [],
+        specialStats: specialStats || {},
+        lastPageUpdate: new Date().toISOString(),
+        type: 'page_data'
       }
 
       const insertQuery = `
@@ -1140,21 +1155,24 @@ async function saveAmountChanges(amountData) {
 
       // 设置必要的默认值
       const defaultStatistics = {
-        type: 'amount_only',
-        lastUpdate: new Date().toISOString()
+        type: 'page_data',
+        lastUpdate: new Date().toISOString(),
+        totalRooms: specialStats?.totalRooms || 0,
+        restRooms: specialStats?.restRooms || 0,
+        vipCards: specialStats?.vipCards || 0
       }
 
       const insertResult = await query(insertQuery, [
         date,                              // shift_date
-        'amount_only',                     // type
+        'page_data',                       // type
         JSON.stringify(details),           // details
         JSON.stringify(defaultStatistics), // statistics
-        '系统',                            // cashier_name
-        'amount'                           // shift_time (must be ≤10 chars)
+        cashierName || '系统',             // cashier_name
+        'page'                             // shift_time (must be ≤10 chars)
       ])
 
-      console.log('✅ 新建金额记录成功，ID:', insertResult.rows[0].id)
-      return { id: insertResult.rows[0].id, action: 'amount_created' }
+      console.log('✅ 新建页面数据记录成功，ID:', insertResult.rows[0].id)
+      return { id: insertResult.rows[0].id, action: 'page_data_created' }
     }
 
   } catch (error) {

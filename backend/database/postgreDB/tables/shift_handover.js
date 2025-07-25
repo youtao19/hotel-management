@@ -11,9 +11,6 @@ const createQuery = `
     cashier_name VARCHAR(100) NOT NULL,
     shift_time VARCHAR(10) NOT NULL,
     shift_date DATE NOT NULL,
-    html_snapshot TEXT,
-    handover_person VARCHAR(100),
-    receive_person VARCHAR(100),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
   );
@@ -26,12 +23,12 @@ const createIndexQueryStrings = [
   `CREATE INDEX IF NOT EXISTS idx_shift_handover_cashier ON shift_handover(cashier_name);`,
 ];
 
-// 数据库迁移函数 - 安全地添加新字段
+// 数据库迁移函数 - 清理不再使用的字段
 async function migrateShiftHandoverTable() {
   try {
     console.log('开始迁移交接班表...');
 
-    // 检查并添加html_snapshot字段
+    // 检查并删除html_snapshot字段（如果存在）
     const checkHtmlSnapshotColumn = `
       SELECT column_name
       FROM information_schema.columns
@@ -41,14 +38,14 @@ async function migrateShiftHandoverTable() {
 
     const htmlSnapshotResult = await query(checkHtmlSnapshotColumn);
 
-    if (htmlSnapshotResult.rows.length === 0) {
-      await query(`ALTER TABLE shift_handover ADD COLUMN html_snapshot TEXT;`);
-      console.log('✓ 添加html_snapshot字段成功');
+    if (htmlSnapshotResult.rows.length > 0) {
+      await query(`ALTER TABLE shift_handover DROP COLUMN html_snapshot;`);
+      console.log('✓ 删除html_snapshot字段成功');
     } else {
-      console.log('✓ html_snapshot字段已存在');
+      console.log('✓ html_snapshot字段不存在，无需删除');
     }
 
-    // 检查并添加handover_person字段
+    // 检查并删除handover_person字段（如果存在）
     const checkHandoverPersonColumn = `
       SELECT column_name
       FROM information_schema.columns
@@ -58,14 +55,14 @@ async function migrateShiftHandoverTable() {
 
     const handoverPersonResult = await query(checkHandoverPersonColumn);
 
-    if (handoverPersonResult.rows.length === 0) {
-      await query(`ALTER TABLE shift_handover ADD COLUMN handover_person VARCHAR(100);`);
-      console.log('✓ 添加handover_person字段成功');
+    if (handoverPersonResult.rows.length > 0) {
+      await query(`ALTER TABLE shift_handover DROP COLUMN handover_person;`);
+      console.log('✓ 删除handover_person字段成功');
     } else {
-      console.log('✓ handover_person字段已存在');
+      console.log('✓ handover_person字段不存在，无需删除');
     }
 
-    // 检查并添加receive_person字段
+    // 检查并删除receive_person字段（如果存在）
     const checkReceivePersonColumn = `
       SELECT column_name
       FROM information_schema.columns
@@ -75,11 +72,11 @@ async function migrateShiftHandoverTable() {
 
     const receivePersonResult = await query(checkReceivePersonColumn);
 
-    if (receivePersonResult.rows.length === 0) {
-      await query(`ALTER TABLE shift_handover ADD COLUMN receive_person VARCHAR(100);`);
-      console.log('✓ 添加receive_person字段成功');
+    if (receivePersonResult.rows.length > 0) {
+      await query(`ALTER TABLE shift_handover DROP COLUMN receive_person;`);
+      console.log('✓ 删除receive_person字段成功');
     } else {
-      console.log('✓ receive_person字段已存在');
+      console.log('✓ receive_person字段不存在，无需删除');
     }
 
     console.log('交接班表迁移完成');

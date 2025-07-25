@@ -18,11 +18,11 @@ async function getDailyRevenue(startDate, endDate) {
             SUM(COALESCE(b.room_fee, 0)) as total_room_fee,
             COUNT(CASE WHEN b.pay_way = '现金' THEN 1 END) as cash_orders,
             COUNT(CASE WHEN b.pay_way = '微信' THEN 1 END) as wechat_orders,
-            COUNT(CASE WHEN b.pay_way = '支付宝' THEN 1 END) as alipay_orders,
+            COUNT(CASE WHEN b.pay_way = '微邮付' THEN 1 END) as alipay_orders,
             COUNT(CASE WHEN b.pay_way = '信用卡' THEN 1 END) as credit_card_orders,
             SUM(CASE WHEN b.pay_way = '现金' THEN COALESCE(b.total_income, 0) ELSE 0 END) as cash_revenue,
             SUM(CASE WHEN b.pay_way = '微信' THEN COALESCE(b.total_income, 0) ELSE 0 END) as wechat_revenue,
-            SUM(CASE WHEN b.pay_way = '支付宝' THEN COALESCE(b.total_income, 0) ELSE 0 END) as alipay_revenue,
+            SUM(CASE WHEN b.pay_way = '微邮付' THEN COALESCE(b.total_income, 0) ELSE 0 END) as alipay_revenue,
             SUM(CASE WHEN b.pay_way = '信用卡' THEN COALESCE(b.total_income, 0) ELSE 0 END) as credit_card_revenue
         FROM bills b
         JOIN orders o ON b.order_id = o.order_id
@@ -60,11 +60,11 @@ async function getWeeklyRevenue(startDate, endDate) {
             AVG(COALESCE(b.total_income, 0)) as avg_daily_revenue,
             COUNT(CASE WHEN b.pay_way = '现金' THEN 1 END) as cash_orders,
             COUNT(CASE WHEN b.pay_way = '微信' THEN 1 END) as wechat_orders,
-            COUNT(CASE WHEN b.pay_way = '支付宝' THEN 1 END) as alipay_orders,
+            COUNT(CASE WHEN b.pay_way = '微邮付' THEN 1 END) as alipay_orders,
             COUNT(CASE WHEN b.pay_way = '信用卡' THEN 1 END) as credit_card_orders,
             SUM(CASE WHEN b.pay_way = '现金' THEN COALESCE(b.total_income, 0) ELSE 0 END) as cash_revenue,
             SUM(CASE WHEN b.pay_way = '微信' THEN COALESCE(b.total_income, 0) ELSE 0 END) as wechat_revenue,
-            SUM(CASE WHEN b.pay_way = '支付宝' THEN COALESCE(b.total_income, 0) ELSE 0 END) as alipay_revenue,
+            SUM(CASE WHEN b.pay_way = '微邮付' THEN COALESCE(b.total_income, 0) ELSE 0 END) as alipay_revenue,
             SUM(CASE WHEN b.pay_way = '信用卡' THEN COALESCE(b.total_income, 0) ELSE 0 END) as credit_card_revenue
         FROM bills b
         JOIN orders o ON b.order_id = o.order_id
@@ -101,11 +101,11 @@ async function getMonthlyRevenue(startDate, endDate) {
             AVG(COALESCE(b.total_income, 0)) as avg_daily_revenue,
             COUNT(CASE WHEN b.pay_way = '现金' THEN 1 END) as cash_orders,
             COUNT(CASE WHEN b.pay_way = '微信' THEN 1 END) as wechat_orders,
-            COUNT(CASE WHEN b.pay_way = '支付宝' THEN 1 END) as alipay_orders,
+            COUNT(CASE WHEN b.pay_way = '微邮付' THEN 1 END) as alipay_orders,
             COUNT(CASE WHEN b.pay_way = '信用卡' THEN 1 END) as credit_card_orders,
             SUM(CASE WHEN b.pay_way = '现金' THEN COALESCE(b.total_income, 0) ELSE 0 END) as cash_revenue,
             SUM(CASE WHEN b.pay_way = '微信' THEN COALESCE(b.total_income, 0) ELSE 0 END) as wechat_revenue,
-            SUM(CASE WHEN b.pay_way = '支付宝' THEN COALESCE(b.total_income, 0) ELSE 0 END) as alipay_revenue,
+            SUM(CASE WHEN b.pay_way = '微邮付' THEN COALESCE(b.total_income, 0) ELSE 0 END) as alipay_revenue,
             SUM(CASE WHEN b.pay_way = '信用卡' THEN COALESCE(b.total_income, 0) ELSE 0 END) as credit_card_revenue,
             -- 计算月度增长率（与上月比较）
             LAG(SUM(COALESCE(b.total_income, 0))) OVER (ORDER BY DATE_TRUNC('month', o.check_in_date)) as prev_month_revenue
@@ -157,11 +157,11 @@ async function getRevenueOverview(startDate, endDate) {
             -- 支付方式统计
             COUNT(CASE WHEN b.pay_way = '现金' THEN 1 END) as cash_orders,
             COUNT(CASE WHEN b.pay_way = '微信' THEN 1 END) as wechat_orders,
-            COUNT(CASE WHEN b.pay_way = '支付宝' THEN 1 END) as alipay_orders,
+            COUNT(CASE WHEN b.pay_way = '微邮付' THEN 1 END) as alipay_orders,
             COUNT(CASE WHEN b.pay_way = '信用卡' THEN 1 END) as credit_card_orders,
             SUM(CASE WHEN b.pay_way = '现金' THEN COALESCE(b.total_income, 0) ELSE 0 END) as cash_revenue,
             SUM(CASE WHEN b.pay_way = '微信' THEN COALESCE(b.total_income, 0) ELSE 0 END) as wechat_revenue,
-            SUM(CASE WHEN b.pay_way = '支付宝' THEN COALESCE(b.total_income, 0) ELSE 0 END) as alipay_revenue,
+            SUM(CASE WHEN b.pay_way = '微邮付' THEN COALESCE(b.total_income, 0) ELSE 0 END) as alipay_revenue,
             SUM(CASE WHEN b.pay_way = '信用卡' THEN COALESCE(b.total_income, 0) ELSE 0 END) as credit_card_revenue
         FROM bills b
         JOIN orders o ON b.order_id = o.order_id

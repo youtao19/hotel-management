@@ -10,7 +10,7 @@ const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
     refund_deposit BOOLEAN NOT NULL,
     room_fee DECIMAL(10,2),
     total_income DECIMAL(10,2),
-    pay_way VARCHAR(20) NOT NULL,
+    pay_way VARCHAR(50) NOT NULL,
     create_time TIMESTAMP NOT NULL,
     remarks TEXT,
     review_invited BOOLEAN DEFAULT FALSE,

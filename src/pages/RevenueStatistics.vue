@@ -530,7 +530,7 @@ const tableColumns = computed(() => {
     },
     {
       name: 'alipay_revenue',
-      label: '支付宝收入',
+      label: '微邮付收入',
       field: 'alipay_revenue',
       align: 'right',
       format: (val) => `¥${formatCurrency(val || 0)}`
@@ -901,7 +901,7 @@ const updateRoomTypeChart = () => {
 
 // 生成示例收款明细数据
 const generateSampleReceiptData = (type) => {
-  const paymentMethods = ['现金', '微信', '支付宝', '银行卡']
+  const paymentMethods = ['现金', '微信', '微邮付', '银行卡']
   const guestNames = ['张三', '李四', '王五', '赵六', '孙七', '周八', '吴九', '郑十']
 
   const sampleData = []
@@ -1145,7 +1145,7 @@ const importToShiftHandover = async () => {
     const paymentAnalysis = {
       现金: { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 },
       微信: { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 },
-      支付宝: { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 },
+      微邮付: { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 },
       银行卡: { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 },
       其他: { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 }
     }
@@ -1174,9 +1174,9 @@ const importToShiftHandover = async () => {
         case '微信':
           normalizedPaymentMethod = '微信'
           break
-        case '微邮付':  // 微邮付按支付宝处理
+        case '微邮付':  // 微邮付
         case '支付宝':
-          normalizedPaymentMethod = '支付宝'
+          normalizedPaymentMethod = '微邮付'
           break
         case '银行卡':
         case '平台':

@@ -1,6 +1,6 @@
 const request = require('supertest');
 const app = require('../app');
-const { initializeHotelDB, closePool, query } = require('../backend/database/postgreDB/pg');
+const { query } = require('../backend/database/postgreDB/pg');
 
 describe('POST /api/orders/:orderNumber/refund-deposit', () => {
   const testOrder = {
@@ -9,7 +9,7 @@ describe('POST /api/orders/:orderNumber/refund-deposit', () => {
     guest_name: '测试退款',
     id_number: '111111111111111111',
     phone: '13900000000',
-    room_type: 'xing_yun_ge',
+    room_type: 'TEST_REFUND_TYPE', // 使用测试房型
     room_number: '403', // 使用一个测试中不常用的房间号
     check_in_date: '2025-08-01',
     check_out_date: '2025-08-02',
@@ -20,27 +20,22 @@ describe('POST /api/orders/:orderNumber/refund-deposit', () => {
     remarks: '测试退款订单'
   };
 
-  beforeAll(async () => {
-    await initializeHotelDB();
-  });
-
   beforeEach(async () => {
-    // 为每个测试清理并插入新的测试数据
-    await query('DELETE FROM orders WHERE order_id = $1', [testOrder.order_id]);
-    await query('DELETE FROM rooms WHERE room_number = $1', [testOrder.room_number]);
-    await query('DELETE FROM room_types WHERE type_code = $1', [testOrder.room_type]);
+    // 使用全局清理函数
+    await global.cleanupTestData();
 
     // 插入依赖数据
     await query(`
-      INSERT INTO room_types (type_code, type_name, base_price)
-      VALUES ($1, '星芸阁', 300)
+      INSERT INTO room_types (type_code, type_name, base_price, description, is_closed)
+      VALUES ($1, '测试退款房型', 300, '测试用房型', false)
       ON CONFLICT (type_code) DO NOTHING
     `, [testOrder.room_type]);
 
     await query(`
-      INSERT INTO rooms (room_id, room_number, type_code, status, price)
-      VALUES (403, $1, $2, 'clean', 300)
-      ON CONFLICT (room_number) DO NOTHING
+      INSERT INTO rooms (room_id, room_number, type_code, status, price, is_closed)
+      VALUES (10403, $1, $2, 'clean', 300, false)
+      ON CONFLICT (room_number) DO UPDATE SET
+      type_code = EXCLUDED.type_code, status = EXCLUDED.status, price = EXCLUDED.price
     `, [testOrder.room_number, testOrder.room_type]);
 
     // 插入测试订单
@@ -54,14 +49,6 @@ describe('POST /api/orders/:orderNumber/refund-deposit', () => {
         testOrder.deposit, testOrder.remarks
       ]
     );
-  });
-
-  afterAll(async () => {
-    // 测试结束后清理数据
-    await query('DELETE FROM orders WHERE order_id = $1', [testOrder.order_id]);
-    await query('DELETE FROM rooms WHERE room_number = $1', [testOrder.room_number]);
-    await query('DELETE FROM room_types WHERE type_code = $1', [testOrder.room_type]);
-    await closePool();
   });
 
   it('应成功处理退押金请求', async () => {
