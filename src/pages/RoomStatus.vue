@@ -1,5 +1,6 @@
 <template>
   <!-- 主容器，使用 Quasar 的 q-page 组件 -->
+
   <q-page class="room-status">
     <div class="q-pa-md">
       <!-- 页面标题 -->
@@ -200,7 +201,7 @@
           <!-- 房间卡片，根据状态设置不同背景色 -->
           <q-card
             :class="roomStore.getRoomStatusClass(room)"
-            class="cursor-pointer"
+            class="cursor-pointer room-card"
             @click="showRoomCalendar(room)"
           >
             <q-card-section class="room-header">
@@ -239,7 +240,7 @@
               </div>
 
               <!-- 已入住房间显示客人信息 -->
-              <div v-if="roomStore.getRoomDisplayStatus(room) === 'occupied'" class="row q-mb-sm">
+              <div v-if="roomStore.getRoomDisplayStatus(room) === ROOM_STATES.OCCUPIED" class="row q-mb-sm">
                 <div class="col-5">
                   <div class="text-subtitle2 text-grey-7">客人:</div>
                 </div>
@@ -249,7 +250,7 @@
               </div>
 
               <!-- 已入住房间显示退房日期 -->
-              <div v-if="roomStore.getRoomDisplayStatus(room) === 'occupied'" class="row q-mb-sm">
+              <div v-if="roomStore.getRoomDisplayStatus(room) === ROOM_STATES.OCCUPIED" class="row q-mb-sm">
                 <div class="col-5">
                   <div class="text-subtitle2 text-grey-7">退房日期:</div>
                 </div>
@@ -262,7 +263,7 @@
               </div>
 
               <!-- 已入住房间显示订单号 -->
-              <div v-if="roomStore.getRoomDisplayStatus(room) === 'occupied' && (room.order_id)" class="row q-mb-sm">
+              <div v-if="roomStore.getRoomDisplayStatus(room) === ROOM_STATES.OCCUPIED && (room.order_id)" class="row q-mb-sm">
                 <div class="col-5">
                   <div class="text-subtitle2 text-grey-7">订单号:</div>
                 </div>
@@ -272,25 +273,77 @@
                   </div>
                 </div>
               </div>
+
+              <!-- 待入住房间显示客人信息 -->
+              <div v-if="roomStore.getRoomDisplayStatus(room) === ROOM_STATES.RESERVED" class="row q-mb-sm">
+                <div class="col-5">
+                  <div class="text-subtitle2 text-grey-7">客人:</div>
+                </div>
+                <div class="col-7">
+                  <div class="text-subtitle2 text-weight-bold">{{ room.currentGuest || room.guest_name || '未知客人' }}</div>
+                </div>
+              </div>
+
+              <!-- 待入住房间显示联系方式 -->
+              <div v-if="roomStore.getRoomDisplayStatus(room) === ROOM_STATES.RESERVED && (room.phone || room.guest_phone)" class="row q-mb-sm">
+                <div class="col-5">
+                  <div class="text-subtitle2 text-grey-7">联系方式:</div>
+                </div>
+                <div class="col-7">
+                  <div class="text-subtitle2 text-weight-bold">{{ room.phone || room.guest_phone }}</div>
+                </div>
+              </div>
+
+              <!-- 待入住房间显示预计入住时间 -->
+              <div v-if="roomStore.getRoomDisplayStatus(room) === ROOM_STATES.RESERVED" class="row q-mb-sm">
+                <div class="col-5">
+                  <div class="text-subtitle2 text-grey-7">预计入住:</div>
+                </div>
+                <div class="col-7">
+                  <div class="text-subtitle2 text-weight-bold">
+                    <q-tooltip>预计入住时间</q-tooltip>
+                    {{ viewStore.formatDate(room.checkInDate || room.check_in_date) || '未设置' }}
+                  </div>
+                </div>
+              </div>
+
+              <!-- 待入住房间显示订单号 -->
+              <div v-if="roomStore.getRoomDisplayStatus(room) === ROOM_STATES.RESERVED && (room.order_id || room.orderId)" class="row q-mb-sm">
+                <div class="col-5">
+                  <div class="text-subtitle2 text-grey-7">订单号:</div>
+                </div>
+                <div class="col-7">
+                  <div class="text-subtitle2">
+                    <span class="text-weight-bold">{{ room.order_id || room.orderId }}</span>
+                  </div>
+                </div>
+              </div>
             </q-card-section>
 
-            <q-space />
-
             <!-- 房间操作按钮 -->
-            <q-card-actions align="center" class="q-pa-sm">
+            <q-card-actions align="center" class="q-pa-sm q-mt-auto">
               <q-btn-group flat>
                 <!-- 空闲房间可预订 -->
                 <q-btn
-                  v-if="roomStore.getRoomDisplayStatus(room) === 'available'"
+                  v-if="roomStore.getRoomDisplayStatus(room) === ROOM_STATES.AVAILABLE"
                   color="primary"
                   icon="book_online"
                   label="预订"
                   size="sm"
                   @click.stop="bookRoom(room.room_id)"
                 />
+                <!-- 待入住房间可办理入住 -->
+                <q-btn
+                  v-if="roomStore.getRoomDisplayStatus(room) === ROOM_STATES.RESERVED"
+                  color="positive"
+                  icon="login"
+                  label="办理入住"
+                  size="sm"
+                  @click.stop="checkInRoom(room)"
+                />
                 <!-- 已入住房间可退房 -->
                 <q-btn
-                  v-if="roomStore.getRoomDisplayStatus(room) === 'occupied'"
+                  v-if="roomStore.getRoomDisplayStatus(room) === ROOM_STATES.OCCUPIED"
                   color="negative"
                   icon="logout"
                   label="退房"
@@ -326,7 +379,7 @@
                 />
                 <!-- 清扫中房间可完成清洁 -->
                 <q-btn
-                  v-if="roomStore.getRoomDisplayStatus(room) === 'cleaning'"
+                  v-if="roomStore.getRoomDisplayStatus(room) === ROOM_STATES.CLEANING"
                   color="green"
                   icon="check"
                   label="完成清洁"
@@ -349,76 +402,114 @@
     </div>
 
     <!-- 房间月度入住状态日历对话框 -->
-    <q-dialog v-model="showCalendarDialog" @hide="clearCalendarData">
-      <q-card style="min-width: 400px; max-width: 500px;">
-        <q-card-section class="row items-center q-pb-none">
-          <div class="text-h6">{{ selectedRoom?.room_number }} 房间月度入住状态</div>
-          <q-space />
-          <q-btn icon="close" flat round dense v-close-popup />
+    <q-dialog v-model="showCalendarDialog" @hide="clearCalendarData" persistent>
+      <q-card class="calendar-dialog-card">
+        <!-- 美化的标题区域 -->
+        <q-card-section class="calendar-header">
+          <div class="calendar-header-content">
+            <div class="calendar-title-section">
+              <q-icon name="calendar_month" size="2rem" class="calendar-title-icon" />
+              <div class="calendar-title-text">
+                <div class="text-h5 text-weight-bold">{{ selectedRoom?.room_number }} 房间</div>
+                <div class="text-subtitle1 calendar-subtitle">月度入住状态</div>
+              </div>
+            </div>
+            <q-btn
+              icon="close"
+              flat
+              round
+              dense
+              v-close-popup
+              class="calendar-close-btn"
+            />
+          </div>
         </q-card-section>
 
-        <q-card-section>
-          <div class="text-subtitle2 q-mb-md">
-            {{ selectedRoom?.room_number }} - {{ getRoomTypeName(selectedRoom?.type_code) }}
+        <q-card-section class="calendar-content">
+          <!-- 房间信息与月份导航合并 -->
+          <div class="room-info-navigation-card q-mb-md">
+            <div class="room-info-section">
+              <q-icon :name="getRoomTypeIcon(selectedRoom?.type_code)" size="1.5rem" class="room-info-icon" />
+              <div class="room-info-text">
+                <div class="text-subtitle1 text-weight-medium">{{ selectedRoom?.room_number }}</div>
+                <div class="text-body2 text-grey-7">{{ getRoomTypeName(selectedRoom?.type_code) }}</div>
+              </div>
+            </div>
+
+            <div class="navigation-section">
+              <q-btn
+                flat
+                round
+                icon="chevron_left"
+                color="primary"
+                @click="previousMonth"
+                class="nav-btn"
+              />
+              <div class="current-month-year">
+                {{ formatCurrentMonth() }}
+              </div>
+              <q-btn
+                flat
+                round
+                icon="chevron_right"
+                color="primary"
+                @click="nextMonth"
+                class="nav-btn"
+              />
+            </div>
           </div>
 
-          <!-- 图例说明 -->
-          <div class="row q-mb-md q-gutter-sm">
-            <div class="col-auto">
-              <q-chip size="sm" color="red" text-color="white">
-                <q-icon name="event_busy" size="xs" class="q-mr-xs" />
-                已入住
-              </q-chip>
-            </div>
-            <div class="col-auto">
-              <q-chip size="sm" color="green" text-color="white">
-                <q-icon name="event_available" size="xs" class="q-mr-xs" />
-                可入住
-              </q-chip>
-            </div>
-            <div class="col-auto">
-              <q-chip size="sm" color="orange" text-color="white">
-                <q-icon name="event_note" size="xs" class="q-mr-xs" />
-                已预订
-              </q-chip>
-            </div>
+          <!-- 美化的日历组件 -->
+          <div class="calendar-container">
+            <q-date
+              v-model="calendarDate"
+              :events="roomCalendarEvents"
+              :event-color="getEventColor"
+              today-btn
+              class="beautiful-calendar"
+              @update:model-value="onDateSelect"
+              @navigation="onCalendarNavigation"
+              navigation-min-year-month="2020/01"
+              navigation-max-year-month="2030/12"
+              :options="dateOptions"
+              emit-immediately
+            />
           </div>
 
-          <!-- 日历组件 - 使用事件系统显示状态 -->
-          <q-date
-            v-model="calendarDate"
-            :events="roomCalendarEvents"
-            :event-color="getEventColor"
-            today-btn
-            class="full-width"
-            @update:model-value="onDateSelect"
-            @navigation="onCalendarNavigation"
-            minimal
-          />
-
-          <!-- 选中日期的详细信息 -->
-          <div v-if="selectedDateInfo" class="q-mt-md q-pa-md bg-grey-1 rounded-borders">
-            <div class="text-subtitle2 q-mb-sm">{{ selectedDateInfo.date }} 详情</div>
-            <div class="text-body2">
-              <div>状态:
+          <!-- 美化的选中日期详细信息 -->
+          <div v-if="selectedDateInfo" class="selected-date-info">
+            <div class="selected-date-header">
+              <q-icon name="event" size="1.5rem" class="selected-date-icon" />
+              <div class="selected-date-title">
+                <div class="text-subtitle1 text-weight-medium">{{ selectedDateInfo.date }}</div>
+                <div class="text-body2 text-grey-7">详细信息</div>
+              </div>
+            </div>
+            <div class="selected-date-content">
+              <div class="status-info">
+                <span class="status-label">状态：</span>
                 <q-chip
-                  size="sm"
                   :color="selectedDateInfo.color"
                   text-color="white"
+                  class="status-chip-detailed"
                 >
+                  <q-icon
+                    :name="getStatusIcon(selectedDateInfo.status)"
+                    size="xs"
+                    class="q-mr-xs"
+                  />
                   {{ selectedDateInfo.statusText }}
                 </q-chip>
               </div>
-              <div v-if="selectedDateInfo.guestName" class="q-mt-xs">
-                客人: {{ selectedDateInfo.guestName }}
+              <div v-if="selectedDateInfo.guestName" class="guest-info">
+                <span class="guest-label">客人：</span>
+                <span class="guest-name">{{ selectedDateInfo.guestName }}</span>
               </div>
             </div>
           </div>
         </q-card-section>
 
-        <q-card-actions align="right">
-          <q-btn flat label="关闭" color="primary" v-close-popup />
-        </q-card-actions>
+
       </q-card>
     </q-dialog>
   </q-page>
@@ -461,6 +552,63 @@ const selectedRoom = ref(null)
 const calendarDate = ref(new Date().toISOString().substr(0, 10)) // YYYY-MM-DD 格式
 const roomBookingData = ref([]) // 存储房间的预订数据
 const selectedDateInfo = ref(null) // 存储选中日期的详细信息
+const currentCalendarView = ref({ // 跟踪日历当前显示的月份
+  year: new Date().getFullYear(),
+  month: new Date().getMonth() + 1
+})
+
+// 日期选项函数 - 允许所有日期可选
+const dateOptions = (date) => {
+  return true // 允许所有日期
+}
+
+// 格式化当前月份年份显示
+const formatCurrentMonth = () => {
+  const date = new Date(calendarDate.value)
+  const year = date.getFullYear()
+  const month = date.getMonth() + 1
+  return `${year}年${month}月`
+}
+
+// 上一个月
+const previousMonth = async () => {
+  const currentDate = new Date(calendarDate.value)
+  currentDate.setMonth(currentDate.getMonth() - 1)
+  calendarDate.value = currentDate.toISOString().substr(0, 10)
+
+  // 更新当前视图
+  currentCalendarView.value = {
+    year: currentDate.getFullYear(),
+    month: currentDate.getMonth() + 1
+  }
+
+  // 重新获取数据
+  if (selectedRoom.value) {
+    const startDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).toISOString().substr(0, 10)
+    const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).toISOString().substr(0, 10)
+    await fetchRoomBookingData(selectedRoom.value.room_id, startDate, endDate)
+  }
+}
+
+// 下一个月
+const nextMonth = async () => {
+  const currentDate = new Date(calendarDate.value)
+  currentDate.setMonth(currentDate.getMonth() + 1)
+  calendarDate.value = currentDate.toISOString().substr(0, 10)
+
+  // 更新当前视图
+  currentCalendarView.value = {
+    year: currentDate.getFullYear(),
+    month: currentDate.getMonth() + 1
+  }
+
+  // 重新获取数据
+  if (selectedRoom.value) {
+    const startDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).toISOString().substr(0, 10)
+    const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).toISOString().substr(0, 10)
+    await fetchRoomBookingData(selectedRoom.value.room_id, startDate, endDate)
+  }
+}
 
 // 格式化选中日期显示（仅用于界面显示）
 const formattedSelectedDate = computed(() => {
@@ -485,49 +633,6 @@ const formattedSelectedDate = computed(() => {
   })
 })
 
-/**
- * 统一的日期格式化函数
- * 将各种格式的日期转换为 YYYY-MM-DD 格式
- * @param {string|Date} dateInput - 输入的日期
- * @returns {string} YYYY-MM-DD 格式的日期字符串
- */
-function formatDateToISO(dateInput) {
-  if (!dateInput) return ''
-
-  try {
-    let dateObj
-
-    if (dateInput instanceof Date) {
-      dateObj = dateInput
-    } else if (typeof dateInput === 'string') {
-      // 处理YYYY/MM/DD格式
-      if (dateInput.includes('/')) {
-        const parts = dateInput.split('/')
-        if (parts.length === 3) {
-          // 确保是YYYY-MM-DD格式
-          const formattedDate = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`
-          dateObj = new Date(formattedDate)
-        } else {
-          dateObj = new Date(dateInput)
-        }
-      } else {
-        dateObj = new Date(dateInput)
-      }
-    } else {
-      return ''
-    }
-
-    if (isNaN(dateObj.getTime())) {
-      console.warn('无效的日期:', dateInput)
-      return ''
-    }
-
-    return dateObj.toISOString().split('T')[0]
-  } catch (error) {
-    console.error('日期格式化失败:', error, dateInput)
-    return ''
-  }
-}
 
 // 组件初始化
 onMounted(async () => {
@@ -536,6 +641,11 @@ onMounted(async () => {
   try {
     // 先获取房型数据
     await roomStore.fetchRoomTypes()
+
+    // 初始化订单数据
+    console.log('开始获取订单数据...')
+    await orderStore.fetchAllOrders()
+    console.log('订单数据获取完成，订单数量:', orderStore.orders.length)
 
         // 检查URL中是否有查询日期参数
     const urlQueryDate = route.query.queryDate
@@ -798,6 +908,7 @@ const getSelectedRoomTypePrice = () => {
 /**
  * 房间日历事件数据 - 为每个日期生成事件数组
  * 这个计算属性返回所有需要在日历上标记颜色的日期
+ * 格式必须是 YYYY/MM/DD 以匹配 Quasar 日历组件的要求
  */
 const roomCalendarEvents = computed(() => {
   // 如果没有选中房间，返回空数组
@@ -807,18 +918,19 @@ const roomCalendarEvents = computed(() => {
 
   const events = [];
 
-  // 获取当前显示的月份
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
+  // 使用当前日历视图的年月
+  const year = currentCalendarView.value.year;
+  const month = currentCalendarView.value.month - 1; // JavaScript月份从0开始
 
-  // 生成当月的所有日期
+  // 生成当月的所有日期，格式为 YYYY/MM/DD
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   for (let i = 1; i <= daysInMonth; i++) {
-    const date = new Date(year, month, i);
-    const dateStr = date.toISOString().substr(0, 10);
+    // 格式化为 YYYY/MM/DD 格式，确保月份和日期都是两位数
+    const dateStr = `${year}/${String(month + 1).padStart(2, '0')}/${String(i).padStart(2, '0')}`;
     events.push(dateStr);
   }
+
+  console.log('生成的日历事件:', events.slice(0, 5), '...'); // 调试信息
 
   return events;
 })
@@ -828,22 +940,36 @@ const roomCalendarEvents = computed(() => {
  * 这个函数会被Quasar日历组件调用，为每个标记的日期设置颜色
  */
 const getEventColor = (timestamp) => {
-  if (!timestamp) return 'grey';
+  if (!timestamp) {
+    console.log('getEventColor: 无效的时间戳');
+    return 'grey';
+  }
 
-  // timestamp 格式：YYYY/MM/DD
-  const dateStr = timestamp.replace ? timestamp.replace(/\//g, '-') : timestamp; // 转换为 YYYY-MM-DD 格式
+  // timestamp 格式：YYYY/MM/DD，转换为 YYYY-MM-DD 格式
+  const dateStr = timestamp.replace ? timestamp.replace(/\//g, '-') : timestamp;
   const status = getRoomDateStatus(dateStr);
 
+  let color;
   switch (status) {
     case 'occupied':
-      return 'red'; // 已入住显示红色
+      color = 'red'; // 已入住显示红色
+      break;
     case 'reserved':
-      return 'orange'; // 已预订显示橙色
+      color = 'orange'; // 已预订显示橙色
+      break;
     case 'available':
-      return 'green'; // 可入住显示绿色
+      color = 'green'; // 可入住显示绿色
+      break;
     default:
-      return 'grey'; // 默认灰色
+      color = 'grey'; // 默认灰色
   }
+
+  // 添加调试信息（仅显示前几个日期的信息）
+  if (timestamp.endsWith('/01') || timestamp.endsWith('/02')) {
+    console.log(`getEventColor: ${timestamp} -> ${dateStr} -> ${status} -> ${color}`);
+  }
+
+  return color;
 }
 
 /**
@@ -860,11 +986,19 @@ function clearCalendarData() {
  */
 async function onCalendarNavigation(view) {
   console.log('日历导航变化:', view)
-  if (selectedRoom.value && view.year && view.month) {
-    // 重新获取新月份的预订数据
-    const startDate = new Date(view.year, view.month - 1, 1).toISOString()
-    const endDate = new Date(view.year, view.month, 0).toISOString()
-    await fetchRoomBookingData(selectedRoom.value.room_id, startDate, endDate)
+  if (view.year && view.month) {
+    // 更新当前日历视图
+    currentCalendarView.value = {
+      year: view.year,
+      month: view.month
+    }
+
+    // 如果有选中的房间，重新获取新月份的预订数据
+    if (selectedRoom.value) {
+      const startDate = new Date(view.year, view.month - 1, 1).toISOString().substr(0, 10)
+      const endDate = new Date(view.year, view.month, 0).toISOString().substr(0, 10)
+      await fetchRoomBookingData(selectedRoom.value.room_id, startDate, endDate)
+    }
   }
 }
 
@@ -899,11 +1033,13 @@ function onDateSelect(date) {
   // 更新选中日期信息
   selectedDateInfo.value = {
     date: new Date(dateStr).toLocaleDateString('zh-CN'),
-    status,
+    status: status,
     statusText: getStatusText(status),
     color: getEventColor(date), // 使用getEventColor函数获取颜色
     guestName: booking?.guest_name || null
   };
+
+  console.log('选中日期信息:', selectedDateInfo.value); // 添加调试信息
 }
 
 /**
@@ -919,6 +1055,22 @@ function getStatusText(status) {
       return '可入住'
     default:
       return '未知状态'
+  }
+}
+
+/**
+ * 获取状态图标
+ */
+function getStatusIcon(status) {
+  switch (status) {
+    case 'occupied':
+      return 'hotel'
+    case 'reserved':
+      return 'schedule'
+    case 'available':
+      return 'check_circle'
+    default:
+      return 'help'
   }
 }
 
@@ -997,10 +1149,17 @@ async function showRoomCalendar(room) {
   try {
     console.log('点击房间卡片:', room)
     selectedRoom.value = room
+
+    // 初始化日历视图为当前月份
+    const currentDate = new Date()
+    currentCalendarView.value = {
+      year: currentDate.getFullYear(),
+      month: currentDate.getMonth() + 1
+    }
+
     showCalendarDialog.value = true
 
     // 获取当前月份的开始和结束日期
-    const currentDate = new Date()
     const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
     const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
 
@@ -1012,7 +1171,7 @@ async function showRoomCalendar(room) {
     // 获取该房间在当月的预订数据
     await fetchRoomBookingData(room.room_id, startDate, endDate)
 
-    console.log('对话框应该已显示')
+    console.log('日历已显示，所有日期都应该有颜色标识')
 
   } catch (error) {
     console.error('显示房间日历失败:', error)
@@ -1036,87 +1195,63 @@ async function fetchRoomBookingData(roomId, startDate, endDate) {
     const room = selectedRoom.value;
     if (room && room.room_number) {
       const orders = orderStore.orders || [];
+      console.log('所有订单数据:', orders.length, '个订单');
+      console.log('查找房间号:', room.room_number);
+
       const roomOrders = orders.filter(order => {
-        return order.room_number === room.room_number ||
-               order.roomNumber === room.room_number;
+        // orderStore中的字段是roomNumber，不是room_number
+        const matches = order.roomNumber === room.room_number;
+        if (matches) {
+          console.log('找到匹配订单:', order.orderNumber, order.roomNumber, order.status);
+        }
+        return matches;
       });
 
       console.log(`找到房间 ${room.room_number} 的订单:`, roomOrders.length);
 
       // 筛选在指定日期范围内的订单
       const filteredOrders = roomOrders.filter(order => {
-        // 确保订单有有效的日期
-        if (!order.checkInDate && !order.check_in_date) return false;
-        if (!order.checkOutDate && !order.check_out_date) return false;
+        // orderStore中的字段是checkInDate和checkOutDate
+        if (!order.checkInDate || !order.checkOutDate) {
+          console.log('订单缺少日期信息:', order.orderNumber);
+          return false;
+        }
 
-        const checkIn = new Date(order.checkInDate || order.check_in_date);
-        const checkOut = new Date(order.checkOutDate || order.check_out_date);
+        const checkIn = new Date(order.checkInDate);
+        const checkOut = new Date(order.checkOutDate);
         const start = new Date(startDate);
         const end = new Date(endDate);
 
         // 检查订单日期是否与查询范围有重叠
-        return (checkIn >= start && checkIn <= end) ||
-               (checkOut >= start && checkOut <= end) ||
-               (checkIn <= start && checkOut >= end);
+        const hasOverlap = (checkIn >= start && checkIn <= end) ||
+                          (checkOut >= start && checkOut <= end) ||
+                          (checkIn <= start && checkOut >= end);
+
+        if (hasOverlap) {
+          console.log(`订单 ${order.orderNumber} 在日期范围内:`, order.checkInDate, '到', order.checkOutDate);
+        }
+
+        return hasOverlap;
       });
 
       if (filteredOrders.length > 0) {
         roomBookingData.value = filteredOrders.map(order => ({
-          check_in_date: order.checkInDate || order.check_in_date,
-          check_out_date: order.checkOutDate || order.check_out_date,
+          check_in_date: order.checkInDate,
+          check_out_date: order.checkOutDate,
           status: order.status,
-          guest_name: order.guestName || order.guest_name
+          guest_name: order.guestName
         }));
 
         console.log('处理后的预订数据:', roomBookingData.value);
+        return; // 找到真实数据，不需要生成示例数据
+      } else {
+        console.log('没有找到在指定日期范围内的订单');
       }
     }
 
-    // 如果没有找到数据，生成一些示例数据用于测试
+    // 如果没有找到真实的预订数据，保持空数组
     if (roomBookingData.value.length === 0) {
-      console.log('没有找到预订数据，生成示例数据');
-
-      // 获取传入日期的年月
-      const startDateObj = new Date(startDate);
-      const currentYear = startDateObj.getFullYear();
-      const currentMonth = startDateObj.getMonth();
-
-      // 获取当前日期，用于创建接近当前的示例数据
-      const currentDay = new Date().getDate();
-
-      // 生成一些示例预订数据，围绕当前日期创建
-      roomBookingData.value = [
-        // 过去的预订（已退房）
-        {
-          check_in_date: new Date(currentYear, currentMonth, Math.max(1, currentDay - 10)).toISOString(),
-          check_out_date: new Date(currentYear, currentMonth, Math.max(3, currentDay - 7)).toISOString(),
-          status: 'checked_out',
-          guest_name: '张三'
-        },
-        // 当前正在进行的预订（已入住）
-        {
-          check_in_date: new Date(currentYear, currentMonth, Math.max(1, currentDay - 2)).toISOString(),
-          check_out_date: new Date(currentYear, currentMonth, Math.min(28, currentDay + 2)).toISOString(),
-          status: 'checked_in',
-          guest_name: '李四'
-        },
-        // 未来的预订（已确认）
-        {
-          check_in_date: new Date(currentYear, currentMonth, Math.min(28, currentDay + 5)).toISOString(),
-          check_out_date: new Date(currentYear, currentMonth, Math.min(30, currentDay + 7)).toISOString(),
-          status: 'confirmed',
-          guest_name: '王五'
-        },
-        // 本月底的预订（待确认）
-        {
-          check_in_date: new Date(currentYear, currentMonth, Math.min(28, currentDay + 15)).toISOString(),
-          check_out_date: new Date(currentYear, currentMonth, Math.min(30, currentDay + 18)).toISOString(),
-          status: 'pending',
-          guest_name: '赵六'
-        }
-      ];
-
-      console.log('生成的示例数据:', roomBookingData.value);
+      console.log('没有找到该房间的预订数据，房间状态将显示为可用');
     }
 
   } catch (error) {
@@ -1125,15 +1260,6 @@ async function fetchRoomBookingData(roomId, startDate, endDate) {
   }
 }
 
-/**
- * 获取状态的中文文本
- */
-// const getStatusText = viewStore.getStatusText
-
-/**
- * 获取状态的颜色
- */
-// const getStatusColor = viewStore.getStatusColor
 
 /**
  * 获取房型的中文名称
@@ -1173,41 +1299,9 @@ function getRoomTypeIcon(typeCode) {
   return iconMap[typeCode] || 'bed'
 }
 
-/**
- * 获取卡片文字颜色
- * @param {number} index - 卡片索引
- * @returns {string} 颜色值
- */
-function getCardTextColor(index) {
-  const colors = [
-    '#e3f2fd', '#e8f5e8', '#fff3e0', '#fce4ec',
-    '#f3e5f5', '#e0f2f1', '#fff8e1', '#e1f5fe'
-  ]
-  return colors[index % 8]
-}
-
-// /**
-//  * 获取特定状态的房间数量
-//  * @param {string} status - 房间状态
-//  * @returns {number} 该状态的房间数量
-//  */
-// function getStatusCount(status) {
-//   return roomStore.filterRooms({ status }).length
-// }
-
-/**
- * 获取特定房型的空余房间数量
- * @param {string} type - 房间类型
- * @returns {number} 该类型的空余房间数量
- */
-function getAvailableRoomCountByType(type) {
-  return roomStore.getAvailableRoomCountByType(type);
-}
-
 // 预设的房型选项（备用，当数据库数据未加载时使用）
 const roomTypeOptions = [
   { label: '全部房型', value: null },
-  { label: '阿苏晚筑', value: 'asu_wan_zhu' },
   { label: '阿苏晓筑', value: 'asu_xiao_zhu' },
   { label: '行云阁', value: 'xing_yun_ge' },
   { label: '声声慢', value: 'sheng_sheng_man' },
@@ -1275,45 +1369,27 @@ const availableRoomTypeOptions = computed(() => {
   }
 })
 
-/**
- * 检查房型是否被选中
- * @param {string} roomType - 房型代码
- * @returns {boolean} 是否被选中
- */
-function isRoomTypeSelected(roomType) {
-  // 检查URL参数中的type或组件状态中的filterType
-  const urlType = route.query.type
-  return urlType === roomType || filterType.value === roomType
-}
+//   console.log('设置房型筛选:', type)
 
-/**
- * 设置房型筛选
- * 实现筛选切换功能：如果当前已经是选中房型，则清除筛选；否则应用新筛选
- * 同时更新URL参数，保持URL状态与组件状态同步
- * @param {string} type - 房间类型代码
- */
-function setTypeFilter(type) {
-  console.log('设置房型筛选:', type)
-
-  // 如果当前已经是这个房型筛选，则清除筛选（切换行为）
-  if (filterType.value === type) {
-    // 清除组件状态
-    filterType.value = null
-    // 更新URL，移除type参数
-    router.replace({
-      path: route.path,
-      query: { ...route.query, type: undefined }  // 保留其他查询参数
-    })
-  } else {
-    // 否则设置为新的房型筛选
-    filterType.value = type
-    // 更新URL，添加type参数
-    router.replace({
-      path: route.path,
-      query: { ...route.query, type: type }  // 保留其他查询参数，添加或更新type
-    })
-  }
-}
+//   // 如果当前已经是这个房型筛选，则清除筛选（切换行为）
+//   if (filterType.value === type) {
+//     // 清除组件状态
+//     filterType.value = null
+//     // 更新URL，移除type参数
+//     router.replace({
+//       path: route.path,
+//       query: { ...route.query, type: undefined }  // 保留其他查询参数
+//     })
+//   } else {
+//     // 否则设置为新的房型筛选
+//     filterType.value = type
+//     // 更新URL，添加type参数
+//     router.replace({
+//       path: route.path,
+//       query: { ...route.query, type: type }  // 保留其他查询参数，添加或更新type
+//     })
+//   }
+// }
 
 // 总可用房间数
 const totalAvailableRooms = computed(() => {
@@ -1349,7 +1425,16 @@ function getRoomDateStatus(dateInput) {
 
   // 检查是否有预订数据
   if (!roomBookingData.value || roomBookingData.value.length === 0) {
+    // 添加调试信息（仅显示前几个日期的信息）
+    if (dateStr.endsWith('-01') || dateStr.endsWith('-02')) {
+      console.log(`getRoomDateStatus: ${dateStr} -> 无预订数据 -> available`);
+    }
     return 'available';
+  }
+
+  // 添加调试信息
+  if (dateStr.endsWith('-01')) {
+    console.log(`getRoomDateStatus: ${dateStr} -> 预订数据数量: ${roomBookingData.value.length}`);
   }
 
   // 检查日期是否在任何预订范围内
@@ -1361,20 +1446,46 @@ function getRoomDateStatus(dateInput) {
     const checkIn = new Date(booking.check_in_date).toISOString().substr(0, 10);
     const checkOut = new Date(booking.check_out_date).toISOString().substr(0, 10);
 
-    // 检查日期是否在入住和退房日期之间（包括边界）
-    if (dateStr >= checkIn && dateStr <= checkOut) {
-      // 根据订单状态返回对应的房间状态
-      if (booking.status === 'checked_in' || booking.status === 'checked-in' || booking.status === 'checked_out' || booking.status === 'checked-out') {
+    // 检查日期是否在入住期间（不包含退房日期）
+    if (dateStr >= checkIn && dateStr < checkOut) {
+      // 如果是已取消的订单，整个期间都显示为可用
+      if (booking.status === 'cancelled') {
+        if (dateStr.endsWith('-01') || dateStr.endsWith('-02')) {
+          console.log(`getRoomDateStatus: ${dateStr} -> 订单已取消 -> available`);
+        }
+        return 'available'; // 已取消，房间可用
+      }
+
+      // 正常的入住期间状态判断
+      if (booking.status === 'checked-in') {
+        if (dateStr.endsWith('-01') || dateStr.endsWith('-02')) {
+          console.log(`getRoomDateStatus: ${dateStr} -> 入住期间 (${checkIn} 到 ${checkOut}前) -> 状态: ${booking.status} -> occupied`);
+        }
         return 'occupied'; // 已入住
-      } else if (booking.status === 'confirmed' || booking.status === 'pending') {
-        return 'reserved'; // 已预订
+      } else if (booking.status === 'pending') {
+        if (dateStr.endsWith('-01') || dateStr.endsWith('-02')) {
+          console.log(`getRoomDateStatus: ${dateStr} -> 预订期间 (${checkIn} 到 ${checkOut}前) -> 状态: ${booking.status} -> reserved`);
+        }
+        return 'reserved'; // 待入住（已预订）
+      } else if (booking.status === 'checked-out') {
+        // 入住期间但已退房，这些日期曾经被占用
+        if (dateStr.endsWith('-01') || dateStr.endsWith('-02')) {
+          console.log(`getRoomDateStatus: ${dateStr} -> 入住期间但已退房 (${checkIn} 到 ${checkOut}前) -> occupied`);
+        }
+        return 'occupied'; // 入住期间（虽然已退房，但这些日期曾经被占用）
       } else {
-        return 'occupied'; // 默认视为已入住
+        if (dateStr.endsWith('-01') || dateStr.endsWith('-02')) {
+          console.log(`getRoomDateStatus: ${dateStr} -> 未知状态 (${checkIn} 到 ${checkOut}前) -> 状态: ${booking.status} -> reserved`);
+        }
+        return 'reserved'; // 未知状态默认为预订
       }
     }
   }
 
   // 如果不在任何预订范围内，则房间在这一天是可用的
+  if (dateStr.endsWith('-01') || dateStr.endsWith('-02')) {
+    console.log(`getRoomDateStatus: ${dateStr} -> 不在任何预订范围内 -> available`);
+  }
   return 'available';
 }
 
@@ -1463,6 +1574,50 @@ async function bookRoom(roomId) {
     $q.notify({
       type: 'negative',
       message: '预订房间失败',
+      position: 'top'
+    })
+  }
+}
+
+// 办理入住
+async function checkInRoom(room) {
+  try {
+    console.log('办理入住:', room)
+
+    // 获取房间对应的订单信息
+    const orderNumber = room.order_id || room.orderId
+    if (!orderNumber) {
+      $q.notify({
+        type: 'warning',
+        message: '未找到订单信息，无法办理入住',
+        position: 'top'
+      })
+      return
+    }
+
+    // 更新订单状态为已入住
+    const updatedOrder = await orderStore.updateOrderStatusViaApi(orderNumber, 'checked-in')
+
+    if (updatedOrder) {
+      $q.notify({
+        type: 'positive',
+        message: `${room.room_number} 房间入住办理成功`,
+        position: 'top'
+      })
+      // 刷新房间数据
+      await loadRoomDataForDate(selectedDate.value)
+    } else {
+      $q.notify({
+        type: 'negative',
+        message: '办理入住失败',
+        position: 'top'
+      })
+    }
+  } catch (error) {
+    console.error('办理入住失败:', error)
+    $q.notify({
+      type: 'negative',
+      message: '办理入住失败',
       position: 'top'
     })
   }
@@ -1625,6 +1780,18 @@ async function clearCleaning(roomId) {
   /* max-width: 1400px; */
   max-width: 100;
   margin: 0 auto;
+}
+
+/* 房间卡片样式 */
+.room-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 250px;
+}
+
+.room-card .room-info {
+  flex: 1;
 }
 
 /* 房间卡片点击效果 */
@@ -1925,5 +2092,470 @@ async function clearCleaning(roomId) {
   font-weight: bold;
   margin-top: 4px;
   font-size: 1.8rem;
+}
+
+/* ==================== 月度入住状态日历对话框样式 ==================== */
+
+/* 日历对话框卡片 */
+.calendar-dialog-card {
+  min-width: 600px;
+  max-width: 700px;
+  max-height: 90vh;
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 日历标题区域 */
+.calendar-header {
+  background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
+  color: white;
+  padding: 16px 24px;
+  position: relative;
+}
+
+.calendar-header-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.calendar-title-section {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.calendar-title-icon {
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  padding: 8px;
+}
+
+.calendar-title-text .text-h5 {
+  margin: 0;
+  line-height: 1.2;
+}
+
+.calendar-subtitle {
+  opacity: 0.9;
+  margin: 0;
+}
+
+.calendar-close-btn {
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+}
+
+.calendar-close-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.1);
+}
+
+/* 日历内容区域 */
+.calendar-content {
+  padding: 20px;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* 房间信息与导航合并卡片 */
+.room-info-navigation-card {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid #dee2e6;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.room-info-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.navigation-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.room-info-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.room-info-icon {
+  color: #1976d2;
+  background: rgba(25, 118, 210, 0.1);
+  border-radius: 50%;
+  padding: 8px;
+}
+
+.room-info-text .text-subtitle1 {
+  margin: 0;
+  color: #1976d2;
+}
+
+.room-info-text .text-body2 {
+  margin: 0;
+}
+
+
+
+/* 导航按钮样式 */
+.current-month-year {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1976d2;
+  text-align: center;
+  min-width: 80px;
+}
+
+.nav-btn {
+  color: #1976d2;
+  background: rgba(25, 118, 210, 0.1);
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  transition: all 0.3s ease;
+}
+
+.nav-btn:hover {
+  background: rgba(25, 118, 210, 0.2);
+  transform: scale(1.1);
+}
+
+.nav-btn .q-icon {
+  color: #1976d2;
+  font-size: 16px;
+}
+
+/* 日历容器 */
+.calendar-container {
+  background: white;
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e9ecef;
+  margin-bottom: 12px;
+}
+
+/* 美化的日历样式 */
+.beautiful-calendar {
+  width: 100%;
+  border-radius: 8px;
+}
+
+.beautiful-calendar :deep(.q-date__header) {
+  display: none !important;
+}
+
+.beautiful-calendar :deep(.q-date__navigation) {
+  color: white;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 8px 16px !important;
+  min-height: 48px !important;
+}
+
+.beautiful-calendar :deep(.q-date__navigation .q-btn) {
+  color: white;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  transition: all 0.3s ease;
+}
+
+.beautiful-calendar :deep(.q-date__navigation .q-btn:hover) {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
+}
+
+/* 确保左右箭头按钮可见 */
+.beautiful-calendar :deep(.q-date__arrow) {
+  color: white !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-radius: 50% !important;
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  transition: all 0.3s ease !important;
+}
+
+.beautiful-calendar :deep(.q-date__arrow:hover) {
+  background: rgba(255, 255, 255, 0.2) !important;
+  transform: scale(1.1) !important;
+}
+
+.beautiful-calendar :deep(.q-date__arrow .q-icon) {
+  color: white !important;
+  font-size: 18px !important;
+}
+
+/* 通用的导航按钮样式 */
+.beautiful-calendar :deep(.q-btn[aria-label*="Previous"]),
+.beautiful-calendar :deep(.q-btn[aria-label*="Next"]) {
+  color: white !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-radius: 50% !important;
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  transition: all 0.3s ease !important;
+}
+
+.beautiful-calendar :deep(.q-btn[aria-label*="Previous"]:hover),
+.beautiful-calendar :deep(.q-btn[aria-label*="Next"]:hover) {
+  background: rgba(255, 255, 255, 0.2) !important;
+  transform: scale(1.1) !important;
+}
+
+/* 确保所有导航相关的按钮都可见 */
+.beautiful-calendar :deep(.q-date__header .q-btn) {
+  color: white !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-radius: 6px !important;
+  transition: all 0.3s ease !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.beautiful-calendar :deep(.q-date__header .q-btn:hover) {
+  background: rgba(255, 255, 255, 0.2) !important;
+  transform: scale(1.05) !important;
+}
+
+/* 强制显示所有可能的导航按钮 */
+.beautiful-calendar :deep(.q-btn) {
+  display: inline-flex !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+/* 特别针对箭头图标 */
+.beautiful-calendar :deep(.q-icon) {
+  color: inherit !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+/* 确保导航区域有足够的空间 */
+.beautiful-calendar :deep(.q-date__header-subtitle) {
+  flex: 1 !important;
+  text-align: center !important;
+}
+
+/* 强制显示前后导航按钮 */
+.beautiful-calendar :deep([role="button"]) {
+  display: inline-flex !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.beautiful-calendar :deep(.q-date__header-link) {
+  color: white;
+  text-decoration: none;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all 0.3s ease;
+}
+
+.beautiful-calendar :deep(.q-date__header-link:hover) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* 确保月份年份选择器可见 */
+.beautiful-calendar :deep(.q-date__header-subtitle) {
+  color: white;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all 0.3s ease;
+}
+
+.beautiful-calendar :deep(.q-date__header-subtitle:hover) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* 月份年份选择视图样式 */
+.beautiful-calendar :deep(.q-date__months) {
+  background: white;
+}
+
+.beautiful-calendar :deep(.q-date__years) {
+  background: white;
+}
+
+/* 月份年份选择项样式 */
+.beautiful-calendar :deep(.q-date__months .q-btn) {
+  color: #1976d2;
+  border-radius: 6px;
+  margin: 2px;
+  transition: all 0.3s ease;
+}
+
+.beautiful-calendar :deep(.q-date__months .q-btn:hover) {
+  background: rgba(25, 118, 210, 0.1);
+  transform: scale(1.05);
+}
+
+.beautiful-calendar :deep(.q-date__years .q-btn) {
+  color: #1976d2;
+  border-radius: 6px;
+  margin: 2px;
+  transition: all 0.3s ease;
+}
+
+.beautiful-calendar :deep(.q-date__years .q-btn:hover) {
+  background: rgba(25, 118, 210, 0.1);
+  transform: scale(1.05);
+}
+
+.beautiful-calendar :deep(.q-date__view) {
+  padding: 16px;
+}
+
+.beautiful-calendar :deep(.q-btn--flat) {
+  border-radius: 6px;
+}
+
+.beautiful-calendar :deep(.q-date__calendar-item--in) {
+  border-radius: 6px;
+  transition: all 0.3s ease;
+}
+
+.beautiful-calendar :deep(.q-date__calendar-item--in:hover) {
+  transform: scale(1.1);
+}
+
+/* 选中日期详情 */
+.selected-date-info {
+  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid #90caf9;
+  animation: fadeInUp 0.3s ease;
+  margin-top: 12px;
+  margin-bottom: 12px;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.selected-date-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.selected-date-icon {
+  color: #1976d2;
+  background: rgba(25, 118, 210, 0.1);
+  border-radius: 50%;
+  padding: 8px;
+}
+
+.selected-date-title .text-subtitle1 {
+  margin: 0;
+  color: #1976d2;
+}
+
+.selected-date-title .text-body2 {
+  margin: 0;
+}
+
+.selected-date-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.status-info,
+.guest-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-label,
+.guest-label {
+  font-weight: 500;
+  color: #495057;
+  min-width: 50px;
+}
+
+.status-chip-detailed {
+  font-weight: 500;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.guest-name {
+  font-weight: 500;
+  color: #1976d2;
+  background: rgba(25, 118, 210, 0.1);
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .calendar-dialog-card {
+    min-width: 90vw;
+    max-width: 95vw;
+    max-height: 95vh;
+    margin: 10px;
+  }
+
+  .calendar-content {
+    padding: 12px;
+  }
+
+  .selected-date-content {
+    gap: 8px;
+  }
+
+  .status-info,
+  .guest-info {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .selected-date-info {
+    padding: 12px;
+    margin-top: 8px;
+    margin-bottom: 8px;
+  }
+
+  .room-info-navigation-card {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+
+  .navigation-section {
+    justify-content: center;
+  }
 }
 </style>
