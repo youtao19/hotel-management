@@ -88,7 +88,7 @@
               <!-- 日期范围选择器，占满整行 -->
               <div class="col-12">
                 <q-date v-model="dateRange" range filled emit-value landscape today-btn color="primary"
-                  :options="dateOptions" @update:model-value="onDateRangeChange">
+                  :options="dateOptions" @update:model-value="onDateRangeChange" :locale="langZhCn.date">
                   <!-- 底部确认按钮 -->
                   <div class="row items-center justify-end q-pr-sm q-pb-sm">
                     <q-btn label="确定" color="primary" flat v-close-popup />
@@ -104,7 +104,7 @@
                     <q-icon name="event" class="cursor-pointer">
                       <q-popup-proxy ref="qDateCheckInProxy" cover transition-show="scale" transition-hide="scale">
                         <q-date v-model="orderData.checkInDate" @update:model-value="onCheckInDateChange"
-                          :options="date => date >= today">
+                          :options="date => date >= today" :locale="langZhCn.date">
                           <!-- 底部确认按钮 -->
                           <div class="row items-center justify-end">
                             <q-btn label="确定" color="primary" flat v-close-popup />
@@ -126,7 +126,7 @@
                     <q-icon name="event" class="cursor-pointer">
                       <q-popup-proxy ref="qDateCheckOutProxy" cover transition-show="scale" transition-hide="scale">
                         <q-date v-model="orderData.checkOutDate" :options="date => date >= orderData.checkInDate"
-                          @update:model-value="onCheckOutDateChange">
+                          @update:model-value="onCheckOutDateChange" :locale="langZhCn.date">
                           <!-- 底部确认按钮 -->
                           <div class="row items-center justify-end">
                             <q-btn label="确定" color="primary" flat v-close-popup />
@@ -281,6 +281,7 @@ import { useRouter } from 'vue-router'
 import { useOrderStore } from '../stores/orderStore' // 导入订单 store
 import { useRoomStore } from '../stores/roomStore' // 导入房间 store
 import { useViewStore } from '../stores/viewStore' // 导入视图 store
+import langZhCn from 'quasar/lang/zh-CN' // 导入中文语言包
 
 // 获取路由和store
 const router = useRouter()

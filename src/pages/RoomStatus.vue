@@ -32,6 +32,7 @@
                         default-view="Calendar"
                         today-btn
                         @update:model-value="onDateChange"
+                        :locale="langZhCn.date"
                       >
                         <div class="row items-center justify-end q-pa-sm">
                           <q-btn v-close-popup label="确定" color="primary" flat/>
@@ -473,6 +474,7 @@
               navigation-max-year-month="2030/12"
               :options="dateOptions"
               emit-immediately
+              :locale="langZhCn.date"
             />
           </div>
 
@@ -522,6 +524,7 @@ import { useRoomStore } from '../stores/roomStore'
 import { useViewStore } from '../stores/viewStore'
 import { useOrderStore } from '../stores/orderStore'
 import { useQuasar } from 'quasar'
+import langZhCn from 'quasar/lang/zh-CN' // 导入中文语言包
 
 // 获取房间store和视图store
 const roomStore = useRoomStore()

@@ -227,6 +227,7 @@
                       <q-date
                         v-model="receiptSelectedDate"
                         @update:model-value="onReceiptDateChange"
+                        :locale="langZhCn.date"
                       >
                         <div class="row items-center justify-end">
                           <q-btn v-close-popup label="确定" color="primary" flat />
@@ -423,6 +424,7 @@ import { revenueApi, shiftHandoverApi } from '../api/index'
 import api from '../api/index'
 import Chart from 'chart.js/auto'
 import { useViewStore } from '../stores/viewStore'
+import langZhCn from 'quasar/lang/zh-CN' // 导入中文语言包
 
 const $q = useQuasar()
 const viewStore = useViewStore()
