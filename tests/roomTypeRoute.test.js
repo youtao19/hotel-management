@@ -26,8 +26,10 @@ describe('Room Type Routes Tests', () => {
   });
 
   beforeEach(async () => {
-    // 清理测试数据
-    await query('DELETE FROM rooms WHERE type_code LIKE \'TEST%\'');
+    // 清理测试数据 - 按外键依赖顺序删除
+    await query('DELETE FROM bills WHERE order_id LIKE \'TEST%\'');
+    await query('DELETE FROM orders WHERE order_id LIKE \'TEST%\' OR room_number LIKE \'TEST%\' OR room_type LIKE \'TEST%\'');
+    await query('DELETE FROM rooms WHERE type_code LIKE \'TEST%\' OR room_number LIKE \'TEST%\'');
     await query('DELETE FROM room_types WHERE type_code LIKE \'TEST%\'');
 
     // 等待一小段时间确保数据库操作完成
@@ -35,8 +37,10 @@ describe('Room Type Routes Tests', () => {
   });
 
   afterAll(async () => {
-    // 清理测试数据
-    await query('DELETE FROM rooms WHERE type_code LIKE \'TEST%\'');
+    // 清理测试数据 - 按外键依赖顺序删除
+    await query('DELETE FROM bills WHERE order_id LIKE \'TEST%\'');
+    await query('DELETE FROM orders WHERE order_id LIKE \'TEST%\' OR room_number LIKE \'TEST%\' OR room_type LIKE \'TEST%\'');
+    await query('DELETE FROM rooms WHERE type_code LIKE \'TEST%\' OR room_number LIKE \'TEST%\'');
     await query('DELETE FROM room_types WHERE type_code LIKE \'TEST%\'');
     await closePool();
   });
@@ -107,7 +111,9 @@ describe('Room Type Routes Tests', () => {
     });
 
     it('当数据库为空时应该返回空数组', async () => {
-      // 先删除所有房间，再删除房型（避免外键约束）
+      // 先删除所有相关数据，按外键依赖顺序删除
+      await query('DELETE FROM bills');
+      await query('DELETE FROM orders');
       await query('DELETE FROM rooms');
       await query('DELETE FROM room_types');
 
