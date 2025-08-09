@@ -140,6 +140,8 @@
       @refund-deposit="handleRefundDeposit"
     />
 
+
+
     </div>
   </q-page>
 </template>
@@ -151,11 +153,13 @@ import { useOrderStore } from '../stores/orderStore' // 导入订单 store
 import { useRoomStore } from '../stores/roomStore' // 导入房间 store
 import { useViewStore } from '../stores/viewStore' // 导入视图 store
 import { useBillStore } from '../stores/billStore' // 导入账单 store
+import { roomApi } from '../api/index.js' // 导入房间API
 import OrderDetailsDialog from 'src/components/OrderDetailsDialog.vue';
 import ChangeRoomDialog from 'src/components/ChangeRoomDialog.vue';
 import Bill from 'src/components/Bill.vue';
 import ExtendStayDialog from 'src/components/ExtendStayDialog.vue';
 import RefundDepositDialog from 'src/components/RefundDepositDialog.vue';
+
 
 // 初始化 stores
 const orderStore = useOrderStore()
@@ -291,7 +295,6 @@ async function fetchAllOrders() {
 const showOrderDetails = ref(false)
 const currentOrder = ref(null)
 const showChangeRoomDialog = ref(false)
-const newRoomNumber = ref(null)
 
 // 在 script 部分添加相关变量和方法
 const availableRoomOptions = ref([]); // 用于存储从API获取的可用房间选项
@@ -371,11 +374,23 @@ async function checkoutOrder(order) {
     return;
   }
 
-  // 确认办理退房
-  if (!confirm(`确定要为订单 ${order.orderNumber} (房间: ${order.roomNumber}) 办理退房吗？`)) {
-    return;
-  }
+  // 使用 Quasar Dialog 显示确认对话框
+  $q.dialog({
+    title: '确认办理退房',
+    message: `确定要为订单 ${order.orderNumber} (客人: ${order.guestName}, 房间: ${order.roomNumber}) 办理退房吗？\n\n办理退房后房间将设置为清扫中状态。`,
+    cancel: true,
+    persistent: true
+  }).onOk(async () => {
+    // 用户点击确定，执行退房操作
+    await performCheckOut(order);
+  }).onCancel(() => {
+    // 用户点击取消，什么也不做
+    console.log('用户取消了退房操作');
+  });
+}
 
+// 执行退房操作
+async function performCheckOut(order) {
   loadingOrders.value = true;
   try {
     console.log('办理退房:', order.orderNumber, '房间:', order.roomNumber);
@@ -476,10 +491,23 @@ async function checkInOrder(order) {
     return;
   }
 
-  // 确认办理入住
-  if (!confirm(`确定要为订单 ${order.orderNumber} (房间: ${order.roomNumber}) 办理入住吗？`)) {
-    return;
-  }
+  // 使用 Quasar Dialog 显示确认对话框
+  $q.dialog({
+    title: '确认办理入住',
+    message: `确定要为订单 ${order.orderNumber} (客人: ${order.guestName}, 房间: ${order.roomNumber}) 办理入住吗？\n\n办理入住后将自动创建账单。`,
+    cancel: true,
+    persistent: true
+  }).onOk(async () => {
+    // 用户点击确定，执行入住操作
+    await performCheckIn(order);
+  }).onCancel(() => {
+    // 用户点击取消，什么也不做
+    console.log('用户取消了入住操作');
+  });
+}
+
+// 执行入住操作
+async function performCheckIn(order) {
 
   loadingOrders.value = true;
   try {
@@ -548,27 +576,42 @@ function checkInOrderFromDetails() {
 
 
 // 更改房间
-async function changeRoom() {
-  if (!currentOrder.value || !newRoomNumber.value) {
+async function changeRoom(newRoomNumber) {
+  if (!currentOrder.value || !newRoomNumber) {
+    console.error('缺少必要的参数：currentOrder 或 newRoomNumber');
+    $q.notify({
+      type: 'negative',
+      message: '参数错误，无法更换房间',
+      position: 'top'
+    });
     return;
   }
 
   try {
-    // 调用API更换房间
-    const response = await api.post('/api/rooms/change-room', {
+
+    const requestData = {
       orderNumber: currentOrder.value.orderNumber,
       oldRoomNumber: currentOrder.value.roomNumber,
-      newRoomNumber: newRoomNumber.value
-    });
+      newRoomNumber: newRoomNumber
+    };
 
-    if (response.data.success) {
+    console.log('准备更换房间:', requestData);
+
+    // 调用API更换房间
+    const response = await roomApi.changePendingRoom(requestData);
+
+    console.log('更换房间API响应:', response);
+
+    if (response.success) {
       // 更新当前订单信息
-      currentOrder.value.roomNumber = newRoomNumber.value;
-      currentOrder.value.roomType = response.data.newRoom.type_code;
-      currentOrder.value.roomPrice = response.data.newRoom.price;
+      currentOrder.value.roomNumber = newRoomNumber;
+      if (response.newRoom) {
+        currentOrder.value.roomType = response.newRoom.type_code;
+        currentOrder.value.roomPrice = response.newRoom.price;
+      }
 
       // 刷新房间状态
-      await roomStore.refreshData();
+      await roomStore.fetchAllRooms();
 
       // 刷新订单列表
       await fetchAllOrders();
@@ -582,14 +625,38 @@ async function changeRoom() {
 
       // 关闭对话框
       showChangeRoomDialog.value = false;
-      newRoomNumber.value = null;
+    } else {
+      console.error('API返回成功状态为false:', response);
+      $q.notify({
+        type: 'negative',
+        message: response.message || '更换房间失败',
+        position: 'top'
+      });
     }
   } catch (error) {
     console.error('更换房间失败:', error);
+    console.error('错误响应:', error.response);
+
+    let errorMessage = '更换房间失败';
+
+    if (error.response?.data) {
+      // 显示后端返回的具体错误信息
+      errorMessage = error.response.data.message || '更换房间失败';
+      console.error('后端错误详情:', error.response.data);
+
+      // 如果有参数验证失败的详细信息，也显示出来
+      if (error.response.data.received) {
+        console.error('后端接收到的参数:', error.response.data.received);
+      }
+    } else {
+      errorMessage = error.message || '更换房间失败';
+    }
+
     $q.notify({
       type: 'negative',
-      message: error.response?.data?.message || '更换房间失败',
-      position: 'top'
+      message: errorMessage,
+      position: 'top',
+      multiLine: true
     });
   }
 }

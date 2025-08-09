@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const roomModule = require('../modules/roomModule');
+const { authenticationMiddleware } = require('../modules/authentication');
 
 const VALID_ROOM_STATES = ['available', 'occupied', 'cleaning', 'repair', 'reserved'];
 
@@ -299,6 +300,50 @@ router.delete('/:id', async (req, res) => {
   } catch (err) {
     console.error('删除房间错误:', err);
     res.status(500).json({ message: '服务器错误', error: err.message });
+  }
+});
+
+// 测试路由
+router.post('/test-change-room', async (req, res) => {
+  console.log('=== 测试更换房间路由 ===');
+  console.log('请求到达了路由处理器');
+  res.json({ message: '路由正常工作', timestamp: new Date().toISOString() });
+});
+
+// 更换房间
+router.post('/change-room', async (req, res) => {
+  try {
+    console.log('=== 更换房间API请求 ===');
+    console.log('请求体:', JSON.stringify(req.body, null, 2));
+    console.log('Content-Type:', req.get('Content-Type'));
+
+    const { orderNumber, oldRoomNumber, newRoomNumber } = req.body;
+
+    // 验证必要参数
+    if (!orderNumber || !oldRoomNumber || !newRoomNumber) {
+      console.log('参数验证失败:', { orderNumber, oldRoomNumber, newRoomNumber });
+      return res.status(400).json({
+        success: false,
+        message: '缺少必要参数：订单号、原房间号或新房间号',
+        received: { orderNumber, oldRoomNumber, newRoomNumber }
+      });
+    }
+
+    console.log('更换房间请求参数:', { orderNumber, oldRoomNumber, newRoomNumber });
+
+    // 调用房间模块的更换房间功能
+    const result = await roomModule.changeOrderRoom(orderNumber, oldRoomNumber, newRoomNumber);
+
+    console.log('更换房间成功:', result);
+    res.json(result);
+  } catch (error) {
+    console.error('更换房间失败:', error);
+    console.error('错误堆栈:', error.stack);
+    res.status(400).json({
+      success: false,
+      message: error.message || '更换房间失败',
+      error: process.env.NODE_ENV === 'dev' ? error.stack : undefined
+    });
   }
 });
 

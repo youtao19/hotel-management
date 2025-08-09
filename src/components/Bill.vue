@@ -33,7 +33,18 @@
             </tr>
             <tr>
               <td class="bill-label">支付方式</td>
-              <td class="bill-value">{{ getPaymentMethodText(currentOrder.paymentMethod) }}</td>
+              <td>
+                <q-select
+                  v-model="selectedPaymentMethod"
+                  :options="paymentMethodOptions"
+                  dense
+                  outlined
+                  emit-value
+                  map-options
+                  class="bill-input"
+                  style="max-width: 150px;"
+                />
+              </td>
             </tr>
             <tr>
               <td class="bill-label bill-total-label">总金额</td>
@@ -68,6 +79,12 @@ const billStore = useBillStore()
 const viewStore = useViewStore()
 const $q = useQuasar()
 
+// 从 pinia store 获取支付方式选项
+const paymentMethodOptions = viewStore.paymentMethodOptions
+
+// 支付方式选择
+const selectedPaymentMethod = ref(props.currentOrder?.paymentMethod || 'cash')
+
 const billData = ref({
   order_id: props.currentOrder?.orderNumber || '', // orderNumber 对应数据库的 order_id
   room_number: props.currentOrder?.roomNumber || '',
@@ -76,14 +93,9 @@ const billData = ref({
   refund_deposit: 'no', // 固定为不退押金，因为已经收取了房费+押金
   room_fee: props.currentOrder?.roomPrice || 0,
   total_income: 0,
-  pay_way: { value: props.currentOrder?.paymentMethod || '' }, // 后端期望的格式
+  pay_way: { value: selectedPaymentMethod.value }, // 后端期望的格式
   remarks: props.currentOrder?.remarks || ''
 })
-
-// 获取支付方式显示文本
-function getPaymentMethodText(paymentMethod) {
-  return viewStore.getPaymentMethodName(paymentMethod)
-}
 
 async function createBill() {
   try {
@@ -99,7 +111,7 @@ async function createBill() {
     if (!props.currentOrder?.guestName) {
       throw new Error('客人姓名不能为空')
     }
-    if (!props.currentOrder?.paymentMethod) {
+    if (!selectedPaymentMethod.value) {
       throw new Error('支付方式不能为空')
     }
 
@@ -117,7 +129,7 @@ async function createBill() {
       refund_deposit: 'no', // 固定为不退押金
       room_fee: roomFee, // 使用输入框中的房费值
       total_income: calculatedTotalAmount,
-      pay_way: { value: props.currentOrder.paymentMethod }, // 后端期望的格式
+      pay_way: { value: selectedPaymentMethod.value }, // 后端期望的格式
       remarks: billData.value.remarks || ''
     }
 
@@ -176,10 +188,19 @@ watch(
       billData.value.deposit = order.deposit || 0
       billData.value.room_fee = order.roomPrice || 0
       billData.value.refund_deposit = 'no' // 固定为不退押金
-      billData.value.pay_way = { value: order.paymentMethod || '' } // 后端期望的格式
+      selectedPaymentMethod.value = order.paymentMethod || 'cash' // 更新支付方式选择
+      billData.value.pay_way = { value: selectedPaymentMethod.value } // 后端期望的格式
     }
   },
   { immediate: true }
+)
+
+// 监听支付方式选择的变化
+watch(
+  () => selectedPaymentMethod.value,
+  (newPaymentMethod) => {
+    billData.value.pay_way = { value: newPaymentMethod }
+  }
 )
 
 // 计算总金额（房费 + 押金）

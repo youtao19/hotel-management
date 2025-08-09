@@ -35,7 +35,7 @@ async function getAllRooms(queryDate = null) {
         FROM orders o
         WHERE o.check_in_date <= $1::date
           AND o.check_out_date > $1::date
-          AND o.status IN ('pending', 'checked-in', 'checked-out')
+          AND o.status IN ('pending', 'checked-in')
         ORDER BY o.room_number, o.create_time DESC
       `;
       queryParams = [queryDate];
@@ -314,6 +314,132 @@ async function getAvailableRooms(startDate, endDate, typeCode = null) {
   }
 }
 
+/**
+ * 更换房间（待入住和已入住订单均可）
+ * @param {string} orderNumber - 订单号
+ * @param {string} oldRoomNumber - 原房间号
+ * @param {string} newRoomNumber - 新房间号
+ * @returns {Promise<Object>} 更新结果
+ */
+async function changeOrderRoom(orderNumber, oldRoomNumber, newRoomNumber) {
+  console.log(`更换房间请求: 订单 ${orderNumber} 从房间 ${oldRoomNumber} 换到 ${newRoomNumber}`);
+
+  try {
+        // 1. 验证订单状态（待入住和已入住的订单可以更换房间）
+    const orderCheckResult = await query(
+      'SELECT * FROM orders WHERE order_id = $1 AND status IN ($2, $3)',
+      [orderNumber, 'pending', 'checked-in']
+    );
+
+    if (orderCheckResult.rows.length === 0) {
+      throw new Error('订单不存在或状态不允许更换房间（只有待入住和已入住订单可以更换房间）');
+    }
+
+    const order = orderCheckResult.rows[0];
+
+    // 2. 验证新房间是否存在且可用
+    const newRoomResult = await query(
+      'SELECT * FROM rooms WHERE room_number = $1',
+      [newRoomNumber]
+    );
+
+    if (newRoomResult.rows.length === 0) {
+      throw new Error('新房间不存在');
+    }
+
+    const newRoom = newRoomResult.rows[0];
+
+    if (newRoom.is_closed) {
+      throw new Error('新房间已关闭，无法使用');
+    }
+
+    if (newRoom.status === 'repair') {
+      throw new Error('新房间正在维修，无法使用');
+    }
+
+    // 对于已入住的订单，新房间必须是可用状态
+    if (order.status === 'checked-in' && newRoom.status !== 'available') {
+      throw new Error(`新房间当前状态为"${newRoom.status}"，已入住订单只能换到可用房间`);
+    }
+
+        // 3. 检查新房间在订单日期期间是否有冲突
+    const conflictCheckResult = await query(`
+      SELECT COUNT(*) as count
+      FROM orders
+      WHERE room_number = $1
+        AND status IN ('pending', 'checked-in')
+        AND order_id != $2
+        AND check_in_date < $4::date
+        AND check_out_date > $3::date
+    `, [newRoomNumber, orderNumber, order.check_in_date, order.check_out_date]);
+
+    if (parseInt(conflictCheckResult.rows[0].count) > 0) {
+      throw new Error('新房间在指定日期期间已被预订');
+    }
+
+    // 4. 开始事务更新
+    await query('BEGIN');
+
+    try {
+            // 更新订单的房间信息
+      const updateOrderResult = await query(`
+        UPDATE orders
+        SET room_number = $1, room_type = $2, room_price = $3
+        WHERE order_id = $4
+        RETURNING *
+      `, [newRoomNumber, newRoom.type_code, newRoom.price, orderNumber]);
+
+      if (updateOrderResult.rows.length === 0) {
+        throw new Error('更新订单失败');
+      }
+
+            const updatedOrder = updateOrderResult.rows[0];
+
+      // 如果是已入住订单，需要更新房间状态
+      if (order.status === 'checked-in') {
+        console.log('更新房间状态：已入住订单更换房间');
+
+        // 将原房间状态改为清洁中
+        await query(
+          'UPDATE rooms SET status = $1 WHERE room_number = $2',
+          ['cleaning', oldRoomNumber]
+        );
+
+        // 将新房间状态改为占用
+        await query(
+          'UPDATE rooms SET status = $1 WHERE room_number = $2',
+          ['occupied', newRoomNumber]
+        );
+
+        console.log(`房间状态已更新: ${oldRoomNumber} -> 清洁中, ${newRoomNumber} -> 占用`);
+      }
+
+      await query('COMMIT');
+
+      console.log(`房间更换成功: 订单 ${orderNumber} 已从 ${oldRoomNumber} 换到 ${newRoomNumber}`);
+
+      return {
+        success: true,
+        message: '房间更换成功',
+        updatedOrder,
+        newRoom: {
+          room_number: newRoom.room_number,
+          type_code: newRoom.type_code,
+          price: newRoom.price
+        }
+      };
+
+    } catch (error) {
+      await query('ROLLBACK');
+      throw error;
+    }
+
+  } catch (error) {
+    console.error('更换房间失败:', error);
+    throw error;
+  }
+}
+
 // 导出表定义和功能函数
 module.exports = {
   getAllRooms,
@@ -322,5 +448,6 @@ module.exports = {
   updateRoomStatus,
   addRoom,
   getAllRoomTypes,
-  getAvailableRooms
+  getAvailableRooms,
+  changeOrderRoom
 };

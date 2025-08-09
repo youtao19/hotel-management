@@ -523,6 +523,13 @@
 
       </q-card>
     </q-dialog>
+
+    <!-- 账单对话框 -->
+    <Bill
+      v-model="showBillDialog"
+      :currentOrder="billOrder"
+      @bill-created="handleBillCreated"
+    />
   </q-page>
 </template>
 
@@ -534,6 +541,7 @@ import { useViewStore } from '../stores/viewStore'
 import { useOrderStore } from '../stores/orderStore'
 import { useQuasar } from 'quasar'
 import langZhCn from 'quasar/lang/zh-CN' // 导入中文语言包
+import Bill from '../components/Bill.vue' // 导入账单组件
 
 // 获取房间store和视图store
 const roomStore = useRoomStore()
@@ -568,6 +576,10 @@ const currentCalendarView = ref({ // 跟踪日历当前显示的月份
   year: new Date().getFullYear(),
   month: new Date().getMonth() + 1
 })
+
+// 账单相关变量
+const showBillDialog = ref(false)
+const billOrder = ref(null)
 
 // 日期选项函数 - 允许所有日期可选
 const dateOptions = (date) => {
@@ -1607,24 +1619,30 @@ async function checkInRoom(room) {
       return
     }
 
-    // 更新订单状态为已入住
-    const updatedOrder = await orderStore.updateOrderStatusViaApi(orderNumber, 'checked-in')
-
-    if (updatedOrder) {
-      $q.notify({
-        type: 'positive',
-        message: `${room.room_number} 房间入住办理成功`,
-        position: 'top'
-      })
-      // 刷新房间数据
-      await loadRoomDataForDate(selectedDate.value)
-    } else {
+    // 获取完整的订单信息
+    const order = orderStore.getOrderByNumber(orderNumber)
+    if (!order) {
       $q.notify({
         type: 'negative',
-        message: '办理入住失败',
+        message: '未找到订单详情，无法办理入住',
         position: 'top'
       })
+      return
     }
+
+    // 使用 Quasar Dialog 显示确认对话框
+    $q.dialog({
+      title: '确认办理入住',
+      message: `确定要为订单 ${order.orderNumber} (客人: ${order.guestName}, 房间: ${order.roomNumber}) 办理入住吗？\n\n办理入住后将自动创建账单。`,
+      cancel: true,
+      persistent: true
+    }).onOk(async () => {
+      // 用户点击确定，执行入住操作
+      await performCheckIn(order)
+    }).onCancel(() => {
+      // 用户点击取消，什么也不做
+      console.log('用户取消了入住操作')
+    })
   } catch (error) {
     console.error('办理入住失败:', error)
     $q.notify({
@@ -1635,10 +1653,166 @@ async function checkInRoom(room) {
   }
 }
 
+// 执行入住操作
+async function performCheckIn(order) {
+  try {
+    console.log('办理入住:', order.orderNumber, '房间:', order.roomNumber)
+
+    // 调用订单store更新订单状态
+    const updatedOrderFromApi = await orderStore.updateOrderStatusViaApi(order.orderNumber, 'checked-in')
+
+    if (!updatedOrderFromApi) {
+      $q.notify({
+        type: 'negative',
+        message: '办理入住失败，API未返回更新后的订单',
+        position: 'top'
+      })
+      return
+    }
+
+    // 获取房间信息 (主要为了拿到 room_id)
+    const room = roomStore.getRoomByNumber(order.roomNumber)
+    if (!room) {
+      console.error('预订房间未找到:', order.roomNumber)
+      $q.notify({
+        type: 'warning',
+        message: '订单已更新为入住，但预订的房间信息未找到，请检查房间状态！',
+        position: 'top',
+        multiLine: true
+      })
+      await loadRoomDataForDate(selectedDate.value)
+      return
+    }
+
+    // 入住成功后刷新房间列表，确保房间状态页面能显示最新的客人信息
+    await roomStore.fetchAllRooms()
+
+    // 办理入住成功后，显示账单创建对话框
+    showBillDialog.value = true
+    billOrder.value = { ...orderStore.getOrderByNumber(order.orderNumber) }
+
+    $q.notify({
+      type: 'positive',
+      message: '入住成功，请完成账单创建',
+      position: 'top'
+    })
+
+    // 刷新房间数据
+    await loadRoomDataForDate(selectedDate.value)
+
+  } catch (error) {
+    console.error('办理入住操作失败:', error)
+    const errorMessage = error.response?.data?.message || error.message || '未知错误'
+    $q.notify({
+      type: 'negative',
+      message: `办理入住失败: ${errorMessage}`,
+      position: 'top',
+      multiLine: true
+    })
+  }
+}
+
+// 处理账单创建成功
+async function handleBillCreated() {
+  try {
+    if (!billOrder.value || !billOrder.value.orderNumber) {
+      console.error('订单信息无效')
+      return
+    }
+
+    console.log('账单创建成功，订单:', billOrder.value.orderNumber)
+
+    // 刷新房间数据
+    await loadRoomDataForDate(selectedDate.value)
+
+    $q.notify({
+      type: 'positive',
+      message: '账单创建成功，入住手续已完成',
+      position: 'top'
+    })
+
+  } catch (error) {
+    console.error('处理账单创建成功事件失败:', error)
+    $q.notify({
+      type: 'negative',
+      message: '账单创建成功，但更新界面失败，请刷新页面',
+      position: 'top'
+    })
+  }
+}
+
 // 退房
 async function checkOut(roomId) {
   try {
     console.log('退房操作:', roomId)
+
+    // 根据roomId找到对应的房间信息
+    const room = roomStore.rooms.find(r => r.room_id === roomId)
+    if (!room) {
+      $q.notify({
+        type: 'negative',
+        message: '未找到房间信息',
+        position: 'top'
+      })
+      return
+    }
+
+    // 获取房间对应的订单信息
+    const orderNumber = room.order_id || room.orderId
+    let orderInfo = null
+    if (orderNumber) {
+      orderInfo = orderStore.getOrderByNumber(orderNumber)
+    }
+
+    // 构建确认信息
+    let confirmMessage = `确定要为房间 ${room.room_number} 办理退房吗？`
+    if (orderInfo) {
+      confirmMessage = `确定要为订单 ${orderInfo.orderNumber} (客人: ${orderInfo.guestName}, 房间: ${room.room_number}) 办理退房吗？`
+    }
+    confirmMessage += '\n\n办理退房后房间将设置为清扫中状态。'
+
+    // 使用 Quasar Dialog 显示确认对话框
+    $q.dialog({
+      title: '确认办理退房',
+      message: confirmMessage,
+      cancel: true,
+      persistent: true
+    }).onOk(async () => {
+      // 用户点击确定，执行退房操作
+      await performRoomCheckOut(roomId, orderInfo);
+    }).onCancel(() => {
+      // 用户点击取消，什么也不做
+      console.log('用户取消了退房操作');
+    });
+  } catch (error) {
+    console.error('退房失败:', error)
+    $q.notify({
+      type: 'negative',
+      message: '退房失败',
+      position: 'top'
+    })
+  }
+}
+
+// 执行退房操作
+async function performRoomCheckOut(roomId, orderInfo) {
+  try {
+    console.log('执行退房操作:', roomId, orderInfo)
+
+    // 如果有订单信息，先更新订单状态
+    if (orderInfo) {
+      const updatedOrder = await orderStore.updateOrderStatusViaApi(orderInfo.orderNumber, 'checked-out')
+      if (!updatedOrder) {
+        $q.notify({
+          type: 'negative',
+          message: '更新订单状态失败，退房操作取消',
+          position: 'top'
+        })
+        return
+      }
+    }
+
+    // 更新房间状态为清扫中
     const success = await roomStore.checkOutRoom(roomId)
     if (success) {
       $q.notify({
@@ -1656,11 +1830,13 @@ async function checkOut(roomId) {
       })
     }
   } catch (error) {
-    console.error('退房失败:', error)
+    console.error('执行退房操作失败:', error)
+    const errorMessage = error.response?.data?.message || error.message || '未知错误'
     $q.notify({
       type: 'negative',
-      message: '退房失败',
-      position: 'top'
+      message: `退房失败: ${errorMessage}`,
+      position: 'top',
+      multiLine: true
     })
   }
 }
