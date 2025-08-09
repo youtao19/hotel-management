@@ -311,7 +311,8 @@
             :columns="receiptColumns"
             row-key="id"
             :loading="receiptLoading"
-            :pagination="{ rowsPerPage: 10 }"
+            v-model:pagination="receiptPagination"
+            :rows-per-page-options="[10, 20, 50, 100]"
             dense
             flat
             bordered
@@ -353,8 +354,8 @@
             <!-- 底部汇总行 -->
             <template v-slot:bottom>
               <div class="full-width q-pa-md bg-grey-1">
-                <div class="row q-col-gutter-md">
-                  <div class="col-md-6 col-xs-12">
+                <div class="row items-center q-col-gutter-md">
+                  <div class="col-12 col-md-6">
                     <div class="text-subtitle2 q-mb-sm">按支付方式统计：</div>
                     <div class="row q-col-gutter-xs">
                       <div v-for="(amount, method) in receiptPaymentSummary" :key="method" class="col-auto">
@@ -368,9 +369,36 @@
                       </div>
                     </div>
                   </div>
-                  <div class="col-md-6 col-xs-12 text-right">
-                    <div class="text-subtitle2">总计：<span class="text-h6 text-primary">¥{{ formatCurrency(receiptTotalAmount) }}</span></div>
-                    <div class="text-caption text-grey-7">共 {{ receiptDetails.length }} 条记录</div>
+
+                  <div class="col-12 col-md-6">
+                    <div class="row items-center justify-end q-gutter-sm">
+                      <div class="text-caption text-grey-7 q-mr-md">共 {{ receiptDetails.length }} 条记录</div>
+                      <q-select
+                        v-model="receiptPagination.rowsPerPage"
+                        :options="[10, 20, 50, 100]"
+                        dense
+                        outlined
+                        style="width: 110px"
+                        :disable="receiptLoading"
+                        :emit-value="true"
+                        :map-options="true"
+                        :options-dense="true"
+                        :popup-content-class="'q-pa-xs'"
+                        :display-value="`${receiptPagination.rowsPerPage}/页`"
+                      />
+                      <q-pagination
+                        v-model="receiptPagination.page"
+                        :max="receiptMaxPage"
+                        max-pages="6"
+                        direction-links
+                        boundary-links
+                        dense
+                        :disable="receiptLoading || receiptMaxPage <= 1"
+                      />
+                    </div>
+                    <div class="text-right q-mt-sm">
+                      <span class="text-subtitle2">总计：<span class="text-h6 text-primary">¥{{ formatCurrency(receiptTotalAmount) }}</span></span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -445,6 +473,14 @@ const importLoading = ref(false)
 const receiptType = ref('hotel') // 'hotel' 或 'rest'
 const receiptDetails = ref([])
 const receiptSelectedDate = ref(date.formatDate(new Date(), 'YYYY-MM-DD')) // 当前选中的日期
+
+// 收款明细分页
+const receiptPagination = ref({ page: 1, rowsPerPage: 10 })
+const receiptMaxPage = computed(() => {
+  const total = receiptDetails.value.length
+  const per = receiptPagination.value.rowsPerPage || 10
+  return Math.max(1, Math.ceil(total / per))
+})
 
 // 日期范围
 const dateRange = ref({
@@ -1005,6 +1041,9 @@ const fetchReceiptDetails = async (customStartDate = null, customEndDate = null)
         minute: '2-digit'
       }) : ''
     }))
+
+    // 重置分页到第一页，避免页码越界
+    receiptPagination.value.page = 1
 
     console.log(`获取到 ${receiptDetails.value.length} 条${receiptType.value === 'hotel' ? '客房' : '休息房'}明细`)
   } catch (error) {

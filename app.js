@@ -55,6 +55,7 @@ const orderRoute = require("./backend/routes/orderRoute");
 const roomRoute = require("./backend/routes/roomRoute");
 const roomTypeRoute = require("./backend/routes/roomTypeRoute");
 const billRoute = require("./backend/routes/billRoute");
+const reviewRoute = require("./backend/routes/reviewRoute");
 const shiftHandoverRoute = require("./backend/routes/shiftHandoverRoute");
 const revenueRoute = require("./backend/routes/revenueRoute");
 
@@ -64,6 +65,7 @@ app.use("/api/orders", orderRoute);
 app.use("/api/rooms", roomRoute);
 app.use("/api/room-types", roomTypeRoute);
 app.use("/api/bills", billRoute);
+app.use("/api/reviews", reviewRoute);
 app.use("/api/shift-handover", shiftHandoverRoute);
 app.use("/api/revenue", revenueRoute);
 

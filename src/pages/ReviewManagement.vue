@@ -161,8 +161,10 @@
 import { ref, computed, onMounted } from 'vue'
 import { useQuasar } from 'quasar'
 import { useBillStore } from '../stores/billStore'
+import { useReviewStore } from '../stores/reviewStore'
 
 const billStore = useBillStore()
+const reviewStore = useReviewStore()
 const $q = useQuasar()
 
 // 响应式数据
@@ -237,7 +239,7 @@ function formatDateTime(dateString) {
 async function inviteReview(bill) {
   try {
     loading.value = true
-    await billStore.inviteReview(bill.order_id)
+    await reviewStore.inviteReview(bill.order_id)
 
     $q.notify({
       type: 'positive',
@@ -263,7 +265,7 @@ async function inviteReview(bill) {
 async function setReviewStatus(bill, isPositive) {
   try {
     loading.value = true
-    await billStore.updateReviewStatus(bill.order_id, isPositive)
+    await reviewStore.updateReviewStatus(bill.order_id, isPositive)
 
     $q.notify({
       type: 'positive',
@@ -292,8 +294,8 @@ async function fetchData() {
 
     // 并行获取所有数据
     const [pendingInvitationsData, pendingReviewsData, allBillsData] = await Promise.all([
-      billStore.fetchPendingInvitations(),
-      billStore.fetchPendingReviews(),
+      reviewStore.fetchPendingInvitations(),
+      reviewStore.fetchPendingReviews(),
       billStore.fetchAllBills()
     ])
 
