@@ -324,6 +324,15 @@
             <!-- 房间操作按钮 -->
             <q-card-actions align="center" class="q-pa-sm q-mt-auto">
               <q-btn-group flat>
+                <!-- 预定或入住房间：查看备注 -->
+                <q-btn
+                  v-if="[ROOM_STATES.RESERVED, ROOM_STATES.OCCUPIED].includes(roomStore.getRoomDisplayStatus(room))"
+                  color="secondary"
+                  icon="notes"
+                  label="查看备注"
+                  size="sm"
+                  @click.stop="showOrderRemarks(room)"
+                />
                 <!-- 空闲房间可预订 -->
                 <q-btn
                   v-if="roomStore.getRoomDisplayStatus(room) === ROOM_STATES.AVAILABLE"
@@ -1773,6 +1782,61 @@ async function clearCleaning(roomId) {
       message: '完成清洁失败',
       position: 'top'
     })
+  }
+}
+
+/**
+ * 查看房间对应订单备注（仅预定/入住）
+ */
+function showOrderRemarks(room) {
+  try {
+    // 优先通过订单号匹配
+    const orderNumber = room.order_id || room.orderId
+    let targetOrder = null
+
+    if (orderNumber) {
+      targetOrder = orderStore.getOrderByNumber(orderNumber)
+    }
+
+    // 备用：通过房间号 + 日期范围/状态匹配
+    if (!targetOrder) {
+      const candidates = (orderStore.orders || []).filter(o => o.roomNumber === room.room_number)
+
+      // 若房间包含订单状态，按状态优先筛选
+      const statusHint = room.order_status || room.orderStatus
+      let filtered = candidates
+      if (statusHint) {
+        const byStatus = candidates.filter(o => o.status === statusHint)
+        if (byStatus.length === 1) {
+          targetOrder = byStatus[0]
+        } else if (byStatus.length > 1) {
+          filtered = byStatus
+        }
+      }
+
+      // 根据选中查询日期匹配在住/预定区间
+      if (!targetOrder && selectedDate.value) {
+        const d = selectedDate.value
+        targetOrder = filtered.find(o => o.checkInDate && o.checkOutDate && d >= o.checkInDate && d < o.checkOutDate)
+      }
+
+      // 兜底：优先已入住，再待入住
+      if (!targetOrder) {
+        targetOrder = filtered.find(o => o.status === 'checked-in') || filtered.find(o => o.status === 'pending') || filtered[0]
+      }
+    }
+
+    const guest = targetOrder?.guestName || room.currentGuest || room.guest_name || '未知客人'
+    const remarks = targetOrder?.remarks?.trim()
+
+    $q.dialog({
+      title: '客人备注',
+      message: remarks && remarks.length > 0 ? `${guest}\n\n${remarks}` : `${guest}\n\n无备注`,
+      ok: { label: '关闭', color: 'primary' }
+    })
+  } catch (e) {
+    console.error('查看备注失败:', e)
+    $q.notify({ type: 'negative', message: '无法获取备注', position: 'top' })
   }
 }
 </script>
