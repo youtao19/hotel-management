@@ -73,6 +73,8 @@ export const useOrderStore = defineStore('order', () => {
       loading.value = true
       error.value = null
 
+
+
       // 数据验证
       if (!order) {
         throw new Error('订单数据不能为空');
@@ -118,7 +120,7 @@ export const useOrderStore = defineStore('order', () => {
         check_out_date: checkOutDateISO,                  // 从 checkOutDate 映射
         status: statusValue,
         payment_method: viewStore.normalizePaymentMethodForDB(typeof order.paymentMethod === 'object' ? order.paymentMethod.value?.toString() : order.paymentMethod?.toString()),
-        room_price: parseFloat(order.roomPrice) || 0,     // 确保是数字
+        room_price: order.roomPrice,     // 支持数字或JSON格式的价格数据
         deposit: parseFloat(order.deposit) || 0,          // 确保是数字
         remarks: order.remarks?.toString() || '',
         order_source: order.source?.toString() || 'front_desk',  // 从 source 映射，确保是字符串
@@ -129,7 +131,25 @@ export const useOrderStore = defineStore('order', () => {
 
       // 验证必填字段
       const requiredFields = ['order_id', 'guest_name', 'id_number', 'room_type', 'room_number', 'check_in_date', 'check_out_date', 'room_price'];
-      const missingFields = requiredFields.filter(field => !orderData[field]);
+
+      const missingFields = requiredFields.filter(field => {
+        const value = orderData[field];
+
+        // room_price 特殊处理：可以是数字或对象
+        if (field === 'room_price') {
+          if (typeof value === 'number') {
+            return value <= 0;
+          } else if (typeof value === 'object' && value !== null) {
+            // 检查是否为有效的价格对象且不为空
+            const isEmpty = Object.keys(value).length === 0;
+            const hasInvalidPrices = Object.values(value).some(price => !price || parseFloat(price) <= 0);
+            return isEmpty || hasInvalidPrices;
+          }
+          return !value;
+        }
+
+        return !value;
+      });
 
       if (missingFields.length > 0) {
         console.error('缺少必填字段:', missingFields);

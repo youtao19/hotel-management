@@ -109,6 +109,89 @@ function isRestRoom(orderData) {
 }
 
 /**
+ * 计算订单总价格
+ * @param {Object|number} roomPrice - 房间价格数据（JSONB对象或数字）
+ * @returns {number} 总价格
+ */
+function calculateTotalPrice(roomPrice) {
+  if (typeof roomPrice === 'number') {
+    return roomPrice;
+  }
+
+  if (typeof roomPrice === 'object' && roomPrice !== null) {
+    return Object.values(roomPrice).reduce((sum, price) => sum + parseFloat(price), 0);
+  }
+
+  return 0;
+}
+
+/**
+ * 验证价格日期范围
+ * @param {Object} roomPrice - 房间价格对象
+ * @param {string} checkInDate - 入住日期
+ * @param {string} checkOutDate - 退房日期
+ * @returns {Object} 验证结果 {isValid: boolean, message?: string}
+ */
+function validatePriceDateRange(roomPrice, checkInDate, checkOutDate) {
+  if (typeof roomPrice !== 'object' || roomPrice === null) {
+    return { isValid: true };
+  }
+
+  const priceDates = Object.keys(roomPrice).sort();
+  const firstPriceDate = priceDates[0];
+  const lastPriceDate = priceDates[priceDates.length - 1];
+
+  const checkIn = new Date(checkInDate);
+  const checkOut = new Date(checkOutDate);
+  const firstPrice = new Date(firstPriceDate);
+  const lastPrice = new Date(lastPriceDate);
+
+  // 价格开始日期应该等于入住日期
+  if (firstPrice.getTime() !== checkIn.getTime()) {
+    return {
+      isValid: false,
+      message: `价格开始日期 ${firstPriceDate} 与入住日期 ${checkInDate} 不匹配`
+    };
+  }
+
+  // 计算入住天数
+  const daysDiff = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
+
+  // 对于休息房（同日入住退房）或1天住宿，价格应该只有入住日期
+  if (daysDiff <= 1) {
+    if (priceDates.length !== 1 || firstPriceDate !== lastPriceDate) {
+      return {
+        isValid: false,
+        message: `单日/休息房订单价格数据应只包含入住日期 ${checkInDate}`
+      };
+    }
+  } else {
+    // 多日住宿：价格结束日期应该是退房前一天
+    const dayBeforeCheckOut = new Date(checkOut);
+    dayBeforeCheckOut.setDate(dayBeforeCheckOut.getDate() - 1);
+
+    if (lastPrice.getTime() !== dayBeforeCheckOut.getTime()) {
+      const expectedLastDate = dayBeforeCheckOut.toISOString().split('T')[0];
+      return {
+        isValid: false,
+        message: `价格结束日期 ${lastPriceDate} 与预期日期 ${expectedLastDate} 不匹配`
+      };
+    }
+
+    // 验证价格日期的连续性
+    const expectedDays = daysDiff;
+    if (priceDates.length !== expectedDays) {
+      return {
+        isValid: false,
+        message: `价格数据应包含 ${expectedDays} 天，但实际包含 ${priceDates.length} 天`
+      };
+    }
+  }
+
+  return { isValid: true };
+}
+
+/**
  * 验证订单数据
  * @param {Object} orderData 订单数据
  * @throws {Error} 验证失败时抛出错误
@@ -164,15 +247,56 @@ function validateOrderData(orderData) {
     throw error;
   }
 
-  // 5. 验证价格和押金为正数
-  if (orderData.room_price && parseFloat(orderData.room_price) <= 0) {
-    const error = new Error('房间价格必须大于0');
-    error.code = 'INVALID_PRICE';
-    throw error;
+  // 5. 验证价格和押金
+  if (orderData.room_price) {
+    if (typeof orderData.room_price === 'object') {
+      // JSON格式验证：验证每个日期的价格
+      const prices = Object.values(orderData.room_price);
+      const dates = Object.keys(orderData.room_price);
+
+      if (prices.length === 0) {
+        const error = new Error('房间价格不能为空');
+        error.code = 'INVALID_PRICE_EMPTY';
+        throw error;
+      }
+
+      if (prices.some(price => !price || parseFloat(price) <= 0)) {
+        const error = new Error('所有日期的房间价格必须大于0');
+        error.code = 'INVALID_PRICE_JSON';
+        throw error;
+      }
+
+      // 验证日期格式
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (dates.some(date => !dateRegex.test(date))) {
+        const error = new Error('价格数据中包含无效的日期格式');
+        error.code = 'INVALID_PRICE_DATE_FORMAT';
+        throw error;
+      }
+
+      // 验证价格日期范围
+      const priceRangeValidation = validatePriceDateRange(
+        orderData.room_price,
+        orderData.check_in_date,
+        orderData.check_out_date
+      );
+      if (!priceRangeValidation.isValid) {
+        const error = new Error(priceRangeValidation.message);
+        error.code = 'INVALID_PRICE_DATE_RANGE';
+        throw error;
+      }
+    } else {
+      // 向后兼容：数字格式验证
+      if (parseFloat(orderData.room_price) <= 0) {
+        const error = new Error('房间价格必须大于0');
+        error.code = 'INVALID_PRICE';
+        throw error;
+      }
+    }
   }
 
-  if (orderData.deposit && parseFloat(orderData.deposit) <= 0) {
-    const error = new Error('押金必须大于0');
+  if (orderData.deposit && parseFloat(orderData.deposit) < 0) {
+    const error = new Error('押金不能为负数');
     error.code = 'INVALID_DEPOSIT';
     throw error;
   }
@@ -286,7 +410,36 @@ async function createOrder(orderData) {
       payment_method, room_price, deposit, create_time, remarks
     } = orderData;
 
-    // 7. 处理休息房备注
+    // 7. 处理房间价格数据
+    let processedRoomPrice = room_price;
+
+    // 如果是数字格式，转换为JSON格式
+    if (typeof room_price === 'number') {
+      processedRoomPrice = {
+        [check_in_date]: room_price
+      };
+    }
+
+    // 确保是有效的JSON对象
+    if (typeof processedRoomPrice === 'object' && processedRoomPrice !== null) {
+      // 验证价格数据的日期范围是否合理
+      const priceStartDate = Math.min(...Object.keys(processedRoomPrice).map(d => new Date(d).getTime()));
+      const priceEndDate = Math.max(...Object.keys(processedRoomPrice).map(d => new Date(d).getTime()));
+      const checkInTime = new Date(check_in_date).getTime();
+      const checkOutTime = new Date(check_out_date).getTime();
+
+      // 检查价格日期是否在订单日期范围内
+      if (priceStartDate < checkInTime || priceStartDate >= checkOutTime) {
+        console.warn('价格数据的日期范围可能不合理，但继续处理:', {
+          priceStartDate: new Date(priceStartDate).toISOString().split('T')[0],
+          priceEndDate: new Date(priceEndDate).toISOString().split('T')[0],
+          checkInDate: check_in_date,
+          checkOutDate: check_out_date
+        });
+      }
+    }
+
+    // 8. 处理休息房备注
     let processedRemarks = remarks || '';
     if (isCurrentOrderRestRoom) {
       // 确保休息房订单在备注中有标识
@@ -295,7 +448,7 @@ async function createOrder(orderData) {
       }
     }
 
-    // 8. 执行数据库插入操作
+    // 9. 执行数据库插入操作
 
     const insertQuery = `
       INSERT INTO orders (
@@ -303,7 +456,7 @@ async function createOrder(orderData) {
         room_type, room_number, check_in_date, check_out_date, status,
         payment_method, room_price, deposit, create_time, remarks
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, $15, $16
       )
       RETURNING *;
     `;
@@ -311,7 +464,7 @@ async function createOrder(orderData) {
     const values = [
       order_id, id_source, order_source, guest_name, phone, id_number,
       room_type, room_number, check_in_date, check_out_date, status,
-      payment_method, room_price, deposit, create_time || new Date(), processedRemarks
+      payment_method, JSON.stringify(processedRoomPrice), deposit, create_time || new Date(), processedRemarks
     ];
 
     const result = await query(insertQuery, values);
@@ -510,7 +663,9 @@ const table = {
   getOrderById,
   updateOrderStatus,
   refundDeposit,
-  isRestRoom
+  isRestRoom,
+  calculateTotalPrice,
+  validatePriceDateRange
 };
 
 module.exports = table;

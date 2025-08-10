@@ -3,27 +3,28 @@
 const tableName = "orders";
 
 const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
-    order_id VARCHAR(20) PRIMARY KEY,
-    id_source VARCHAR(50),
-    order_source VARCHAR(20) NOT NULL,
-    guest_name VARCHAR(50) NOT NULL,
-    phone VARCHAR(20) NOT NULL,
-    id_number VARCHAR(30) NOT NULL,
-    room_type VARCHAR(20) NOT NULL,
-    room_number VARCHAR(20) NOT NULL,
-    check_in_date DATE NOT NULL,
-    check_out_date DATE NOT NULL,
-    status VARCHAR(20) NOT NULL,
-    payment_method VARCHAR(20),
-    room_price DECIMAL(10,2) NOT NULL,
-    deposit DECIMAL(10,2),
-    create_time TIMESTAMP NOT NULL,
-    remarks TEXT,
-    refunded_deposit DECIMAL(10,2) DEFAULT 0,
-    refund_records JSONB DEFAULT '[]'::jsonb,
-    FOREIGN KEY (room_type) REFERENCES room_types(type_code),
-    FOREIGN KEY (room_number) REFERENCES rooms(room_number),
-    CONSTRAINT unique_order_constraint UNIQUE (guest_name, check_in_date, check_out_date, room_type)
+    order_id VARCHAR(50) PRIMARY KEY, -- 订单号
+    id_source VARCHAR(50), -- 来源单号
+    order_source VARCHAR(20) NOT NULL, -- 订单来源
+    guest_name VARCHAR(50) NOT NULL, -- 客人姓名
+    phone VARCHAR(20) NOT NULL, -- 客人电话
+    id_number VARCHAR(30) NOT NULL, -- 证件号码
+    room_type VARCHAR(20) NOT NULL, -- 房间类型
+    room_number VARCHAR(20) NOT NULL, -- 房间号
+    check_in_date DATE NOT NULL, -- 入住日期
+    check_out_date DATE NOT NULL, -- 离店日期
+    status VARCHAR(20) NOT NULL, -- 订单状态
+    payment_method VARCHAR(20), -- 支付方式
+    room_price JSONB NOT NULL, -- 房间价格(JSON格式: {"YYYY-MM-DD": 价格})
+    deposit DECIMAL(10,2), -- 押金
+    create_time TIMESTAMP NOT NULL, -- 创建时间
+    remarks TEXT, -- 备注
+    refunded_deposit DECIMAL(10,2) DEFAULT 0, -- 已退押金
+    refund_records JSONB DEFAULT '[]'::jsonb, -- 退款记录
+    FOREIGN KEY (room_type) REFERENCES room_types(type_code), -- 房间类型外键
+    FOREIGN KEY (room_number) REFERENCES rooms(room_number), -- 房间号外键
+    CONSTRAINT unique_order_constraint UNIQUE (guest_name, check_in_date, check_out_date, room_type), -- 唯一约束
+    CONSTRAINT chk_room_price_json CHECK (jsonb_typeof(room_price) = 'object') -- 确保room_price是JSON对象格式
 )`;
 
 
@@ -31,7 +32,8 @@ const dropQuery = `DROP TABLE IF EXISTS ${tableName}`;
 
 const createIndexQueryStrings = [
     `CREATE INDEX IF NOT EXISTS idx_orders_status ON ${tableName}(status)`,
-    `CREATE INDEX IF NOT EXISTS idx_orders_check_dates ON ${tableName}(check_in_date, check_out_date)`
+    `CREATE INDEX IF NOT EXISTS idx_orders_check_dates ON ${tableName}(check_in_date, check_out_date)`,
+    `CREATE INDEX IF NOT EXISTS idx_orders_room_price_gin ON ${tableName} USING GIN (room_price)` // JSONB字段的GIN索引
 ];
 
 const table = {

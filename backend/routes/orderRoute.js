@@ -115,6 +115,10 @@ router.post('/new', async (req, res) => {
       case 'INVALID_DATE_RANGE':
       case 'INVALID_PHONE_FORMAT':
       case 'INVALID_PRICE':
+      case 'INVALID_PRICE_EMPTY':
+      case 'INVALID_PRICE_JSON':
+      case 'INVALID_PRICE_DATE_FORMAT':
+      case 'INVALID_PRICE_DATE_RANGE':
       case 'INVALID_DEPOSIT':
       case 'INVALID_ROOM_TYPE':
       case 'INVALID_ROOM_NUMBER':
