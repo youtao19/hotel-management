@@ -154,37 +154,63 @@ function validatePriceDateRange(roomPrice, checkInDate, checkOutDate) {
     };
   }
 
-  // 计算入住天数
+  // 计算入住天数（实际居住的晚数）
   const daysDiff = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
+  console.log(`🏨 日期验证 - 入住: ${checkInDate}, 退房: ${checkOutDate}, 天数差: ${daysDiff}`);
+  console.log(`📊 价格日期数量: ${priceDates.length}, 日期: [${priceDates.join(', ')}]`);
 
-  // 对于休息房（同日入住退房）或1天住宿，价格应该只有入住日期
-  if (daysDiff <= 1) {
-    if (priceDates.length !== 1 || firstPriceDate !== lastPriceDate) {
+  // 对于休息房（同日入住退房），价格应该只有入住日期
+  if (daysDiff === 0) {
+    if (priceDates.length !== 1 || firstPriceDate !== checkInDate) {
       return {
         isValid: false,
-        message: `单日/休息房订单价格数据应只包含入住日期 ${checkInDate}`
+        message: `休息房订单价格数据应只包含入住日期 ${checkInDate}`
       };
     }
-  } else {
-    // 多日住宿：价格结束日期应该是退房前一天
+  }
+  // 对于住1晚的订单，价格应该只有入住日期
+  else if (daysDiff === 1) {
+    if (priceDates.length !== 1 || firstPriceDate !== checkInDate) {
+      return {
+        isValid: false,
+        message: `单日住宿订单价格数据应只包含入住日期 ${checkInDate}，不应包含退房日期`
+      };
+    }
+  }
+  // 对于多日住宿（2晚及以上）
+  else {
+    // 价格结束日期应该是退房前一天
     const dayBeforeCheckOut = new Date(checkOut);
     dayBeforeCheckOut.setDate(dayBeforeCheckOut.getDate() - 1);
+    const expectedLastDate = dayBeforeCheckOut.toISOString().split('T')[0];
 
     if (lastPrice.getTime() !== dayBeforeCheckOut.getTime()) {
-      const expectedLastDate = dayBeforeCheckOut.toISOString().split('T')[0];
       return {
         isValid: false,
-        message: `价格结束日期 ${lastPriceDate} 与预期日期 ${expectedLastDate} 不匹配`
+        message: `多日住宿价格结束日期 ${lastPriceDate} 与预期日期 ${expectedLastDate} 不匹配`
       };
     }
 
-    // 验证价格日期的连续性
-    const expectedDays = daysDiff;
-    if (priceDates.length !== expectedDays) {
+    // 验证价格日期的连续性 - 应该等于住宿晚数
+    if (priceDates.length !== daysDiff) {
       return {
         isValid: false,
-        message: `价格数据应包含 ${expectedDays} 天，但实际包含 ${priceDates.length} 天`
+        message: `${daysDiff}晚住宿应包含 ${daysDiff} 个价格数据，但实际包含 ${priceDates.length} 个`
       };
+    }
+
+    // 验证日期连续性
+    for (let i = 0; i < priceDates.length; i++) {
+      const expectedDate = new Date(checkIn);
+      expectedDate.setDate(expectedDate.getDate() + i);
+      const expectedDateStr = expectedDate.toISOString().split('T')[0];
+
+      if (priceDates[i] !== expectedDateStr) {
+        return {
+          isValid: false,
+          message: `价格日期不连续，第${i + 1}个日期应为 ${expectedDateStr}，实际为 ${priceDates[i]}`
+        };
+      }
     }
   }
 

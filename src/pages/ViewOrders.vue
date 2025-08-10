@@ -544,11 +544,18 @@ async function performCheckIn(order) {
       currentOrder.value = { ...orderStore.getOrderByNumber(order.orderNumber) }; // 从store获取最新数据
     }
 
-    // 办理入住成功后，显示账单创建对话框
-    showBillDialog.value = true;
-    billOrder.value = { ...orderStore.getOrderByNumber(order.orderNumber) };
+    // 办理入住成功后，显示账单创建对话框（支持单日和多日订单）
+    const updatedOrder = orderStore.getOrderByNumber(order.orderNumber);
 
-    $q.notify({ type: 'positive', message: '入住成功，请完成账单创建', position: 'top' });
+    showBillDialog.value = true;
+    billOrder.value = { ...updatedOrder };
+
+    const isMultiDay = checkIfMultiDayOrder(updatedOrder);
+    const message = isMultiDay
+      ? '入住成功，请编辑每日房费并创建多日账单'
+      : '入住成功，请完成账单创建';
+
+    $q.notify({ type: 'positive', message, position: 'top' });
 
   } catch (error) {
     console.error('办理入住操作失败:', error);
@@ -1068,6 +1075,19 @@ async function handleRefundDeposit(refundData) {
       position: 'top'
     })
   }
+}
+
+// 检查是否为多日订单
+function checkIfMultiDayOrder(order) {
+  if (!order || !order.roomPrice) return false;
+
+  // 如果roomPrice是对象格式且包含多个日期
+  if (typeof order.roomPrice === 'object') {
+    const priceDates = Object.keys(order.roomPrice);
+    return priceDates.length > 1;
+  }
+
+  return false;
 }
 
 onMounted(async () => {

@@ -23,6 +23,25 @@ export const useBillStore = defineStore('bill', () => {
     }
 
     /**
+     * 创建单个账单（用于多日账单）
+     * @param {Object} billData - 账单数据
+     * @returns {Promise<Object>} 新创建的账单
+     */
+    async function createSingleBill(billData) {
+        try {
+            console.log('创建单个账单:', billData);
+            const response = await billApi.createBill(billData);
+
+            // 不自动添加到本地状态，由调用方处理
+            console.log('账单创建响应:', response);
+            return response.bill || response.data?.bill || response;
+        } catch (error) {
+            console.error('创建单个账单失败:', error);
+            throw error;
+        }
+    }
+
+    /**
      * 邀请客户好评
      * @param {string} orderId - 订单ID
      * @returns {Promise<Object>} 更新后的账单
@@ -115,6 +134,7 @@ export const useBillStore = defineStore('bill', () => {
         bills,
         currentBill,
         addBill,
+        createSingleBill,
         inviteReview,
         updateReviewStatus,
         fetchAllBills,

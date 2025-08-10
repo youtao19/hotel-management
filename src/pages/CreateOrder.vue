@@ -519,6 +519,53 @@ const orderData = ref({
 // 多日价格管理
 const dailyPrices = ref({}) // 存储每日价格 {date: price}
 
+// 判断是否为多日订单
+const isMultiDay = computed(() => {
+  const checkIn = new Date(orderData.value.checkInDate);
+  const checkOut = new Date(orderData.value.checkOutDate);
+  const daysDiff = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
+
+  console.log('🔍 多日判断：', {
+    checkInDate: orderData.value.checkInDate,
+    checkOutDate: orderData.value.checkOutDate,
+    daysDiff,
+    isMultiDay: daysDiff > 1
+  });
+
+  return daysDiff > 1; // 超过1天算多日
+});
+
+// 生成日期列表（住宿的每一晚）
+const dateList = computed(() => {
+  const checkIn = new Date(orderData.value.checkInDate);
+  const checkOut = new Date(orderData.value.checkOutDate);
+  const daysDiff = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
+
+  const dates = [];
+
+  // 对于休息房（同日入住退房）或单日住宿，返回空数组（单日订单不使用dateList）
+  if (daysDiff <= 1) {
+    console.log('📅 单日/休息房订单，dateList为空');
+    return dates;
+  }
+
+  // 多日订单：生成每一晚的日期（不包括退房日期）
+  for (let i = 0; i < daysDiff; i++) {
+    const currentDate = new Date(checkIn);
+    currentDate.setDate(currentDate.getDate() + i);
+    dates.push(date.formatDate(currentDate, 'YYYY-MM-DD'));
+  }
+
+  console.log('🗓️ 多日订单日期列表：', dates);
+  return dates;
+});
+
+// 首日价格（用于应用到所有天）
+const firstDatePrice = computed(() => {
+  if (dateList.value.length === 0) return 0;
+  return dailyPrices.value[dateList.value[0]] || 0;
+});
+
 // 日期范围对象 - 用于日期选择器的范围选择模式
 const dateRange = ref({
   from: orderData.value.checkInDate,   // 开始日期，默认为入住日期
@@ -839,9 +886,18 @@ async function submitOrder() {
       // 构建价格数据
   let roomPriceData
 
+  // 调试信息
+  console.log('🏨 订单日期信息：');
+  console.log('  入住日期：', orderData.value.checkInDate);
+  console.log('  退房日期：', orderData.value.checkOutDate);
+  console.log('  是否多日：', isMultiDay.value);
+  console.log('  日期列表：', dateList.value);
+  console.log('  每日价格：', dailyPrices.value);
+
   if (isMultiDay.value) {
     // 多日订单：使用JSON格式
     roomPriceData = { ...dailyPrices.value }
+    console.log('📊 多日订单价格数据：', roomPriceData);
 
     // 验证所有日期都有价格
     const missingPrices = dateList.value.filter(date => !dailyPrices.value[date] || dailyPrices.value[date] <= 0)
@@ -867,6 +923,7 @@ async function submitOrder() {
     roomPriceData = {
       [orderData.value.checkInDate]: Number(orderData.value.roomPrice)
     }
+    console.log('📅 单日订单价格数据：', roomPriceData);
   }
 
   // 最终验证价格数据
@@ -1282,30 +1339,7 @@ const isRestRoom = computed(() => {
   return orderData.value.checkInDate === orderData.value.checkOutDate
 });
 
-// 计算属性：是否为多日订单
-const isMultiDay = computed(() => {
-  if (!orderData.value.checkInDate || !orderData.value.checkOutDate) return false
-  return orderData.value.checkInDate !== orderData.value.checkOutDate && !isRestRoom.value
-});
 
-// 计算属性：日期列表
-const dateList = computed(() => {
-  if (!isMultiDay.value) return []
-  const dates = []
-  const start = new Date(orderData.value.checkInDate)
-  const end = new Date(orderData.value.checkOutDate)
-
-  for (let d = new Date(start); d < end; d.setDate(d.getDate() + 1)) {
-    dates.push(date.formatDate(d, 'YYYY-MM-DD'))
-  }
-  return dates
-});
-
-// 计算属性：首日价格
-const firstDatePrice = computed(() => {
-  const firstDate = dateList.value[0]
-  return firstDate ? dailyPrices.value[firstDate] : 0
-});
 
 // 计算属性：总价格（多日情况下）
 const totalPrice = computed(() => {

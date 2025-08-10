@@ -124,8 +124,23 @@ export const billApi = {
   // 获得账单
   getBillByOrderId: (orderId) => api.get(`/bills/${orderId}`),
 
+  // 获取订单的所有账单（支持多账单）
+  getBillsByOrderId: (orderId) => api.get(`/bills/order/${orderId}`),
+
   // 获取所有账单
   getAllBills: () => api.get('/bills/all'),
+
+  // 邀请客户好评
+  inviteReview: (orderId) => api.post(`/bills/${orderId}/invite-review`),
+
+  // 更新好评状态
+  updateReviewStatus: (orderId, positive_review) => api.put(`/bills/${orderId}/review-status`, { positive_review }),
+
+  // 获取待邀请好评的账单
+  getPendingInvitations: () => api.get('/bills/pending-invitations'),
+
+  // 获取已邀请但未设置好评状态的账单
+  getPendingReviews: () => api.get('/bills/pending-reviews'),
 }
 
 // 好评相关接口
