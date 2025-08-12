@@ -519,8 +519,7 @@ const receiptColumns = [
     style: 'width: 100px'
   },
   { name: 'totalAmount', label: '总额', field: 'total_amount', align: 'right', style: 'width: 120px' },
-  { name: 'checkInTime', label: '开房时间', field: 'check_in_date', align: 'center', style: 'width: 140px' },
-  { name: 'checkOutTime', label: '退房时间', field: 'check_out_date', align: 'center', style: 'width: 140px' }
+  { name: 'stayDate', label: '入住日期', field: 'stay_date_display', align: 'center', style: 'width: 140px' }
 ]
 
 // 表格列定义
@@ -630,7 +629,17 @@ const formatCurrency = (value) => {
 
 const formatDate = (dateStr) => {
   if (!dateStr) return ''
-  return new Date(dateStr).toLocaleDateString('zh-CN')
+  // 避免 'YYYY-MM-DD' 被 new Date() 当作 UTC 解析后在负时区减一天
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    // 直接返回或按需要格式化
+    const [y,m,d] = dateStr.split('-')
+    return `${y}-${m}-${d}`
+  }
+  try {
+    return new Date(dateStr).toLocaleDateString('zh-CN')
+  } catch {
+    return dateStr
+  }
 }
 
 // 收款明细表日期格式化
@@ -933,91 +942,29 @@ const updateRevenueChart = () => {
 // 更新房型收入图表
 const updateRoomTypeChart = () => {
   if (!roomTypeChart.value || !roomTypeData.value || roomTypeData.value.length === 0) return
-
-  // 销毁现有图表
-  if (roomTypeChartInstance) {
-    roomTypeChartInstance.destroy()
-  }
-
+  if (roomTypeChartInstance) roomTypeChartInstance.destroy()
   const ctx = roomTypeChart.value.getContext('2d')
-
   const labels = roomTypeData.value.map(item => item.type_name || item.room_type)
   const revenues = roomTypeData.value.map(item => item.total_revenue || 0)
   const orders = roomTypeData.value.map(item => item.order_count || 0)
-
   roomTypeChartInstance = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: labels,
+      labels,
       datasets: [
-        {
-          label: '收入金额',
-          data: revenues,
-          backgroundColor: 'rgba(25, 118, 210, 0.8)',
-          borderColor: 'rgba(25, 118, 210, 1)',
-          borderWidth: 1,
-          yAxisID: 'y'
-        },
-        {
-          label: '订单数量',
-          data: orders,
-          backgroundColor: 'rgba(76, 175, 80, 0.8)',
-          borderColor: 'rgba(76, 175, 80, 1)',
-          borderWidth: 1,
-          yAxisID: 'y1'
-        }
+        { label: '收入金额', data: revenues, backgroundColor: 'rgba(25,118,210,0.8)', borderColor: 'rgba(25,118,210,1)', borderWidth: 1, yAxisID: 'y' },
+        { label: '订单数量', data: orders, backgroundColor: 'rgba(76,175,80,0.8)', borderColor: 'rgba(76,175,80,1)', borderWidth: 1, yAxisID: 'y1' }
       ]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       scales: {
-        x: {
-          title: {
-            display: true,
-            text: '房型'
-          }
-        },
-        y: {
-          type: 'linear',
-          display: true,
-          position: 'left',
-          title: {
-            display: true,
-            text: '收入金额 (¥)'
-          },
-          ticks: {
-            callback: function(value) {
-              return '¥' + formatCurrency(value)
-            }
-          }
-        },
-        y1: {
-          type: 'linear',
-          display: true,
-          position: 'right',
-          title: {
-            display: true,
-            text: '订单数量'
-          },
-          grid: {
-            drawOnChartArea: false,
-          }
-        }
+        x: { title: { display: true, text: '房型' } },
+        y: { type: 'linear', display: true, position: 'left', title: { display: true, text: '收入金额 (¥)' }, ticks: { callback: v => '¥' + formatCurrency(v) } },
+        y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: '订单数量' }, grid: { drawOnChartArea: false } }
       },
-      plugins: {
-        tooltip: {
-          callbacks: {
-            label: function(context) {
-              if (context.datasetIndex === 0) {
-                return `收入: ¥${formatCurrency(context.parsed.y)}`
-              } else {
-                return `订单: ${context.parsed.y}单`
-              }
-            }
-          }
-        }
-      }
+      plugins: { tooltip: { callbacks: { label: ctx => ctx.datasetIndex === 0 ? `收入: ¥${formatCurrency(ctx.parsed.y)}` : `订单: ${ctx.parsed.y}单` } } }
     }
   })
 }
@@ -1047,18 +994,7 @@ const generateSampleReceiptData = (type) => {
       deposit: deposit,
       payment_method: paymentMethod,
       total_amount: roomFee + deposit,
-      check_in_date: new Date(receiptSelectedDate.value + 'T' + String(Math.floor(Math.random() * 12) + 8).padStart(2, '0') + ':' + String(Math.floor(Math.random() * 60)).padStart(2, '0')).toLocaleString('zh-CN', {
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
-      }),
-      check_out_date: new Date(receiptSelectedDate.value + 'T' + String(Math.floor(Math.random() * 8) + 14).padStart(2, '0') + ':' + String(Math.floor(Math.random() * 60)).padStart(2, '0')).toLocaleString('zh-CN', {
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
-      })
+      stay_date: receiptSelectedDate.value
     })
   }
 
@@ -1107,25 +1043,32 @@ const fetchReceiptDetails = async (customStartDate = null, customEndDate = null)
         endDate: endDate
       }
     })
-    receiptDetails.value = data.map(item => ({
-      ...item,
-      room_fee: parseFloat(item.room_fee || 0),
-      deposit: parseFloat(item.deposit || 0),
-      total_amount: parseFloat(item.total_amount || 0),
-      guest_name: item.guest_name || '未知客户',
-      check_in_date: item.check_in_date ? new Date(item.check_in_date).toLocaleString('zh-CN', {
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
-      }) : '',
-      check_out_date: item.check_out_date ? new Date(item.check_out_date).toLocaleString('zh-CN', {
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
-      }) : ''
-    }))
+    receiptDetails.value = data.map(item => {
+      const raw = item.stay_date
+      let stayDateDisplay = ''
+      if (raw) {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+          stayDateDisplay = raw
+        } else {
+          // ISO 字符串情况，转为本地日期（不受时区减一天影响）
+            try {
+              const dt = new Date(raw)
+              const y = dt.getFullYear()
+              const m = String(dt.getMonth()+1).padStart(2,'0')
+              const d = String(dt.getDate()).padStart(2,'0')
+              stayDateDisplay = `${y}-${m}-${d}`
+            } catch { stayDateDisplay = String(raw).substring(0,10) }
+        }
+      }
+      return {
+        ...item,
+        room_fee: parseFloat(item.room_fee || 0),
+        deposit: parseFloat(item.deposit || 0),
+        total_amount: parseFloat(item.total_amount || 0),
+        guest_name: item.guest_name || '未知客户',
+        stay_date_display: stayDateDisplay
+      }
+    })
 
     // 重置分页到第一页，避免页码越界
     receiptPagination.value.page = 1

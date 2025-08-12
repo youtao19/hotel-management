@@ -180,6 +180,7 @@
 import { ref, computed, watch } from 'vue'
 import { useQuasar } from 'quasar'
 import { useUserStore } from '../stores/userStore'
+import { orderApi } from '../api'
 import { useViewStore } from '../stores/viewStore'
 
 const $q = useQuasar()
@@ -213,12 +214,14 @@ const refundForm = ref({
 const paymentMethodOptions = computed(() => viewStore.paymentMethodOptions)
 
 // 计算属性
-const availableRefundAmount = computed(() => {
-  if (!props.order) return 0
+// 通过接口获取的押金状态（优先于传入的冗余字段）
+const remoteDepositInfo = ref(null)
 
+const availableRefundAmount = computed(() => {
+  if (remoteDepositInfo.value) return Math.max(0, remoteDepositInfo.value.remaining)
+  if (!props.order) return 0
   const originalDeposit = props.order.deposit || 0
   const refundedDeposit = props.order.refundedDeposit || 0
-
   return Math.max(0, originalDeposit - refundedDeposit)
 })
 
@@ -229,8 +232,9 @@ const actualRefundAmount = computed(() => {
 })
 
 const remainingDepositAfter = computed(() => {
-  if (!props.order) return 0
-  return Math.max(0, (props.order.deposit || 0) - (props.order.refundedDeposit || 0) - actualRefundAmount.value)
+  const baseDeposit = remoteDepositInfo.value ? remoteDepositInfo.value.deposit : (props.order?.deposit || 0)
+  const refunded = remoteDepositInfo.value ? remoteDepositInfo.value.refunded : (props.order?.refundedDeposit || 0)
+  return Math.max(0, baseDeposit - refunded - actualRefundAmount.value)
 })
 
 const isFormValid = computed(() => {
@@ -243,9 +247,15 @@ const isFormValid = computed(() => {
 })
 
 // 监听对话框打开，重置表单
-watch(() => props.modelValue, (newVal) => {
+watch(() => props.modelValue, async (newVal) => {
   if (newVal && props.order) {
-    // 重置表单
+    remoteDepositInfo.value = null
+    try {
+      const res = await orderApi.getDepositInfo(props.order.orderNumber)
+      if (res?.data) remoteDepositInfo.value = res.data
+    } catch (e) {
+      console.warn('获取押金状态失败(使用本地数据):', e.message)
+    }
     refundForm.value = {
       amount: availableRefundAmount.value,
       method: 'cash',

@@ -102,6 +102,9 @@ export const orderApi = {
 
   // 退押金
   refundDeposit: (orderNumber, refundData) => api.post(`/orders/${orderNumber}/refund-deposit`, refundData),
+
+  // 获取押金状态
+  getDepositInfo: (orderNumber) => api.get(`/orders/${orderNumber}/deposit-info`),
 }
 
 // 用户相关接口

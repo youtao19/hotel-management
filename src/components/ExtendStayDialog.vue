@@ -34,7 +34,7 @@
             </div>
             <div class="row q-gutter-sm q-mt-xs">
               <div class="col">退房日期: {{ currentOrder?.checkOutDate }}</div>
-              <div class="col">原房价: ¥{{ currentOrder?.roomPrice }}/晚</div>
+              <div class="col">原房价: {{ formatOriginalRoomPrice(currentOrder?.roomPrice) }}</div>
             </div>
           </div>
         </div>
@@ -212,8 +212,52 @@
           <div class="text-subtitle2 q-mb-sm">价格信息:</div>
           <div class="bg-blue-1 q-pa-sm rounded-borders">
             <div class="row q-gutter-sm">
-              <div class="col">房间单价: ¥{{ selectedRoomInfo.price }}/晚</div>
+              <div class="col">原建议单价: ¥{{ selectedRoomInfo.price }}/晚</div>
               <div class="col">续住天数: {{ stayDays }}天</div>
+            </div>
+      <div class="row q-gutter-sm q-mt-xs" v-if="stayDays === 1">
+              <div class="col-12">
+                <q-input
+                  v-model.number="customUnitPrice"
+                  type="number"
+                  label="续住单价(可修改)"
+          dense
+          filled
+          bg-color="blue-1"
+                  :rules="singlePriceRules"
+                  hint="此价格将写入新订单 room_price（单日）"
+                >
+                  <template #prepend>
+                    <q-icon name="attach_money" color="primary" />
+                  </template>
+                </q-input>
+              </div>
+            </div>
+            <div v-else class="q-mt-xs">
+              <div class="text-caption text-grey-7 q-mb-xs">多日续住：可分别调整每天价格</div>
+        <q-markup-table flat bordered dense class="price-table-transparent">
+                <tbody>
+                  <tr v-for="d in stayDateList" :key="d">
+                    <td class="text-caption" style="width:90px">{{ formatDay(d) }}</td>
+                    <td>
+                      <q-input
+                        v-model.number="dailyPrices[d]"
+                        type="number"
+            dense
+            filled
+            bg-color="blue-1"
+                        :rules="[v=>v!==undefined && v!==null && v!=='' || '必填', v=>parseFloat(v)>0 || '需>0']"
+                        style="max-width:110px"
+                        @update:model-value="recalcTotal"
+                      >
+                        <template #prepend>
+                          <q-icon name="attach_money" color="primary" size="16px" />
+                        </template>
+                      </q-input>
+                    </td>
+                  </tr>
+                </tbody>
+              </q-markup-table>
             </div>
             <div class="row q-gutter-sm q-mt-xs">
               <div class="col text-h6 text-positive">总价: ¥{{ totalPrice }}</div>
@@ -273,6 +317,14 @@ const guestPhone = ref('')
 const notes = ref('')
 const submitting = ref(false)
 const newOrderNumber = ref('')
+// 可编辑续住单价
+const customUnitPrice = ref(0)
+// 多日价格对象 (key=YYYY-MM-DD)
+const dailyPrices = ref({})
+const singlePriceRules = [
+  val => val !== null && val !== undefined && val !== '' || '请输入房价',
+  val => parseFloat(val) > 0 || '房价必须大于0'
+]
 
 // 监听日期变化，重新获取可用房间
 watch([extendStartDate, extendEndDate], ([newStartDate, newEndDate]) => {
@@ -314,17 +366,20 @@ const stayDays = computed(() => {
 
 const totalPrice = computed(() => {
   if (!selectedRoomInfo.value || !stayDays.value) return 0
-  return selectedRoomInfo.value.price * stayDays.value
+  if (stayDays.value === 1) {
+    const unit = parseFloat(customUnitPrice.value) || 0
+    return unit
+  }
+  return Object.values(dailyPrices.value).reduce((s,v)=> s + (parseFloat(v)||0),0)
 })
 
 const canConfirm = computed(() => {
-  return selectedRoom.value &&
-         extendStartDate.value &&
-         extendEndDate.value &&
-         guestName.value.trim() &&
-         guestPhone.value.trim() &&
-         newOrderNumber.value.trim() &&
-         stayDays.value > 0
+  if (!(selectedRoom.value && extendStartDate.value && extendEndDate.value && guestName.value.trim() && guestPhone.value.trim() && newOrderNumber.value.trim() && stayDays.value > 0)) return false
+  if (stayDays.value === 1) return parseFloat(customUnitPrice.value) > 0
+  // 多日：所有 dailyPrices 完整且>0
+  const dates = stayDateList.value
+  if (!dates.length) return false
+  return dates.every(d => parseFloat(dailyPrices.value[d]) > 0)
 })
 
 // 检查原房间是否在可用房间列表中
@@ -353,6 +408,46 @@ function selectOriginalRoom() {
   if (props.currentOrder?.roomNumber) {
     selectedRoom.value = props.currentOrder.roomNumber
   }
+}
+
+// 当选择房间改变时，初始化可编辑单价
+watch(selectedRoomInfo, (info) => {
+  if (info) {
+    if (!customUnitPrice.value || customUnitPrice.value <= 0) {
+      customUnitPrice.value = info.price
+    }
+  } else {
+    customUnitPrice.value = 0
+  }
+})
+
+// 生成续住每日日期列表 (入住日至离店日前一日)
+const stayDateList = computed(() => {
+  if (!extendStartDate.value || !extendEndDate.value) return []
+  const res = []
+  const start = new Date(extendStartDate.value)
+  const end = new Date(extendEndDate.value) // checkout
+  for (let d = new Date(start); d < end; d.setDate(d.getDate()+1)) {
+    res.push(d.toISOString().split('T')[0])
+  }
+  return res
+})
+
+// 监听日期范围变化构建 dailyPrices
+watch(stayDateList, (list) => {
+  const current = { ...dailyPrices.value }
+  // 删除不存在的
+  Object.keys(current).forEach(k => { if (!list.includes(k)) delete current[k] })
+  // 新增的设默认价
+  list.forEach(d => { if (current[d] === undefined) current[d] = parseFloat(customUnitPrice.value) || selectedRoomInfo.value?.price || 0 })
+  dailyPrices.value = current
+}, { immediate: true })
+
+function recalcTotal(){ /* 占位: totalPrice computed 自动更新 */ }
+
+function formatDay(str){
+  if(!str) return ''
+  try { const d = new Date(str); return `${d.getMonth()+1}-${d.getDate()}` } catch { return str }
 }
 
 // 监听对话框打开，初始化数据
@@ -385,6 +480,16 @@ watch(() => props.modelValue, (newVal) => {
         endDate: extendEndDate.value
       })
     }, 100)
+    // 初始化单价（如果原订单是JSON对象，取其最后一晚或第一晚单价）
+    try {
+      const rp = props.currentOrder.roomPrice
+      if (rp && typeof rp === 'object') {
+        const keys = Object.keys(rp).sort()
+        if (keys.length) customUnitPrice.value = parseFloat(rp[keys[keys.length-1]]) || parseFloat(rp[keys[0]]) || 0
+      } else if (typeof rp === 'number') {
+        customUnitPrice.value = rp
+      }
+    } catch(e){ customUnitPrice.value = selectedRoomInfo.value?.price || 0 }
   } else if (!newVal) {
     // 对话框关闭时重置所有字段
     selectedRoom.value = null
@@ -395,6 +500,8 @@ watch(() => props.modelValue, (newVal) => {
     notes.value = ''
     submitting.value = false
     newOrderNumber.value = ''
+  customUnitPrice.value = 0
+  dailyPrices.value = {}
   }
 })
 
@@ -409,7 +516,7 @@ async function confirmExtendStay() {
       originalOrderNumber: props.currentOrder.orderNumber,
       roomNumber: selectedRoom.value,
       roomType: selectedRoomInfo.value.type,
-      roomPrice: selectedRoomInfo.value.price,
+  roomPrice: stayDays.value === 1 ? (parseFloat(customUnitPrice.value) || selectedRoomInfo.value.price) : { ...dailyPrices.value },
       checkInDate: extendStartDate.value,
       checkOutDate: extendEndDate.value,
       guestName: guestName.value.trim(),
@@ -429,10 +536,43 @@ async function confirmExtendStay() {
     submitting.value = false
   }
 }
+
+// 格式化原订单房价（可能为JSON）
+function formatOriginalRoomPrice(val) {
+  if (val == null) return '—'
+  if (typeof val === 'number') return `¥${val}/晚`
+  if (typeof val === 'object') {
+    const keys = Object.keys(val).sort()
+    if (!keys.length) return '—'
+    if (keys.length === 1) return `¥${val[keys[0]]}/晚`
+    // 多日：显示范围与总计
+    const prices = keys.map(k => parseFloat(val[k])||0)
+    const min = Math.min(...prices)
+    const max = Math.max(...prices)
+    const sum = prices.reduce((a,b)=>a+b,0)
+    return `¥${min===max?min:`${min}-${max}`} 共${prices.length}天 合计¥${sum}`
+  }
+  return String(val)
+}
 </script>
 
 <style scoped>
 .q-card {
   max-width: 600px;
 }
+
+.price-table-transparent {
+  background: transparent;
+  width: 100%;
+  border: 1px solid #d9e6f2;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.price-table-transparent td {
+  background: #e6f1fb; /* 接近 blue-1 更柔和 */
+  border-bottom: 1px solid #d9e6f2;
+  border-right: none;
+}
+.price-table-transparent tr:last-child td { border-bottom: none; }
+.price-table-transparent td:first-child { width: 90px; }
 </style>

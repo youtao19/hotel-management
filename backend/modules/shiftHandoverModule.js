@@ -63,48 +63,39 @@ function normalizePaymentMethod(paymentMethod) {
  * @returns {Promise<Array>} 收款明细列表
  */
 async function getReceiptDetails(type, startDate, endDate) {
-  // 根据类型确定分类条件 - 基于订单业务属性而非房间类型
-  let typeCondition = '';
-  if (type === 'hotel') {
-    // 客房：跨日期的订单
-    typeCondition = `(
-      o.check_in_date::date != o.check_out_date::date
-    )`;
-  } else if (type === 'rest') {
-    // 休息房：同日期的订单
-    typeCondition = `(
-      o.check_in_date::date = o.check_out_date::date
-    )`;
-  } else {
-    typeCondition = "1=1"; // 显示所有类型
-  }
+  // 需求：改为以账单(bills)为主的数据来源，按账单日期筛选。
+  // 账单日期优先使用 stay_date，没有则回退 create_time::date。
+  // 仍然使用订单的入住/退房日期用于 hotel/rest 分类及展示。
 
+  let typeCondition = '1=1';
+  if (type === 'hotel') {
+    typeCondition = `(o.check_in_date::date != o.check_out_date::date)`;
+  } else if (type === 'rest') {
+    typeCondition = `(o.check_in_date::date = o.check_out_date::date)`;
+  }
 
   const sql = `
     SELECT
-      o.order_id as id,                        -- 订单ID
-      o.order_id as order_number,              -- 订单编号（与ID相同）
-      o.room_number,                           -- 房间号
-      o.guest_name,                            -- 客人姓名
-      b.room_fee as room_fee,                  -- 房费（仅取bills表的room_fee）
-      b.deposit as deposit,                    -- 押金（仅取bills表的deposit）
-      b.pay_way as payment_method,             -- 支付方式（仅取bills表的pay_way）
-      b.total_income as total_amount,          -- 总金额（仅取bills表的total_income）
-      o.check_in_date,                         -- 入住时间
-      o.check_out_date,                        -- 退房时间
-      o.create_time as created_at,             -- 订单创建时间
-      r.type_code,                             -- 房型代码
-      CASE                                     -- 开始判断业务类型
-        WHEN (o.check_in_date::date != o.check_out_date::date) THEN 'hotel'
-        ELSE 'rest'
-      END as business_type                                        -- 业务类型：如果入住和退房日期不同则为'住宿房'，否则为'休息'
-    FROM orders o
-    JOIN rooms r ON o.room_number = r.room_number                 -- 通过房间号与rooms表（房间信息表）关联，获取房型代码等信息
-    LEFT JOIN bills b ON o.order_id = b.order_id                  -- 左连接bills表（账单表），优先使用账单表中的数据
-    WHERE ${typeCondition}                                        -- 业务类型条件（由函数参数type决定，hotel为跨天订单，rest为当天订单，默认全部）
-    AND o.check_in_date::date BETWEEN $1::date AND $2::date       -- 入住日期在指定的开始和结束日期之间
-    AND o.status IN ('checked-in', 'checked-out', 'pending')      -- 订单状态为已入住、已退房、待入住（即有效订单）
-    ORDER BY o.check_in_date DESC;                                -- 按入住时间倒序排列
+      b.bill_id as id,                         -- 账单ID 作为行主键
+      b.order_id as order_number,              -- 订单编号
+      b.room_number,                           -- 房间号（直接来自账单）
+      b.guest_name,                            -- 客人姓名（账单快照）
+      b.room_fee,                              -- 房费（账单记录）
+      b.deposit,                               -- 押金（通常只在首张账单出现）
+      b.pay_way as payment_method,             -- 支付方式
+      b.total_income as total_amount,          -- 总收入（房费+押金）
+      o.check_in_date,                         -- 订单入住时间（展示 / 分类）
+      o.check_out_date,                        -- 订单退房时间（展示 / 分类）
+      b.create_time as created_at,             -- 账单创建时间
+  b.stay_date::date as stay_date,          -- 强制转换为 date 防止时区偏移
+      CASE WHEN (o.check_in_date::date != o.check_out_date::date) THEN 'hotel' ELSE 'rest' END AS business_type
+    FROM bills b
+    JOIN orders o ON b.order_id = o.order_id
+    LEFT JOIN rooms r ON b.room_number = r.room_number
+    WHERE ${typeCondition}
+  AND b.stay_date BETWEEN $1::date AND $2::date
+      AND o.status IN ('checked-in', 'checked-out', 'pending')
+    ORDER BY COALESCE(b.stay_date, b.create_time::date) DESC, b.bill_id DESC;
   `;
 
   try {

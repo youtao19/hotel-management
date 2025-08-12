@@ -337,12 +337,17 @@ router.post('/change-room', async (req, res) => {
     console.log('更换房间成功:', result);
     res.json(result);
   } catch (error) {
-    console.error('更换房间失败:', error);
-    console.error('错误堆栈:', error.stack);
-    res.status(400).json({
+    console.error('更换房间失败:', error.message);
+    const clientErrorCodes = [
+      'MISSING_PARAMS', 'SAME_ROOM', 'ORDER_STATUS_INVALID', 'NEW_ROOM_NOT_FOUND',
+      'NEW_ROOM_CLOSED', 'NEW_ROOM_REPAIR', 'NEW_ROOM_NOT_AVAILABLE', 'NEW_ROOM_CONFLICT'
+    ];
+    const status = clientErrorCodes.includes(error.code) ? 400 : 500;
+    res.status(status).json({
       success: false,
       message: error.message || '更换房间失败',
-      error: process.env.NODE_ENV === 'dev' ? error.stack : undefined
+      code: error.code || (status === 400 ? 'ROOM_CHANGE_VALIDATION' : 'ROOM_CHANGE_SERVER'),
+      stack: process.env.NODE_ENV === 'dev' ? error.stack : undefined
     });
   }
 });

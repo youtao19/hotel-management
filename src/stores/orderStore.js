@@ -39,7 +39,8 @@ export const useOrderStore = defineStore('order', () => {
         roomPrice: order.room_price,
         deposit: order.deposit,
         refundedDeposit: order.refunded_deposit || 0,
-        refundRecords: order.refund_records || [],
+  // refundRecords / refundedDeposit 改为由账单层获取，这里先占位0与空数组（调用端如需精确数据应查询账单）
+  refundRecords: [],
         createTime: order.create_time,
         remarks: order.remarks,
         source: order.order_source,
@@ -355,33 +356,34 @@ export const useOrderStore = defineStore('order', () => {
 
       // 调用API
       const response = await orderApi.refundDeposit(refundData.orderNumber, refundData);
-
-      // 更新本地订单数据
-      const orderIndex = orders.value.findIndex(order => order.orderNumber === refundData.orderNumber);
-      if (orderIndex !== -1) {
-        const currentRefunded = orders.value[orderIndex].refundedDeposit || 0;
-        orders.value[orderIndex] = {
-          ...orders.value[orderIndex],
-          refundedDeposit: currentRefunded + refundData.actualRefundAmount,
-          refundRecords: [
-            ...(orders.value[orderIndex].refundRecords || []),
-            {
-              refundTime: refundData.refundTime,
-              actualRefundAmount: refundData.actualRefundAmount,
-              method: refundData.method,
-              operator: refundData.operator,
-              notes: refundData.notes || ''
-            }
-          ]
-        };
-      }
-
       console.log('✅ 退押金处理成功:', response);
+
+      // 成功后刷新押金状态（账单层）
+      try {
+        const dep = await orderApi.getDepositInfo(refundData.orderNumber);
+        const orderIndex = orders.value.findIndex(order => order.orderNumber === refundData.orderNumber);
+        if (orderIndex !== -1 && dep?.data) {
+          orders.value[orderIndex].refundedDeposit = dep.data.refunded;
+          orders.value[orderIndex].deposit = dep.data.deposit; // 防止历史为0时补齐
+        }
+      } catch (e) {
+        console.warn('刷新押金状态失败:', e.message);
+      }
       return response;
 
     } catch (err) {
       console.error('❌ 退押金处理失败:', err);
-      error.value = err.response?.data?.message || err.message || '退押金处理失败';
+      const resp = err.response?.data;
+      // 如果是超额报错且提供 availableRefund，自动调整本地可退显示（refundedDeposit = deposit - availableRefund）
+      if (resp?.availableRefund !== undefined && resp?.originalDeposit !== undefined) {
+        const orderIndex = orders.value.findIndex(o => o.orderNumber === refundData.orderNumber);
+        if (orderIndex !== -1) {
+          const computedRefunded = resp.originalDeposit - resp.availableRefund;
+          orders.value[orderIndex].refundedDeposit = computedRefunded;
+          orders.value[orderIndex].deposit = resp.originalDeposit;
+        }
+      }
+      error.value = resp?.message || err.message || '退押金处理失败';
       throw err;
     } finally {
       loading.value = false;

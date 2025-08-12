@@ -188,6 +188,9 @@ async function initializeHotelDB() {
     // 2. 创建表结构
     await createTables();
 
+  // 3. (已移除自动执行全部迁移，以避免在自定义裁剪字段后被重新添加)
+  // 若需要运行特定迁移，请手动执行对应脚本。
+
     console.log('酒店管理系统数据库初始化完成');
     return true;
   } catch (err) {

@@ -237,11 +237,35 @@ router.post('/:orderNumber/refund-deposit', [
     });
 
   } catch (error) {
-    console.error('退押金处理失败:', error);
-    res.status(500).json({
-      message: '退押金处理失败',
-      error: error.message
+    console.error('退押金处理失败:', error.message);
+    const msg = error.message || '退押金处理失败';
+    const validationIndicators = [
+      '只有已退房或已取消的订单才能退押金',
+      '该订单没有可退押金',
+      '退押金金额不能超过可退金额',
+      '订单号',
+      '退款累计'
+    ];
+    const isClientError = validationIndicators.some(v => msg.includes(v));
+    res.status(isClientError ? 400 : 500).json({
+      message: msg,
+      error: msg,
+      code: error.code || (isClientError ? 'REFUND_VALIDATION' : 'REFUND_SERVER_ERROR'),
+      availableRefund: error.availableRefund,
+      originalDeposit: error.originalDeposit,
+      currentRefundedDeposit: error.currentRefundedDeposit
     });
+  }
+});
+
+/** 获取订单押金状态（基于账单） */
+router.get('/:orderNumber/deposit-info', async (req, res) => {
+  try {
+    const { orderNumber } = req.params;
+    const status = await orderModule.getDepositStatus(orderNumber);
+    res.json({ success: true, data: status });
+  } catch (e) {
+    res.status(500).json({ success: false, message: '获取押金状态失败', error: e.message });
   }
 });
 

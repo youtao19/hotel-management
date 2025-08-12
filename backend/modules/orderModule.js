@@ -601,40 +601,50 @@ async function refundDeposit(refundData) {
     }
 
     // 验证押金金额
-    const originalDeposit = parseFloat(order.deposit) || 0; // 原始押金
-    const currentRefundedDeposit = parseFloat(order.refunded_deposit) || 0; // 当前已退押金
+    let originalDeposit = parseFloat(order.deposit) || 0; // 原始押金
+    // 如果订单表押金为0，尝试从第一张含押金账单获取（兼容历史/拆分逻辑）
+    if (originalDeposit === 0) {
+      try {
+        const billRes = await query(`SELECT deposit FROM bills WHERE order_id=$1 AND COALESCE(deposit,0)>0 ORDER BY create_time ASC LIMIT 1`, [orderNumber]);
+        if (billRes.rows.length) {
+          const billDeposit = parseFloat(billRes.rows[0].deposit) || 0;
+          if (billDeposit > 0) {
+            originalDeposit = billDeposit;
+            console.log('[refundDeposit] 使用账单押金作为原始押金:', billDeposit);
+          }
+        }
+      } catch (e) {
+        console.warn('[refundDeposit] 获取账单押金失败(忽略):', e.message);
+      }
+    }
+    // 通过账单计算当前已退押金（refund_deposit 为负数, 取绝对值）
+    let currentRefundedDeposit = 0;
+    try {
+      const billRef = await query(`SELECT refund_deposit, deposit FROM bills WHERE order_id=$1 AND COALESCE(deposit,0)>0 ORDER BY create_time ASC LIMIT 1`, [orderNumber]);
+      if (billRef.rows.length) {
+        const b = billRef.rows[0];
+        if (originalDeposit === 0 && b.deposit) originalDeposit = parseFloat(b.deposit) || 0; // 若订单押金为0用账单押金
+        currentRefundedDeposit = Math.abs(parseFloat(b.refund_deposit) || 0);
+      }
+    } catch (calcErr) {
+      console.warn('[refundDeposit] 计算已退押金失败(忽略, 按0处理):', calcErr.message);
+    }
     const availableRefund = originalDeposit - currentRefundedDeposit; // 可退押金
 
-    if (refundAmount > availableRefund) {
-      throw new Error(`退押金金额不能超过可退金额 ¥${availableRefund}`);
+    if (originalDeposit <= 0) {
+      throw new Error('该订单没有可退押金');
     }
 
-    // 更新订单的退押金信息
-    const newRefundedDeposit = currentRefundedDeposit + actualRefundAmount; // 新的已退押金金额
+    if (refundAmount > availableRefund) {
+  const err = new Error(`退押金金额不能超过可退金额 ¥${availableRefund}`);
+  err.code = 'REFUND_EXCEED';
+  err.availableRefund = availableRefund;
+  err.originalDeposit = originalDeposit;
+  err.currentRefundedDeposit = currentRefundedDeposit;
+  throw err;
+    }
 
-    /*
-      这段SQL代码的作用是：
-      1. 更新orders表中指定order_id的订单的已退押金金额（refunded_deposit 字段）。
-      2. 将本次退押金的记录追加到refund_records字段（类型为JSONB的数组）。
-         - COALESCE(refund_records, '[]'::jsonb) 保证即使原本没有退押金记录也能正常追加。
-         - $2::jsonb 是本次退押金的记录（以JSON数组形式传入），通过 || 操作符追加到原有数组后面。
-      3. WHERE order_id = $3 指定只更新对应订单号的记录。
-      4. RETURNING * 表示返回更新后的整条订单记录。
-
-      参数说明：
-      $1: 新的已退押金金额
-      $2: 本次退押金记录（JSON数组）
-      $3: 订单号
-    */
-    const updateQuery = `
-      UPDATE orders
-      SET refunded_deposit = $1,
-          refund_records = COALESCE(refund_records, '[]'::jsonb) || $2::jsonb
-      WHERE order_id = $3
-      RETURNING *
-    `;
-
-    // 构建退押金记录
+    // 构建退款记录（用于交接班记录、日志）
     const refundRecord = {
       refundTime: refundTime || new Date().toISOString(),
       refundAmount,
@@ -645,18 +655,7 @@ async function refundDeposit(refundData) {
       operator
     };
 
-    // 更新订单退押金信息
-    const updateResult = await query(updateQuery, [
-      newRefundedDeposit, // 新的已退押金金额
-      JSON.stringify([refundRecord]), // 本次退押金的记录（JSON数组）
-      orderNumber // 订单号
-    ]);
-
-    if (updateResult.rows.length === 0) {
-      throw new Error('更新订单退押金信息失败');
-    }
-
-    console.log('退押金处理成功(订单层):', { orderNumber, originalDeposit, newRefundedDeposit, actualRefundAmount });
+    console.log('退押金校验通过, 即将应用到账单层:', { orderNumber, originalDeposit, currentRefundedDeposit, actualRefundAmount });
 
     // 同步更新账单中的退款记录
     try {
@@ -684,12 +683,28 @@ async function refundDeposit(refundData) {
       // 不抛出错误，因为退押金本身已经成功
     }
 
-    return updateResult.rows[0];
+  return order; // 订单本身未修改（押金退款状态由账单体现）
 
   } catch (error) {
     console.error('退押金处理失败:', error);
     throw error;
   }
+}
+
+/**
+ * 获取订单押金状态（基于账单）
+ * @param {string} orderId 
+ * @returns {Promise<{orderId:string, deposit:number, refunded:number, remaining:number}>}
+ */
+async function getDepositStatus(orderId) {
+  const res = await query(`SELECT deposit, refund_deposit FROM bills WHERE order_id=$1 AND COALESCE(deposit,0)>0 ORDER BY create_time ASC LIMIT 1`, [orderId]);
+  if (!res.rows.length) {
+    return { orderId, deposit: 0, refunded: 0, remaining: 0 };
+  }
+  const row = res.rows[0];
+  const deposit = parseFloat(row.deposit)||0;
+  const refunded = Math.abs(parseFloat(row.refund_deposit)||0);
+  return { orderId, deposit, refunded, remaining: deposit - refunded };
 }
 
 const table = {
@@ -699,6 +714,7 @@ const table = {
   getOrderById,
   updateOrderStatus,
   refundDeposit,
+  getDepositStatus,
   isRestRoom,
   calculateTotalPrice,
   validatePriceDateRange

@@ -647,24 +647,31 @@ async function changeRoom(newRoomNumber) {
     let errorMessage = '更换房间失败';
 
     if (error.response?.data) {
-      // 显示后端返回的具体错误信息
-      errorMessage = error.response.data.message || '更换房间失败';
-      console.error('后端错误详情:', error.response.data);
-
-      // 如果有参数验证失败的详细信息，也显示出来
-      if (error.response.data.received) {
-        console.error('后端接收到的参数:', error.response.data.received);
+      const data = error.response.data;
+      const code = data.code;
+      console.error('后端错误详情:', data);
+      const codeMap = {
+        MISSING_PARAMS: '参数缺失，请刷新后重试',
+        SAME_ROOM: '新房间与当前房间相同，无需更换',
+        ORDER_STATUS_INVALID: '订单状态不允许更换房间，仅待入住/已入住可更换',
+        NEW_ROOM_NOT_FOUND: '目标房间不存在',
+        NEW_ROOM_CLOSED: '目标房间已关闭',
+        NEW_ROOM_REPAIR: '目标房间正在维修中',
+        NEW_ROOM_NOT_AVAILABLE: '目标房间当前不可用',
+        NEW_ROOM_CONFLICT: '目标房间在该日期范围内已有冲突订单',
+        ROOM_CHANGE_VALIDATION: '请求参数校验失败',
+        ROOM_CHANGE_SERVER: '服务器内部错误，请稍后再试'
+      };
+      if (code && codeMap[code]) {
+        errorMessage = codeMap[code];
+      } else {
+        errorMessage = data.message || errorMessage;
       }
     } else {
-      errorMessage = error.message || '更换房间失败';
+      errorMessage = error.message || errorMessage;
     }
 
-    $q.notify({
-      type: 'negative',
-      message: errorMessage,
-      position: 'top',
-      multiLine: true
-    });
+    $q.notify({ type: 'negative', message: errorMessage, position: 'top', multiLine: true });
   }
 }
 
@@ -1007,18 +1014,26 @@ async function handleRefreshExtendStayRooms(dateRange) {
   }
 }
 
-// 判断是否可以退押金
-// 账单退款信息映射 (order_id -> refund_deposit)
-const billRefundDepositMap = computed(() => {
+// ===== 退押金按钮显示逻辑（调整：已发生一次退款后隐藏） =====
+// 新业务规则：发生任意一次退款（不管是否全额，只要 refund_deposit < 0 表示已执行过退款）后不再允许继续退款。
+// 原因：第一次退款可能已包含扣款（损坏赔偿等），剩余差额为“扣留”部分，不再退还。
+// 逻辑：
+// 1. 状态必须在 allowedRefundStatuses
+// 2. 押金>0
+// 3. 账单层 refund_deposit == 0 (尚未退款) 才显示按钮
+// 4. 没有账单记录时回退到订单字段（refundedDeposit==0）
+
+const allowedRefundStatuses = ['checked-out', 'cancelled'] // 如需支持入住中：添加 'checked-in'
+
+const billDepositInfoMap = computed(() => {
+  // order_id -> { deposit, refunded }
   const map = {}
   billStore.bills.forEach(b => {
-    // 只记录第一条含押金账单，或若尚未记录
-    if (!map[b.order_id]) {
-      if ((b.deposit || 0) > 0) {
-        map[b.order_id] = b.refund_deposit
-      } else {
-        map[b.order_id] = b.refund_deposit
-      }
+    // 锁定第一张含押金账单
+    if (!map[b.order_id] && (b.deposit || 0) > 0) {
+      const deposit = Number(b.deposit) || 0
+      const refunded = Math.abs(Number(b.refund_deposit) || 0) // refund_deposit 为负数
+      map[b.order_id] = { deposit, refunded }
     }
   })
   return map
@@ -1026,12 +1041,19 @@ const billRefundDepositMap = computed(() => {
 
 function canRefundDeposit(order) {
   if (!order) return false
-  // 仍要求订单状态必须为已退房或已取消，且存在押金
-  const statusOk = ['checked-out', 'cancelled'].includes(order.status)
-  const hasDeposit = (order.deposit || 0) > 0
-  // 新逻辑：只有对应账单 refund_deposit === 0 时显示退押按钮
-  const billRefund = billRefundDepositMap.value[order.orderNumber]
-  return statusOk && hasDeposit && billRefund === 0
+  if (!allowedRefundStatuses.includes(order.status)) return false
+  const info = billDepositInfoMap.value[order.orderNumber]
+  if (info) {
+    // 已经有退款（refunded>0） => 隐藏
+    if (info.refunded > 0) return false
+    return info.deposit > 0
+  }
+  // 回退逻辑（无账单缓存）
+  const deposit = Number(order.deposit) || 0
+  const refunded = Number(order.refundedDeposit) || 0
+  if (deposit <= 0) return false
+  if (refunded > 0) return false
+  return true
 }
 
 // 打开退押金对话框

@@ -325,6 +325,17 @@ async function changeOrderRoom(orderNumber, oldRoomNumber, newRoomNumber) {
   console.log(`更换房间请求: 订单 ${orderNumber} 从房间 ${oldRoomNumber} 换到 ${newRoomNumber}`);
 
   try {
+        // 基础参数校验
+    if (!orderNumber || !oldRoomNumber || !newRoomNumber) {
+      const err = new Error('缺少必要参数');
+      err.code = 'MISSING_PARAMS';
+      throw err;
+    }
+    if (oldRoomNumber === newRoomNumber) {
+      const err = new Error('新房间与原房间相同，无需更换');
+      err.code = 'SAME_ROOM';
+      throw err;
+    }
         // 1. 验证订单状态（待入住和已入住的订单可以更换房间）
     const orderCheckResult = await query(
       'SELECT * FROM orders WHERE order_id = $1 AND status IN ($2, $3)',
@@ -332,7 +343,9 @@ async function changeOrderRoom(orderNumber, oldRoomNumber, newRoomNumber) {
     );
 
     if (orderCheckResult.rows.length === 0) {
-      throw new Error('订单不存在或状态不允许更换房间（只有待入住和已入住订单可以更换房间）');
+      const err = new Error('订单不存在或状态不允许更换房间（只有待入住和已入住订单可以更换房间）');
+      err.code = 'ORDER_STATUS_INVALID';
+      throw err;
     }
 
     const order = orderCheckResult.rows[0];
@@ -344,22 +357,30 @@ async function changeOrderRoom(orderNumber, oldRoomNumber, newRoomNumber) {
     );
 
     if (newRoomResult.rows.length === 0) {
-      throw new Error('新房间不存在');
+  const err = new Error('新房间不存在');
+  err.code = 'NEW_ROOM_NOT_FOUND';
+  throw err;
     }
 
     const newRoom = newRoomResult.rows[0];
 
     if (newRoom.is_closed) {
-      throw new Error('新房间已关闭，无法使用');
+  const err = new Error('新房间已关闭，无法使用');
+  err.code = 'NEW_ROOM_CLOSED';
+  throw err;
     }
 
     if (newRoom.status === 'repair') {
-      throw new Error('新房间正在维修，无法使用');
+  const err = new Error('新房间正在维修，无法使用');
+  err.code = 'NEW_ROOM_REPAIR';
+  throw err;
     }
 
     // 对于已入住的订单，新房间必须是可用状态
     if (order.status === 'checked-in' && newRoom.status !== 'available') {
-      throw new Error(`新房间当前状态为"${newRoom.status}"，已入住订单只能换到可用房间`);
+  const err = new Error(`新房间当前状态为"${newRoom.status}"，已入住订单只能换到可用房间`);
+  err.code = 'NEW_ROOM_NOT_AVAILABLE';
+  throw err;
     }
 
         // 3. 检查新房间在订单日期期间是否有冲突
@@ -374,7 +395,9 @@ async function changeOrderRoom(orderNumber, oldRoomNumber, newRoomNumber) {
     `, [newRoomNumber, orderNumber, order.check_in_date, order.check_out_date]);
 
     if (parseInt(conflictCheckResult.rows[0].count) > 0) {
-      throw new Error('新房间在指定日期期间已被预订');
+  const err = new Error('新房间在指定日期期间已被预订');
+  err.code = 'NEW_ROOM_CONFLICT';
+  throw err;
     }
 
     // 4. 开始事务更新
@@ -382,15 +405,34 @@ async function changeOrderRoom(orderNumber, oldRoomNumber, newRoomNumber) {
 
     try {
             // 更新订单的房间信息
+      // 准备新的 room_price JSON：保持 JSONB 结构 (满足 chk_room_price_json)
+      let newRoomPriceJson = {};
+      try {
+        // order.room_price 可能已是对象 (JSONB -> JS 对象)，也可能是数字(旧数据)，也可能为空
+        if (order.room_price && typeof order.room_price === 'object' && !Array.isArray(order.room_price)) {
+          Object.keys(order.room_price).forEach(k => { newRoomPriceJson[k] = Number(newRoom.price); });
+        } else {
+          // 构造单日键：使用入住日期；若为空则使用当前日期
+            const keyDate = (order.check_in_date || new Date().toISOString().split('T')[0]).toString().split('T')[0];
+          newRoomPriceJson[keyDate] = Number(newRoom.price);
+        }
+      } catch (e) {
+        console.warn('构造 newRoomPriceJson 失败，使用回退策略:', e.message);
+        const keyDate = (order.check_in_date || new Date().toISOString().split('T')[0]).toString().split('T')[0];
+        newRoomPriceJson[keyDate] = Number(newRoom.price);
+      }
+
       const updateOrderResult = await query(`
         UPDATE orders
-        SET room_number = $1, room_type = $2, room_price = $3
+        SET room_number = $1, room_type = $2, room_price = $3::jsonb
         WHERE order_id = $4
         RETURNING *
-      `, [newRoomNumber, newRoom.type_code, newRoom.price, orderNumber]);
+      `, [newRoomNumber, newRoom.type_code, JSON.stringify(newRoomPriceJson), orderNumber]);
 
       if (updateOrderResult.rows.length === 0) {
-        throw new Error('更新订单失败');
+  const err = new Error('更新订单失败');
+  err.code = 'UPDATE_ORDER_FAILED';
+  throw err;
       }
 
             const updatedOrder = updateOrderResult.rows[0];

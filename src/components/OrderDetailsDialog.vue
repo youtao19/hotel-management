@@ -219,12 +219,12 @@ function emitRefundDeposit() {
 // 判断是否可以退押金
 function canRefundDeposit(order) {
   if (!order) return false
-
-  const hasDeposit = (order.deposit || 0) > 0
-  const refundedDeposit = order.refundedDeposit || 0
-  const canRefund = ['checked-out', 'cancelled'].includes(order.status)
-  const hasRemainingDeposit = refundedDeposit < (order.deposit || 0)
-
-  return hasDeposit && canRefund && hasRemainingDeposit
+  const allowedStatuses = ['checked-out', 'cancelled']
+  if (!allowedStatuses.includes(order.status)) return false
+  const deposit = Number(order.deposit) || 0
+  if (deposit <= 0) return false
+  const refunded = Number(order.refundedDeposit) || 0
+  // 新规则：只允许第一次退款（refunded==0 表示尚未退款）
+  return refunded === 0
 }
 </script>
