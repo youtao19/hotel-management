@@ -277,7 +277,7 @@ const filteredOrders = computed(() => {
 async function fetchAllOrders() {
   try {
     loadingOrders.value = true;
-    await orderStore.fetchAllOrders(); // <--- 修改这里的函数名为 fetchAllOrders
+    await orderStore.fetchAllOrders();
     console.log('获取到的订单数据:', orderStore.orders);
   } catch (error) {
     console.error('获取订单数据失败:', error);
@@ -830,6 +830,9 @@ async function handleBillCreated() {
       position: 'top'
     });
 
+  // 关闭账单对话框（双保险）
+  showBillDialog.value = false;
+
   } catch (error) {
     console.error('处理账单创建成功事件失败:', error);
     $q.notify({
@@ -1005,16 +1008,30 @@ async function handleRefreshExtendStayRooms(dateRange) {
 }
 
 // 判断是否可以退押金
+// 账单退款信息映射 (order_id -> refund_deposit)
+const billRefundDepositMap = computed(() => {
+  const map = {}
+  billStore.bills.forEach(b => {
+    // 只记录第一条含押金账单，或若尚未记录
+    if (!map[b.order_id]) {
+      if ((b.deposit || 0) > 0) {
+        map[b.order_id] = b.refund_deposit
+      } else {
+        map[b.order_id] = b.refund_deposit
+      }
+    }
+  })
+  return map
+})
+
 function canRefundDeposit(order) {
-  // 已退房、已取消的订单，且押金大于0，且还未完全退押金
   if (!order) return false
-
+  // 仍要求订单状态必须为已退房或已取消，且存在押金
+  const statusOk = ['checked-out', 'cancelled'].includes(order.status)
   const hasDeposit = (order.deposit || 0) > 0
-  const refundedDeposit = order.refundedDeposit || 0
-  const canRefund = ['checked-out', 'cancelled'].includes(order.status)
-  const hasRemainingDeposit = refundedDeposit < (order.deposit || 0)
-
-  return hasDeposit && canRefund && hasRemainingDeposit
+  // 新逻辑：只有对应账单 refund_deposit === 0 时显示退押按钮
+  const billRefund = billRefundDepositMap.value[order.orderNumber]
+  return statusOk && hasDeposit && billRefund === 0
 }
 
 // 打开退押金对话框
@@ -1055,11 +1072,12 @@ async function handleRefundDeposit(refundData) {
       }
     }
 
-    // 关闭对话框
-    showRefundDepositDialog.value = false
+  // 关闭对话框
+  showRefundDepositDialog.value = false
 
-    // 刷新订单列表
-    await fetchAllOrders()
+  // 刷新订单与账单数据（账单 refund_deposit 更新后隐藏按钮）
+  await fetchAllOrders()
+  await billStore.fetchAllBills()
 
     $q.notify({
       type: 'positive',
@@ -1092,6 +1110,8 @@ function checkIfMultiDayOrder(order) {
 
 onMounted(async () => {
   await fetchAllOrders()
+  // 加载账单数据以支持退押按钮显示逻辑
+  try { await billStore.fetchAllBills() } catch (e) { console.warn('加载账单失败(不影响订单显示):', e.message) }
 })
 </script>
 

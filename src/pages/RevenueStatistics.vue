@@ -446,7 +446,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useQuasar, date } from 'quasar'
 import { revenueApi, shiftHandoverApi } from '../api/index'
 import api from '../api/index'
@@ -537,6 +537,12 @@ const tableColumns = computed(() => {
       name: 'order_count',
       label: '订单数',
       field: 'order_count',
+      align: 'center'
+    },
+    {
+      name: 'bill_count',
+      label: '账单数',
+      field: 'bill_count',
       align: 'center'
     },
     {
@@ -702,7 +708,13 @@ const fetchRevenueData = async () => {
     }
 
     console.log('收入数据API响应:', response)
-    revenueData.value = response.data || []
+    let raw = response.data || []
+    // === 填充缺失日期（仅每日统计）===
+    if (selectedPeriod.value === 'daily') {
+      const filled = fillMissingDailyData(raw, dateRange.value.start, dateRange.value.end)
+      raw = filled
+    }
+    revenueData.value = raw
     console.log('收入数据设置完成:', revenueData.value.length, '条记录')
 
     // 获取房型收入数据
@@ -729,6 +741,70 @@ const fetchRevenueData = async () => {
   } finally {
     loading.value = false
     console.log('fetchRevenueData 完成')
+  }
+}
+
+// 生成日期字符串列表 (YYYY-MM-DD) from start to end (inclusive)
+const generateDateList = (start, end) => {
+  const list = []
+  const startDate = new Date(start + 'T00:00:00')
+  const endDate = new Date(end + 'T00:00:00')
+  for (let d = startDate; d <= endDate; d.setDate(d.getDate() + 1)) {
+    list.push(d.toISOString().split('T')[0])
+  }
+  return list
+}
+
+// 填充缺失的每日数据为 0，确保趋势图起止日期与选择一致
+const fillMissingDailyData = (rows, start, end) => {
+  try {
+    console.log('[DEBUG] 原始每日统计 rows 长度:', rows.length)
+    if (rows[0]) console.log('[DEBUG] 第一条原始记录:', rows[0])
+    const map = new Map()
+    rows.forEach(r => {
+      const rawDate = r.date || r.day || r.check_in_date
+      if (!rawDate) return
+      const normalized = typeof rawDate === 'string' ? rawDate.substring(0,10) : new Date(rawDate).toISOString().split('T')[0]
+      // 覆盖 date 字段为标准 YYYY-MM-DD，避免后续格式化再次偏差
+      const obj = {
+        ...r,
+        date: normalized,
+        order_count: Number(r.order_count || 0),
+        total_revenue: Number(r.total_revenue || 0),
+        total_room_fee: Number(r.total_room_fee || 0),
+        cash_revenue: Number(r.cash_revenue || 0),
+        wechat_revenue: Number(r.wechat_revenue || 0),
+        alipay_revenue: Number(r.alipay_revenue || 0)
+      }
+      map.set(normalized, obj)
+    })
+    const allDates = generateDateList(start, end)
+    const filled = allDates.map(d => {
+      if (map.has(d)) return map.get(d)
+      return {
+        date: d,
+        order_count: 0,
+        total_revenue: 0,
+        total_room_fee: 0,
+        cash_revenue: 0,
+        wechat_revenue: 0,
+        alipay_revenue: 0
+      }
+    })
+    // 后端是 DESC，这里保持一致，后续前端仍 reverse() 变升序
+    filled.sort((a,b) => a.date < b.date ? 1 : -1)
+    const originalHasRevenue = rows.some(r => Number(r.total_revenue) > 0)
+    const filledAllZero = filled.every(r => Number(r.total_revenue) === 0)
+    console.log(`[DEBUG] originalHasRevenue=${originalHasRevenue} filledAllZero=${filledAllZero}`)
+    if (originalHasRevenue && filledAllZero) {
+      console.warn('[WARN] 填充后全部为0，回退到原始数据（可能日期键不匹配）')
+      return rows
+    }
+    console.log(`已填充每日缺失数据: 原 ${rows.length} 条 -> 填充后 ${filled.length} 条`)
+    return filled
+  } catch (e) {
+    console.warn('填充缺失日期失败, 使用原始数据:', e)
+    return rows
   }
 }
 
@@ -762,6 +838,7 @@ const updateRevenueChart = () => {
 
   const revenues = revenueData.value.map(item => item.total_revenue || 0).reverse()
   const orders = revenueData.value.map(item => item.order_count || 0).reverse()
+  const bills = revenueData.value.map(item => item.bill_count || 0).reverse()
 
   revenueChartInstance = new Chart(ctx, {
     type: 'line',
@@ -782,6 +859,15 @@ const updateRevenueChart = () => {
           borderColor: 'rgb(76, 175, 80)',
           backgroundColor: 'rgba(76, 175, 80, 0.1)',
           yAxisID: 'y1',
+          tension: 0.4
+        },
+        {
+          label: '账单数量',
+          data: bills,
+          borderColor: 'rgb(255, 152, 0)',
+          backgroundColor: 'rgba(255, 152, 0, 0.1)',
+          yAxisID: 'y1',
+          borderDash: [6,4],
           tension: 0.4
         }
       ]
@@ -832,11 +918,10 @@ const updateRevenueChart = () => {
         tooltip: {
           callbacks: {
             label: function(context) {
-              if (context.datasetIndex === 0) {
-                return `收入: ¥${formatCurrency(context.parsed.y)}`
-              } else {
-                return `订单: ${context.parsed.y}单`
-              }
+              if (context.dataset.label === '收入金额') return `收入: ¥${formatCurrency(context.parsed.y)}`
+              if (context.dataset.label === '订单数量') return `订单: ${context.parsed.y}单`
+              if (context.dataset.label === '账单数量') return `账单: ${context.parsed.y}张`
+              return `${context.dataset.label}: ${context.parsed.y}`
             }
           }
         }
@@ -1320,6 +1405,36 @@ onMounted(async () => {
   await fetchQuickStats()
   await fetchRevenueData()
   await fetchReceiptDetails()
+})
+
+// ============= 自动刷新逻辑（日期 / 周期变化时自动更新趋势图） =============
+const hasMounted = ref(false)
+let dateRangeFetchTimer = null
+
+const scheduleRevenueFetch = () => {
+  if (!hasMounted.value) return
+  if (!dateRange.value.start || !dateRange.value.end) return
+  // 避免频繁请求，做简单防抖
+  if (dateRangeFetchTimer) clearTimeout(dateRangeFetchTimer)
+  dateRangeFetchTimer = setTimeout(() => {
+    fetchRevenueData()
+  }, 400)
+}
+
+watch(() => selectedPeriod.value, () => {
+  scheduleRevenueFetch()
+})
+
+watch([
+  () => dateRange.value.start,
+  () => dateRange.value.end
+], () => {
+  scheduleRevenueFetch()
+})
+
+// 将 hasMounted 设为 true，避免初次挂载时 watch 重复触发一次
+onMounted(() => {
+  hasMounted.value = true
 })
 </script>
 

@@ -51,6 +51,19 @@
                   <div class="text-caption text-grey-7">可退押金金额</div>
                   <div class="text-h6 text-positive text-weight-bold">¥{{ availableRefundAmount }}</div>
                 </div>
+                <div v-if="order.refundRecords && order.refundRecords.length" class="col-12 q-mt-sm">
+                  <div class="text-caption text-grey-7">历史退款记录</div>
+                  <q-timeline color="purple" layout="dense" class="q-mt-xs refund-history">
+                    <q-timeline-entry
+                      v-for="(r,i) in order.refundRecords"
+                      :key="i"
+                      :title="formatRefundTitle(r)"
+                      :subtitle="formatRefundSubtitle(r)"
+                      color="purple"
+                      icon="history"
+                    />
+                  </q-timeline>
+                </div>
               </div>
             </q-card-section>
           </q-card>
@@ -118,6 +131,7 @@
             outlined
             readonly
             class="bg-grey-1"
+            :hint="`剩余押金：¥${remainingDepositAfter}`"
           />
 
           <!-- 退押金说明 -->
@@ -155,7 +169,7 @@
           icon="account_balance_wallet"
           @click="handleRefundDeposit"
           :loading="loading"
-          :disable="!isFormValid || availableRefundAmount <= 0"
+          :disable="!isFormValid || availableRefundAmount <= 0 || actualRefundAmount<=0"
         />
       </q-card-actions>
     </q-card>
@@ -214,6 +228,11 @@ const actualRefundAmount = computed(() => {
   return Math.max(0, refundAmount - deductAmount)
 })
 
+const remainingDepositAfter = computed(() => {
+  if (!props.order) return 0
+  return Math.max(0, (props.order.deposit || 0) - (props.order.refundedDeposit || 0) - actualRefundAmount.value)
+})
+
 const isFormValid = computed(() => {
   return refundForm.value.amount > 0 &&
          refundForm.value.method &&
@@ -240,6 +259,17 @@ watch(() => props.modelValue, (newVal) => {
 // 方法
 function closeDialog() {
   emit('update:modelValue', false)
+}
+
+function formatRefundTitle(r) {
+  return `退款 ¥${r.actualRefundAmount || r.refundAmount || 0}`
+}
+
+function formatRefundSubtitle(r) {
+  const t = r.refundTime ? new Date(r.refundTime).toLocaleString() : ''
+  const m = viewStore.getPaymentMethodName(r.method || '')
+  const op = r.operator || ''
+  return `${t} · ${m}${op ? (' · ' + op) : ''}`
 }
 
 async function handleRefundDeposit() {

@@ -1,5 +1,6 @@
 const { query } = require('../database/postgreDB/pg');
 const shiftHandoverModule = require('./shiftHandoverModule');
+const billModule = require('./billModule');
 
 const tableName = "orders";
 
@@ -335,8 +336,10 @@ function validateOrderData(orderData) {
  */
 async function createOrder(orderData) {
   try {
+  console.log('🛠️ [createOrder] 输入原始数据:', JSON.stringify(orderData, null, 2));
     // 1. 数据验证
     validateOrderData(orderData);
+  console.log('✅ [createOrder] 基础验证通过');
 
     // 2. 检查是否存在重复订单
     const existingOrder = await checkExistingOrder(orderData);
@@ -493,11 +496,13 @@ async function createOrder(orderData) {
       payment_method, JSON.stringify(processedRoomPrice), deposit, create_time || new Date(), processedRemarks
     ];
 
-    const result = await query(insertQuery, values);
+  console.log('🗃️ [createOrder] 即将插入 values:', values.map(v => (typeof v === 'string' && v.length > 120 ? v.slice(0,120)+'…' : v)));
+  const result = await query(insertQuery, values);
+  console.log('✅ [createOrder] 插入成功 order_id=', result.rows[0]?.order_id);
     return result.rows[0];
 
   } catch (error) {
-    console.error('创建订单失败:', error);
+  console.error('❌ [createOrder] 失败:', error.message, error.stack);
     throw error;
   }
 }
@@ -651,12 +656,17 @@ async function refundDeposit(refundData) {
       throw new Error('更新订单退押金信息失败');
     }
 
-    console.log('退押金处理成功:', {
-      orderNumber,
-      originalDeposit,
-      newRefundedDeposit,
-      actualRefundAmount
-    });
+    console.log('退押金处理成功(订单层):', { orderNumber, originalDeposit, newRefundedDeposit, actualRefundAmount });
+
+    // 同步更新账单中的退款记录
+    try {
+      const billUpdated = await billModule.applyDepositRefund(orderNumber, actualRefundAmount, method, refundRecord.refundTime);
+      if (billUpdated) {
+        console.log('✅ 已更新账单退款信息 bill_id=', billUpdated.bill_id, ' refund_deposit=', billUpdated.refund_deposit, ' refund_method=', billUpdated.refund_method);
+      }
+    } catch (billErr) {
+      console.error('⚠️ 更新账单退款信息失败(不影响订单退款完成):', billErr.message);
+    }
 
     // 自动记录到交接班系统（延迟加载避免循环依赖）
     try {

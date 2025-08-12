@@ -88,24 +88,24 @@ export const useOrderStore = defineStore('order', () => {
       else if (statusValue === '已取消') statusValue = 'cancelled';
 
       // 确保日期是 ISO8601 格式
+      // 保留 YYYY-MM-DD 原样，避免 toISOString 造成时区回退一天（东八区等）
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
       let checkInDateISO = null;
       if (order.checkInDate) {
-        try {
-          checkInDateISO = new Date(order.checkInDate).toISOString();
-        } catch (e) {
+        if (!dateRegex.test(order.checkInDate)) {
           console.error('入住日期格式错误:', order.checkInDate);
           throw new Error('入住日期格式错误');
         }
+        checkInDateISO = order.checkInDate; // 直接使用日期字符串
       }
 
       let checkOutDateISO = null;
       if (order.checkOutDate) {
-        try {
-          checkOutDateISO = new Date(order.checkOutDate).toISOString();
-        } catch (e) {
+        if (!dateRegex.test(order.checkOutDate)) {
           console.error('退房日期格式错误:', order.checkOutDate);
           throw new Error('退房日期格式错误');
         }
+        checkOutDateISO = order.checkOutDate;
       }
 
       // 构建要发送到后端的数据，进行字段名映射
@@ -194,9 +194,14 @@ export const useOrderStore = defineStore('order', () => {
       orders.value.unshift(newOrderMapped)
       return newOrderMapped;
     } catch (err) {
-      console.error('添加订单失败:', err.response ? err.response.data : err.message);
-      error.value = err.response?.data?.errors?.[0]?.msg || err.response?.data?.message || '添加订单失败';
-      throw err;
+      const backend = err.response?.data;
+      console.error('添加订单失败:', backend || err.message);
+      const code = backend?.error?.code || backend?.error?.details || backend?.code;
+      const msg = backend?.message || backend?.error?.details || backend?.error?.message || err.message;
+      const combined = code ? `[${code}] ${msg}` : msg;
+      error.value = combined || '添加订单失败';
+      // 抛出新的 Error 便于上层显示
+      throw new Error(combined);
     } finally {
       loading.value = false
     }

@@ -99,7 +99,7 @@
 
 <script setup>
 import { ref, watch, computed, nextTick } from 'vue'
-import useBillStore from '../stores/billStore'
+import { useBillStore } from '../stores/billStore'
 import { useQuasar } from 'quasar'
 import { useViewStore } from '../stores/viewStore'
 
@@ -184,7 +184,7 @@ const billData = ref({
   room_number: props.currentOrder?.roomNumber || '',
   guest_name: props.currentOrder?.guestName || '',
   deposit: props.currentOrder?.deposit || 0,
-  refund_deposit: 'no', // 固定为不退押金，因为已经收取了房费+押金
+  refund_deposit: 0, // 数值：0表示未退，负数表示已退金额
   room_fee: safeInitialRoomFee,
   total_income: 0,
   pay_way: { value: selectedPaymentMethod.value }, // 后端期望的格式
@@ -380,8 +380,8 @@ async function createSingleDayBill() {
     order_id: props.currentOrder.orderNumber, // 使用订单号作为 order_id
     room_number: props.currentOrder.roomNumber,
     guest_name: props.currentOrder.guestName,
-    deposit: deposit, // 使用输入框中的押金值
-    refund_deposit: 'no', // 固定为不退押金
+  deposit: deposit, // 使用输入框中的押金值
+  refund_deposit: 0, // 0 表示未退
     room_fee: roomFee, // 使用输入框中的房费值
     total_income: calculatedTotalAmount,
     pay_way: { value: selectedPaymentMethod.value }, // 后端期望的格式
@@ -406,6 +406,8 @@ async function createSingleDayBill() {
 
   // 触发账单创建完成事件
   emit('bill-created');
+  // 主动关闭对话框
+  emit('update:modelValue', false);
 }
 
 // 创建多日账单
@@ -445,8 +447,8 @@ async function createMultiDayBills() {
         order_id: props.currentOrder.orderNumber,
         room_number: props.currentOrder.roomNumber,
         guest_name: props.currentOrder.guestName,
-        deposit: i === 0 ? deposit : 0, // 只在第一个账单记录押金
-        refund_deposit: 'no',
+  deposit: i === 0 ? deposit : 0, // 只在第一个账单记录押金
+  refund_deposit: 0,
         room_fee: currentPrice,
         total_income: currentPrice + (i === 0 ? deposit : 0),
         pay_way: { value: selectedPaymentMethod.value },
@@ -477,6 +479,8 @@ async function createMultiDayBills() {
 
     // 触发账单创建完成事件
     emit('bill-created');
+  // 主动关闭对话框
+  emit('update:modelValue', false);
 
   } catch (error) {
     // 关闭进度通知
@@ -495,7 +499,7 @@ watch(
       billData.value.guest_name = order.guestName || ''
       billData.value.deposit = order.deposit || 0
       billData.value.room_fee = order.roomPrice || 0
-      billData.value.refund_deposit = 'no' // 固定为不退押金
+  billData.value.refund_deposit = 0 // 固定为不退押金（数值）
       selectedPaymentMethod.value = order.paymentMethod || 'cash' // 更新支付方式选择
       billData.value.pay_way = { value: selectedPaymentMethod.value } // 后端期望的格式
     }

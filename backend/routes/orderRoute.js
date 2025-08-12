@@ -96,7 +96,7 @@ router.post('/new', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('创建订单失败:', error);
+  console.error('创建订单失败(路由层):', error.code || 'NO_CODE', error.message);
 
     // 处理不同类型的错误
     switch(error.code) {
@@ -151,7 +151,7 @@ router.post('/new', async (req, res) => {
         return res.status(500).json({
           success: false,
           message: '订单创建失败',
-          error: error.message
+          error: { code: error.code || 'UNKNOWN', details: error.message }
         });
     }
   }

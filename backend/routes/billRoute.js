@@ -10,7 +10,7 @@ router.post('/create', [
     body('room_number').notEmpty().withMessage('房间号不能为空'),
     body('guest_name').notEmpty().withMessage('客人姓名不能为空'),
     body('deposit').notEmpty().withMessage('押金不能为空'),
-    body('refund_deposit').notEmpty().withMessage('退押金状态不能为空'),
+  body('refund_deposit').notEmpty().withMessage('已退押金不能为空'),
     body('room_fee').notEmpty().withMessage('房费不能为空'),
     body('total_income').notEmpty().withMessage('总收入不能为空'),
     body('pay_way').notEmpty().withMessage('支付方式不能为空'),
@@ -29,7 +29,7 @@ router.post('/create', [
     const parsedRoomFee = Number(room_fee) || 0;
     const parsedTotalIncome = Number(total_income) || 0;
 
-    // refund_deposit 字段为数值：0（未退）或负数（已退金额）
+    // refund_deposit 数值：0（未退）或负数（已退金额）
     let normalizedRefundDeposit = 0;
     if (typeof refund_deposit === 'number') {
       normalizedRefundDeposit = refund_deposit;
@@ -40,7 +40,6 @@ router.post('/create', [
       } else if (!isNaN(parseFloat(refund_deposit))) {
         normalizedRefundDeposit = parseFloat(refund_deposit);
       } else {
-        // 默认按未退处理
         normalizedRefundDeposit = 0;
       }
     }
@@ -78,9 +77,20 @@ router.get('/all', async (req, res) => {
 });
 
 
-// 获得账单 (这个要放在最后，因为它使用参数化路由)
-router.get('/:orderId', async (req, res) => {
+// 获取某订单的全部账单
+router.get('/order/:orderId', async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const bills = await billModule.getBillsByOrderId(orderId);
+    res.status(200).json({ message: '获取订单账单成功', bills });
+  } catch (error) {
+    console.error('获取订单账单失败:', error);
+    res.status(500).json({ message: '获取订单账单失败', error: error.message });
+  }
+});
 
+// 兼容旧接口：获取某订单最新一条账单 (这个要放在最后，因为它使用参数化路由)
+router.get('/:orderId', async (req, res) => {
   try {
     const { orderId } = req.params;
     const bill = await billModule.getBillByOrderId(orderId);

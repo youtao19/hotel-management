@@ -62,10 +62,10 @@ export const useViewStore = defineStore('view', () => {
 
   // 支付方式选项
   const paymentMethodOptions = [
-    { label: '微邮付', value: 'weiyoufu', icon: 'mdi-alipay' },
-    { label: '微信', value: 'wechat', icon: 'mdi-wechat' },
-    { label: '现金', value: 'cash', icon: 'mdi-cash' },
-    { label: '平台', value: 'platform', icon: 'mdi-cash' }
+    { label: '微邮付', value: '微邮付', icon: 'mdi-alipay' },
+    { label: '微信', value: '微信', icon: 'mdi-wechat' },
+    { label: '现金', value: '现金', icon: 'mdi-cash' },
+    { label: '平台', value: '平台', icon: 'mdi-cash' }
   ]
 
   /**
@@ -151,7 +151,7 @@ export const useViewStore = defineStore('view', () => {
       // 中文标签保持不变
       '现金': '现金',
       '微信': '微信',
-      '微邮付': '支付宝', // 微邮付在数据库中按支付宝处理
+  '微邮付': '微邮付', // 修正: 微邮付保持自身映射
       '支付宝': '支付宝',
       '银行卡': '银行卡',
       '信用卡': '银行卡',

@@ -9,12 +9,7 @@
     <div class="row q-mb-md">
       <q-btn label="填充测试数据" color="orange" icon="bug_report" @click="fillTestData" class="q-mr-sm" />
       <q-btn v-if="isDev" label="随机数据" color="purple" icon="auto_awesome" @click="fillRandomData" class="q-mr-sm" />
-      <q-btn label="快速休息房" color="teal" icon="hotel" @click="fillRestRoomData" class="q        if (selectedRoom) {
-          // 如果是休息房，价格按半价计算
-          const basePrice = Number(selectedRoom.price);
-          orderData.value.roomPrice = isRestRoom.value ?
-            Math.round(basePrice / 2) : basePrice;
-        }" />
+      <q-btn label="快速休息房" color="teal" icon="hotel" @click="fillRestRoomData" />
     </div>
 
     <!-- 主卡片容器，包含整个表单 -->
@@ -63,7 +58,7 @@
                   @input="validateIdNumber" :rules="[
                     val => !!val || '请输入身份证号',
                     val => (val.length === 18) || '身份证号必须为18位',
-                    val => /^[0-9X]+$/.test(val) || '身份证号只能包含数字和X'
+                    val => /^[0-9Xx]+$/.test(val) || '身份证号只能包含数字和X'
                   ]">
                   <!-- 提示文本 -->
                   <template v-slot:hint>
@@ -508,8 +503,8 @@ const orderData = ref({
   roomNumber: null,                    // 房间号
   checkInDate: date.formatDate(getCurrentTimeToMinute(), 'YYYY-MM-DD'),  // 入住日期，默认今天
   checkOutDate: date.formatDate(date.addToDate(getCurrentTimeToMinute(), { days: 1 }), 'YYYY-MM-DD'), // 离店日期，默认明天
-  deposit: 0,                        // 押金，默认100元
-  paymentMethod: viewStore.paymentMethodOptions[0].label,               // 支付方式，默认微邮付
+  deposit: 100,                        // 押金默认100元
+  paymentMethod: viewStore.paymentMethodOptions[0]?.value || 'cash',    // 支付方式使用 value
   roomPrice: 0,                        // 房间价格，会根据选择的房间自动设置
   remarks: '',                         // 备注信息（可选）
   createTime: date.formatDate(getCurrentTimeToMinute(), 'YYYY-MM-DD HH:mm:ss'), // 创建时间
@@ -778,7 +773,11 @@ function onRoomTypeChange(value) {
     const roomTypeText = viewStore.getRoomTypeName(value);
     const count = availableRoomCount.value;
     if (count === 0) {
-      alert(`当前没有可用的${roomTypeText}，请联系管理员。`)
+      $q.notify({
+        type: 'warning',
+        message: `当前没有可用的${roomTypeText}，请联系管理员。`,
+        position: 'top'
+      });
     } else {
       if (availableRoomOptions.value.length > 0) {
         orderData.value.roomNumber = availableRoomOptions.value[0].value;
@@ -809,12 +808,16 @@ function onRoomTypeChange(value) {
  * 确保身份证号只包含数字和最后一位的X
  */
 function validateIdNumber() {
-  // 移除非数字和X/x字符
-  orderData.value.idNumber = orderData.value.idNumber.replace(/[^0-9X]/g, '');
-
-  // 如果最后一位不是X/x，则确保只有数字
-  if (orderData.value.idNumber.length < 18) {
+  // 仅保留数字和X/x
+  orderData.value.idNumber = orderData.value.idNumber.replace(/[^0-9Xx]/g, '');
+  // 中间过程只允许前17位数字
+  if (orderData.value.idNumber.length <= 17) {
     orderData.value.idNumber = orderData.value.idNumber.replace(/[^0-9]/g, '');
+  } else if (orderData.value.idNumber.length === 18) {
+    // 第18位允许X/x，统一转大写
+    const first17 = orderData.value.idNumber.slice(0,17).replace(/[^0-9]/g,'');
+    const lastChar = orderData.value.idNumber.slice(17,18).toUpperCase();
+    orderData.value.idNumber = first17 + (/[0-9X]/.test(lastChar) ? lastChar : '');
   }
 }
 
@@ -836,18 +839,18 @@ function formatDateDisplay(dateStr) {
  * 应用首日价格到所有天
  */
 function applyFirstDayPriceToAll() {
-  const firstPrice = firstDatePrice.value
-  if (firstPrice > 0) {
-    dateList.value.forEach(date => {
-      dailyPrices.value[date] = firstPrice
-    })
-    $q.notify({
-      type: 'positive',
-      message: `已将首日价格 ¥${firstPrice} 应用到所有 ${dateList.value.length} 天`,
-      position: 'top',
-      icon: 'content_copy'
-    })
+  const firstPrice = firstDatePrice.value;
+  if (!(firstPrice > 0)) {
+    $q.notify({ type: 'warning', message: '首日价格未设置或无效', position: 'top' });
+    return;
   }
+  dateList.value.forEach(d => { dailyPrices.value[d] = firstPrice; });
+  $q.notify({
+    type: 'positive',
+    message: `已将首日价格 ¥${firstPrice} 应用到所有 ${dateList.value.length} 天`,
+    position: 'top',
+    icon: 'content_copy'
+  });
 }
 
 
@@ -1257,38 +1260,8 @@ function checkIfRestRoom() {
  * 更新休息房状态并处理相关逻辑
  */
 function updateRestRoomStatus() {
-  const wasRestRoom = orderData.value.isRestRoom
-  orderData.value.isRestRoom = checkIfRestRoom()
-
-  // 如果状态发生变化，更新备注
-  if (wasRestRoom !== orderData.value.isRestRoom) {
-    if (orderData.value.isRestRoom) {
-      // 变成休息房，添加标识
-      if (!orderData.value.remarks.includes('【休息房】')) {
-        orderData.value.remarks = orderData.value.remarks ?
-          `【休息房】${orderData.value.remarks}` : '【休息房】'
-      }
-      // 调整价格为半价（如果当前价格大于0）
-      if (orderData.value.roomPrice > 0) {
-        orderData.value.roomPrice = Math.round(orderData.value.roomPrice / 2)
-      }
-      // 调整押金
-      if (orderData.value.deposit > 50) {
-        orderData.value.deposit = 50
-      }
-    } else {
-      // 不再是休息房，移除标识
-      orderData.value.remarks = orderData.value.remarks.replace(/【休息房】/g, '').trim()
-      // 恢复原价（如果当前是半价）
-      if (orderData.value.roomPrice > 0) {
-        orderData.value.roomPrice = orderData.value.roomPrice * 2
-      }
-      // 恢复押金
-      if (orderData.value.deposit < 100) {
-        orderData.value.deposit = 100
-      }
-    }
-  }
+  // 仅同步标志，实际价格/押金调整在 watch(isRestRoom) 中集中处理
+  orderData.value.isRestRoom = checkIfRestRoom();
 }
 
 /**
@@ -1335,8 +1308,16 @@ async function onDateRangeChange() {
 }
 
 // 计算属性：休息房状态
-const isRestRoom = computed(() => {
-  return orderData.value.checkInDate === orderData.value.checkOutDate
+const isRestRoom = computed(() => orderData.value.checkInDate === orderData.value.checkOutDate);
+
+// 保存原始房价与押金以便恢复
+const originalRoomPrice = ref(null);
+const originalDeposit = ref(null);
+
+// 清理不再使用的多日价格键
+watch(dateList, (newList) => {
+  const set = new Set(newList);
+  Object.keys(dailyPrices.value).forEach(k => { if (!set.has(k)) delete dailyPrices.value[k]; });
 });
 
 
@@ -1352,38 +1333,33 @@ const totalPrice = computed(() => {
 });
 
 // 监听休息房状态变化，自动处理价格和备注
-watch(isRestRoom, (newValue, oldValue) => {
-  // 同步到数据对象中（为了兼容性）
-  orderData.value.isRestRoom = newValue;
-
-  // 如果状态发生变化，处理备注和价格
-  if (newValue !== oldValue) {
-    if (newValue) {
-      // 变成休息房，添加标识
-      if (!orderData.value.remarks.includes('【休息房】')) {
-        orderData.value.remarks = orderData.value.remarks ?
-          `【休息房】${orderData.value.remarks}` : '【休息房】'
-      }
-      // 调整价格为半价（如果当前价格大于0）
-      if (orderData.value.roomPrice > 0) {
-        orderData.value.roomPrice = Math.round(orderData.value.roomPrice / 2)
-      }
-      // 调整押金
-      if (orderData.value.deposit > 50) {
-        orderData.value.deposit = 50
-      }
-    } else {
-      // 不再是休息房，移除标识
-      orderData.value.remarks = orderData.value.remarks.replace(/【休息房】/g, '').trim()
-      // 恢复原价（如果当前是半价）
-      if (orderData.value.roomPrice > 0) {
-        orderData.value.roomPrice = orderData.value.roomPrice * 2
-      }
-      // 恢复押金
-      if (orderData.value.deposit < 100) {
-        orderData.value.deposit = 100
-      }
+watch(isRestRoom, (now, prev) => {
+  if (now === prev) return;
+  if (now) {
+    // 进入休息房模式
+    if (!orderData.value.remarks.includes('【休息房】')) {
+      orderData.value.remarks = orderData.value.remarks ? `【休息房】${orderData.value.remarks}` : '【休息房】';
     }
+    if (orderData.value.roomPrice > 0) {
+      originalRoomPrice.value = originalRoomPrice.value ?? orderData.value.roomPrice; // 只保存一次
+      orderData.value.roomPrice = Math.round(orderData.value.roomPrice / 2);
+    }
+    originalDeposit.value = originalDeposit.value ?? orderData.value.deposit;
+    if (orderData.value.deposit > 50) orderData.value.deposit = 50;
+  } else {
+    // 退出休息房模式
+    orderData.value.remarks = orderData.value.remarks.replace(/【休息房】/g, '').trim();
+    if (originalRoomPrice.value != null) {
+      orderData.value.roomPrice = originalRoomPrice.value;
+    }
+    if (originalDeposit.value != null) {
+      orderData.value.deposit = Math.max(originalDeposit.value, 100);
+    } else if (orderData.value.deposit < 100) {
+      orderData.value.deposit = 100;
+    }
+    // 复位缓存
+    originalRoomPrice.value = null;
+    originalDeposit.value = null;
   }
 });
 </script>

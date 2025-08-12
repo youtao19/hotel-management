@@ -14,6 +14,8 @@ const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
     pay_way VARCHAR(50) NOT NULL, -- 支付方式
     create_time TIMESTAMP NOT NULL, -- 创建时间
     refund_time TIMESTAMP NOT NULL, -- 退款时间
+    stay_date DATE, -- 入住时间
+    refund_method VARCHAR(50), -- 退款方式 (现金/微信/微邮付/银行卡/其他)
     remarks TEXT, -- 备注
     FOREIGN KEY (order_id) REFERENCES orders(order_id), -- 订单号外键
     CONSTRAINT chk_refund_deposit CHECK (refund_deposit <= 0) -- 确保已退押金只能为0或负数

@@ -143,7 +143,8 @@ async function getStatistics(startDate, endDate = null) {
       SUM(b.room_fee) as room_fee_income,
       SUM(b.deposit) as deposit_income,
       SUM(b.total_income) as total_income,
-      SUM(CASE WHEN b.refund_deposit = true THEN b.deposit ELSE 0 END) as refunded_deposit,
+  -- refund_deposit 0=未退, 负数=已退押金额(存储为负数); 统计时取绝对值累计
+  SUM(CASE WHEN b.refund_deposit < 0 THEN ABS(b.refund_deposit) ELSE 0 END) as refunded_deposit,
       COUNT(*) as count,
       b.pay_way as payment_method
     FROM orders o

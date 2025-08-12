@@ -19,8 +19,6 @@ const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
     deposit DECIMAL(10,2), -- 押金
     create_time TIMESTAMP NOT NULL, -- 创建时间
     remarks TEXT, -- 备注
-    refunded_deposit DECIMAL(10,2) DEFAULT 0, -- 已退押金
-    refund_records JSONB DEFAULT '[]'::jsonb, -- 退款记录
     FOREIGN KEY (room_type) REFERENCES room_types(type_code), -- 房间类型外键
     FOREIGN KEY (room_number) REFERENCES rooms(room_number), -- 房间号外键
     CONSTRAINT unique_order_constraint UNIQUE (guest_name, check_in_date, check_out_date, room_type), -- 唯一约束
