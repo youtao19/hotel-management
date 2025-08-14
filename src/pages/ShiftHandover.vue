@@ -16,7 +16,7 @@
       <!-- 日期和人员信息 -->
       <div class="row q-col-gutter-md q-mb-md">
         <div class="col-md-4">
-          <q-input v-model="selectedDate" type="date" label="交接日期" filled @update:model-value="loadShiftData" />
+          <q-input v-model="selectedDate" type="date" label="查询日期" filled @update:model-value="loadShiftData" />
         </div>
         <div class="col-md-4">
           <q-input v-model="handoverPerson" label="交班人" filled />
@@ -56,6 +56,7 @@ import { useQuasar } from 'quasar'
 import { shiftHandoverApi } from '../api/index.js'
 import ShiftHandoverHistory from '../components/ShiftHandoverHistory.vue'
 import ShiftHandoverTable from '../components/ShiftHandoverTable.vue'
+import { useShiftHandoverStore } from 'src/stores/shiftHandoverStore.js'
 
 const $q = useQuasar()
 
@@ -67,6 +68,7 @@ const cashierName = ref('张')
 const notes = ref('')
 const savingAmounts = ref(false)
 const goodReview = ref('邀1得1')
+const shiftHandoverStore = useShiftHandoverStore()
 
 // 备忘录列表相关
 const newTaskTitle = ref('')
@@ -76,23 +78,20 @@ const taskList = ref([])
 const historyDialogRef = ref(null)
 
 
-
-
-
 // 支付方式数据结构
 const paymentData = ref({
-  cash: { // 现金行
-    reserveCash: 320, // 默认备用金（会根据前一天的留存款更新）
+  cash: {
+    reserveCash: 320,
     hotelIncome: 0,
     restIncome: 0,
     carRentIncome: 0,
-    total: 320,
+    total: 0,
     hotelDeposit: 0,
     restDeposit: 0,
-    retainedAmount: 320 // 现金行默认留存款为320
+    retainedAmount: 320
   },
-  wechat: { // 微信行
-    reserveCash: 0, // 默认为0（会根据前一天的交接款更新）
+  wechat: {
+    reserveCash: 0,
     hotelIncome: 0,
     restIncome: 0,
     carRentIncome: 0,
@@ -101,8 +100,8 @@ const paymentData = ref({
     restDeposit: 0,
     retainedAmount: 0
   },
-  digital: { // 数码付行
-    reserveCash: 0, // 默认为0（会根据前一天的交接款更新）
+  digital: {
+    reserveCash: 0,
     hotelIncome: 0,
     restIncome: 0,
     carRentIncome: 0,
@@ -111,8 +110,8 @@ const paymentData = ref({
     restDeposit: 0,
     retainedAmount: 0
   },
-  other: { // 其他行
-    reserveCash: 0, // 默认为0（会根据前一天的交接款更新）
+  other: {
+    reserveCash: 0,
     hotelIncome: 0,
     restIncome: 0,
     carRentIncome: 0,
@@ -122,7 +121,6 @@ const paymentData = ref({
     retainedAmount: 0
   }
 })
-
 // 计算各项合计
 function calculateTotals() {
   // 现金行：备用金 + 客房收入 + 休息房收入 + 租车收入 = 合计
@@ -144,10 +142,6 @@ function calculateTotals() {
 const totalRooms = ref(29)
 const restRooms = ref(3)
 const vipCards = ref(6)
-
-
-
-
 
 // 加载数据
 async function loadShiftData() {
@@ -783,6 +777,48 @@ function updateTaskStatus(taskId, completed) {
   }
 }
 
+// 从后端加载备注并填充到备忘录
+async function loadRemarksIntoMemo() {
+  try {
+    // 调用 Pinia 的 action 获取指定日期的备注，并使用其返回值
+    const res = await shiftHandoverStore.fetchRemarks(selectedDate.value)
+    // 兼容不同返回结构
+    let list = []
+    if (Array.isArray(res)) list = res
+    else if (Array.isArray(res?.data)) list = res.data
+    else if (Array.isArray(res?.data?.data)) list = res.data.data
+    else if (Array.isArray(res?.rows)) list = res.rows
+    else if (Array.isArray(res?.data?.rows)) list = res.data.rows
+    else if (Array.isArray(res?.list)) list = res.list
+    else if (Array.isArray(res?.data?.list)) list = res.data.list
+
+    if (list.length) {
+      // 转成备忘录任务，格式：房间号：（），备注：（）
+      const formatted = list.map((r, idx) => {
+      const room =  r?.room_number
+      const remarkText = r?.remarks
+      const rawTime = r?.time || r?.created_at || r?.create_time || r?.createdAt || r?.updatedAt
+        const timeStr = rawTime
+          ? new Date(rawTime).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+          : new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+        return {
+          id: r?.id ?? (Date.now() + idx),
+          title: `房间号：${room}，备注：${remarkText}`,
+          time: timeStr,
+          completed: false
+        }
+      })
+
+      // 覆盖显示为后端当天结果
+      taskList.value = formatted
+    } else {
+  taskList.value = []
+    }
+  } catch (e) {
+    console.error('加载备忘录失败:', e)
+  }
+}
+
 // 历史记录相关方法
 function openHistoryDialog() {
   if (historyDialogRef.value) {
@@ -802,6 +838,27 @@ watch(paymentData, () => {
   calculateTotals()
 }, { deep: true })
 
+// 监听日期变更，重新加载备忘录
+watch(selectedDate, async () => {
+  await loadRemarksIntoMemo()
+  // 日期变化时刷新特殊统计
+  try {
+    const res = await shiftHandoverStore.fetchSpecialStats(selectedDate.value)
+    const data = res?.data || res
+    if (data) {
+      const openCount = data.openCount ?? data.totalRooms ?? data.open ?? 0
+      const restCount = data.restCount ?? data.restRooms ?? data.rest ?? 0
+      const invited = data.invited ?? data.invite ?? 0
+      const positive = data.positive ?? data.good ?? 0
+      totalRooms.value = Number(openCount) || 0
+      restRooms.value = Number(restCount) || 0
+      goodReview.value = `邀${invited}得${positive}`
+    }
+  } catch (e) {
+    console.error('加载特殊统计失败:', e)
+  }
+})
+
 
 
 // 组件挂载时初始化
@@ -809,6 +866,24 @@ onMounted(async () => {
   await loadShiftData()
   // 确保总计正确计算
   calculateTotals()
+  // 加载备忘录：从后端获取备注并填入“房间号：（），备注：（）”格式
+  await loadRemarksIntoMemo()
+  // 加载交接班特殊统计（开房数、休息房数、好评邀/得）
+  try {
+    const res = await shiftHandoverStore.fetchSpecialStats(selectedDate.value)
+    const data = res?.data || res // 兼容拦截器返回
+    if (data) {
+      const openCount = data.openCount ?? data.totalRooms ?? data.open ?? 0
+      const restCount = data.restCount ?? data.restRooms ?? data.rest ?? 0
+      const invited = data.invited ?? data.invite ?? 0
+      const positive = data.positive ?? data.good ?? 0
+      totalRooms.value = Number(openCount) || 0
+      restRooms.value = Number(restCount) || 0
+      goodReview.value = `邀${invited}得${positive}`
+    }
+  } catch (e) {
+    console.error('加载特殊统计失败:', e)
+  }
 })
 </script>
 

@@ -442,11 +442,20 @@ async function createOrder(orderData) {
     // 7. 处理房间价格数据
     let processedRoomPrice = room_price;
 
-    // 如果是数字格式，转换为JSON格式
-    if (typeof room_price === 'number') {
+    // 数字或数字字符串 -> 转换为以入住日为key的对象
+    if (typeof room_price === 'number' || (typeof room_price === 'string' && room_price.trim() !== '' && !isNaN(parseFloat(room_price)))) {
       processedRoomPrice = {
-        [check_in_date]: room_price
+        [check_in_date]: parseFloat(room_price)
       };
+    } else if (typeof room_price === 'string' && room_price.trim().startsWith('{')) {
+      // JSON字符串 -> 解析为对象
+      try {
+        processedRoomPrice = JSON.parse(room_price);
+      } catch (e) {
+        const err = new Error('价格数据格式无效，无法解析');
+        err.code = 'INVALID_PRICE_JSON';
+        throw err;
+      }
     }
 
     // 确保是有效的JSON对象
@@ -502,7 +511,14 @@ async function createOrder(orderData) {
     return result.rows[0];
 
   } catch (error) {
-  console.error('❌ [createOrder] 失败:', error.message, error.stack);
+  console.error('❌ [createOrder] 失败:', error.message);
+    // 转换为具有 code 的可识别错误，供路由层分类
+    if (!error.code) {
+      // 简要归类常见消息
+      if (/价格|日期|电话号码|押金|房型|房间号|预订|关闭/.test(error.message)) {
+        error.code = 'ORDER_VALIDATION_ERROR';
+      }
+    }
     throw error;
   }
 }
@@ -693,7 +709,7 @@ async function refundDeposit(refundData) {
 
 /**
  * 获取订单押金状态（基于账单）
- * @param {string} orderId 
+ * @param {string} orderId
  * @returns {Promise<{orderId:string, deposit:number, refunded:number, remaining:number}>}
  */
 async function getDepositStatus(orderId) {

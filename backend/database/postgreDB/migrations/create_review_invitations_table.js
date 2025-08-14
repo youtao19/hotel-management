@@ -26,12 +26,18 @@ async function migrate() {
     await query(`CREATE INDEX IF NOT EXISTS idx_review_invitations_positive_review ON review_invitations(positive_review);`);
 
     console.log('从 bills 迁移邀请数据到 review_invitations ...');
-    await query(`
-      INSERT INTO review_invitations(order_id, invited, positive_review, invite_time, update_time)
-      SELECT order_id, COALESCE(review_invited, FALSE), positive_review, review_invite_time, review_update_time
-      FROM bills
-      ON CONFLICT (order_id) DO NOTHING;
-    `);
+    const colCheck = await query(`SELECT column_name FROM information_schema.columns WHERE table_name='bills' AND column_name='review_invited'`);
+    if (colCheck.rows.length > 0) {
+      await query(`
+        INSERT INTO review_invitations(order_id, invited, positive_review, invite_time, update_time)
+        SELECT order_id, COALESCE(review_invited, FALSE), positive_review, review_invite_time, review_update_time
+        FROM bills
+        ON CONFLICT (order_id) DO NOTHING;
+      `);
+      console.log('旧字段存在，已迁移历史邀请数据');
+    } else {
+      console.log('bills 表无旧邀请字段，跳过数据迁移');
+    }
 
     console.log('完成数据迁移');
   } catch (error) {

@@ -10,7 +10,10 @@ const {
   getCurrentHandoverData,
   importReceiptsToShiftHandover,
   saveAmountChanges,
-  deleteHandoverRecord
+  deleteHandoverRecord,
+  getShiftTable,
+  getRemarks,
+  getShiftSpecialStats
 } = require('../modules/shiftHandoverModule');
 
 /**
@@ -402,6 +405,42 @@ router.delete('/:recordId', async (req, res) => {
       message: '删除交接班记录失败',
       error: error.message
     });
+  }
+});
+
+// 获取交接表数据
+router.get('/table', async (req, res) => {
+  try {
+    const { date } = req.query;
+    const data = await getShiftTable({ date });
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+// 获取备忘录数据
+router.get('/remarks', async (req, res) => {
+  console.log('开始获取备忘录数据')
+  try {
+    const { date } = req.query;
+    const data = await getRemarks({ date });
+    res.json({ success: true, data });
+    console.log('备忘录数据获取成功',data)
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+// 获取交接班页面特殊统计（开房数、休息房数、好评邀/得）
+router.get('/special-stats', async (req, res) => {
+  try {
+    const { date } = req.query;
+    const data = await getShiftSpecialStats(date);
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('获取交接班特殊统计失败:', error);
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 

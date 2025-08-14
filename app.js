@@ -8,19 +8,17 @@ const posgreDB = require("./backend/database/postgreDB/pg");
 const authtication = require("./backend/modules/authentication");
 
 let app = express();
+
+
+
+
+
 app.disable('x-powered-by');
 
-if (setup.env === "dev") {
-  const history = require('connect-history-api-fallback');
-  const cors = require('cors');
-  app.use(cors({
-    origin: ['http://localhost:9000', 'http://localhost:9001'],
-    credentials: false,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-  }));
-  app.use(history());
-}
+// 先挂载解析中间件与会话/认证，确保后续路由能访问 req.body 和会话
+app.use(express.json({ limit: setup.reqSizeLimit, strict: false }));
+app.use(express.urlencoded({ extended: true, limit: setup.reqSizeLimit }));
+app.use(express.text({ limit: setup.reqSizeLimit }));
 
 const sessionOptions = {
   name: setup.appName + ".sid",
@@ -44,9 +42,18 @@ if (setup.env !== "dev") {
 app.use(session(sessionOptions));
 app.use(authtication.authenticationMiddleware);
 
-app.use(express.json({ limit: setup.reqSizeLimit, strict: false }));
-app.use(express.urlencoded({ extended: true, limit: setup.reqSizeLimit }));
-app.use(express.text({ limit: setup.reqSizeLimit }));
+if (setup.env === "dev") {
+  const history = require('connect-history-api-fallback');
+  const cors = require('cors');
+  app.use(cors({
+    origin: ['http://localhost:9000', 'http://localhost:9001'],
+    credentials: false,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+  }));
+  app.use(history());
+
+}
 
 // 引入并挂载路由
 const userRoute = require("./backend/routes/userRoute");
@@ -68,12 +75,17 @@ app.use("/api/bills", billRoute);
 app.use("/api/reviews", reviewRoute);
 app.use("/api/shift-handover", shiftHandoverRoute);
 app.use("/api/revenue", revenueRoute);
-
 app.get("/api/hup", (req, res) => res.status(200).json({ ok: true }));
 
 app.all("/", function (req, res) {
   console.log(`req route not found with url : ${req.originalUrl}\nreq ip is : ${req.ip}`);
   res.status(404).json();
 });
+
+app.use(session(sessionOptions));
+app.use(authtication.authenticationMiddleware);
+
+
+
 
 module.exports = app;

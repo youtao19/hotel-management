@@ -79,53 +79,61 @@
           <!-- 入住信息部分 -->
           <div class="form-section q-mb-md">
             <div class="text-subtitle1 q-mb-sm">入住时间</div>
-            <div class="row">
-              <!-- 日期范围选择器，占满整行 -->
-              <div class="col-12">
-                <q-date v-model="dateRange" range filled emit-value landscape today-btn color="primary"
-                  :options="dateOptions" @update:model-value="onDateRangeChange" :locale="langZhCn.date">
-                  <!-- 底部确认按钮 -->
-                  <div class="row items-center justify-end q-pr-sm q-pb-sm">
-                    <q-btn label="确定" color="primary" flat v-close-popup />
-                  </div>
-                </q-date>
-              </div>
-              <!-- 入住日期显示框 -->
-              <div class="col-md-4 col-xs-12 q-mt-md">
-                <q-input v-model="orderData.checkInDate"
-                  label="入住日期" filled readonly
-                  :rules="[val => !!val || '请选择入住日期']">
-                  <template v-slot:prepend>
+            <div class="row q-col-gutter-md">
+              <!-- 入住日期输入 -->
+              <div class="col-md-4 col-xs-12">
+                <q-input
+                  v-model="orderData.checkInDate"
+                  label="入住日期"
+                  filled
+                  clearable
+                  placeholder="YYYY-MM-DD"
+                  :rules="[dateRule]"
+                  @blur="() => normalizeInputDate('checkInDate')"
+                  @keyup.enter="() => normalizeInputDate('checkInDate')"
+                  @update:model-value="onCheckInDateChange"
+                >
+                  <template #append>
                     <q-icon name="event" class="cursor-pointer">
-                      <q-popup-proxy ref="qDateCheckInProxy" cover transition-show="scale" transition-hide="scale">
-                        <q-date v-model="orderData.checkInDate" @update:model-value="onCheckInDateChange"
-                          :options="date => date >= today" :locale="langZhCn.date">
-                          <!-- 底部确认按钮 -->
-                          <div class="row items-center justify-end">
+                      <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+                        <q-date
+                          v-model="orderData.checkInDate"
+                          :options="d => d >= minDate"
+                          @update:model-value="val => { normalizeInputDate('checkInDate'); onCheckInDateChange(); }"
+                          :locale="langZhCn.date"
+                        >
+                          <div class="row items-center justify-end q-pa-sm">
                             <q-btn label="确定" color="primary" flat v-close-popup />
                           </div>
                         </q-date>
                       </q-popup-proxy>
                     </q-icon>
                   </template>
-                  <!-- 日期选择图标和弹出日历 -->
                 </q-input>
               </div>
-
-              <!-- 离店日期显示框 -->
-              <div class="col-md-4 col-xs-12 q-mt-md">
-                <q-input v-model="orderData.checkOutDate" label="离店日期" filled readonly :rules="[
-                  val => !!val || '请选择离店日期',
-                  val => val >= orderData.checkInDate || '离店日期不能早于入住日期'
-                ]">
-                  <!-- 日期选择图标和弹出日历 -->
-                  <template v-slot:prepend>
+              <!-- 离店日期输入 -->
+              <div class="col-md-4 col-xs-12">
+                <q-input
+                  v-model="orderData.checkOutDate"
+                  label="离店日期"
+                  filled
+                  clearable
+                  placeholder="YYYY-MM-DD"
+                  :rules="[dateRule, checkoutAfterCheckinRule]"
+                  @blur="() => normalizeInputDate('checkOutDate')"
+                  @keyup.enter="() => normalizeInputDate('checkOutDate')"
+                  @update:model-value="onCheckOutDateChange"
+                >
+                  <template #append>
                     <q-icon name="event" class="cursor-pointer">
-                      <q-popup-proxy ref="qDateCheckOutProxy" cover transition-show="scale" transition-hide="scale">
-                        <q-date v-model="orderData.checkOutDate" :options="date => date >= orderData.checkInDate"
-                          @update:model-value="onCheckOutDateChange" :locale="langZhCn.date">
-                          <!-- 底部确认按钮 -->
-                          <div class="row items-center justify-end">
+                      <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+                        <q-date
+                          v-model="orderData.checkOutDate"
+                          :options="d => !isValidFullDate(orderData.checkInDate) || d >= orderData.checkInDate"
+                          @update:model-value="val => { normalizeInputDate('checkOutDate'); onCheckOutDateChange(); }"
+                          :locale="langZhCn.date"
+                        >
+                          <div class="row items-center justify-end q-pa-sm">
                             <q-btn label="确定" color="primary" flat v-close-popup />
                           </div>
                         </q-date>
@@ -516,6 +524,7 @@ const dailyPrices = ref({}) // 存储每日价格 {date: price}
 
 // 判断是否为多日订单
 const isMultiDay = computed(() => {
+  if (!isValidFullDate(orderData.value.checkInDate) || !isValidFullDate(orderData.value.checkOutDate)) return false;
   const checkIn = new Date(orderData.value.checkInDate);
   const checkOut = new Date(orderData.value.checkOutDate);
   const daysDiff = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
@@ -532,6 +541,7 @@ const isMultiDay = computed(() => {
 
 // 生成日期列表（住宿的每一晚）
 const dateList = computed(() => {
+  if (!isValidFullDate(orderData.value.checkInDate) || !isValidFullDate(orderData.value.checkOutDate)) return [];
   const checkIn = new Date(orderData.value.checkInDate);
   const checkOut = new Date(orderData.value.checkOutDate);
   const daysDiff = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
@@ -561,11 +571,6 @@ const firstDatePrice = computed(() => {
   return dailyPrices.value[dateList.value[0]] || 0;
 });
 
-// 日期范围对象 - 用于日期选择器的范围选择模式
-const dateRange = ref({
-  from: orderData.value.checkInDate,   // 开始日期，默认为入住日期
-  to: orderData.value.checkOutDate     // 结束日期，默认为离店日期
-})
 
 /**
  * 日期选项函数 - 控制日期选择器可选择的日期
@@ -578,42 +583,13 @@ const dateOptions = (dateStr) => {
   return dateStr >= currentDate
 }
 
-/**
- * 更新入住和离店日期，并刷新可用房间列表
- */
-async function updateDatesAndRooms() {
-  if (dateRange.value.from) {
-    dateRange.value.from = date.formatDate(dateRange.value.from, 'YYYY-MM-DD');
-    orderData.value.checkInDate = dateRange.value.from;
-  }
-  if (dateRange.value.to) {
-    dateRange.value.to = date.formatDate(dateRange.value.to, 'YYYY-MM-DD');
-    orderData.value.checkOutDate = dateRange.value.to;
-  }
-
-  await updateAvailableRooms();
-}
-
-/**
- * 更新离店日期的最小值并刷新可用房间列表
- */
-async function updateCheckOutMinDateAndRooms() {
-  // 如果离店日期小于入住日期，重置离店日期
-  if (orderData.value.checkOutDate < orderData.value.checkInDate) {
-    // 设置为入住日期（允许同一天，即休息房）
-    orderData.value.checkOutDate = orderData.value.checkInDate;
-    dateRange.value.to = date.formatDate(orderData.value.checkOutDate, 'YYYY-MM-DD');
-  }
-
-  await updateAvailableRooms();
-}
 
 /**
  * 更新可用房间列表
  */
 async function updateAvailableRooms() {
   try {
-    if (!orderData.value.checkInDate || !orderData.value.checkOutDate) {
+  if (!isValidFullDate(orderData.value.checkInDate) || !isValidFullDate(orderData.value.checkOutDate)) {
       return;
     }
     // 强制格式化
@@ -637,9 +613,60 @@ async function updateAvailableRooms() {
 }
 
 // 监听日期变化
+// 简单防抖
+let roomsUpdateTimer = null;
+function scheduleUpdateRooms() {
+  if (roomsUpdateTimer) clearTimeout(roomsUpdateTimer);
+  roomsUpdateTimer = setTimeout(() => {
+    updateAvailableRooms();
+  }, 250);
+}
+
+function isValidFullDate(str) {
+  if (!str) return false;
+  const s = String(str).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const [y,m,d] = s.split('-').map(Number);
+  const dt = new Date(y, m-1, d);
+  return dt.getFullYear() === y && dt.getMonth() === m-1 && dt.getDate() === d;
+}
+
+const minDate = date.formatDate(new Date(), 'YYYY-MM-DD');
+
+function normalizeInputDate(field) {
+  let v = orderData.value[field];
+  if (!v) return;
+  v = String(v).trim().replace(/\//g,'-');
+  const m = v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) {
+    const mm = m[2].padStart(2,'0');
+    const dd = m[3].padStart(2,'0');
+    v = `${m[1]}-${mm}-${dd}`;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+    orderData.value[field] = v;
+  }
+  if (field === 'checkOutDate' && isValidFullDate(orderData.value.checkInDate) && isValidFullDate(v) && v < orderData.value.checkInDate) {
+    orderData.value.checkOutDate = orderData.value.checkInDate; // auto-fix
+  }
+}
+
+const dateRule = (val) => {
+  if (!val) return '请选择日期';
+  const s = String(val).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return '格式应为 YYYY-MM-DD';
+  return true;
+};
+const checkoutAfterCheckinRule = (val) => {
+  if (!isValidFullDate(orderData.value.checkInDate) || !isValidFullDate(val)) return true;
+  return val >= orderData.value.checkInDate || '离店日期不能早于入住日期';
+};
+
+// removed old normalizeAndValidate (replaced by normalizeInputDate)
+
 watch(() => orderData.value.checkInDate, async () => {
-  dateRange.value.from = date.formatDate(orderData.value.checkInDate, 'YYYY-MM-DD');
-  await updateAvailableRooms();
+  if (!isValidFullDate(orderData.value.checkInDate)) return; // 等待完整输入
+  scheduleUpdateRooms();
 
   // 如果是多日订单且有房间选择，重新初始化价格
   if (isMultiDay.value && orderData.value.roomNumber) {
@@ -655,8 +682,8 @@ watch(() => orderData.value.checkInDate, async () => {
 });
 
 watch(() => orderData.value.checkOutDate, async () => {
-  dateRange.value.to = date.formatDate(orderData.value.checkOutDate, 'YYYY-MM-DD');
-  await updateAvailableRooms();
+  if (!isValidFullDate(orderData.value.checkOutDate)) return;
+  scheduleUpdateRooms();
 
   // 如果是多日订单且有房间选择，重新初始化价格
   if (isMultiDay.value && orderData.value.roomNumber) {
@@ -1182,10 +1209,6 @@ function fillRestRoomData() {
   orderData.value.checkInDate = today
   orderData.value.checkOutDate = today
 
-  // 更新日期范围
-  dateRange.value.from = today
-  dateRange.value.to = today
-
   // 获取第一个可用的房间类型
   const availableRoomTypes = roomTypeOptionsWithCount.value
     .filter(type => type.availableCount > 0)
@@ -1268,7 +1291,7 @@ function updateRestRoomStatus() {
  * 离店日期变化时的处理函数
  */
 async function onCheckOutDateChange() {
-  // 更新可用房间
+  if (!isValidFullDate(orderData.value.checkOutDate)) return;
   await updateAvailableRooms();
 }
 
@@ -1276,11 +1299,11 @@ async function onCheckOutDateChange() {
  * 入住日期变化时的处理函数
  */
 async function onCheckInDateChange() {
+  if (!isValidFullDate(orderData.value.checkInDate)) return;
   // 如果离店日期小于入住日期，重置离店日期
   if (orderData.value.checkOutDate < orderData.value.checkInDate) {
     // 设置为入住日期（允许同一天，即休息房）
-    orderData.value.checkOutDate = orderData.value.checkInDate;
-    dateRange.value.to = date.formatDate(orderData.value.checkOutDate, 'YYYY-MM-DD');
+  orderData.value.checkOutDate = orderData.value.checkInDate;
   }
 
   // 更新休息房状态
@@ -1293,19 +1316,7 @@ async function onCheckInDateChange() {
 /**
  * 日期范围变化时的处理函数
  */
-async function onDateRangeChange() {
-  if (dateRange.value.from) {
-    dateRange.value.from = date.formatDate(dateRange.value.from, 'YYYY-MM-DD');
-    orderData.value.checkInDate = dateRange.value.from;
-  }
-  if (dateRange.value.to) {
-    dateRange.value.to = date.formatDate(dateRange.value.to, 'YYYY-MM-DD');
-    orderData.value.checkOutDate = dateRange.value.to;
-  }
-
-  // 更新可用房间
-  await updateAvailableRooms();
-}
+// 移除日期范围选择器，使用两个独立 date 输入
 
 // 计算属性：休息房状态
 const isRestRoom = computed(() => orderData.value.checkInDate === orderData.value.checkOutDate);

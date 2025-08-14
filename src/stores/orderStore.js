@@ -90,23 +90,57 @@ export const useOrderStore = defineStore('order', () => {
 
       // 确保日期是 ISO8601 格式
       // 保留 YYYY-MM-DD 原样，避免 toISOString 造成时区回退一天（东八区等）
-      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      const strictDateRegex = /^\d{4}-\d{2}-\d{2}$/; // 最终必须匹配的严格格式
+
+      // 允许的输入格式: YYYY-MM-DD / YYYY/MM/DD / YYYY-M-D / YYYY/M/D
+      function normalizeDateInput(input) {
+        if (!input) return null;
+        if (input instanceof Date) {
+          const y = input.getFullYear();
+          const m = String(input.getMonth() + 1).padStart(2, '0');
+          const d = String(input.getDate()).padStart(2, '0');
+          return `${y}-${m}-${d}`;
+        }
+        let s = String(input).trim();
+        // 替换斜杠为短横线
+        if (s.includes('/')) s = s.replaceAll('/', '-');
+        // 匹配宽松格式 YYYY-M-D
+        const loose = /^(\d{4})-(\d{1,2})-(\d{1,2})$/;
+        const m = s.match(loose);
+        if (m) {
+          const year = m[1];
+          const month = m[2].padStart(2, '0');
+          const day = m[3].padStart(2, '0');
+          const normalized = `${year}-${month}-${day}`;
+          return normalized;
+        }
+        return s; // 其他情况原样返回供后续严格校验
+      }
+
+      function assertValidDate(str, label) {
+        if (!strictDateRegex.test(str)) {
+          console.error(`${label}格式错误:`, str);
+          throw new Error(`${label}格式错误`);
+        }
+        // 进一步校验真实日期有效性（如 2025-02-30）
+        const [y, m, d] = str.split('-').map(Number);
+        const dt = new Date(y, m - 1, d);
+        if (dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d) {
+          console.error(`${label}无效日期:`, str);
+            throw new Error(`${label}无效日期`);
+        }
+      }
+
       let checkInDateISO = null;
       if (order.checkInDate) {
-        if (!dateRegex.test(order.checkInDate)) {
-          console.error('入住日期格式错误:', order.checkInDate);
-          throw new Error('入住日期格式错误');
-        }
-        checkInDateISO = order.checkInDate; // 直接使用日期字符串
+        checkInDateISO = normalizeDateInput(order.checkInDate);
+        assertValidDate(checkInDateISO, '入住日期');
       }
 
       let checkOutDateISO = null;
       if (order.checkOutDate) {
-        if (!dateRegex.test(order.checkOutDate)) {
-          console.error('退房日期格式错误:', order.checkOutDate);
-          throw new Error('退房日期格式错误');
-        }
-        checkOutDateISO = order.checkOutDate;
+        checkOutDateISO = normalizeDateInput(order.checkOutDate);
+        assertValidDate(checkOutDateISO, '退房日期');
       }
 
       // 构建要发送到后端的数据，进行字段名映射

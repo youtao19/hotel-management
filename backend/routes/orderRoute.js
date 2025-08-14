@@ -1,5 +1,7 @@
 const express = require('express');
 const router = express.Router();
+// 保险：为该路由挂载 JSON 解析（即使全局已启用）
+router.use(express.json());
 const { body, validationResult } = require('express-validator');
 const orderModule = require('../modules/orderModule');
 const { authenticationMiddleware } = require('../modules/authentication');

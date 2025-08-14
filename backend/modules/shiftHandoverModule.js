@@ -1386,6 +1386,127 @@ async function deleteHandoverRecord(recordId) {
   }
 }
 
+/**
+ *
+ * @param {date} date - 查询日期
+ * @returns {Promise<Object>} 交接班表格数据
+ */
+async function getShiftTable(date) {
+  try {
+    // 保留旧签名兼容，允许 data 为对象或字符串日期
+    const targetDate = typeof date === 'string' ? date : (date?.date || new Date().toISOString().slice(0,10));
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(targetDate)) {
+      throw new Error('日期格式应为 YYYY-MM-DD');
+    }
+
+    // 查询指定入住(stay_date)的账单
+    const stayBillsSql = `
+      SELECT bill_id, deposit, room_fee, remarks
+      FROM bills
+      WHERE stay_date = $1
+      ORDER BY bill_id ASC`;
+    const stayBillsRes = await query(stayBillsSql, [targetDate]);
+
+    const records = stayBillsRes.rows.map(row => ({
+      bill_id: row.bill_id,
+      total_income: Number(row.deposit) + Number(row.room_fee),
+      remarks: row.remarks
+    }));
+
+    // 查询退款(refund_time)的账单
+    const refundBillsSql = `
+      SELECT bill_id, refund_deposit, remarks
+      FROM bills
+      WHERE refund_time::date = $1::date
+      ORDER BY bill_id ASC`;
+    const refundBillsRes = await query(refundBillsSql, [targetDate]);
+
+    refunds = refundBillsRes.rows.map(row => ({
+      bill_id: row.bill_id,
+      refund_deposit: Number(row.refund_deposit),
+      remarks: row.remarks
+    }));
+
+    const result = {
+      date: targetDate,
+      records,
+      refunds
+    };
+    return result;
+  } catch (error) {
+    console.error('获取交接班表格数据失败:', error);
+    throw error;
+  }
+}
+
+
+/**
+ *
+ * @param {date} date - 查询日期
+ * @returns {Promise<Array>} 备忘录数据
+ */
+async function getRemarks({ date }) {
+  try {
+    const querySql = `
+      SELECT order_id, room_number, remarks
+      FROM orders
+      WHERE check_in_date::date = $1::date
+    `;
+    const result = await query(querySql, [date]);
+    return result.rows;
+  } catch (error) {
+    console.error('获取备忘录数据失败:', error);
+    throw error;
+  }
+}
+
+/**
+ * 获取交接班页面的特殊统计：开房数、休息房数、好评（邀/得）
+ * @param {string} date - 日期 YYYY-MM-DD
+ * @returns {Promise<Object>} { openCount, restCount, invited, positive }
+ */
+async function getShiftSpecialStats(date) {
+  const targetDate = date || new Date().toISOString().split('T')[0]
+
+  // 统计开房/休息房数量：根据订单入住/退房跨天与否分类
+  const roomCountSql = `
+    SELECT
+      SUM(CASE WHEN (o.check_in_date::date != o.check_out_date::date) THEN 1 ELSE 0 END) AS open_count,
+      SUM(CASE WHEN (o.check_in_date::date = o.check_out_date::date) THEN 1 ELSE 0 END) AS rest_count
+    FROM orders o
+    WHERE o.check_in_date::date = $1::date
+      AND o.status IN ('checked-in', 'checked-out', 'pending')
+  `
+
+  // 统计好评邀/得：以订单退房日期为该日计算
+  const reviewSql = `
+    SELECT
+      COUNT(*) FILTER (WHERE ri.invited = TRUE) AS invited,
+      COUNT(*) FILTER (WHERE ri.positive_review = TRUE) AS positive
+    FROM review_invitations ri
+    JOIN orders o ON o.order_id = ri.order_id
+    WHERE o.check_out_date::date = $1::date
+  `
+
+  try {
+    const [roomRes, reviewRes] = await Promise.all([
+      query(roomCountSql, [targetDate]),
+      query(reviewSql, [targetDate])
+    ])
+
+    const openCount = Number(roomRes.rows?.[0]?.open_count || 0)
+    const restCount = Number(roomRes.rows?.[0]?.rest_count || 0)
+    const invited = Number(reviewRes.rows?.[0]?.invited || 0)
+    const positive = Number(reviewRes.rows?.[0]?.positive || 0)
+
+    return { openCount, restCount, invited, positive }
+  } catch (error) {
+    console.error('获取交接班特殊统计失败:', error)
+    throw error
+  }
+}
+
 module.exports = {
   getReceiptDetails,
   getStatistics,
@@ -1398,5 +1519,8 @@ module.exports = {
   importReceiptsToShiftHandover,
   saveAmountChanges,
   recordRefundDepositToHandover,
-  deleteHandoverRecord
+  deleteHandoverRecord,
+  getShiftTable,
+  getRemarks,
+  getShiftSpecialStats
 };

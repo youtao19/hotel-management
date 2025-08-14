@@ -240,6 +240,19 @@ export const shiftHandoverApi = {
 
   // 删除交接班记录
   deleteHandoverRecord: (recordId) => api.delete(`/shift-handover/${recordId}`),
+
+  // 获取交接班表格
+  getShiftTable: (params) => api.get('/shift-handover/table', { params }),
+
+  // 获取备忘录
+  getRemarks: (params) => api.get('/shift-handover/remarks', { params }),
+
+  // 获取统计信息
+  getStatistics: (params) => api.get('/shift-handover/statistics', { params }),
+
+  // 获取交接班特殊统计（开房数、休息房数、好评邀/得）
+  getSpecialStats: (params) => api.get('/shift-handover/special-stats', { params }),
+
 }
 
 export default api;
