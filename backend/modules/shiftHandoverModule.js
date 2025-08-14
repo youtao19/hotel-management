@@ -1410,8 +1410,8 @@ async function getShiftTable(date) {
 
     const records = stayBillsRes.rows.map(row => ({
       bill_id: row.bill_id,
-      total_income: Number(row.deposit) + Number(row.room_fee),
-      remarks: row.remarks
+      total_income: Number(row.deposit || 0) + Number(row.room_fee || 0),
+      remarks: row.remarks || ''
     }));
 
     // 查询退款(refund_time)的账单
@@ -1422,10 +1422,10 @@ async function getShiftTable(date) {
       ORDER BY bill_id ASC`;
     const refundBillsRes = await query(refundBillsSql, [targetDate]);
 
-    refunds = refundBillsRes.rows.map(row => ({
+    const refunds = refundBillsRes.rows.map(row => ({
       bill_id: row.bill_id,
-      refund_deposit: Number(row.refund_deposit),
-      remarks: row.remarks
+      refund_deposit: Number(row.refund_deposit || 0),
+      remarks: row.remarks || ''
     }));
 
     const result = {

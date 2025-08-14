@@ -2,10 +2,21 @@
   <!-- 历史记录对话框 -->
   <q-dialog v-model="showDialog" persistent>
     <q-card style="min-width: 800px; max-width: 1200px; width: 90vw;">
-      <q-card-section class="row items-center q-pb-none">
+      <q-card-section class="row items-center q-pb-none history-dialog-header">
         <div class="text-h6">交接班历史记录</div>
         <q-space />
-        <q-btn icon="close" flat round dense @click="closeDialog" />
+        <q-btn
+          icon="close"
+          color="negative"
+          flat
+          round
+          size="md"
+          padding="sm"
+          class="history-close-btn"
+          aria-label="关闭"
+          title="关闭"
+          v-close-popup
+        />
       </q-card-section>
 
       <q-card-section class="q-pt-none">
@@ -129,7 +140,7 @@
 </template>
 
 <script setup>
-import { ref, defineEmits, defineExpose } from 'vue'
+import { ref, defineEmits, defineExpose, watch } from 'vue'
 import { useQuasar } from 'quasar'
 import { shiftHandoverApi } from '../api/index.js'
 import ShiftHandoverDetail from './ShiftHandoverDetail.vue'
@@ -313,10 +324,12 @@ function openDialog() {
   loadHistoryRecords()
 }
 
-function closeDialog() {
-  showDialog.value = false
-  emit('close')
-}
+// 统一监听弹窗关闭，派发 close 事件（无论用何种方式关闭）
+watch(showDialog, (val, oldVal) => {
+  if (oldVal === true && val === false) {
+    emit('close')
+  }
+})
 
 function onDetailDialogClose() {
   // 详情对话框关闭时的处理
@@ -409,5 +422,24 @@ defineExpose({
   padding: 12px;
   border-radius: 6px;
   border-left: 4px solid #2196f3;
+}
+
+/* 固定标题栏，避免滚动时被内容覆盖 */
+.history-dialog-header {
+  position: sticky;
+  top: 0;
+  z-index: 5; /* 高于表格主体 */
+  background: white;
+}
+
+/* 放大点击热区，提升交互灵敏度 */
+.history-close-btn {
+  min-width: 32px;
+  min-height: 32px;
+  z-index: 10;
+}
+
+.history-close-btn :deep(.q-icon) {
+  pointer-events: none; /* 确保点击落到按钮本身 */
 }
 </style>

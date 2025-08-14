@@ -51,7 +51,7 @@ if (setup.env === "dev") {
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
   }));
-  app.use(history());
+  // app.use(history());
 
 }
 

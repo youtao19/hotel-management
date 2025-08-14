@@ -53,10 +53,11 @@ export const useShiftHandoverStore = defineStore("shiftHandover", () => {
   let statistics_data = ref([])
   let special_stats_data = ref(null)
 
-  // 获取表格数据
-  const fetchShiftTable = async () => {
-    const response = await shiftHandoverApi.getShiftTable();
-  shiftTable_data.value = response;
+  // 获取表格数据（可选传入日期）
+  const fetchShiftTable = async (date) => {
+    const response = await shiftHandoverApi.getShiftTable(date ? { date } : {});
+    shiftTable_data.value = response;
+    return response;
   };
 
   // 获取备忘录数据（可选传入日期）
@@ -85,8 +86,8 @@ export const useShiftHandoverStore = defineStore("shiftHandover", () => {
     remarks_data,
     fetchRemarks,
     statistics_data,
-  fetchStatistics,
-  special_stats_data,
-  fetchSpecialStats
+    fetchStatistics,
+    special_stats_data,
+    fetchSpecialStats
   };
 });

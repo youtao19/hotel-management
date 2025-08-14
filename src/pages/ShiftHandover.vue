@@ -16,7 +16,7 @@
       <!-- 日期和人员信息 -->
       <div class="row q-col-gutter-md q-mb-md">
         <div class="col-md-4">
-          <q-input v-model="selectedDate" type="date" label="查询日期" filled @update:model-value="loadShiftData" />
+          <q-input v-model="selectedDate" type="date" label="查询日期" filled />
         </div>
         <div class="col-md-4">
           <q-input v-model="handoverPerson" label="交班人" filled />
@@ -128,7 +128,6 @@ function calculateTotals() {
                                  (paymentData.value.cash.hotelIncome || 0) +
                                  (paymentData.value.cash.restIncome || 0) +
                                  (paymentData.value.cash.carRentIncome || 0)
-
   // 其他支付方式：备用金 + 客房收入 + 休息房收入 + 租车收入 = 合计
   Object.keys(paymentData.value).forEach(paymentType => {
     if (paymentType !== 'cash') {
@@ -138,479 +137,104 @@ function calculateTotals() {
   })
 }
 
+// 将 store 的 shiftTable_data 映射到本地 paymentData
+function syncPaymentDataFromStore(table) {
+  const data = table?.data || table
+  if (!data || typeof data !== 'object') return
+
+  // 如果是按中文键的表格数据
+  if (data['现金'] || data['微信'] || data['微邮付'] || data['支付宝'] || data['数字支付'] || data['其他']) {
+    const mapCurrency = (src, destKey) => {
+      if (!src) return
+      paymentData.value[destKey].reserveCash = Number(src['备用金'] ?? (paymentData.value[destKey].reserveCash || 0))
+      paymentData.value[destKey].hotelIncome = Number(src['客房收入'] ?? 0)
+      paymentData.value[destKey].restIncome = Number(src['休息房收入'] ?? 0)
+      paymentData.value[destKey].carRentIncome = Number(src['租车收入'] ?? 0)
+      paymentData.value[destKey].hotelDeposit = Number(src['客房退押'] ?? 0)
+      paymentData.value[destKey].restDeposit = Number(src['休息退押'] ?? 0)
+      paymentData.value[destKey].retainedAmount = Number(src['留存款'] ?? (destKey === 'cash' ? 320 : 0))
+    }
+    mapCurrency(data['现金'], 'cash')
+    mapCurrency(data['微信'], 'wechat')
+    mapCurrency(data['微邮付'] || data['支付宝'] || data['数字支付'], 'digital')
+    mapCurrency(data['其他'], 'other')
+    calculateTotals()
+  }
+
+  // 如果是 { records, refunds } 结构，按备注分类到现金行
+  if (Array.isArray(data?.records) || Array.isArray(data?.refunds)) {
+    applyShiftTableRemarks(data)
+  }
+}
+
+// 从交接表records/refunds根据备注(住宿/休息房)分类并累加到表格
+function applyShiftTableRemarks(raw, destKey = 'cash') {
+  if (!raw || typeof raw !== 'object') return
+  const records = Array.isArray(raw.records) ? raw.records : []
+  const refunds = Array.isArray(raw.refunds) ? raw.refunds : []
+
+  let hotelIncomeSum = 0
+  let restIncomeSum = 0
+  let hotelRefundSum = 0
+  let restRefundSum = 0
+
+  // 备注分类：更健壮的关键词匹配
+  const classifyRemark = (txt) => {
+    const r = (txt ?? '').toString()
+    // 优先匹配“休息类”
+    const restKeywords = ['休息房', '休息', '钟点', '钟点房']
+    const hotelKeywords = ['住宿', '客房', '住', '房费']
+    const hasAny = (arr) => arr.some(k => r.includes(k))
+    if (hasAny(restKeywords)) return 'rest'
+    if (hasAny(hotelKeywords)) return 'hotel'
+    return null
+  }
+
+  // 汇总收入
+  for (const r of records) {
+    const remark = r?.remarks || ''
+    const amt = Number(r?.total_income || 0) || 0
+    const t = classifyRemark(remark)
+    if (t === 'hotel') hotelIncomeSum += amt
+    if (t === 'rest') restIncomeSum += amt
+  }
+
+  // 汇总退押金（使用绝对值）
+  for (const rf of refunds) {
+    const remark = rf?.remarks || ''
+    const amt = Math.abs(Number(rf?.refund_deposit || 0) || 0)
+    const t = classifyRemark(remark)
+    if (t === 'hotel') hotelRefundSum += amt
+    if (t === 'rest') restRefundSum += amt
+  }
+
+  // 将结果累加到指定支付方式行（默认现金）。为防止重复累加，先重置这些目标字段
+  if (!paymentData.value[destKey]) destKey = 'cash'
+  paymentData.value[destKey].hotelIncome = 0
+  paymentData.value[destKey].restIncome = 0
+  paymentData.value[destKey].hotelDeposit = 0
+  paymentData.value[destKey].restDeposit = 0
+
+  paymentData.value[destKey].hotelIncome += hotelIncomeSum
+  paymentData.value[destKey].restIncome += restIncomeSum
+  paymentData.value[destKey].hotelDeposit += hotelRefundSum
+  paymentData.value[destKey].restDeposit += restRefundSum
+
+  // 注：已去除冗余日志，保持控制台整洁
+
+  calculateTotals()
+}
+
 // 特殊统计
 const totalRooms = ref(29)
 const restRooms = ref(3)
 const vipCards = ref(6)
 
-// 加载数据
-async function loadShiftData() {
-  try {
-    console.log('开始加载交接班数据，日期:', selectedDate.value)
-
-    // 获取统计数据、收款明细和前一天的交接班记录
-    const [statisticsResponse, receiptsResponse, previousHandoverResponse] = await Promise.all([
-      shiftHandoverApi.getStatistics({
-        date: selectedDate.value
-      }),
-      shiftHandoverApi.getReceiptDetails({
-        date: selectedDate.value
-      }),
-      shiftHandoverApi.getPreviousHandoverData({
-        date: selectedDate.value
-      }).catch(error => {
-        console.error('获取前一天交接班记录失败:', error)
-        return null
-      })
-    ])
-
-    console.log('API响应数据:', {
-      statisticsResponse: statisticsResponse ? '已获取' : '未获取',
-      receiptsResponse: receiptsResponse ? `获取了${receiptsResponse.length || 0}条记录` : '未获取',
-      previousHandoverResponse: previousHandoverResponse ? `ID=${previousHandoverResponse.id || '未知'}` : '未获取'
-    })
-
-    if (previousHandoverResponse) {
-      console.log('交接班记录详情:', {
-        id: previousHandoverResponse.id,
-        date: previousHandoverResponse.shift_date,
-        isCurrentDay: previousHandoverResponse.isCurrentDay || false,
-        hasPaymentData: !!previousHandoverResponse.paymentData,
-        hasDetailsPaymentData: !!(previousHandoverResponse.details && previousHandoverResponse.details.paymentData),
-        cashRetainedAmount: previousHandoverResponse.paymentData?.cash?.retainedAmount ||
-                           previousHandoverResponse.details?.paymentData?.cash?.retainedAmount || 'undefined'
-      })
-    }
-
-    if (statisticsResponse) {
-      // 更新支付数据
-      updatePaymentData(statisticsResponse, receiptsResponse, previousHandoverResponse)
-    }
-
-  } catch (error) {
-    console.error('加载数据失败:', error)
-
-    // 即使出错，也要尝试加载当天的统计数据
-    try {
-      const statisticsResponse = await shiftHandoverApi.getStatistics({
-        date: selectedDate.value
-      })
-      if (statisticsResponse) {
-        updatePaymentData(statisticsResponse, null, null)
-      } else {
-        // 如果统计数据也获取失败，至少保持默认的备用金设置
-        console.log('统计数据获取失败，保持默认设置')
-        // 不调用 updatePaymentData，保持初始的默认值
-        calculateTotals()
-      }
-    } catch (fallbackError) {
-      console.error('备用加载失败:', fallbackError)
-      // 保持默认设置，不重置数据
-      console.log('保持默认的支付数据设置')
-      calculateTotals()
-    }
-
-    $q.notify({
-      type: 'negative',
-      message: '加载数据失败，已使用默认备用金'
-    })
-  }
-}
-
-// 更新支付数据
-function updatePaymentData(statistics, receipts, previousHandover) {
-  console.log('🔄 开始更新支付数据...')
-
-  // 检查当天是否有已保存的数据（来自"保存金额"或"保存交接记录"）
-  const todaysSavedPaymentData = previousHandover && previousHandover.isCurrentDay
-    ? (previousHandover.details && previousHandover.details.paymentData) || previousHandover.paymentData
-    : null
-
-  if (todaysSavedPaymentData) {
-    console.log('🔄 发现当天已保存的数据，恢复支付数据')
-    console.log('📋 当天保存的完整数据:', previousHandover.details)
-    const savedPaymentData = todaysSavedPaymentData
-
-    // 直接恢复已保存的支付数据
-    Object.keys(savedPaymentData).forEach(paymentType => {
-      if (paymentData.value[paymentType]) {
-        paymentData.value[paymentType] = {
-          ...paymentData.value[paymentType],
-          ...savedPaymentData[paymentType]
-        }
-      }
-    })
-
-    // 恢复其他页面信息
-    if (previousHandover.details) {
-      const details = previousHandover.details
-      console.log('📋 恢复页面数据:', details)
-
-      // 恢复基本信息
-      if (details.notes) {
-        notes.value = details.notes
-        console.log('📝 恢复备注:', details.notes)
-      }
-      if (details.handoverPerson) {
-        handoverPerson.value = details.handoverPerson
-        console.log('👤 恢复交接人:', details.handoverPerson)
-      }
-      if (details.receivePerson) {
-        receivePerson.value = details.receivePerson
-        console.log('👤 恢复接收人:', details.receivePerson)
-      }
-      if (details.cashierName) {
-        cashierName.value = details.cashierName
-        console.log('👤 恢复收银员:', details.cashierName)
-      }
-
-      // 恢复备忘录
-      if (details.taskList && Array.isArray(details.taskList)) {
-        taskList.value = details.taskList
-        console.log('📋 恢复备忘录:', details.taskList.length, '条')
-      }
-
-      // 恢复特殊统计数据
-      if (details.specialStats) {
-        const stats = details.specialStats
-        console.log('📊 恢复特殊统计:', stats)
-        if (stats.totalRooms !== undefined) {
-          totalRooms.value = stats.totalRooms
-          console.log('🏠 恢复开房数:', stats.totalRooms)
-        }
-        if (stats.restRooms !== undefined) {
-          restRooms.value = stats.restRooms
-          console.log('🛏️ 恢复休息房数:', stats.restRooms)
-        }
-        if (stats.vipCards !== undefined) {
-          vipCards.value = stats.vipCards
-          console.log('💳 恢复大美卡:', stats.vipCards)
-        }
-        if (stats.goodReview !== undefined) {
-          goodReview.value = stats.goodReview
-          console.log('⭐ 恢复好评:', stats.goodReview)
-        }
-      }
-    }
-
-    // 🔒 恢复数据时，只有在用户没有手动设置过现金备用金的情况下才强制设置为320
-    // 如果用户已经保存了自定义的现金备用金，则保持用户的设置
-    if (!savedPaymentData.cash || savedPaymentData.cash.reserveCash === undefined || savedPaymentData.cash.reserveCash === null) {
-      console.log('🔧 用户未设置现金备用金，使用默认值320')
-      paymentData.value.cash.reserveCash = 320
-    } else {
-      console.log('✅ 保持用户设置的现金备用金:', savedPaymentData.cash.reserveCash)
-    }
-
-    // 🔒 对于现金留存款，只有在用户没有手动设置过的情况下才强制设置为320
-    if (!savedPaymentData.cash || savedPaymentData.cash.retainedAmount === undefined || savedPaymentData.cash.retainedAmount === null) {
-      console.log('🔧 用户未设置现金留存款，使用默认值320')
-      paymentData.value.cash.retainedAmount = 320
-    } else {
-      console.log('✅ 保持用户设置的现金留存款:', savedPaymentData.cash.retainedAmount)
-    }
-
-    calculateTotals()
-
-    $q.notify({
-      type: 'positive',
-      message: '已恢复当天保存的交接班数据',
-      caption: `记录ID: ${previousHandover.id}`,
-      timeout: 3000
-    })
-
-    return // 直接返回，不执行下面的统计数据更新逻辑
-  }
-
-  // 只有在有统计数据时才重置支付数据，否则保持当前状态
-  if (statistics) {
-    resetPaymentData()
-    console.log('📝 已重置支付数据，现金备用金:', paymentData.value.cash.reserveCash)
-  } else {
-    console.log('📝 无统计数据，保持当前支付数据状态')
-  }
-
-  // 保存前一天的备用金数据，稍后设置
-  let correctReserveCash = {
-    cash: 320,
-    wechat: 0,
-    digital: 0,
-    other: 0
-  }
-
-  // 先解析前一天的交接班记录，保存正确的备用金值
-  if (previousHandover) {
-    const prevPaymentData = previousHandover.paymentData ||
-                           (previousHandover.details && previousHandover.details.paymentData) ||
-                           null
-    console.log('📊 解析前一天交接班记录:', prevPaymentData)
-
-    if (prevPaymentData && prevPaymentData.cash) {
-      // 🔒 现金留存款应该始终是320，不管数据库中存储的是什么
-      correctReserveCash.cash = 320
-      console.log(`💰 现金备用金强制设置为: 320 (现金留存款固定值)`)
-
-      // 如果数据库中的值不是320，记录警告
-      const rawRetainedAmount = prevPaymentData.cash.retainedAmount
-      if (rawRetainedAmount && Number(rawRetainedAmount) !== 320) {
-        console.warn(`⚠️ 数据库中的留存款是 ${rawRetainedAmount}，但应该是320`)
-      }
-    }
-
-    // 其他支付方式的备用金计算
-    if (prevPaymentData && prevPaymentData.wechat) {
-      const wechatHandover = (prevPaymentData.wechat.total || 0) -
-                            (prevPaymentData.wechat.hotelDeposit || 0) -
-                            (prevPaymentData.wechat.restDeposit || 0) -
-                            (prevPaymentData.wechat.retainedAmount || 0)
-      correctReserveCash.wechat = Math.max(0, wechatHandover)
-    }
-
-    if (prevPaymentData && prevPaymentData.digital) {
-      const digitalHandover = (prevPaymentData.digital.total || 0) -
-                             (prevPaymentData.digital.hotelDeposit || 0) -
-                             (prevPaymentData.digital.restDeposit || 0) -
-                             (prevPaymentData.digital.retainedAmount || 0)
-      correctReserveCash.digital = Math.max(0, digitalHandover)
-    }
-
-    if (prevPaymentData && prevPaymentData.other) {
-      const otherHandover = (prevPaymentData.other.total || 0) -
-                           (prevPaymentData.other.hotelDeposit || 0) -
-                           (prevPaymentData.other.restDeposit || 0) -
-                           (prevPaymentData.other.retainedAmount || 0)
-      correctReserveCash.other = Math.max(0, otherHandover)
-    }
-  }
-
-  console.log('💰 计算得到的正确备用金:', correctReserveCash)
-
-  // 从统计数据更新基础信息
-  if (statistics) {
-    // 更新房间统计
-    if (statistics.totalRooms) totalRooms.value = statistics.totalRooms
-    if (statistics.restRooms) restRooms.value = statistics.restRooms
-    if (statistics.vipCards) vipCards.value = statistics.vipCards
-
-    // 优先使用后端返回的paymentDetails
-    if (statistics.paymentDetails) {
-      // 现金
-      if (statistics.paymentDetails['现金']) {
-        const cashData = statistics.paymentDetails['现金']
-        paymentData.value.cash.hotelIncome = Math.round(cashData.hotelIncome || 0)
-        paymentData.value.cash.restIncome = Math.round(cashData.restIncome || 0)
-        paymentData.value.cash.hotelDeposit = Math.round(cashData.hotelDeposit || 0)
-        paymentData.value.cash.restDeposit = Math.round(cashData.restDeposit || 0)
-      }
-
-      // 微信
-      if (statistics.paymentDetails['微信']) {
-        const wechatData = statistics.paymentDetails['微信']
-        paymentData.value.wechat.hotelIncome = Math.round(wechatData.hotelIncome || 0)
-        paymentData.value.wechat.restIncome = Math.round(wechatData.restIncome || 0)
-        paymentData.value.wechat.hotelDeposit = Math.round(wechatData.hotelDeposit || 0)
-        paymentData.value.wechat.restDeposit = Math.round(wechatData.restDeposit || 0)
-      }
-
-      // 支付宝/微邮付
-      if (statistics.paymentDetails['支付宝']) {
-        const alipayData = statistics.paymentDetails['支付宝']
-        paymentData.value.digital.hotelIncome = Math.round(alipayData.hotelIncome || 0)
-        paymentData.value.digital.restIncome = Math.round(alipayData.restIncome || 0)
-        paymentData.value.digital.hotelDeposit = Math.round(alipayData.hotelDeposit || 0)
-        paymentData.value.digital.restDeposit = Math.round(alipayData.restDeposit || 0)
-      }
-
-      // 其他方式（银行卡等）
-      const bankData = statistics.paymentDetails['银行卡'] || { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 }
-      const otherData = statistics.paymentDetails['其他'] || { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 }
-
-      paymentData.value.other.hotelIncome = Math.round((bankData.hotelIncome || 0) + (otherData.hotelIncome || 0))
-      paymentData.value.other.restIncome = Math.round((bankData.restIncome || 0) + (otherData.restIncome || 0))
-      paymentData.value.other.hotelDeposit = Math.round((bankData.hotelDeposit || 0) + (otherData.hotelDeposit || 0))
-      paymentData.value.other.restDeposit = Math.round((bankData.restDeposit || 0) + (otherData.restDeposit || 0))
-
-    } else if (receipts && Array.isArray(receipts)) {
-      // 如果后端没有返回paymentDetails，使用收款明细数据进行精确分类
-
-      const paymentStats = {
-        '现金': { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 },
-        '微信': { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 },
-        '支付宝': { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 },
-        '银行卡': { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 },
-        '其他': { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 }
-      }
-
-      // 处理收款明细
-      receipts.forEach(receipt => {
-        const paymentMethod = receipt.payment_method || '现金'
-        const businessType = receipt.business_type || 'hotel'
-        const totalAmount = Number(receipt.total_amount || 0) // 总收入（房费+押金）
-        const refundedDeposit = 0 // 收款明细中暂时无法获取退押金信息，设为0
-
-        // 确保支付方式存在
-        if (!paymentStats[paymentMethod]) {
-          paymentStats[paymentMethod] = { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 }
-        }
-
-        // 按业务类型分类 - 收入是总收入（房费+押金），退押金另算
-        if (businessType === 'hotel') {
-          paymentStats[paymentMethod].hotelIncome += totalAmount // 总收入（房费+押金）
-          paymentStats[paymentMethod].hotelDeposit += refundedDeposit // 退还的押金
-        } else if (businessType === 'rest') {
-          paymentStats[paymentMethod].restIncome += totalAmount // 总收入（房费+押金）
-          paymentStats[paymentMethod].restDeposit += refundedDeposit // 退还的押金
-        }
-      })
-
-      // 更新前端数据
-      // 现金
-      if (paymentStats['现金']) {
-        paymentData.value.cash.hotelIncome = Math.round(paymentStats['现金'].hotelIncome)
-        paymentData.value.cash.restIncome = Math.round(paymentStats['现金'].restIncome)
-        paymentData.value.cash.hotelDeposit = Math.round(paymentStats['现金'].hotelDeposit)
-        paymentData.value.cash.restDeposit = Math.round(paymentStats['现金'].restDeposit)
-      }
-
-      // 微信
-      if (paymentStats['微信']) {
-        paymentData.value.wechat.hotelIncome = Math.round(paymentStats['微信'].hotelIncome)
-        paymentData.value.wechat.restIncome = Math.round(paymentStats['微信'].restIncome)
-        paymentData.value.wechat.hotelDeposit = Math.round(paymentStats['微信'].hotelDeposit)
-        paymentData.value.wechat.restDeposit = Math.round(paymentStats['微信'].restDeposit)
-      }
-
-      // 支付宝/微邮付
-      if (paymentStats['支付宝']) {
-        paymentData.value.digital.hotelIncome = Math.round(paymentStats['支付宝'].hotelIncome)
-        paymentData.value.digital.restIncome = Math.round(paymentStats['支付宝'].restIncome)
-        paymentData.value.digital.hotelDeposit = Math.round(paymentStats['支付宝'].hotelDeposit)
-        paymentData.value.digital.restDeposit = Math.round(paymentStats['支付宝'].restDeposit)
-      }
-
-      // 其他方式（银行卡等）
-      const otherStats = {
-        hotelIncome: (paymentStats['银行卡']?.hotelIncome || 0) + (paymentStats['其他']?.hotelIncome || 0),
-        restIncome: (paymentStats['银行卡']?.restIncome || 0) + (paymentStats['其他']?.restIncome || 0),
-        hotelDeposit: (paymentStats['银行卡']?.hotelDeposit || 0) + (paymentStats['其他']?.hotelDeposit || 0),
-        restDeposit: (paymentStats['银行卡']?.restDeposit || 0) + (paymentStats['其他']?.restDeposit || 0)
-      }
-
-      paymentData.value.other.hotelIncome = Math.round(otherStats.hotelIncome)
-      paymentData.value.other.restIncome = Math.round(otherStats.restIncome)
-      paymentData.value.other.hotelDeposit = Math.round(otherStats.hotelDeposit)
-      paymentData.value.other.restDeposit = Math.round(otherStats.restDeposit)
-
-    } else if (statistics.paymentBreakdown) {
-      // 如果没有明细数据，使用统计数据的分解（兜底方案）
-      const totalIncome = statistics.totalIncome || 1
-
-      // 现金 - 使用新的逻辑：收入是总收入，退押金是实际退还金额
-      if (statistics.paymentBreakdown['现金']) {
-        const cashRatio = statistics.paymentBreakdown['现金'] / totalIncome
-        paymentData.value.cash.hotelIncome = Math.round((statistics.hotelIncome || 0) * cashRatio) // 总收入按比例分配
-        paymentData.value.cash.restIncome = Math.round((statistics.restIncome || 0) * cashRatio)
-        paymentData.value.cash.hotelDeposit = Math.round((statistics.hotelDeposit || 0) * cashRatio) // 退押金按比例分配
-        paymentData.value.cash.restDeposit = Math.round((statistics.restDeposit || 0) * cashRatio)
-      }
-
-      // 微信
-      if (statistics.paymentBreakdown['微信']) {
-        const wechatRatio = statistics.paymentBreakdown['微信'] / totalIncome
-        paymentData.value.wechat.hotelIncome = Math.round((statistics.hotelIncome || 0) * wechatRatio)
-        paymentData.value.wechat.restIncome = Math.round((statistics.restIncome || 0) * wechatRatio)
-        paymentData.value.wechat.hotelDeposit = Math.round((statistics.hotelDeposit || 0) * wechatRatio)
-        paymentData.value.wechat.restDeposit = Math.round((statistics.restDeposit || 0) * wechatRatio)
-      }
-
-      // 支付宝
-      if (statistics.paymentBreakdown['支付宝']) {
-        const alipayRatio = statistics.paymentBreakdown['支付宝'] / totalIncome
-        paymentData.value.digital.hotelIncome = Math.round((statistics.hotelIncome || 0) * alipayRatio)
-        paymentData.value.digital.restIncome = Math.round((statistics.restIncome || 0) * alipayRatio)
-        paymentData.value.digital.hotelDeposit = Math.round((statistics.hotelDeposit || 0) * alipayRatio)
-        paymentData.value.digital.restDeposit = Math.round((statistics.restDeposit || 0) * alipayRatio)
-      }
-
-      // 其他方式
-      const otherTotal = (statistics.paymentBreakdown['银行卡'] || 0) + (statistics.paymentBreakdown['其他'] || 0)
-      if (otherTotal > 0) {
-        const otherRatio = otherTotal / totalIncome
-        paymentData.value.other.hotelIncome = Math.round((statistics.hotelIncome || 0) * otherRatio)
-        paymentData.value.other.restIncome = Math.round((statistics.restIncome || 0) * otherRatio)
-        paymentData.value.other.hotelDeposit = Math.round((statistics.hotelDeposit || 0) * otherRatio)
-        paymentData.value.other.restDeposit = Math.round((statistics.restDeposit || 0) * otherRatio)
-      }
-    }
-  }
-
-  // 🎯 最后设置正确的备用金（这样不会被其他操作覆盖）
-  console.log('🎯 最后设置正确的备用金...')
-  paymentData.value.cash.reserveCash = correctReserveCash.cash
-  paymentData.value.wechat.reserveCash = correctReserveCash.wechat
-  paymentData.value.digital.reserveCash = correctReserveCash.digital
-  paymentData.value.other.reserveCash = correctReserveCash.other
-
-  // 🔒 强制设置现金留存款为320（固定值）
-  paymentData.value.cash.retainedAmount = 320
-
-  console.log('✅ 备用金和留存款设置完成:', {
-    现金备用金: paymentData.value.cash.reserveCash,
-    现金留存款: paymentData.value.cash.retainedAmount,
-    微信: paymentData.value.wechat.reserveCash,
-    微邮付: paymentData.value.digital.reserveCash,
-    其他: paymentData.value.other.reserveCash
-  })
-
-  calculateTotals()
-}
-
-// 重置支付数据（但保留已设置的备用金）
-function resetPaymentData() {
-  Object.keys(paymentData.value).forEach(paymentType => {
-    const payment = paymentData.value[paymentType]
-
-    // 备用金设置默认值
-    // 现金默认备用金为320，其他为0
-    if (paymentType === 'cash') {
-      payment.reserveCash = 320
-    } else {
-      payment.reserveCash = 0
-    }
-
-    // 留存款只对现金默认设置为320（固定值）
-    if (paymentType === 'cash') {
-      payment.retainedAmount = 320  // 现金留存款固定为320
-    } else {
-      payment.retainedAmount = 0
-    }
-
-    // 清空其他数据
-    payment.hotelIncome = 0
-    payment.restIncome = 0
-    payment.carRentIncome = 0
-    payment.hotelDeposit = 0
-    payment.restDeposit = 0
-    // total会在calculateTotals中重新计算
-  })
-
-  console.log('重置支付数据完成，设置默认值:')
-  console.log('- 现金备用金:', paymentData.value.cash.reserveCash)
-  console.log('- 现金留存款:', paymentData.value.cash.retainedAmount)
-
-  // 重置后立即计算总计
-  calculateTotals()
-}
-
-
+// 移除复杂的页面级数据加载，统一依赖 store 及 watchers 进行同步
 
 // 保存交接记录
 async function saveHandover() {
   try {
-    // 调试：保存前检查备用金
-    console.log('保存前的现金备用金:', paymentData.value.cash.reserveCash)
-    console.log('保存前的现金留存款:', paymentData.value.cash.retainedAmount)
-
     const handoverData = {
       date: selectedDate.value,
       handoverPerson: handoverPerson.value,
@@ -626,8 +250,6 @@ async function saveHandover() {
         goodReview: goodReview.value
       }
     }
-
-    console.log('即将保存的支付数据:', handoverData.paymentData.cash)
 
     await shiftHandoverApi.saveHandover(handoverData)
 
@@ -666,8 +288,6 @@ async function savePageData() {
       }
     }
 
-    console.log('保存页面数据:', pageData)
-
     // 调用保存API端点
     const result = await shiftHandoverApi.saveAmountChanges(pageData)
 
@@ -679,7 +299,7 @@ async function savePageData() {
       timeout: 3000
     })
 
-    console.log('页面数据保存成功:', result)
+  // 成功日志简化，避免控制台噪音
 
   } catch (error) {
     console.error('保存页面数据失败:', error)
@@ -757,10 +377,12 @@ function addNewTask() {
   newTaskTitle.value = ''
 }
 
+// 删除备忘录
 function deleteTask(index) {
   taskList.value.splice(index, 1)
 }
 
+// 编辑备忘录
 function editTask(index) {
   // 可以扩展为内联编辑功能
   const task = taskList.value[index]
@@ -770,6 +392,7 @@ function editTask(index) {
   }
 }
 
+// 更新备忘录状态
 function updateTaskStatus(taskId, completed) {
   const task = taskList.value.find(t => t.id === taskId)
   if (task) {
@@ -828,18 +451,27 @@ function openHistoryDialog() {
 
 function onHistoryDialogClose() {
   // 历史记录对话框关闭时的处理
-  console.log('历史记录对话框已关闭')
+  // 省略冗余日志
 }
-
-
 
 // 监听支付数据变化
 watch(paymentData, () => {
   calculateTotals()
 }, { deep: true })
 
-// 监听日期变更，重新加载备忘录
+// 监听 store 中的表格数据变化，自动同步到 paymentData
+watch(shiftHandoverStore.shiftTable_data, (val) => {
+  try {
+    syncPaymentDataFromStore(val)
+  } catch (e) {
+    console.error('同步交接表到 paymentData 失败:', e)
+  }
+}, { deep: true, immediate: false })
+
+// 监听日期变更：刷新备忘录、特殊统计，并拉取交接表（映射由 store-watch 负责）
 watch(selectedDate, async () => {
+  // 先确保合计不为空
+  calculateTotals()
   await loadRemarksIntoMemo()
   // 日期变化时刷新特殊统计
   try {
@@ -857,15 +489,26 @@ watch(selectedDate, async () => {
   } catch (e) {
     console.error('加载特殊统计失败:', e)
   }
+
+  // 日期变化时刷新交接表格（来自 store），映射通过 store-watch 自动完成
+  try {
+    await shiftHandoverStore.fetchShiftTable(selectedDate.value)
+  } catch (e) {
+    console.error('加载交接表格失败:', e)
+  }
 })
-
-
 
 // 组件挂载时初始化
 onMounted(async () => {
-  await loadShiftData()
   // 确保总计正确计算
   calculateTotals()
+  // 通过 store 首次拉取交接表并同步到 paymentData
+  try {
+    const res = await shiftHandoverStore.fetchShiftTable(selectedDate.value)
+    syncPaymentDataFromStore(res)
+  } catch (e) {
+    console.error('首次加载交接表失败:', e)
+  }
   // 加载备忘录：从后端获取备注并填入“房间号：（），备注：（）”格式
   await loadRemarksIntoMemo()
   // 加载交接班特殊统计（开房数、休息房数、好评邀/得）
