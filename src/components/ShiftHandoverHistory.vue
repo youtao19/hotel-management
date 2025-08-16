@@ -71,7 +71,7 @@
                 color="primary"
                 icon="visibility"
                 label="查看"
-                @click="viewHistoryRecord(props.row)"
+                @click.stop="viewHistoryRecord(props.row)"
                 class="q-mr-sm"
               />
               <q-btn
@@ -262,9 +262,11 @@ async function loadHistoryRecords() {
       ...historyFilter.value
     }
 
-    const response = await shiftHandoverApi.getHandoverHistory(params)
-    historyRecords.value = response.data || []
-    historyPagination.value.rowsNumber = response.total || 0
+  const response = await shiftHandoverApi.getHandoverHistory(params)
+  const rows = response?.data?.rows || response?.rows || response?.data || []
+  const total = response?.data?.total || response?.total || rows.length || 0
+  historyRecords.value = Array.isArray(rows) ? rows : []
+  historyPagination.value.rowsNumber = Number(total) || historyRecords.value.length
   } catch (error) {
     console.error('加载历史记录失败:', error)
     $q.notify({

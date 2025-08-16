@@ -88,9 +88,11 @@
             <q-icon name="table_view" class="q-mr-sm" />
             交接班记录详情
           </div>
-          <ShiftHandoverTableReadonly
+          <ShiftHandoverTable
+            :read-only="true"
             :payment-data="recordData.details.paymentData || {}"
             :task-list="recordData.details.taskList || []"
+            :new-task-title="''"
             :total-rooms="recordData.details.specialStats?.totalRooms || 0"
             :rest-rooms="recordData.details.specialStats?.restRooms || 0"
             :vip-cards="recordData.details.specialStats?.vipCards || 0"
@@ -223,7 +225,7 @@
 
 <script setup>
 import { ref, computed, defineEmits, defineExpose } from 'vue'
-import ShiftHandoverTableReadonly from './ShiftHandoverTableReadonly.vue'
+import ShiftHandoverTable from './ShiftHandoverTable.vue'
 
 // 定义事件
 const emit = defineEmits(['close', 'export'])

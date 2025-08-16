@@ -28,19 +28,20 @@
 
       <!-- 引用交接班表格组件 -->
       <ShiftHandoverTable
-        v-model:paymentData="paymentData"
-        :taskList="taskList"
-        v-model:newTaskTitle="newTaskTitle"
-        v-model:cashierName="cashierName"
+        :read-only="true"
+        v-model:payment-data="paymentData"
+        :task-list="taskList"
+        v-model:new-task-title="newTaskTitle"
+        v-model:cashier-name="cashierName"
         v-model:notes="notes"
-        v-model:totalRooms="totalRooms"
-        v-model:restRooms="restRooms"
-        v-model:vipCards="vipCards"
-        v-model:goodReview="goodReview"
-        @updateTaskStatus="updateTaskStatus"
-        @addNewTask="addNewTask"
-        @deleteTask="deleteTask"
-        @editTask="editTask"
+        v-model:total-rooms="totalRooms"
+        v-model:rest-rooms="restRooms"
+        v-model:vip-cards="vipCards"
+        v-model:good-review="goodReview"
+        @update-task-status="updateTaskStatus"
+        @add-new-task="addNewTask"
+        @delete-task="deleteTask"
+        @edit-task="editTask"
       />
     </div>
 
@@ -460,7 +461,8 @@ watch(paymentData, () => {
 }, { deep: true })
 
 // 监听 store 中的表格数据变化，自动同步到 paymentData
-watch(shiftHandoverStore.shiftTable_data, (val) => {
+// 注意：Pinia 会对 setup store 的 ref 进行解包，这里需要用 getter 形式确保可被 watch 追踪
+watch(() => shiftHandoverStore.shiftTable_data, (val) => {
   try {
     syncPaymentDataFromStore(val)
   } catch (e) {
@@ -492,7 +494,9 @@ watch(selectedDate, async () => {
 
   // 日期变化时刷新交接表格（来自 store），映射通过 store-watch 自动完成
   try {
-    await shiftHandoverStore.fetchShiftTable(selectedDate.value)
+  const res = await shiftHandoverStore.fetchShiftTable(selectedDate.value)
+  // 冗余保障：直接按返回值同步一次，避免 watch 漏触发
+  syncPaymentDataFromStore(res)
   } catch (e) {
     console.error('加载交接表格失败:', e)
   }

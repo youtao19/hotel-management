@@ -56,15 +56,18 @@ export const useShiftHandoverStore = defineStore("shiftHandover", () => {
   // 获取表格数据（可选传入日期）
   const fetchShiftTable = async (date) => {
     const response = await shiftHandoverApi.getShiftTable(date ? { date } : {});
-    shiftTable_data.value = response;
-    return response;
+    // 后端路由返回 { success, data }，拦截器已返回 response.data，这里需再取 data
+    const table = response?.data ?? response;
+    shiftTable_data.value = table;
+    return table;
   };
 
   // 获取备忘录数据（可选传入日期）
   const fetchRemarks = async (date) => {
     const response = await shiftHandoverApi.getRemarks(date ? { date } : {});
-    remarks_data.value = response;
-    return response;
+    const list = response?.data ?? response;
+    remarks_data.value = list;
+    return list;
   };
 
   // 获取统计信息
@@ -76,8 +79,9 @@ export const useShiftHandoverStore = defineStore("shiftHandover", () => {
   // 获取交接班特殊统计（传入日期）
   const fetchSpecialStats = async (date) => {
     const response = await shiftHandoverApi.getSpecialStats(date ? { date } : {})
-    special_stats_data.value = response
-    return response
+    const stats = response?.data ?? response
+    special_stats_data.value = stats
+    return stats
   }
 
   return {
