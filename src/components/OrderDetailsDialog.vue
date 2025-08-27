@@ -216,15 +216,28 @@ function emitRefundDeposit() {
   emit('refund-deposit');
 }
 
+import { useBillStore } from 'src/stores/billStore'
+const billStore = useBillStore()
+
 // 判断是否可以退押金
 function canRefundDeposit(order) {
   if (!order) return false
   const allowedStatuses = ['checked-out', 'cancelled']
   if (!allowedStatuses.includes(order.status)) return false
-  const deposit = Number(order.deposit) || 0
+  // 优先使用订单字段
+  let deposit = Number(order.deposit) || 0
+  const billsForOrder = billStore.bills.filter(b => b.order_id === order.orderNumber)
+  if (deposit === 0) {
+    const bWithDep = billsForOrder.find(b => Number(b.deposit) > 0)
+    if (bWithDep) deposit = Number(bWithDep.deposit) || 0
+  }
   if (deposit <= 0) return false
-  const refunded = Number(order.refundedDeposit) || 0
-  // 新规则：只允许第一次退款（refunded==0 表示尚未退款）
+  // 计算已退金额
+  let refunded = 0
+  billsForOrder.forEach(b => {
+    refunded += Math.abs(Number(b.refund_deposit) || 0)
+    if (b.change_type === '退押') refunded += Math.abs(Number(b.change_price) || 0)
+  })
   return refunded === 0
 }
 </script>

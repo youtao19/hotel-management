@@ -15,7 +15,10 @@ async function getDailyRevenue(startDate, endDate) {
             COUNT(DISTINCT o.order_id) as order_count,
             COUNT(b.order_id) as bill_count,
             SUM(COALESCE(b.total_income, 0)) as total_revenue,
-            SUM(CASE WHEN COALESCE(b.refund_deposit,0) < 0 THEN ABS(COALESCE(b.refund_deposit,0)) ELSE 0 END) as total_deposit_refund,
+                        (
+                            SUM(CASE WHEN COALESCE(b.refund_deposit,0) < 0 THEN ABS(COALESCE(b.refund_deposit,0)) ELSE 0 END)
+                            + SUM(CASE WHEN b.change_type = '退押' THEN ABS(COALESCE(b.change_price,0)) ELSE 0 END)
+                        ) as total_deposit_refund,
             SUM(COALESCE(b.room_fee, 0)) as total_room_fee,
             COUNT(DISTINCT CASE WHEN b.pay_way = '现金' THEN o.order_id END) as cash_orders,
             COUNT(DISTINCT CASE WHEN b.pay_way = '微信' THEN o.order_id END) as wechat_orders,
@@ -57,7 +60,10 @@ async function getWeeklyRevenue(startDate, endDate) {
             COUNT(DISTINCT o.order_id) as order_count,
             COUNT(b.order_id) as bill_count,
             SUM(COALESCE(b.total_income, 0)) as total_revenue,
-            SUM(CASE WHEN COALESCE(b.refund_deposit,0) < 0 THEN ABS(COALESCE(b.refund_deposit,0)) ELSE 0 END) as total_deposit_refund,
+                        (
+                            SUM(CASE WHEN COALESCE(b.refund_deposit,0) < 0 THEN ABS(COALESCE(b.refund_deposit,0)) ELSE 0 END)
+                            + SUM(CASE WHEN b.change_type = '退押' THEN ABS(COALESCE(b.change_price,0)) ELSE 0 END)
+                        ) as total_deposit_refund,
             SUM(COALESCE(b.room_fee, 0)) as total_room_fee,
             AVG(COALESCE(b.total_income, 0)) as avg_daily_revenue,
             COUNT(DISTINCT CASE WHEN b.pay_way = '现金' THEN o.order_id END) as cash_orders,
@@ -99,7 +105,10 @@ async function getMonthlyRevenue(startDate, endDate) {
             COUNT(DISTINCT o.order_id) as order_count,
             COUNT(b.order_id) as bill_count,
             SUM(COALESCE(b.total_income, 0)) as total_revenue,
-            SUM(CASE WHEN COALESCE(b.refund_deposit,0) < 0 THEN ABS(COALESCE(b.refund_deposit,0)) ELSE 0 END) as total_deposit_refund,
+                        (
+                            SUM(CASE WHEN COALESCE(b.refund_deposit,0) < 0 THEN ABS(COALESCE(b.refund_deposit,0)) ELSE 0 END)
+                            + SUM(CASE WHEN b.change_type = '退押' THEN ABS(COALESCE(b.change_price,0)) ELSE 0 END)
+                        ) as total_deposit_refund,
             SUM(COALESCE(b.room_fee, 0)) as total_room_fee,
             AVG(COALESCE(b.total_income, 0)) as avg_daily_revenue,
             COUNT(DISTINCT CASE WHEN b.pay_way = '现金' THEN o.order_id END) as cash_orders,
@@ -192,7 +201,10 @@ async function getRoomTypeRevenue(startDate, endDate) {
             SUM(COALESCE(b.total_income, 0)) as total_revenue,
             AVG(COALESCE(b.total_income, 0)) as avg_revenue_per_order,
             SUM(COALESCE(b.room_fee, 0)) as total_room_fee,
-            SUM(CASE WHEN COALESCE(b.refund_deposit,0) < 0 THEN ABS(COALESCE(b.refund_deposit,0)) ELSE 0 END) as total_deposit_refund
+                        (
+                            SUM(CASE WHEN COALESCE(b.refund_deposit,0) < 0 THEN ABS(COALESCE(b.refund_deposit,0)) ELSE 0 END)
+                            + SUM(CASE WHEN b.change_type = '退押' THEN ABS(COALESCE(b.change_price,0)) ELSE 0 END)
+                        ) as total_deposit_refund
         FROM orders o
         LEFT JOIN bills b ON b.order_id = o.order_id
         LEFT JOIN room_types rt ON o.room_type = rt.type_code

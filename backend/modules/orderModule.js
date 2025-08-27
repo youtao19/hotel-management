@@ -633,15 +633,32 @@ async function refundDeposit(refundData) {
         console.warn('[refundDeposit] 获取账单押金失败(忽略):', e.message);
       }
     }
-    // 通过账单计算当前已退押金（refund_deposit 为负数, 取绝对值）
+    // 通过账单计算当前已退押金：兼容多种历史结构
+    // 优先从 orders.deposit 获取原始押金，其次尝试从 bills.deposit（如果列存在）
     let currentRefundedDeposit = 0;
     try {
-      const billRef = await query(`SELECT refund_deposit, deposit FROM bills WHERE order_id=$1 AND COALESCE(deposit,0)>0 ORDER BY create_time ASC LIMIT 1`, [orderNumber]);
-      if (billRef.rows.length) {
-        const b = billRef.rows[0];
-        if (originalDeposit === 0 && b.deposit) originalDeposit = parseFloat(b.deposit) || 0; // 若订单押金为0用账单押金
-        currentRefundedDeposit = Math.abs(parseFloat(b.refund_deposit) || 0);
+      // 1) 尝试从 bills 表读取 deposit（如果该列存在）
+      const colDep = await query(`SELECT 1 FROM information_schema.columns WHERE table_name='bills' AND column_name='deposit' LIMIT 1`);
+      if (colDep.rows.length) {
+        const depRow = await query(`SELECT deposit FROM bills WHERE order_id=$1 AND COALESCE(deposit,0)>0 ORDER BY create_time ASC LIMIT 1`, [orderNumber]);
+        if (depRow.rows.length && originalDeposit === 0) {
+          const d = parseFloat(depRow.rows[0].deposit) || 0;
+          if (d > 0) originalDeposit = d;
+        }
       }
+
+      // 2) 计算 legacy refunded（如果 refund_deposit 列存在）和新 change_type='退押' 的退款合计
+      let legacyRefunded = 0;
+      const colRef = await query(`SELECT 1 FROM information_schema.columns WHERE table_name='bills' AND column_name='refund_deposit' LIMIT 1`);
+      if (colRef.rows.length) {
+        const r = await query(`SELECT ABS(COALESCE(MIN(refund_deposit),0)) AS legacy_refunded FROM bills WHERE order_id=$1`, [orderNumber]);
+        legacyRefunded = parseFloat(r.rows[0].legacy_refunded) || 0;
+      }
+
+      const r2 = await query(`SELECT COALESCE(SUM(CASE WHEN change_type='退押' THEN ABS(COALESCE(change_price,0)) ELSE 0 END),0) AS change_refunded FROM bills WHERE order_id=$1`, [orderNumber]);
+      const changeRefunded = parseFloat(r2.rows[0].change_refunded) || 0;
+
+      currentRefundedDeposit = legacyRefunded + changeRefunded;
     } catch (calcErr) {
       console.warn('[refundDeposit] 计算已退押金失败(忽略, 按0处理):', calcErr.message);
     }
@@ -652,12 +669,12 @@ async function refundDeposit(refundData) {
     }
 
     if (refundAmount > availableRefund) {
-  const err = new Error(`退押金金额不能超过可退金额 ¥${availableRefund}`);
-  err.code = 'REFUND_EXCEED';
-  err.availableRefund = availableRefund;
-  err.originalDeposit = originalDeposit;
-  err.currentRefundedDeposit = currentRefundedDeposit;
-  throw err;
+      const err = new Error(`退押金金额不能超过可退金额 ¥${availableRefund}`);
+      err.code = 'REFUND_EXCEED';
+      err.availableRefund = availableRefund;
+      err.originalDeposit = originalDeposit;
+      err.currentRefundedDeposit = currentRefundedDeposit;
+      throw err;
     }
 
     // 构建退款记录（用于交接班记录、日志）
@@ -713,14 +730,37 @@ async function refundDeposit(refundData) {
  * @returns {Promise<{orderId:string, deposit:number, refunded:number, remaining:number}>}
  */
 async function getDepositStatus(orderId) {
-  const res = await query(`SELECT deposit, refund_deposit FROM bills WHERE order_id=$1 AND COALESCE(deposit,0)>0 ORDER BY create_time ASC LIMIT 1`, [orderId]);
-  if (!res.rows.length) {
-    return { orderId, deposit: 0, refunded: 0, remaining: 0 };
+  try {
+    // 优先使用 orders.deposit
+    const ord = await query(`SELECT deposit FROM orders WHERE order_id=$1`, [orderId]);
+    let deposit = 0;
+    if (ord.rows.length) deposit = parseFloat(ord.rows[0].deposit) || 0;
+
+    // 如果 orders.deposit 为 0，尝试从 bills.deposit 读取（兼容旧结构）
+    if (deposit === 0) {
+      const colDep = await query(`SELECT 1 FROM information_schema.columns WHERE table_name='bills' AND column_name='deposit' LIMIT 1`);
+      if (colDep.rows.length) {
+        const b = await query(`SELECT deposit FROM bills WHERE order_id=$1 AND COALESCE(deposit,0)>0 ORDER BY create_time ASC LIMIT 1`, [orderId]);
+        if (b.rows.length) deposit = parseFloat(b.rows[0].deposit) || 0;
+      }
+    }
+
+    // 计算已退押金（兼容 refund_deposit 和 change_type='退押'）
+    let legacyRefunded = 0;
+    const colRef = await query(`SELECT 1 FROM information_schema.columns WHERE table_name='bills' AND column_name='refund_deposit' LIMIT 1`);
+    if (colRef.rows.length) {
+      const r = await query(`SELECT ABS(COALESCE(MIN(refund_deposit),0)) AS legacy_refunded FROM bills WHERE order_id=$1`, [orderId]);
+      legacyRefunded = parseFloat(r.rows[0].legacy_refunded) || 0;
+    }
+    const r2 = await query(`SELECT COALESCE(SUM(CASE WHEN change_type='退押' THEN ABS(COALESCE(change_price,0)) ELSE 0 END),0) AS change_refunded FROM bills WHERE order_id=$1`, [orderId]);
+    const changeRefunded = parseFloat(r2.rows[0].change_refunded) || 0;
+
+    const refunded = legacyRefunded + changeRefunded;
+    return { orderId, deposit, refunded, remaining: Math.max(0, deposit - refunded) };
+  } catch (error) {
+    console.error('获取押金状态失败:', error);
+    throw new Error('获取押金状态失败');
   }
-  const row = res.rows[0];
-  const deposit = parseFloat(row.deposit)||0;
-  const refunded = Math.abs(parseFloat(row.refund_deposit)||0);
-  return { orderId, deposit, refunded, remaining: deposit - refunded };
 }
 
 const table = {

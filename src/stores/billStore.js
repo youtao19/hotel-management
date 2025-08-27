@@ -14,8 +14,14 @@ export const useBillStore = defineStore('bill', () => {
     async function addBill(billData) {
         try {
             const response = await billApi.createBill(billData);
-            bills.value.push(response.bill);
-            return response.bill;
+            // 服务端在多日账单场景可能返回 { result: { skippedInsert: true, updatedOrder } }
+            if (response && response.result && response.result.skippedInsert) {
+                // 不将任何账单加入本地 bills 列表，返回服务器的结果
+                return response.result;
+            }
+            const created = response.bill || response.data?.bill || response;
+            if (created) bills.value.push(created);
+            return created;
         } catch (error) {
             console.error('添加账单失败:', error);
             throw error;
@@ -34,6 +40,7 @@ export const useBillStore = defineStore('bill', () => {
 
             // 不自动添加到本地状态，由调用方处理
             console.log('账单创建响应:', response);
+            if (response && response.result && response.result.skippedInsert) return response.result;
             return response.bill || response.data?.bill || response;
         } catch (error) {
             console.error('创建单个账单失败:', error);

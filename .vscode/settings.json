@@ -13,7 +13,9 @@
         "copilot/gpt-5"
       ]
     }
-  }
+  },
+  "editor.fontSize": 17,
+  "editor.mouseWheelZoom": true
 }
 
 

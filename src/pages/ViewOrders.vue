@@ -1042,15 +1042,21 @@ const billDepositInfoMap = computed(() => {
 function canRefundDeposit(order) {
   if (!order) return false
   if (!allowedRefundStatuses.includes(order.status)) return false
-  const info = billDepositInfoMap.value[order.orderNumber]
-  if (info) {
-    // 已经有退款（refunded>0） => 隐藏
-    if (info.refunded > 0) return false
-    return info.deposit > 0
+  // 优先使用 billStore 中的账单信息判断（支持 change_type='退押'）
+  const billsForOrder = billStore.bills.filter(b => b.order_id === order.orderNumber)
+  // 计算 deposit（优先 order.deposit，其次 bills 中第一条含押金的记录）
+  let deposit = Number(order.deposit) || 0
+  if (deposit === 0) {
+    const bWithDep = billsForOrder.find(b => Number(b.deposit) > 0)
+    if (bWithDep) deposit = Number(bWithDep.deposit) || 0
   }
-  // 回退逻辑（无账单缓存）
-  const deposit = Number(order.deposit) || 0
-  const refunded = Number(order.refundedDeposit) || 0
+  // 计算已退押金：兼容 legacy refund_deposit 和 change_type='退押'
+  let refunded = 0
+  billsForOrder.forEach(b => {
+    refunded += Math.abs(Number(b.refund_deposit) || 0)
+    if (b.change_type === '退押') refunded += Math.abs(Number(b.change_price) || 0)
+  })
+
   if (deposit <= 0) return false
   if (refunded > 0) return false
   return true

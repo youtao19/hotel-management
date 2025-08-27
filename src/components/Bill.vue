@@ -395,14 +395,14 @@ async function createSingleDayBill() {
     throw new Error('关键信息缺失，无法创建账单')
   }
 
-  await billStore.addBill(billDataToSend)
+  const createResult = await billStore.addBill(billDataToSend)
 
-  // 显示成功提示
-  $q.notify({
-    type: 'positive',
-    message: '账单创建成功',
-    position: 'top'
-  });
+  // 若服务端返回 skippedInsert，说明在多日场景或仅更新了 orders
+  if (createResult && createResult.skippedInsert) {
+    $q.notify({ type: 'positive', message: '订单已更新（未在账单表插入）', position: 'top' });
+  } else {
+    $q.notify({ type: 'positive', message: '账单创建成功', position: 'top' });
+  }
 
   // 触发账单创建完成事件
   emit('bill-created');
@@ -459,7 +459,10 @@ async function createMultiDayBills() {
 
       // 调用账单API创建单日账单
       const createdBill = await billStore.createSingleBill(billDataToSend);
-      createdBills.push(createdBill);
+      // createdBill 可能为 { skippedInsert: true, updatedOrder }
+      if (!(createdBill && createdBill.skippedInsert)) {
+        createdBills.push(createdBill);
+      }
 
       // 短暂延迟，避免创建时间完全相同
       await new Promise(resolve => setTimeout(resolve, 200));
