@@ -217,6 +217,7 @@ const paymentMethodOptions = computed(() => viewStore.paymentMethodOptions)
 // 通过接口获取的押金状态（优先于传入的冗余字段）
 const remoteDepositInfo = ref(null)
 
+// 计算可退押金金额
 const availableRefundAmount = computed(() => {
   if (remoteDepositInfo.value) return Math.max(0, remoteDepositInfo.value.remaining)
   if (!props.order) return 0
@@ -258,7 +259,10 @@ watch(() => props.modelValue, async (newVal) => {
     }
     refundForm.value = {
       amount: availableRefundAmount.value,
-      method: 'cash',
+      // 退押方式默认：优先用订单的支付方式，其次使用中文“现金”
+      method: viewStore.normalizePaymentMethodForDB(
+        props.order.paymentMethod || props.order.payment_method || '现金'
+      ),
       deductAmount: 0,
       notes: '',
       operator: userStore.currentUser?.username || '系统操作员'
