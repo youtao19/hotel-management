@@ -1,5 +1,5 @@
 <template>
-  <div class="shift-table-container">
+  <div class="shift-table-wrapper">
     <table class="shift-table">
       <thead>
         <tr class="table-header">
@@ -19,7 +19,7 @@
         </tr>
       </thead>
       <tbody>
-    <tr class="payment-row cash-row">
+        <tr class="payment-row cash-row">
           <td class="payment-label">现金</td>
           <td class="editable-cell">
             <q-input :model-value="normalizedPaymentData.cash.reserveCash" dense borderless class="table-input" readonly />
@@ -125,121 +125,16 @@
         </tr>
       </tbody>
     </table>
-
-    <!-- 备忘录 -->
-    <div class="row q-mt-lg">
-      <div class="col-12">
-        <div class="task-management-container">
-          <div class="task-management-header">
-            <q-icon name="edit_note" size="24px" class="q-mr-sm" />
-            <span class="text-h6 text-weight-bold">备忘录</span>
-          </div>
-          <div class="task-management-content">
-            <div class="task-list-horizontal">
-              <div v-for="(task, index) in taskList" :key="task.id" class="task-card" :class="{ 'task-completed': task.completed }">
-                <q-checkbox
-                  v-model="task.completed"
-                  class="task-checkbox"
-                  @click.prevent.stop="readOnly && $event && $event.preventDefault()"
-                  @update:model-value="updateTaskStatus(task.id, $event)"
-                />
-                <div class="task-content" @click="onEditTask(index)">
-                  <div class="task-title" :class="{ 'completed': task.completed }">{{ task.title }}</div>
-                  <div class="task-time" v-if="task.time">
-                    <q-icon name="schedule" size="14px" class="q-mr-xs" />
-                    {{ task.time }}
-                  </div>
-                </div>
-                <q-btn v-if="!readOnly" flat round dense size="sm" icon="close" class="task-delete" @click="deleteTask(index)" />
-              </div>
-              <!-- 添加新任务卡片 -->
-              <div class="add-task-card">
-                <q-input v-model="localNewTaskTitle" placeholder="添加新备忘录..." dense borderless class="add-task-input" @keyup.enter="addNewTask">
-                  <template #prepend>
-                    <q-icon name="add" />
-                  </template>
-                  <template #append>
-                    <q-btn flat round dense size="sm" icon="add" color="primary" @click="addNewTask" :disable="!localNewTaskTitle.trim()" />
-                  </template>
-                </q-input>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 特殊统计 -->
-    <div class="row q-mt-md q-col-gutter-md">
-      <div class="col-md-6">
-        <table class="special-stats-table">
-          <tbody>
-            <tr>
-              <td class="stats-label">好评</td>
-              <td colspan="2" class="stats-value">
-                <q-input v-model="localGoodReview" dense borderless class="text-center" placeholder="邀1得1" :readonly="readOnly" />
-              </td>
-              <td class="stats-label">开房</td>
-              <td colspan="2" class="stats-number">
-                <q-input v-model.number="localTotalRooms" dense borderless class="text-center" placeholder="0" :readonly="readOnly" />
-              </td>
-              <td class="stats-label">收银员</td>
-              <td class="cashier-name">
-                <q-input v-model="localCashierName" dense borderless class="text-center" placeholder="张" :readonly="readOnly" />
-              </td>
-            </tr>
-            <tr>
-              <td class="stats-label">大美卡</td>
-              <td colspan="2" class="stats-number">
-                <q-input v-model.number="localVipCards" dense borderless class="text-center" placeholder="0" :readonly="readOnly" />
-              </td>
-              <td class="stats-label">休息房</td>
-              <td colspan="2" class="stats-number">
-                <q-input v-model.number="localRestRooms" dense borderless class="text-center" placeholder="0" :readonly="readOnly" />
-              </td>
-              <td class="stats-label">备注</td>
-              <td class="notes-cell">
-                <q-input v-model="localNotes" dense borderless class="notes-input" placeholder="备注..." :readonly="readOnly" />
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
   </div>
-
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { computed } from 'vue'
 
 const props = defineProps({
-  readOnly: { type: Boolean, default: false },
   paymentData: { type: Object, required: true },
-  taskList: { type: Array, required: true },
-  newTaskTitle: { type: String, required: true },
-  totalRooms: { type: Number, required: true },
-  restRooms: { type: Number, required: true },
-  vipCards: { type: Number, required: true },
-  cashierName: { type: String, required: true },
-  notes: { type: String, required: true },
-  goodReview: { type: String, default: '邀1得1' }
+  readOnly: { type: Boolean, default: false }
 })
-
-const emit = defineEmits([
-  'update:cashierName',
-  'update:notes',
-  'update:newTaskTitle',
-  'update:totalRooms',
-  'update:restRooms',
-  'update:vipCards',
-  'update:goodReview',
-  // custom events use kebab-case to be compatible with DOM templates
-  'update-task-status',
-  'add-new-task',
-  'delete-task',
-  'edit-task'
-])
 
 // 规范化支付数据：兼容中文键和英文字段
 function normalizePaymentData(src) {
@@ -271,43 +166,11 @@ function normalizePaymentData(src) {
 }
 
 const normalizedPaymentData = computed(() => normalizePaymentData(props.paymentData))
-
-const localCashierName = ref(props.cashierName) // 收银员姓名
-const localNotes = ref(props.notes) // 备注
-const localNewTaskTitle = ref(props.newTaskTitle) // 新任务标题
-const localTotalRooms = ref(props.totalRooms) // 总房间数
-const localRestRooms = ref(props.restRooms) // 休息房间数
-const localVipCards = ref(props.vipCards) // VIP 卡数
-const localGoodReview = ref(props.goodReview) // 好评
-
-watch(() => props.cashierName, v => { localCashierName.value = v })
-watch(() => props.notes, v => { localNotes.value = v })
-watch(() => props.newTaskTitle, v => { localNewTaskTitle.value = v })
-watch(() => props.totalRooms, v => { localTotalRooms.value = v })
-watch(() => props.restRooms, v => { localRestRooms.value = v })
-watch(() => props.vipCards, v => { localVipCards.value = v })
-watch(() => props.goodReview, v => { localGoodReview.value = v })
-
-watch(localCashierName, v => emit('update:cashierName', v))
-watch(localNotes, v => emit('update:notes', v))
-watch(localNewTaskTitle, v => emit('update:newTaskTitle', v))
-watch(localTotalRooms, v => emit('update:totalRooms', v))
-watch(localRestRooms, v => emit('update:restRooms', v))
-watch(localVipCards, v => emit('update:vipCards', v))
-watch(localGoodReview, v => emit('update:goodReview', v))
-
-function updateTaskStatus(taskId, completed) { emit('update-task-status', taskId, completed) }
-function addNewTask() { emit('add-new-task') }
-function deleteTask(index) { if (!props.readOnly) emit('delete-task', index) }
-function onEditTask(index) { if (!props.readOnly) emit('edit-task', index) }
 </script>
 
 <style scoped>
-.shift-table-container {
-  background: white;
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+.shift-table-wrapper {
+  margin-bottom: 20px;
 }
 
 .shift-table {
@@ -354,39 +217,8 @@ function onEditTask(index) { if (!props.readOnly) emit('edit-task', index) }
 .table-input :deep(.q-field__native) { text-align: center; color: #388e3c; font-weight: 500; }
 .table-input :deep(input) { text-align: center !important; }
 
-.task-management-container { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1); border: 1px solid #e0e0e0; }
-.task-management-header { display: flex; align-items: center; justify-content: center; margin-bottom: 16px; color: #2c3e50; background-color: #e8f5e8; border-bottom: 2px solid #a5d6a7; padding: 12px; border-radius: 8px 8px 0 0; }
-.task-management-content { min-height: 100px; }
-.task-list-horizontal { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; }
-.task-card { display: flex; align-items: center; background: #f1f8e9; border: 1px solid #81c784; border-radius: 8px; padding: 12px; min-width: 200px; max-width: 300px; transition: all 0.3s ease; position: relative; }
-.task-card:hover { background: #e8f5e8; border-color: #66bb6a; box-shadow: 0 2px 8px rgba(102, 187, 106, 0.2); }
-.task-card.task-completed { opacity: 0.7; background: #f5f5f5; border-color: #ccc; }
-.task-card.task-completed:hover { background: #eeeeee; }
-.task-checkbox { margin-right: 10px; align-self: flex-start; margin-top: 2px; }
-.task-content { flex: 1; cursor: pointer; padding: 2px; border-radius: 4px; min-width: 0; }
-.task-title { font-size: 14px; line-height: 1.4; margin-bottom: 4px; font-weight: 500; word-wrap: break-word; }
-.task-title.completed { text-decoration: line-through; color: #999; }
-.task-time { font-size: 12px; color: #666; display: flex; align-items: center; }
-.task-delete { opacity: 0; transition: opacity 0.2s; color: #f44336; margin-left: 8px; align-self: flex-start; }
-.task-card:hover .task-delete { opacity: 1; }
-
-.add-task-card { display: flex; align-items: center; background: #f3f9f3; border: 2px dashed #a5d6a7; border-radius: 8px; padding: 12px; min-width: 200px; max-width: 300px; transition: all 0.3s ease; }
-.add-task-card:hover { background: #e8f5e8; border-color: #81c784; }
-.add-task-input { font-size: 14px; width: 100%; text-align: center; }
-.add-task-input :deep(.q-field__control) { background: transparent; }
-.add-task-input :deep(.q-field__native) { text-align: center; color: #388e3c; font-weight: 500; }
-.add-task-input :deep(.q-field__native::placeholder) { color: #66bb6a; opacity: 0.8; }
-
-.special-stats-table { width: 100%; border-collapse: collapse; border: 2px solid #333; margin-top: 20px; }
-.special-stats-table td { border: 1px solid #333; padding: 8px; text-align: center; height: 35px; }
-.stats-label { background-color: #e3f2fd; font-weight: bold; width: 80px; }
-.stats-value { background-color: #f3e5f5; font-weight: bold; width: 60px; }
-.stats-number { background-color: #fff3e0; font-weight: bold; font-size: 16px; color: #f57c00; width: 80px; }
-.cashier-name { background-color: #e8f5e8; font-weight: bold; font-size: 18px; width: 100px; }
-
 @media (max-width: 768px) {
   .shift-table { font-size: 12px; }
   .shift-table th, .shift-table td { padding: 4px; }
-  .notes-cell { width: 120px; }
 }
 </style>

@@ -82,24 +82,40 @@
           </div>
         </div>
 
-        <!-- 使用ShiftHandoverTable组件重新渲染数据 -->
+        <!-- 使用拆分的组件重新渲染数据 -->
         <div v-if="recordData && recordData.details" class="handover-table-display">
           <div class="text-h6 q-mb-md text-primary">
             <q-icon name="table_view" class="q-mr-sm" />
             交接班记录详情
           </div>
-          <ShiftHandoverTable
+
+          <!-- 支付表格组件 -->
+          <ShiftHandoverPaymentTable
             :read-only="true"
             :payment-data="recordData.details.paymentData || {}"
-            :task-list="recordData.details.taskList || []"
-            :new-task-title="''"
-            :total-rooms="recordData.details.specialStats?.totalRooms || 0"
-            :rest-rooms="recordData.details.specialStats?.restRooms || 0"
-            :vip-cards="recordData.details.specialStats?.vipCards || 0"
-            :cashier-name="recordData.cashier_name || ''"
-            :notes="recordData.details.notes || recordData.remarks || ''"
-            :good-review="recordData.details.specialStats?.goodReview || '邀1得1'"
           />
+
+          <!-- 备忘录组件 -->
+          <div class="q-mt-md">
+            <ShiftHandoverMemoList
+              :read-only="true"
+              :task-list="recordData.details.taskList || []"
+              :new-task-title="''"
+            />
+          </div>
+
+          <!-- 特殊统计组件 -->
+          <div class="q-mt-md">
+            <ShiftHandoverSpecialStats
+              :read-only="true"
+              :total-rooms="recordData.details.specialStats?.totalRooms || 0"
+              :rest-rooms="recordData.details.specialStats?.restRooms || 0"
+              :vip-cards="recordData.details.specialStats?.vipCards || 0"
+              :cashier-name="recordData.cashier_name || ''"
+              :notes="recordData.details.notes || recordData.remarks || ''"
+              :good-review="recordData.details.specialStats?.goodReview || '邀1得1'"
+            />
+          </div>
         </div>
 
         <!-- 备用：结构化数据显示（仅在没有详情数据时显示） -->
@@ -224,8 +240,10 @@
 </template>
 
 <script setup>
-import { ref, computed, defineEmits, defineExpose } from 'vue'
-import ShiftHandoverTable from './ShiftHandoverTable.vue'
+import { ref, computed } from 'vue'
+import ShiftHandoverPaymentTable from './ShiftHandoverPaymentTable.vue'
+import ShiftHandoverMemoList from './ShiftHandoverMemoList.vue'
+import ShiftHandoverSpecialStats from './ShiftHandoverSpecialStats.vue'
 
 // 定义事件
 const emit = defineEmits(['close', 'export'])

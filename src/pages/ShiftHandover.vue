@@ -26,23 +26,51 @@
         </div>
       </div>
 
-      <!-- 引用交接班表格组件 -->
-      <ShiftHandoverTable
-        :read-only="true"
-        v-model:payment-data="paymentData"
-        :task-list="taskList"
-        v-model:new-task-title="newTaskTitle"
-        v-model:cashier-name="cashierName"
-        v-model:notes="notes"
-        v-model:total-rooms="totalRooms"
-        v-model:rest-rooms="restRooms"
-        v-model:vip-cards="vipCards"
-        v-model:good-review="goodReview"
-        @update-task-status="updateTaskStatus"
-        @add-new-task="addNewTask"
-        @delete-task="deleteTask"
-        @edit-task="editTask"
-      />
+      <!-- 交接班内容区域 -->
+      <div class="shift-handover-container">
+        <!-- 支付表格 -->
+        <ShiftHandoverPaymentTable
+          :payment-data="paymentData"
+          :read-only="false"
+        />
+
+        <!-- 备忘录 -->
+        <div class="row q-mt-lg">
+          <div class="col-12">
+            <ShiftHandoverMemoList
+              :task-list="taskList"
+              :new-task-title="newTaskTitle"
+              :read-only="false"
+              @update:new-task-title="v => newTaskTitle = v"
+              @update-task-status="updateTaskStatus"
+              @add-new-task="addNewTask"
+              @delete-task="deleteTask"
+              @edit-task="editTask"
+            />
+          </div>
+        </div>
+
+        <!-- 特殊统计 -->
+        <div class="row q-mt-md q-col-gutter-md">
+          <div class="col-md-6">
+            <ShiftHandoverSpecialStats
+              :total-rooms="totalRooms"
+              :rest-rooms="restRooms"
+              :vip-cards="vipCards"
+              :cashier-name="cashierName"
+              :notes="notes"
+              :good-review="goodReview"
+              :read-only="false"
+              @update:cashier-name="v => cashierName = v"
+              @update:notes="v => notes = v"
+              @update:total-rooms="v => totalRooms = v"
+              @update:rest-rooms="v => restRooms = v"
+              @update:vip-cards="v => vipCards = v"
+              @update:good-review="v => goodReview = v"
+            />
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- 历史记录组件 -->
@@ -51,12 +79,14 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import { date } from 'quasar'
 import { useQuasar } from 'quasar'
 import { shiftHandoverApi } from '../api/index.js'
 import ShiftHandoverHistory from '../components/ShiftHandoverHistory.vue'
-import ShiftHandoverTable from '../components/ShiftHandoverTable.vue'
+import ShiftHandoverPaymentTable from '../components/ShiftHandoverPaymentTable.vue'
+import ShiftHandoverMemoList from '../components/ShiftHandoverMemoList.vue'
+import ShiftHandoverSpecialStats from '../components/ShiftHandoverSpecialStats.vue'
 import { useShiftHandoverStore } from 'src/stores/shiftHandoverStore.js'
 
 const $q = useQuasar()
@@ -74,6 +104,30 @@ const shiftHandoverStore = useShiftHandoverStore()
 // 备忘录列表相关
 const newTaskTitle = ref('')
 const taskList = ref([])
+
+// 页面状态
+const isLoading = ref(false)
+const hasChanges = ref(false) // 用于追踪数据是否有变更
+
+// 计算属性：获取总收入
+const totalIncome = computed(() => {
+  let total = 0
+  Object.keys(paymentData.value).forEach(key => {
+    const row = paymentData.value[key]
+    total += (row.hotelIncome || 0) + (row.restIncome || 0) + (row.carRentIncome || 0)
+  })
+  return total
+})
+
+// 计算属性：获取总退押金
+const totalDeposit = computed(() => {
+  let total = 0
+  Object.keys(paymentData.value).forEach(key => {
+    const row = paymentData.value[key]
+    total += (row.hotelDeposit || 0) + (row.restDeposit || 0)
+  })
+  return total
+})
 
 // 历史记录组件引用
 const historyDialogRef = ref(null)
@@ -141,30 +195,37 @@ function calculateTotals() {
 // 将 store 的 shiftTable_data 映射到本地 paymentData
 function syncPaymentDataFromStore(table) {
   const data = table?.data || table
-  if (!data || typeof data !== 'object') return
-
-  // 如果是按中文键的表格数据
-  if (data['现金'] || data['微信'] || data['微邮付'] || data['支付宝'] || data['数字支付'] || data['其他']) {
-    const mapCurrency = (src, destKey) => {
-      if (!src) return
-      paymentData.value[destKey].reserveCash = Number(src['备用金'] ?? (paymentData.value[destKey].reserveCash || 0))
-      paymentData.value[destKey].hotelIncome = Number(src['客房收入'] ?? 0)
-      paymentData.value[destKey].restIncome = Number(src['休息房收入'] ?? 0)
-      paymentData.value[destKey].carRentIncome = Number(src['租车收入'] ?? 0)
-      paymentData.value[destKey].hotelDeposit = Number(src['客房退押'] ?? 0)
-      paymentData.value[destKey].restDeposit = Number(src['休息退押'] ?? 0)
-      paymentData.value[destKey].retainedAmount = Number(src['留存款'] ?? (destKey === 'cash' ? 320 : 0))
-    }
-    mapCurrency(data['现金'], 'cash')
-    mapCurrency(data['微信'], 'wechat')
-    mapCurrency(data['微邮付'] || data['支付宝'] || data['数字支付'], 'digital')
-    mapCurrency(data['其他'], 'other')
-    calculateTotals()
+  if (!data || typeof data !== 'object') {
+    console.warn('交接班数据格式无效', table)
+    return
   }
 
-  // 如果是 { records, refunds } 结构，按备注分类到现金行
-  if (Array.isArray(data?.records) || Array.isArray(data?.refunds)) {
-    applyShiftTableRemarks(data)
+  try {
+    // 如果是按中文键的表格数据
+    if (data['现金'] || data['微信'] || data['微邮付'] || data['支付宝'] || data['数字支付'] || data['其他']) {
+      const mapCurrency = (src, destKey) => {
+        if (!src) return
+        paymentData.value[destKey].reserveCash = Number(src['备用金'] ?? (paymentData.value[destKey].reserveCash || 0))
+        paymentData.value[destKey].hotelIncome = Number(src['客房收入'] ?? 0)
+        paymentData.value[destKey].restIncome = Number(src['休息房收入'] ?? 0)
+        paymentData.value[destKey].carRentIncome = Number(src['租车收入'] ?? 0)
+        paymentData.value[destKey].hotelDeposit = Number(src['客房退押'] ?? 0)
+        paymentData.value[destKey].restDeposit = Number(src['休息退押'] ?? 0)
+        paymentData.value[destKey].retainedAmount = Number(src['留存款'] ?? (destKey === 'cash' ? 320 : 0))
+      }
+      mapCurrency(data['现金'], 'cash')
+      mapCurrency(data['微信'], 'wechat')
+      mapCurrency(data['微邮付'] || data['支付宝'] || data['数字支付'], 'digital')
+      mapCurrency(data['其他'], 'other')
+      calculateTotals()
+    }
+
+    // 如果是 { records, refunds } 结构，按备注分类到现金行
+    if (Array.isArray(data?.records) || Array.isArray(data?.refunds)) {
+      applyShiftTableRemarks(data)
+    }
+  } catch (error) {
+    console.error('同步交接班数据失败:', error)
   }
 }
 
@@ -270,27 +331,42 @@ async function saveHandover() {
 // 保存页面数据（保存所有页面数据，包括金额、统计数据等）
 async function savePageData() {
   try {
-    savingAmounts.value = true
+    // 数据验证
+    if (!selectedDate.value) {
+      throw new Error('请选择日期')
+    }
 
-    // 准备完整的页面数据
+    if (!cashierName.value) {
+      throw new Error('请填写收银员姓名')
+    }
+
+    savingAmounts.value = true
+    $q.loading.show({ message: '保存数据中...' })
+
+    // 准备完整的页面数据，使用深拷贝避免响应式对象的引用问题
     const pageData = {
       date: selectedDate.value,
       handoverPerson: handoverPerson.value,
       receivePerson: receivePerson.value,
       cashierName: cashierName.value,
       notes: notes.value,
-      taskList: taskList.value,
-      paymentData: paymentData.value,
+      taskList: JSON.parse(JSON.stringify(taskList.value)),
+      paymentData: JSON.parse(JSON.stringify(paymentData.value)),
       specialStats: {
         totalRooms: totalRooms.value,
         restRooms: restRooms.value,
         vipCards: vipCards.value,
-        goodReview: goodReview.value
+        goodReview: goodReview.value,
+        totalIncome: totalIncome.value,
+        totalDeposit: totalDeposit.value
       }
     }
 
     // 调用保存API端点
-    const result = await shiftHandoverApi.saveAmountChanges(pageData)
+    await shiftHandoverApi.saveAmountChanges(pageData)
+
+    // 标记没有未保存的变更
+    hasChanges.value = false
 
     $q.notify({
       type: 'positive',
@@ -300,18 +376,18 @@ async function savePageData() {
       timeout: 3000
     })
 
-  // 成功日志简化，避免控制台噪音
-
   } catch (error) {
     console.error('保存页面数据失败:', error)
     $q.notify({
       type: 'negative',
       message: '保存页面数据失败',
-      caption: error.message,
-      position: 'top'
+      caption: error.message || '请检查数据并重试',
+      position: 'top',
+      timeout: 5000
     })
   } finally {
     savingAmounts.value = false
+    $q.loading.hide()
   }
 }
 
@@ -406,6 +482,7 @@ async function loadRemarksIntoMemo() {
   try {
     // 调用 Pinia 的 action 获取指定日期的备注，并使用其返回值
     const res = await shiftHandoverStore.fetchRemarks(selectedDate.value)
+
     // 兼容不同返回结构
     let list = []
     if (Array.isArray(res)) list = res
@@ -419,27 +496,36 @@ async function loadRemarksIntoMemo() {
     if (list.length) {
       // 转成备忘录任务，格式：房间号：（），备注：（）
       const formatted = list.map((r, idx) => {
-      const room =  r?.room_number
-      const remarkText = r?.remarks
-      const rawTime = r?.time || r?.created_at || r?.create_time || r?.createdAt || r?.updatedAt
+        const room = r?.room_number || '未知房间'
+        const remarkText = r?.remarks || '无备注'
+        const rawTime = r?.time || r?.created_at || r?.create_time || r?.createdAt || r?.updatedAt
         const timeStr = rawTime
           ? new Date(rawTime).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
           : new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+
         return {
           id: r?.id ?? (Date.now() + idx),
           title: `房间号：${room}，备注：${remarkText}`,
           time: timeStr,
-          completed: false
+          completed: false,
+          // 保存原始数据，便于后续处理
+          raw: r
         }
       })
 
       // 覆盖显示为后端当天结果
       taskList.value = formatted
     } else {
-  taskList.value = []
+      taskList.value = []
     }
   } catch (e) {
     console.error('加载备忘录失败:', e)
+    $q.notify({
+      type: 'negative',
+      message: '加载备忘录失败',
+      caption: e.message,
+      timeout: 3000
+    })
   }
 }
 
@@ -458,7 +544,18 @@ function onHistoryDialogClose() {
 // 监听支付数据变化
 watch(paymentData, () => {
   calculateTotals()
+  hasChanges.value = true // 标记数据已变更
 }, { deep: true })
+
+// 监听备忘录变化
+watch(taskList, () => {
+  hasChanges.value = true // 标记数据已变更
+}, { deep: true })
+
+// 监听其他关键数据变化
+watch([cashierName, notes, totalRooms, restRooms, vipCards, goodReview], () => {
+  hasChanges.value = true // 标记数据已变更
+})
 
 // 监听 store 中的表格数据变化，自动同步到 paymentData
 // 注意：Pinia 会对 setup store 的 ref 进行解包，这里需要用 getter 形式确保可被 watch 追踪
@@ -470,67 +567,79 @@ watch(() => shiftHandoverStore.shiftTable_data, (val) => {
   }
 }, { deep: true, immediate: false })
 
-// 监听日期变更：刷新备忘录、特殊统计，并拉取交接表（映射由 store-watch 负责）
-watch(selectedDate, async () => {
-  // 先确保合计不为空
-  calculateTotals()
-  await loadRemarksIntoMemo()
-  // 日期变化时刷新特殊统计
+// 刷新所有数据的统一入口函数
+async function refreshAllData() {
+  try {
+    $q.loading.show({ message: '加载数据中...' })
+
+    // 确保合计正确计算
+    calculateTotals()
+
+    // 加载备忘录
+    await loadRemarksIntoMemo()
+
+    // 加载特殊统计
+    await loadSpecialStats()
+
+    // 加载交接表数据
+    await loadShiftTableData()
+
+  } catch (error) {
+    console.error('刷新数据失败:', error)
+    $q.notify({
+      type: 'negative',
+      message: '刷新数据失败',
+      caption: error.message,
+      timeout: 3000
+    })
+  } finally {
+    $q.loading.hide()
+  }
+}
+
+// 加载特殊统计数据
+async function loadSpecialStats() {
   try {
     const res = await shiftHandoverStore.fetchSpecialStats(selectedDate.value)
     const data = res?.data || res
+
     if (data) {
       const openCount = data.openCount ?? data.totalRooms ?? data.open ?? 0
       const restCount = data.restCount ?? data.restRooms ?? data.rest ?? 0
       const invited = data.invited ?? data.invite ?? 0
       const positive = data.positive ?? data.good ?? 0
+
       totalRooms.value = Number(openCount) || 0
       restRooms.value = Number(restCount) || 0
       goodReview.value = `邀${invited}得${positive}`
     }
-  } catch (e) {
-    console.error('加载特殊统计失败:', e)
+  } catch (error) {
+    console.error('加载特殊统计失败:', error)
+    throw error
   }
+}
 
-  // 日期变化时刷新交接表格（来自 store），映射通过 store-watch 自动完成
+// 加载交接表数据
+async function loadShiftTableData() {
   try {
-  const res = await shiftHandoverStore.fetchShiftTable(selectedDate.value)
-  // 冗余保障：直接按返回值同步一次，避免 watch 漏触发
-  syncPaymentDataFromStore(res)
-  } catch (e) {
-    console.error('加载交接表格失败:', e)
+    const res = await shiftHandoverStore.fetchShiftTable(selectedDate.value)
+    syncPaymentDataFromStore(res)
+    return res
+  } catch (error) {
+    console.error('加载交接表格失败:', error)
+    throw error
   }
+}
+
+// 监听日期变更：刷新所有数据
+watch(selectedDate, async () => {
+  await refreshAllData()
 })
 
 // 组件挂载时初始化
 onMounted(async () => {
-  // 确保总计正确计算
-  calculateTotals()
-  // 通过 store 首次拉取交接表并同步到 paymentData
-  try {
-    const res = await shiftHandoverStore.fetchShiftTable(selectedDate.value)
-    syncPaymentDataFromStore(res)
-  } catch (e) {
-    console.error('首次加载交接表失败:', e)
-  }
-  // 加载备忘录：从后端获取备注并填入“房间号：（），备注：（）”格式
-  await loadRemarksIntoMemo()
-  // 加载交接班特殊统计（开房数、休息房数、好评邀/得）
-  try {
-    const res = await shiftHandoverStore.fetchSpecialStats(selectedDate.value)
-    const data = res?.data || res // 兼容拦截器返回
-    if (data) {
-      const openCount = data.openCount ?? data.totalRooms ?? data.open ?? 0
-      const restCount = data.restCount ?? data.restRooms ?? data.rest ?? 0
-      const invited = data.invited ?? data.invite ?? 0
-      const positive = data.positive ?? data.good ?? 0
-      totalRooms.value = Number(openCount) || 0
-      restRooms.value = Number(restCount) || 0
-      goodReview.value = `邀${invited}得${positive}`
-    }
-  } catch (e) {
-    console.error('加载特殊统计失败:', e)
-  }
+  // 使用统一的数据刷新入口函数
+  await refreshAllData()
 })
 </script>
 
@@ -538,6 +647,13 @@ onMounted(async () => {
 .shift-handover {
   background-color: #f5f5f5;
   min-height: 100vh;
+}
+
+.shift-handover-container {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
 }
 
 /* 打印样式 */
