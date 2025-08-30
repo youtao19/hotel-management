@@ -63,10 +63,10 @@ function normalizePaymentMethod(paymentMethod) {
  * @returns {Promise<Array>} 收款明细列表
  */
 async function getReceiptDetails(type, startDate, endDate) {
-  // 需求：改为以账单(bills)为主的数据来源，按账单日期筛选。
-  // 账单日期优先使用 stay_date，没有则回退 create_time::date。
-  // 仍然使用订单的入住/退房日期用于 hotel/rest 分类及展示。
+  // 以订单为主：根据 orders.room_price 的每日价格，生成 [startDate, endDate] 区间内的逐日收款明细
+  // 首日计入押金，其余仅计房费；支付方式取自 orders.payment_method
 
+  // 订单类型条件
   let typeCondition = '1=1';
   if (type === 'hotel') {
     typeCondition = `(o.check_in_date::date != o.check_out_date::date)`;
@@ -76,38 +76,63 @@ async function getReceiptDetails(type, startDate, endDate) {
 
   const sql = `
     SELECT
-      b.bill_id as id,                         -- 账单ID 作为行主键
-      b.order_id as order_number,              -- 订单编号
-      b.room_number,                           -- 房间号（直接来自账单）
-      b.guest_name,                            -- 客人姓名（账单快照）
-      b.room_fee,                              -- 房费（账单记录）
-      b.deposit,                               -- 押金（通常只在首张账单出现）
-      b.pay_way as payment_method,             -- 支付方式
-      b.total_income as total_amount,          -- 总收入（房费+押金）
-      o.check_in_date,                         -- 订单入住时间（展示 / 分类）
-      o.check_out_date,                        -- 订单退房时间（展示 / 分类）
-      b.create_time as created_at,             -- 账单创建时间
-  b.stay_date::date as stay_date,          -- 强制转换为 date 防止时区偏移
-      CASE WHEN (o.check_in_date::date != o.check_out_date::date) THEN 'hotel' ELSE 'rest' END AS business_type
-    FROM bills b
-    JOIN orders o ON b.order_id = o.order_id
-    LEFT JOIN rooms r ON b.room_number = r.room_number
+      o.order_id,
+      o.room_number,
+      o.guest_name,
+      o.payment_method,
+      o.room_price,
+      o.deposit,
+      o.check_in_date,
+      o.check_out_date
+    FROM orders o
     WHERE ${typeCondition}
-  AND b.stay_date BETWEEN $1::date AND $2::date
       AND o.status IN ('checked-in', 'checked-out', 'pending')
-    ORDER BY COALESCE(b.stay_date, b.create_time::date) DESC, b.bill_id DESC;
+      AND o.check_in_date <= $2::date AND o.check_out_date > $1::date
+    ORDER BY o.order_id DESC
   `;
 
   try {
     const result = await query(sql, [startDate, endDate]);
 
-    // 标准化支付方式
-    const processedRows = result.rows.map(row => ({
-      ...row, // 复制所有原始字段
-      payment_method: normalizePaymentMethod(row.payment_method) // 标准化支付方式(重新赋值)
-    }));
+    // 辅助函数
+    const toDate = (s) => new Date(`${s}T00:00:00`);
+    const inRange = (dStr) => dStr >= startDate && dStr <= endDate;
+    const toStr = (d) => d.toISOString().split('T')[0];
 
-    return processedRows;
+    const rows = [];
+    for (const o of result.rows) {
+      let rp = o.room_price;
+      if (typeof rp === 'string') {
+        try { rp = JSON.parse(rp || '{}'); } catch { rp = {}; }
+      }
+      const keys = Object.keys(rp || {}).sort();
+      const firstDay = keys[0];
+      for (const day of keys) {
+        if (!inRange(day)) continue;
+        const roomFee = Number(rp[day] || 0);
+        const deposit = (day === firstDay) ? Number(o.deposit || 0) : 0;
+        const total = roomFee + deposit;
+        rows.push({
+          id: `${o.order_id}-${day}`,
+          order_number: o.order_id,
+          room_number: o.room_number,
+          guest_name: o.guest_name,
+          room_fee: roomFee,
+          deposit: deposit,
+          payment_method: normalizePaymentMethod(o.payment_method || '现金'),
+          total_amount: total,
+          check_in_date: o.check_in_date,
+          check_out_date: o.check_out_date,
+          created_at: toDate(day),
+          stay_date: day,
+          business_type: (new Date(o.check_in_date).toDateString() !== new Date(o.check_out_date).toDateString()) ? 'hotel' : 'rest'
+        });
+      }
+    }
+
+    // 按 stay_date DESC、order_number DESC 排序
+    rows.sort((a, b) => (b.stay_date.localeCompare(a.stay_date)) || (b.order_number.localeCompare(a.order_number)));
+    return rows;
   } catch (error) {
     console.error('获取收款明细失败:', error);
     throw error;
@@ -121,136 +146,130 @@ async function getReceiptDetails(type, startDate, endDate) {
  * @returns {Promise<Object>} 统计数据
  */
 async function getStatistics(startDate, endDate = null) {
-  // 如果没有提供结束日期，使用开始日期（单天查询）
+  // 以天为单位统计收入：从 orders.room_price 逐日聚合；退押金从 bills(change_type='退押') 汇总
   const finalEndDate = endDate || startDate;
 
-  // 获取指定日期范围的订单统计 - 基于业务类型
-  const orderStatsSql = `
-    SELECT
-      CASE
-        WHEN (o.check_in_date::date != o.check_out_date::date) THEN 'hotel'
-        ELSE 'rest'
-      END as business_type,
-      SUM(b.room_fee) as room_fee_income,
-      SUM(b.deposit) as deposit_income,
-      SUM(b.total_income) as total_income,
-  -- refund_deposit 0=未退, 负数=已退押金额(存储为负数); 统计时取绝对值累计
-  SUM(CASE WHEN b.refund_deposit < 0 THEN ABS(b.refund_deposit) ELSE 0 END) as refunded_deposit,
-      COUNT(*) as count,
-      b.pay_way as payment_method
-    FROM orders o
-    LEFT JOIN bills b ON o.order_id = b.order_id
-    WHERE o.check_in_date::date BETWEEN $1::date AND $2::date
-    AND o.status IN ('checked-in', 'checked-out', 'pending')
-    GROUP BY business_type, b.pay_way;
-  `;
+  // 辅助：生成日期数组
+  const toDate = (s) => new Date(`${s}T00:00:00`);
+  const pad = (n) => (n < 10 ? `0${n}` : `${n}`);
+  const toStr = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const days = [];
+  for (let d = toDate(startDate); d <= toDate(finalEndDate); d.setDate(d.getDate() + 1)) {
+    days.push(toStr(new Date(d)));
+  }
 
-  // 获取指定日期范围的房间统计 - 基于业务类型
-  const roomStatsSql = `
-    SELECT
-      CASE
-        WHEN (o.check_in_date::date != o.check_out_date::date) THEN 'hotel'
-        ELSE 'rest'
-      END as business_type,
-      COUNT(*) as room_count
-    FROM orders o
-    WHERE o.check_in_date::date BETWEEN $1::date AND $2::date
-    AND o.status IN ('checked-in', 'checked-out', 'pending')
-    GROUP BY business_type;
-  `;
+  // 初始化统计数据
+  const statistics = {
+    hotelIncome: 0,
+    restIncome: 0,
+    carRentalIncome: 0,
+    totalIncome: 0,
+    hotelDeposit: 0,   // 退押金（支出）
+    restDeposit: 0,    // 退押金（支出）
+    retainedAmount: 0,
+    handoverAmount: 0,
+    goodReviews: 0,
+    totalRooms: 0,
+    restRooms: 0,
+    paymentBreakdown: {
+      '现金': 0,
+      '微信': 0,
+      '微邮付': 0,
+      '其他': 0
+    },
+    paymentDetails: {
+      '现金': { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 },
+      '微信': { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 },
+      '微邮付': { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 },
+      '其他': { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 }
+    }
+  };
 
-  try { // 获取指定日期范围的订单统计和房间统计
-    const [orderStatsResult, roomStatsResult] = await Promise.all([
-      query(orderStatsSql, [startDate, finalEndDate]),
-      query(roomStatsSql, [startDate, finalEndDate])
-    ]);
+  try {
+    // 逐日查询入住中的订单，并按“首日+押金，其余仅房费”计入收入
+    for (const day of days) {
+      const ordSql = `
+        SELECT order_id, check_in_date, check_out_date, room_price, deposit, payment_method
+        FROM orders
+        WHERE check_in_date <= $1::date AND $1::date < check_out_date
+          AND status IN ('checked-in', 'checked-out', 'pending')
+      `;
+      const ordRes = await query(ordSql, [day]);
 
-    // 初始化统计数据
-    const statistics = {
-      hotelIncome: 0, // 酒店收入
-      restIncome: 0, // 休息收入
-      carRentalIncome: 0, // 租车收入
-      totalIncome: 0, // 总收入
-      hotelDeposit: 0, // 酒店押金
-      restDeposit: 0, // 休息押金
-      retainedAmount: 0, // 保留金额
-      handoverAmount: 0, // 交接款金额
-      goodReviews: 0, // 好评
-      totalRooms: 0, // 总房间数
-      restRooms: 0, // 休息房间数
-      paymentBreakdown: { // 按支付方式分类总收入（不包括退押金）
-        '现金': 0,
-        '微信': 0,
-        '微邮付': 0,
-        '其他': 0
-      },
-      // 新增：按支付方式和业务类型的详细分解
-      paymentDetails: { // 按支付方式和业务类型的详细分解
-        '现金': { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 },
-        '微信': { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 },
-        '微邮付': { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 },
-        '其他': { hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0 }
+      for (const row of ordRes.rows) {
+        // 解析 room_price JSON
+        let rp = row.room_price;
+        if (typeof rp === 'string') {
+          try { rp = JSON.parse(rp || '{}'); } catch { rp = {}; }
+        }
+        const keys = Object.keys(rp || {}).sort();
+        const isFirstDay = keys.length > 0 && day === keys[0];
+        const roomFee = Number(rp?.[day] || 0);
+        const deposit = Number(row.deposit || 0);
+        const incomeToday = roomFee + (isFirstDay ? deposit : 0);
+
+        const businessType = (new Date(row.check_in_date).toDateString() !== new Date(row.check_out_date).toDateString()) ? 'hotel' : 'rest';
+        const pm = normalizePaymentMethod(row.payment_method || '现金');
+        const pmKey = statistics.paymentDetails[pm] ? pm : '其他';
+
+        if (businessType === 'hotel') {
+          statistics.hotelIncome += incomeToday;
+          statistics.paymentDetails[pmKey].hotelIncome += incomeToday;
+        } else {
+          statistics.restIncome += incomeToday;
+          statistics.paymentDetails[pmKey].restIncome += incomeToday;
+        }
+
+        // 总收入的支付方式分布（不含退押金）
+        statistics.paymentBreakdown[pmKey] += incomeToday;
       }
-    };
+    }
 
-    // 处理订单统计结果 - 基于业务类型和支付方式
-    orderStatsResult.rows.forEach(row => {
-      const income = Number(row.total_income || 0); // 总收入
-      const deposit = Number(row.refunded_deposit || 0); // 退押金
-      const rawPaymentMethod = row.payment_method || '现金'; // 原始支付方式
-      const paymentMethod = normalizePaymentMethod(rawPaymentMethod); // 标准化支付方式
-      const businessType = row.business_type || 'hotel';
-
-      console.log(`处理订单统计: 原始支付方式=${rawPaymentMethod}, 标准化后=${paymentMethod}, 业务类型=${businessType}, 总收入=${income}, 退押金=${deposit}`);
-
-      // 按业务类型分类收入和退押金
-      if (businessType === 'hotel') {
-        statistics.hotelIncome += income;  // 现在income是总收入（房费+押金）
-        statistics.hotelDeposit += deposit; // 现在deposit是退还的押金
-      } else if (businessType === 'rest') {
-        statistics.restIncome += income;   // 现在income是总收入（房费+押金）
-        statistics.restDeposit += deposit; // 现在deposit是退还的押金
-      }
-
-      // 按支付方式分类总收入（不包括退押金）
-      if (statistics.paymentBreakdown.hasOwnProperty(paymentMethod)) {
-        statistics.paymentBreakdown[paymentMethod] += income;
+    // 退押金：从 bills 的 change 记录统计
+    const refundSql = `
+      SELECT
+        SUM(ABS(COALESCE(b.change_price,0))) AS amount,
+        o.payment_method,
+        CASE WHEN o.check_in_date::date != o.check_out_date::date THEN 'hotel' ELSE 'rest' END AS business_type
+      FROM bills b
+      JOIN orders o ON o.order_id = b.order_id
+      WHERE b.change_type = '退押' AND b.create_time::date BETWEEN $1::date AND $2::date
+      GROUP BY o.payment_method, business_type
+    `;
+    const refundRes = await query(refundSql, [startDate, finalEndDate]);
+    for (const r of refundRes.rows) {
+      const amount = Number(r.amount || 0);
+      const pm = normalizePaymentMethod(r.payment_method || '现金');
+      const pmKey = statistics.paymentDetails[pm] ? pm : '其他';
+      if (r.business_type === 'hotel') {
+        statistics.hotelDeposit += amount; // 退押金（支出）
+        statistics.paymentDetails[pmKey].hotelDeposit += amount;
       } else {
-        statistics.paymentBreakdown['其他'] += income;
+        statistics.restDeposit += amount;
+        statistics.paymentDetails[pmKey].restDeposit += amount;
       }
+    }
 
-
-      let targetPaymentMethod = paymentMethod;
-      if (!statistics.paymentDetails.hasOwnProperty(paymentMethod)) {
-        targetPaymentMethod = '其他';
-      }
-
-
-      if (businessType === 'hotel') {
-        statistics.paymentDetails[targetPaymentMethod].hotelIncome += income;   // 总收入（房费+押金）
-        statistics.paymentDetails[targetPaymentMethod].hotelDeposit += deposit; // 退还的押金
-      } else if (businessType === 'rest') {
-        statistics.paymentDetails[targetPaymentMethod].restIncome += income;    // 总收入（房费+押金）
-        statistics.paymentDetails[targetPaymentMethod].restDeposit += deposit;  // 退还的押金
-      }
-    });
-
-    // 处理房间统计结果 - 基于业务类型
-    roomStatsResult.rows.forEach(row => {
+    // 房间统计：按“开房数/休息房数”（以 check_in_date 当天计数）
+    const roomStatsSql = `
+      SELECT
+        CASE WHEN (o.check_in_date::date != o.check_out_date::date) THEN 'hotel' ELSE 'rest' END as business_type,
+        COUNT(*) as room_count
+      FROM orders o
+      WHERE o.check_in_date::date BETWEEN $1::date AND $2::date
+        AND o.status IN ('checked-in', 'checked-out', 'pending')
+      GROUP BY business_type
+    `;
+    const roomStats = await query(roomStatsSql, [startDate, finalEndDate]);
+    for (const row of roomStats.rows) {
       const count = Number(row.room_count || 0);
-      if (row.business_type === 'hotel') {
-        statistics.totalRooms += count;
-      } else if (row.business_type === 'rest') {
-        statistics.restRooms += count;
-      }
-    });
+      if (row.business_type === 'hotel') statistics.totalRooms += count; else statistics.restRooms += count;
+    }
 
-    // 计算总收入
+    // 汇总总收入与交接款
     statistics.totalIncome = statistics.hotelIncome + statistics.restIncome + statistics.carRentalIncome;
-
-    // 计算交接款金额
-    statistics.handoverAmount = statistics.totalIncome + statistics.reserveCash -
-                               statistics.hotelDeposit - statistics.restDeposit - statistics.retainedAmount;
+    statistics.handoverAmount = statistics.totalIncome + (statistics.reserveCash || 0)
+                              - statistics.hotelDeposit - statistics.restDeposit - (statistics.retainedAmount || 0);
 
     return statistics;
   } catch (error) {
@@ -1387,7 +1406,7 @@ async function deleteHandoverRecord(recordId) {
 }
 
 /**
- *
+ * 获取表格数据
  * @param {date} date - 查询日期
  * @returns {Promise<Object>} 交接班表格数据
  */
@@ -1400,32 +1419,42 @@ async function getShiftTable(date) {
       throw new Error('日期格式应为 YYYY-MM-DD');
     }
 
-    // 查询指定入住(stay_date)的账单
-    const stayBillsSql = `
-      SELECT bill_id, deposit, room_fee, remarks
-      FROM bills
-      WHERE stay_date = $1
-      ORDER BY bill_id ASC`;
-    const stayBillsRes = await query(stayBillsSql, [targetDate]);
+    // 查询入账
+    const incomeSql = `
+      SELECT order_id, deposit, room_price, payment_method
+      FROM orders
+      WHERE check_in_date <= $1 and $1 < check_out_date
+      ORDER BY order_id ASC`;
+    const incomeRes = await query(incomeSql, [targetDate]);
 
-    const records = stayBillsRes.rows.map(row => ({
-      bill_id: row.bill_id,
-      total_income: Number(row.deposit || 0) + Number(row.room_fee || 0),
-      remarks: row.remarks || ''
-    }));
+    let records = {};
+
+    for (let item of incomeRes.rows) {
+      record = {}
+      record.order_id = item.order_id
+      record.deposit = Number(item.deposit || 0)
+      record.payment_method = item.payment_method || ''
+      const keys = Object.keys(item.room_price || {}).sort();
+      const isFirstDay = keys.length > 0 && targetDate === keys[0];
+      record.totalIncome = isFirstDay ? Number(item.deposit || 0) + Number(item.room_price[date] || 0) : Number(item.room_price[date] || 0);
+      records[item.order_id] = record;
+    }
+
+    const keys = Object.keys(incomeRes.rows[0]?.room_price || {}).sort();
+
 
     // 查询退款(refund_time)的账单
     const refundBillsSql = `
-      SELECT bill_id, refund_deposit, remarks
+      SELECT bill_id, change_price, change_type
       FROM bills
-      WHERE refund_time::date = $1::date
+      WHERE create_time::date = $1::date and change_type = '退押'
       ORDER BY bill_id ASC`;
     const refundBillsRes = await query(refundBillsSql, [targetDate]);
 
     const refunds = refundBillsRes.rows.map(row => ({
       bill_id: row.bill_id,
-      refund_deposit: Number(row.refund_deposit || 0),
-      remarks: row.remarks || ''
+      change_price: Number(row.change_price || 0),
+      change_type: row.change_type || '',
     }));
 
     const result = {

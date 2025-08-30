@@ -22,104 +22,104 @@
     <tr class="payment-row cash-row">
           <td class="payment-label">现金</td>
           <td class="editable-cell">
-            <q-input v-model="fieldModel.cash.reserveCash" dense borderless class="table-input" :readonly="readOnly" />
+            <q-input :model-value="normalizedPaymentData.cash.reserveCash" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input v-model="fieldModel.cash.hotelIncome" dense borderless class="table-input" :readonly="readOnly" />
+            <q-input :model-value="normalizedPaymentData.cash.hotelIncome" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input v-model="fieldModel.cash.restIncome" dense borderless class="table-input" :readonly="readOnly" />
+            <q-input :model-value="normalizedPaymentData.cash.restIncome" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input v-model="fieldModel.cash.carRentIncome" dense borderless class="table-input" :readonly="readOnly" />
+            <q-input :model-value="normalizedPaymentData.cash.carRentIncome" dense borderless class="table-input" readonly />
           </td>
           <td class="total-cell">{{ normalizedPaymentData.cash.total.toFixed(0) }}</td>
           <td class="editable-cell">
-            <q-input v-model="fieldModel.cash.hotelDeposit" dense borderless class="table-input" :readonly="readOnly" />
+            <q-input :model-value="normalizedPaymentData.cash.hotelDeposit" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input v-model="fieldModel.cash.restDeposit" dense borderless class="table-input" :readonly="readOnly" />
+            <q-input :model-value="normalizedPaymentData.cash.restDeposit" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input v-model="fieldModel.cash.retainedAmount" dense borderless class="table-input" :readonly="readOnly" />
+            <q-input :model-value="normalizedPaymentData.cash.retainedAmount" dense borderless class="table-input" readonly />
           </td>
           <td class="auto-calculate">{{ (normalizedPaymentData.cash.total - normalizedPaymentData.cash.hotelDeposit - normalizedPaymentData.cash.restDeposit - normalizedPaymentData.cash.retainedAmount).toFixed(0) }}</td>
         </tr>
         <tr class="payment-row wechat-row">
           <td class="payment-label">微信</td>
           <td class="editable-cell">
-            <q-input v-model="fieldModel.wechat.reserveCash" dense borderless class="table-input" :readonly="readOnly" />
+            <q-input :model-value="normalizedPaymentData.wechat.reserveCash" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input v-model="fieldModel.wechat.hotelIncome" dense borderless class="table-input" :readonly="readOnly" />
+            <q-input :model-value="normalizedPaymentData.wechat.hotelIncome" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input v-model="fieldModel.wechat.restIncome" dense borderless class="table-input" :readonly="readOnly" />
+            <q-input :model-value="normalizedPaymentData.wechat.restIncome" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input v-model="fieldModel.wechat.carRentIncome" dense borderless class="table-input" :readonly="readOnly" />
+            <q-input :model-value="normalizedPaymentData.wechat.carRentIncome" dense borderless class="table-input" readonly />
           </td>
           <td class="total-cell">{{ normalizedPaymentData.wechat.total.toFixed(0) }}</td>
           <td class="editable-cell">
-            <q-input v-model="fieldModel.wechat.hotelDeposit" dense borderless class="table-input" :readonly="readOnly" />
+            <q-input :model-value="normalizedPaymentData.wechat.hotelDeposit" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input v-model="fieldModel.wechat.restDeposit" dense borderless class="table-input" :readonly="readOnly" />
+            <q-input :model-value="normalizedPaymentData.wechat.restDeposit" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input v-model="fieldModel.wechat.retainedAmount" dense borderless class="table-input" :readonly="readOnly" />
+            <q-input :model-value="normalizedPaymentData.wechat.retainedAmount" dense borderless class="table-input" readonly />
           </td>
           <td class="auto-calculate">{{ (normalizedPaymentData.wechat.total - normalizedPaymentData.wechat.hotelDeposit - normalizedPaymentData.wechat.restDeposit - normalizedPaymentData.wechat.retainedAmount).toFixed(0) }}</td>
         </tr>
         <tr class="payment-row digital-row">
           <td class="payment-label">微邮付</td>
           <td class="editable-cell">
-            <q-input v-model="fieldModel.digital.reserveCash" dense borderless class="table-input" :readonly="readOnly" />
+            <q-input :model-value="normalizedPaymentData.digital.reserveCash" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input v-model="fieldModel.digital.hotelIncome" dense borderless class="table-input" :readonly="readOnly" />
+            <q-input :model-value="normalizedPaymentData.digital.hotelIncome" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input v-model="fieldModel.digital.restIncome" dense borderless class="table-input" :readonly="readOnly" />
+            <q-input :model-value="normalizedPaymentData.digital.restIncome" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input v-model="fieldModel.digital.carRentIncome" dense borderless class="table-input" :readonly="readOnly" />
+            <q-input :model-value="normalizedPaymentData.digital.carRentIncome" dense borderless class="table-input" readonly />
           </td>
           <td class="total-cell">{{ normalizedPaymentData.digital.total.toFixed(0) }}</td>
           <td class="editable-cell">
-            <q-input v-model="fieldModel.digital.hotelDeposit" dense borderless class="table-input" :readonly="readOnly" />
+            <q-input :model-value="normalizedPaymentData.digital.hotelDeposit" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input v-model="fieldModel.digital.restDeposit" dense borderless class="table-input" :readonly="readOnly" />
+            <q-input :model-value="normalizedPaymentData.digital.restDeposit" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input v-model="fieldModel.digital.retainedAmount" dense borderless class="table-input" :readonly="readOnly" />
+            <q-input :model-value="normalizedPaymentData.digital.retainedAmount" dense borderless class="table-input" readonly />
           </td>
           <td class="auto-calculate">{{ (normalizedPaymentData.digital.total - normalizedPaymentData.digital.hotelDeposit - normalizedPaymentData.digital.restDeposit - normalizedPaymentData.digital.retainedAmount).toFixed(0) }}</td>
         </tr>
         <tr class="payment-row other-row">
           <td class="payment-label">其他方式</td>
           <td class="editable-cell">
-            <q-input v-model="fieldModel.other.reserveCash" dense borderless class="table-input" :readonly="readOnly" />
+            <q-input :model-value="normalizedPaymentData.other.reserveCash" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input v-model="fieldModel.other.hotelIncome" dense borderless class="table-input" :readonly="readOnly" />
+            <q-input :model-value="normalizedPaymentData.other.hotelIncome" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input v-model="fieldModel.other.restIncome" dense borderless class="table-input" :readonly="readOnly" />
+            <q-input :model-value="normalizedPaymentData.other.restIncome" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input v-model="fieldModel.other.carRentIncome" dense borderless class="table-input" :readonly="readOnly" />
+            <q-input :model-value="normalizedPaymentData.other.carRentIncome" dense borderless class="table-input" readonly />
           </td>
           <td class="total-cell">{{ normalizedPaymentData.other.total.toFixed(0) }}</td>
           <td class="editable-cell">
-            <q-input v-model="fieldModel.other.hotelDeposit" dense borderless class="table-input" :readonly="readOnly" />
+            <q-input :model-value="normalizedPaymentData.other.hotelDeposit" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input v-model="fieldModel.other.restDeposit" dense borderless class="table-input" :readonly="readOnly" />
+            <q-input :model-value="normalizedPaymentData.other.restDeposit" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input v-model="fieldModel.other.retainedAmount" dense borderless class="table-input" :readonly="readOnly" />
+            <q-input :model-value="normalizedPaymentData.other.retainedAmount" dense borderless class="table-input" readonly />
           </td>
           <td class="auto-calculate">{{ (normalizedPaymentData.other.total - normalizedPaymentData.other.hotelDeposit - normalizedPaymentData.other.restDeposit - normalizedPaymentData.other.retainedAmount).toFixed(0) }}</td>
         </tr>
@@ -227,7 +227,6 @@ const props = defineProps({
 })
 
 const emit = defineEmits([
-  'update:paymentData',
   'update:cashierName',
   'update:notes',
   'update:newTaskTitle',
@@ -273,13 +272,13 @@ function normalizePaymentData(src) {
 
 const normalizedPaymentData = computed(() => normalizePaymentData(props.paymentData))
 
-const localCashierName = ref(props.cashierName)
-const localNotes = ref(props.notes)
-const localNewTaskTitle = ref(props.newTaskTitle)
-const localTotalRooms = ref(props.totalRooms)
-const localRestRooms = ref(props.restRooms)
-const localVipCards = ref(props.vipCards)
-const localGoodReview = ref(props.goodReview)
+const localCashierName = ref(props.cashierName) // 收银员姓名
+const localNotes = ref(props.notes) // 备注
+const localNewTaskTitle = ref(props.newTaskTitle) // 新任务标题
+const localTotalRooms = ref(props.totalRooms) // 总房间数
+const localRestRooms = ref(props.restRooms) // 休息房间数
+const localVipCards = ref(props.vipCards) // VIP 卡数
+const localGoodReview = ref(props.goodReview) // 好评
 
 watch(() => props.cashierName, v => { localCashierName.value = v })
 watch(() => props.notes, v => { localNotes.value = v })
@@ -296,85 +295,6 @@ watch(localTotalRooms, v => emit('update:totalRooms', v))
 watch(localRestRooms, v => emit('update:restRooms', v))
 watch(localVipCards, v => emit('update:vipCards', v))
 watch(localGoodReview, v => emit('update:goodReview', v))
-
-function updatePaymentField(paymentType, field, value) {
-  if (props.readOnly) return
-  const newPaymentData = JSON.parse(JSON.stringify(props.paymentData))
-  newPaymentData[paymentType][field] = Number(value) || 0
-  Object.keys(newPaymentData).forEach(type => {
-    const p = newPaymentData[type]
-    p.total = (p.reserveCash || 0) + (p.hotelIncome || 0) + (p.restIncome || 0) + (p.carRentIncome || 0)
-  })
-  emit('update:paymentData', newPaymentData)
-}
-
-// 为表格输入提供 v-model 简化绑定：fieldModel[paymentType][field]
-const fieldModel = {
-  cash: {
-    get reserveCash() { return normalizedPaymentData.value.cash.reserveCash },
-    set reserveCash(v) { updatePaymentField('cash','reserveCash', v) },
-    get hotelIncome() { return normalizedPaymentData.value.cash.hotelIncome },
-    set hotelIncome(v) { updatePaymentField('cash','hotelIncome', v) },
-    get restIncome() { return normalizedPaymentData.value.cash.restIncome },
-    set restIncome(v) { updatePaymentField('cash','restIncome', v) },
-    get carRentIncome() { return normalizedPaymentData.value.cash.carRentIncome },
-    set carRentIncome(v) { updatePaymentField('cash','carRentIncome', v) },
-    get hotelDeposit() { return normalizedPaymentData.value.cash.hotelDeposit },
-    set hotelDeposit(v) { updatePaymentField('cash','hotelDeposit', v) },
-    get restDeposit() { return normalizedPaymentData.value.cash.restDeposit },
-    set restDeposit(v) { updatePaymentField('cash','restDeposit', v) },
-    get retainedAmount() { return normalizedPaymentData.value.cash.retainedAmount },
-    set retainedAmount(v) { updatePaymentField('cash','retainedAmount', v) }
-  },
-  wechat: {
-    get reserveCash() { return normalizedPaymentData.value.wechat.reserveCash },
-    set reserveCash(v) { updatePaymentField('wechat','reserveCash', v) },
-    get hotelIncome() { return normalizedPaymentData.value.wechat.hotelIncome },
-    set hotelIncome(v) { updatePaymentField('wechat','hotelIncome', v) },
-    get restIncome() { return normalizedPaymentData.value.wechat.restIncome },
-    set restIncome(v) { updatePaymentField('wechat','restIncome', v) },
-    get carRentIncome() { return normalizedPaymentData.value.wechat.carRentIncome },
-    set carRentIncome(v) { updatePaymentField('wechat','carRentIncome', v) },
-    get hotelDeposit() { return normalizedPaymentData.value.wechat.hotelDeposit },
-    set hotelDeposit(v) { updatePaymentField('wechat','hotelDeposit', v) },
-    get restDeposit() { return normalizedPaymentData.value.wechat.restDeposit },
-    set restDeposit(v) { updatePaymentField('wechat','restDeposit', v) },
-    get retainedAmount() { return normalizedPaymentData.value.wechat.retainedAmount },
-    set retainedAmount(v) { updatePaymentField('wechat','retainedAmount', v) }
-  },
-  digital: {
-    get reserveCash() { return normalizedPaymentData.value.digital.reserveCash },
-    set reserveCash(v) { updatePaymentField('digital','reserveCash', v) },
-    get hotelIncome() { return normalizedPaymentData.value.digital.hotelIncome },
-    set hotelIncome(v) { updatePaymentField('digital','hotelIncome', v) },
-    get restIncome() { return normalizedPaymentData.value.digital.restIncome },
-    set restIncome(v) { updatePaymentField('digital','restIncome', v) },
-    get carRentIncome() { return normalizedPaymentData.value.digital.carRentIncome },
-    set carRentIncome(v) { updatePaymentField('digital','carRentIncome', v) },
-    get hotelDeposit() { return normalizedPaymentData.value.digital.hotelDeposit },
-    set hotelDeposit(v) { updatePaymentField('digital','hotelDeposit', v) },
-    get restDeposit() { return normalizedPaymentData.value.digital.restDeposit },
-    set restDeposit(v) { updatePaymentField('digital','restDeposit', v) },
-    get retainedAmount() { return normalizedPaymentData.value.digital.retainedAmount },
-    set retainedAmount(v) { updatePaymentField('digital','retainedAmount', v) }
-  },
-  other: {
-    get reserveCash() { return normalizedPaymentData.value.other.reserveCash },
-    set reserveCash(v) { updatePaymentField('other','reserveCash', v) },
-    get hotelIncome() { return normalizedPaymentData.value.other.hotelIncome },
-    set hotelIncome(v) { updatePaymentField('other','hotelIncome', v) },
-    get restIncome() { return normalizedPaymentData.value.other.restIncome },
-    set restIncome(v) { updatePaymentField('other','restIncome', v) },
-    get carRentIncome() { return normalizedPaymentData.value.other.carRentIncome },
-    set carRentIncome(v) { updatePaymentField('other','carRentIncome', v) },
-    get hotelDeposit() { return normalizedPaymentData.value.other.hotelDeposit },
-    set hotelDeposit(v) { updatePaymentField('other','hotelDeposit', v) },
-    get restDeposit() { return normalizedPaymentData.value.other.restDeposit },
-    set restDeposit(v) { updatePaymentField('other','restDeposit', v) },
-    get retainedAmount() { return normalizedPaymentData.value.other.retainedAmount },
-    set retainedAmount(v) { updatePaymentField('other','retainedAmount', v) }
-  }
-}
 
 function updateTaskStatus(taskId, completed) { emit('update-task-status', taskId, completed) }
 function addNewTask() { emit('add-new-task') }

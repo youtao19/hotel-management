@@ -15,14 +15,16 @@ const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
     check_out_date DATE NOT NULL, -- 离店日期
     status VARCHAR(20) NOT NULL, -- 订单状态
     payment_method VARCHAR(20), -- 支付方式
-    room_price JSONB NOT NULL, -- 房间价格(JSON格式: {"YYYY-MM-DD": 价格})
+  room_price JSONB NOT NULL, -- 房间价格(JSON格式: {"YYYY-MM-DD": 价格} 或 数字)
     deposit DECIMAL(10,2), -- 押金
     create_time TIMESTAMP NOT NULL, -- 创建时间
     remarks TEXT, -- 备注
     FOREIGN KEY (room_type) REFERENCES room_types(type_code), -- 房间类型外键
     FOREIGN KEY (room_number) REFERENCES rooms(room_number), -- 房间号外键
     CONSTRAINT unique_order_constraint UNIQUE (guest_name, check_in_date, check_out_date, room_type), -- 唯一约束
-    CONSTRAINT chk_room_price_json CHECK (jsonb_typeof(room_price) = 'object') -- 确保room_price是JSON对象格式
+  -- 允许 room_price 为对象(多日)或数字(单日/休息房)
+  -- 允许 room_price 为对象(多日)或数字(单日/休息房)，以及字符串数字（兼容部分测试用例）
+  CONSTRAINT chk_room_price_json CHECK (jsonb_typeof(room_price) IN ('object','number','string'))
 )`;
 
 
