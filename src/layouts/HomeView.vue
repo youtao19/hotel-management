@@ -1,6 +1,6 @@
 <template>
     <!-- 主布局容器，lHh Lpr lFf 是 Quasar 布局视图配置 -->
-    <q-layout view="lhh Lpr lFf">
+    <q-layout view="lHh Lpr lFf">
 
       <!-- 页面顶部导航栏 -->
       <q-header elevated class="bg-primary text-white">

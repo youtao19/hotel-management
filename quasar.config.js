@@ -96,8 +96,8 @@ export default defineConfig((/* ctx */) => {
       // components: [],
       // directives: [],
 
-      // Quasar plugins
-      plugins: ['Notify', 'Dialog'] // 确保 Notify 和 Dialog 插件已添加
+  // Quasar plugins
+  plugins: ['Notify', 'Dialog', 'Loading'] // 启用 Loading 插件以支持 $q.loading
     },
 
     // animations: 'all', // --- includes all animations

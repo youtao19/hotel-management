@@ -1421,7 +1421,7 @@ async function getShiftTable(date) {
 
     // 查询入账
     const incomeSql = `
-      SELECT order_id, deposit, room_price, payment_method
+      SELECT order_id, deposit, room_price, payment_method, check_in_date, check_out_date
       FROM orders
       WHERE check_in_date <= $1 and $1 < check_out_date
       ORDER BY order_id ASC`;
@@ -1430,22 +1430,33 @@ async function getShiftTable(date) {
     let records = {};
 
     for (let item of incomeRes.rows) {
-      record = {}
-      record.order_id = item.order_id
-      record.deposit = Number(item.deposit || 0)
-      record.payment_method = item.payment_method || ''
       const keys = Object.keys(item.room_price || {}).sort();
       const isFirstDay = keys.length > 0 && targetDate === keys[0];
-      record.totalIncome = isFirstDay ? Number(item.deposit || 0) + Number(item.room_price[date] || 0) : Number(item.room_price[date] || 0);
+
+      let totalIncome = 0;
+      if (isFirstDay) {
+        // 如果是第一天，记录押金和房费
+        totalIncome += Number(item.deposit || 0) + Number(item.room_price[targetDate] || 0);
+      }else{
+        totalIncome += Number(item.room_price[targetDate] || 0);
+      }
+
+      const record = {
+        order_id: item.order_id,
+        deposit: Number(item.deposit || 0),
+        room_price: Number(item.room_price[targetDate] || 0),
+        payment_method: item.payment_method || '',
+        totalIncome: totalIncome,
+        check_in_date: item.check_in_date || '',
+        check_out_date: item.check_out_date || ''
+      }
+
       records[item.order_id] = record;
     }
 
-    const keys = Object.keys(incomeRes.rows[0]?.room_price || {}).sort();
-
-
     // 查询退款(refund_time)的账单
     const refundBillsSql = `
-      SELECT bill_id, change_price, change_type
+      SELECT bill_id, change_price, change_type, pay_way
       FROM bills
       WHERE create_time::date = $1::date and change_type = '退押'
       ORDER BY bill_id ASC`;
@@ -1455,6 +1466,7 @@ async function getShiftTable(date) {
       bill_id: row.bill_id,
       change_price: Number(row.change_price || 0),
       change_type: row.change_type || '',
+      pay_way: row.pay_way || '',
     }));
 
     const result = {
