@@ -87,17 +87,15 @@ async function getReceiptDetails(type, startDate, endDate) {
     FROM orders o
     WHERE ${typeCondition}
       AND o.status IN ('checked-in', 'checked-out', 'pending')
-      AND o.check_in_date <= $2::date AND o.check_out_date > $1::date
+      AND o.check_in_date::date <= $2::date AND o.check_out_date::date >= $1::date
     ORDER BY o.order_id DESC
   `;
 
   try {
     const result = await query(sql, [startDate, endDate]);
 
-    // 辅助函数
-    const toDate = (s) => new Date(`${s}T00:00:00`);
-    const inRange = (dStr) => dStr >= startDate && dStr <= endDate;
-    const toStr = (d) => d.toISOString().split('T')[0];
+  // 辅助：范围判断基于 YYYY-MM-DD 字符串
+  const inRange = (dStr) => String(dStr) >= String(startDate) && String(dStr) <= String(endDate);
 
     const rows = [];
     for (const o of result.rows) {
@@ -123,7 +121,7 @@ async function getReceiptDetails(type, startDate, endDate) {
           total_amount: total,
           check_in_date: o.check_in_date,
           check_out_date: o.check_out_date,
-          created_at: toDate(day),
+          created_at: `${day}T00:00:00`,
           stay_date: day,
           business_type: (new Date(o.check_in_date).toDateString() !== new Date(o.check_out_date).toDateString()) ? 'hotel' : 'rest'
         });
@@ -1211,16 +1209,16 @@ async function recordRefundDepositToHandover(refundData) {
     } = refundData;
 
     // 首先获取订单信息以获取退房日期
-    const orderQuery = 'SELECT check_out_date FROM orders WHERE order_id = $1';
+  const orderQuery = 'SELECT (check_out_date::date)::text AS check_out_date FROM orders WHERE order_id = $1';
     const orderResult = await query(orderQuery, [orderNumber]);
 
     if (orderResult.rows.length === 0) {
       throw new Error(`订单号 '${orderNumber}' 不存在`);
     }
 
-    const order = orderResult.rows[0];
-    // 使用订单的退房日期作为退押金日期
-    const refundDate = order.check_out_date.toISOString().split('T')[0];
+  const order = orderResult.rows[0];
+  // 使用订单的退房日期作为交接班日期（直接使用数据库的 date 字段文本，避免 UTC 偏移）
+  const refundDate = order.check_out_date; // e.g. '2025-08-31'
     console.log(`📅 使用订单退房日期作为交接班日期: ${refundDate}`);
 
     // 检查退房日期是否已有交接班记录
@@ -1419,11 +1417,18 @@ async function getShiftTable(date) {
       throw new Error('日期格式应为 YYYY-MM-DD');
     }
 
-    // 查询入账
+    // 查询客房入账
     const incomeSql = `
-      SELECT order_id, deposit, room_price, payment_method, check_in_date, check_out_date
+      SELECT
+        order_id,
+        guest_name,
+        deposit,
+        room_price,
+        payment_method,
+        (check_in_date::date)::text AS check_in_date,
+        (check_out_date::date)::text AS check_out_date
       FROM orders
-      WHERE check_in_date <= $1 and $1 < check_out_date
+      WHERE check_in_date::date <= $1::date AND $1::date < check_out_date::date
       ORDER BY order_id ASC`;
     const incomeRes = await query(incomeSql, [targetDate]);
 
@@ -1432,7 +1437,6 @@ async function getShiftTable(date) {
     for (let item of incomeRes.rows) {
       const keys = Object.keys(item.room_price || {}).sort();
       const isFirstDay = keys.length > 0 && targetDate === keys[0];
-
       let totalIncome = 0;
       if (isFirstDay) {
         // 如果是第一天，记录押金和房费
@@ -1443,10 +1447,42 @@ async function getShiftTable(date) {
 
       const record = {
         order_id: item.order_id,
+        guest_name: item.guest_name || '',
         deposit: Number(item.deposit || 0),
         room_price: Number(item.room_price[targetDate] || 0),
         payment_method: item.payment_method || '',
         totalIncome: totalIncome,
+        check_in_date: item.check_in_date || '',
+        check_out_date: item.check_out_date || ''
+      }
+
+      records[item.order_id] = record;
+    }
+
+    // 查询休息房入账
+    const restIncomeSql = `
+      SELECT
+        order_id,
+        guest_name,
+        deposit,
+        room_price,
+        payment_method,
+        (check_in_date::date)::text AS check_in_date,
+        (check_out_date::date)::text AS check_out_date
+      FROM orders
+      WHERE check_in_date::date = $1::date
+      AND check_in_date::date = check_out_date::date
+      ORDER BY order_id ASC`;
+    const restIncomeRes = await query(restIncomeSql, [targetDate]);
+
+    for (let item of restIncomeRes.rows) {
+      const record = {
+        order_id: item.order_id,
+        guest_name: item.guest_name || '',
+        deposit: Number(item.deposit || 0),
+        room_price: Number(item.room_price[targetDate] || 0),
+        payment_method: item.payment_method || '',
+        totalIncome: Number(item.deposit || 0) + Number(item.room_price[targetDate] || 0),
         check_in_date: item.check_in_date || '',
         check_out_date: item.check_out_date || ''
       }
@@ -1513,7 +1549,7 @@ async function getShiftSpecialStats(date) {
   // 统计开房/休息房数量：根据订单入住/退房跨天与否分类
   const roomCountSql = `
     SELECT
-      SUM(CASE WHEN (o.check_in_date::date != o.check_out_date::date) THEN 1 ELSE 0 END) AS open_count,
+      SUM(CASE WHEN (o.check_in_date::date <= $1::date and o.check_out_date::date > $1::date) THEN 1 ELSE 0 END) AS open_count,
       SUM(CASE WHEN (o.check_in_date::date = o.check_out_date::date) THEN 1 ELSE 0 END) AS rest_count
     FROM orders o
     WHERE o.check_in_date::date = $1::date
@@ -1521,13 +1557,16 @@ async function getShiftSpecialStats(date) {
   `
 
   // 统计好评邀/得：以订单退房日期为该日计算
+  // 统计好评邀/得：按邀请/更新发生在当天统计（不再依赖订单退房日）
   const reviewSql = `
     SELECT
-      COUNT(*) FILTER (WHERE ri.invited = TRUE) AS invited,
-      COUNT(*) FILTER (WHERE ri.positive_review = TRUE) AS positive
+      COUNT(*) FILTER (
+        WHERE ri.invited = TRUE AND ri.invite_time::date = $1::date
+      ) AS invited,
+      COUNT(*) FILTER (
+        WHERE ri.positive_review = TRUE AND ri.update_time::date = $1::date
+      ) AS positive
     FROM review_invitations ri
-    JOIN orders o ON o.order_id = ri.order_id
-    WHERE o.check_out_date::date = $1::date
   `
 
   try {

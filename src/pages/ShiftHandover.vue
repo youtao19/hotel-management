@@ -89,7 +89,6 @@ import ShiftHandoverPaymentTable from '../components/ShiftHandoverPaymentTable.v
 import ShiftHandoverMemoList from '../components/ShiftHandoverMemoList.vue'
 import ShiftHandoverSpecialStats from '../components/ShiftHandoverSpecialStats.vue'
 import { useShiftHandoverStore } from 'src/stores/shiftHandoverStore.js'
-import def from 'ajv/dist/vocabularies/applicator/additionalItems.js'
 
 const $q = useQuasar()
 
@@ -201,39 +200,36 @@ async function insertDataToShiftTable(date) {
   const records = response.data.records
 
   for (const record of Object.values(records)) {
-    // 处理时间
-    const checkin = record.check_in_date.split("T")[0];
-    const checkout = record.check_out_date.split("T")[0];
     // 如果是休息房
-    if (checkin === checkout){
+    if (record.check_in_date === record.check_out_date){
       switch (record.payment_method) {
         case '现金':
-          paymentData.value.cash.hotelIncome += record.room_price || 0
+          paymentData.value.cash.restIncome += record.totalIncome || 0
           break
         case '微信':
-          paymentData.value.wechat.hotelIncome += record.room_price || 0
+          paymentData.value.wechat.restIncome += record.totalIncome || 0
           break
-        case '支付宝':
-          paymentData.value.digital.hotelIncome += record.room_price || 0
+        case '微邮付':
+          paymentData.value.digital.restIncome += record.totalIncome || 0
           break
         default:
-          paymentData.value.other.hotelIncome += record.room_price || 0
+          paymentData.value.other.restIncome += record.totalIncome || 0
           break
       }
       continue;
     }else{// 客房
       switch (record.payment_method) {
         case '现金':
-          paymentData.value.cash.hotelIncome += record.room_price || 0
+          paymentData.value.cash.hotelIncome += record.totalIncome || 0
           break
         case '微信':
-          paymentData.value.wechat.hotelIncome += record.room_price || 0
+          paymentData.value.wechat.hotelIncome += record.totalIncome || 0
           break
-        case '支付宝':
-          paymentData.value.digital.hotelIncome += record.room_price || 0
+        case '微邮付':
+          paymentData.value.digital.hotelIncome += record.totalIncome || 0
           break
         case '其他':
-          paymentData.value.other.hotelIncome += record.room_price || 0
+          paymentData.value.other.hotelIncome += record.totalIncome || 0
           break
         default:
           break
@@ -260,6 +256,7 @@ async function insertDataToShiftTable(date) {
         break
     }
   }
+  shiftHandoverStore.updateTableData(paymentData.value)
 }
 
 // 监听支付数据变化
@@ -271,7 +268,9 @@ watch(paymentData, () => {
 // 加载交接表数据
 async function loadShiftTableData() {
   try {
-    await insertDataToShiftTable(selectedDate.value)
+  const data = shiftHandoverStore.shiftTable_data?.value ?? shiftHandoverStore.shiftTable_data
+  // 深拷贝到本地，避免直接引用 store 导致联动副作用
+  paymentData.value = JSON.parse(JSON.stringify(data))
   } catch (error) {
     console.error('加载交接表格失败:', error)
     throw error
@@ -283,7 +282,6 @@ const totalRooms = ref(29)
 const restRooms = ref(3)
 const vipCards = ref(6)
 
-// 移除复杂的页面级数据加载，统一依赖 store 及 watchers 进行同步
 
 // 保存交接记录
 async function saveHandover() {
@@ -560,6 +558,9 @@ async function refreshAllData() {
     // 加载特殊统计
     await loadSpecialStats()
 
+    // 先根据选中日期汇总交接表数据到 store
+    await shiftHandoverStore.insertDataToShiftTable(selectedDate.value)
+
     // 加载交接表数据
     await loadShiftTableData()
 
@@ -609,11 +610,13 @@ watch(selectedDate, async () => {
 onMounted(async () => {
   // 使用统一的数据刷新入口函数
   await refreshAllData()
+  console.log('日期变更，已刷新数据', paymentData.value)
+
 })
 
 async function test1() {
-  const content = await shiftHandoverStore.fetchShiftTable('2025-08-26');
-  console.log('测试按钮被点击', content.data.records);
+  const content = await shiftHandoverStore.fetchSpecialStats('2025-08-26');
+  console.log('测试按钮被点击', content.data);
 }
 
 </script>
