@@ -12,6 +12,17 @@
       </q-card-section>
 
       <q-card-section v-if="currentOrder">
+        <!-- 顶部操作按钮区 -->
+        <div class="row q-mb-md justify-end">
+          <q-btn
+            color="primary"
+            icon="history"
+            label="查看修改历史"
+            outline
+            @click="viewOrderHistory"
+          />
+        </div>
+
         <div class="row q-col-gutter-md">
           <!-- 订单基本信息 -->
           <div class="col-md-6 col-xs-12">
@@ -230,10 +241,56 @@
       </q-card-actions>
     </q-card>
   </q-dialog>
+
+  <!-- 订单修改历史对话框 -->
+  <q-dialog v-model="showOrderHistoryDialog">
+    <q-card style="width: 700px; max-width: 95vw;">
+      <q-card-section class="row items-center q-pb-none">
+        <div class="text-h6">订单修改历史</div>
+        <q-space />
+        <q-btn icon="close" flat round dense v-close-popup />
+      </q-card-section>
+
+      <q-card-section v-if="orderChanges.length > 0">
+        <q-timeline color="primary">
+          <q-timeline-entry
+            v-for="(change, index) in orderChanges"
+            :key="index"
+            :title="change.change_type"
+            :subtitle="formatDateTime(change.change_time)"
+            icon="edit"
+          >
+            <div>
+              <div><strong>操作人：</strong> {{ change.operator || '系统' }}</div>
+              <div class="q-mt-sm">
+                <div><strong>变更内容：</strong></div>
+                <div class="q-ml-md" v-for="(value, key) in change.changes" :key="key">
+                  <strong>{{ formatChangeField(key) }}：</strong>
+                  {{ formatChangeValue(key, value.old) }} → {{ formatChangeValue(key, value.new) }}
+                </div>
+              </div>
+            </div>
+          </q-timeline-entry>
+        </q-timeline>
+      </q-card-section>
+
+      <q-card-section v-else class="text-center text-grey-6">
+        <div v-if="loadingHistory">正在加载历史记录...</div>
+        <div v-else>该订单暂无修改记录</div>
+      </q-card-section>
+    </q-card>
+  </q-dialog>
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
+import { useQuasar } from 'quasar';
+import { useBillStore } from 'src/stores/billStore';
+import { useOrderStore } from 'src/stores/orderStore';
+
+const $q = useQuasar();
+const orderStore = useOrderStore();
+const billStore = useBillStore();
 
 const props = defineProps({
   modelValue: Boolean,
@@ -252,7 +309,8 @@ const emit = defineEmits([
   'change-room',
   'checkout',
   'refund-deposit',
-  'change-order'
+  'change-order',
+  'view-history'
 ]);
 
 function emitCheckIn() {
@@ -272,9 +330,6 @@ function emitRefundDeposit() {
 function emitChangeOrder() {
   emit('change-order');
 }
-
-import { useBillStore } from 'src/stores/billStore'
-const billStore = useBillStore()
 
 // 判断是否可以退押金
 function canRefundDeposit(order) {
@@ -336,6 +391,62 @@ const remainingDeposit = computed(() => {
   const left = (Number(depositAmount.value) || 0) - (Number(refundedAmount.value) || 0)
   return left > 0 ? Number(left.toFixed(2)) : 0
 })
+
+// 订单修改历史相关
+// 重用上面导入的orderStore
+const showOrderHistoryDialog = ref(false)
+const orderChanges = ref([])
+const loadingHistory = ref(false)
+
+// 查看订单修改历史
+async function viewOrderHistory() {
+  if (!props.currentOrder?.orderNumber) return
+
+  try {
+    // 我们将使用ViewOrders.vue中的变更历史组件来展示历史，而不是在这里加载
+    // 将事件传递给父组件
+    emit('view-history', props.currentOrder);
+  } catch (error) {
+    console.error('查看订单修改历史失败:', error)
+    $q.notify({
+      type: 'negative',
+      message: '查看订单修改历史失败',
+      position: 'top'
+    })
+  }
+}
+
+// 格式化字段名
+function formatChangeField(field) {
+  const fieldMap = {
+    guest_name: '客人姓名',
+    phone: '手机号',
+    room_number: '房间号',
+    remarks: '备注',
+    status: '状态',
+    room_type: '房型',
+    check_in_date: '入住日期',
+    check_out_date: '退房日期',
+  }
+  return fieldMap[field] || field
+}
+
+// 格式化字段值
+function formatChangeValue(field, value) {
+  if (value === null || value === undefined) return '-'
+
+  if (field === 'status') {
+    const statusMap = {
+      'pending': '待入住',
+      'checked-in': '已入住',
+      'checked-out': '已退房',
+      'cancelled': '已取消'
+    }
+    return statusMap[value] || value
+  }
+
+  return value
+}
 
 
 </script>

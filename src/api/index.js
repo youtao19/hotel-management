@@ -3,7 +3,7 @@ import axios from 'axios'
 // 创建axios实例
 const api = axios.create({
   baseURL: 'http://localhost:3000/api', // 后端API运行在3000端口
-  timeout: 10000, // 请求超时时间
+  timeout: 30000, // 请求超时时间增加到30秒
   withCredentials: false // 避免CORS预检请求
 })
 
@@ -85,6 +85,9 @@ export const orderApi = {
   // 获取所有订单
   getAllOrders: () => api.get('/orders'),
 
+  // 使用宽限期机制获取所有订单，避免频繁刷新
+  getAllOrdersWithGrace: () => api.get('/orders?useGracePeriod=true'),
+
   // 添加新订单
   addOrder: (orderData) => api.post('/orders/new', orderData),
 
@@ -93,6 +96,12 @@ export const orderApi = {
 
   // 更新订单房间信息
   updateOrderRoom: (orderId, roomData) => api.patch(`/orders/${orderId}/room`, roomData),
+
+  // 获取订单变更历史
+  getOrderChangeHistory: (orderId) => api.get(`/orders/${orderId}/history`),
+
+  // 更新订单信息（新方法，使用订单修改历史记录）
+  updateOrder: (orderId, orderData) => api.patch(`/orders/${orderId}`, orderData),
 
   // 办理入住
   checkIn: (orderId, checkInData) => api.patch(`/orders/${orderId}/check-in`, checkInData),

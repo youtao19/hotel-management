@@ -33,6 +33,13 @@ function createPool() {
       console.error('PostgreSQL连接池发生错误:', err);
     });
 
+    // 为每个新连接设置默认超时（测试环境下防止挂起）
+    pool.on('connect', (client) => {
+      if (process.env.NODE_ENV === 'test') {
+        client.query("SET statement_timeout = '8000ms'; SET lock_timeout = '2000ms';").catch(() => {});
+      }
+    });
+
     console.log('PostgreSQL连接池已创建');
   }
   return pool;
@@ -187,6 +194,17 @@ async function initializeHotelDB() {
 
     // 2. 创建表结构
     await createTables();
+
+    // 2.1 确保 orders.room_price 的检查约束为期望版本
+    // 历史环境可能存在仅允许 'object' 的旧约束，这里统一为 ('object','number','string')
+    try {
+      await query("ALTER TABLE orders DROP CONSTRAINT IF EXISTS chk_room_price_json;");
+      await query(
+        "ALTER TABLE orders ADD CONSTRAINT chk_room_price_json CHECK (jsonb_typeof(room_price) IN ('object','number','string'))"
+      );
+    } catch (e) {
+      console.warn('调整 orders.room_price 检查约束失败(忽略):', e.message);
+    }
 
   // 3. (已移除自动执行全部迁移，以避免在自定义裁剪字段后被重新添加)
   // 若需要运行特定迁移，请手动执行对应脚本。

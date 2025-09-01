@@ -8,35 +8,50 @@ beforeAll(async () => {
 
 // 全局测试清理
 afterAll(async () => {
-  // 清理所有测试数据，按正确的顺序删除以避免外键约束违反
+  // 使用受控会话+本地超时，避免因锁阻塞导致的长时间挂起
   try {
-    await db.query('DELETE FROM bills WHERE order_id LIKE $1', ['TEST_%']);
-    await db.query('DELETE FROM orders WHERE order_id LIKE $1', ['TEST_%']);
-    await db.query('DELETE FROM rooms WHERE room_number LIKE $1', ['T%']);
-    await db.query('DELETE FROM room_types WHERE type_code LIKE $1', ['TEST_%']);
-    await db.query('DELETE FROM shift_handover WHERE cashier_name LIKE $1', ['TEST_%']);
-  } catch (error) {
-    console.warn('清理测试数据时出现警告:', error.message);
+    console.log('[tests/setup] afterAll: truncate tables (with local timeouts)');
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL statement_timeout = '4000ms'");
+      await client.query("SET LOCAL lock_timeout = '1500ms'");
+      await client.query('TRUNCATE TABLE bills, orders, rooms, room_types, shift_handover RESTART IDENTITY CASCADE');
+      await client.query('COMMIT');
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      console.warn('[tests/setup] afterAll: truncate failed (ignored):', error.message);
+    } finally {
+      client.release();
+    }
+  } catch (outerErr) {
+    console.warn('[tests/setup] afterAll: cleanup session failed (ignored):', outerErr.message);
   }
 
+  // 无论清理是否成功，均尝试关闭连接池，避免 Jest 打开句柄
   await db.closePool();
 });
 
 // 提供给各个测试文件使用的清理函数
 global.cleanupTestData = async () => {
   try {
-    // 按正确的顺序删除数据以避免外键约束违反
-    await db.query('DELETE FROM bills WHERE order_id LIKE $1', ['TEST_%']);
-    await db.query('DELETE FROM orders WHERE order_id LIKE $1', ['TEST_%']);
-    await db.query('DELETE FROM shift_handover WHERE cashier_name LIKE $1 OR cashier_name LIKE $2', ['TEST_%', '%test%']);
-
-    // 先删除房间，再删除房型，避免外键约束
-    await db.query('DELETE FROM rooms WHERE room_number LIKE $1 OR room_number LIKE $2', ['T%', '%TEST%']);
-    await db.query('DELETE FROM room_types WHERE type_code LIKE $1', ['TEST_%']);
-  } catch (error) {
-    // 忽略外键约束警告，这些是正常的清理过程
-    if (!error.message.includes('外键约束')) {
-      console.warn('清理测试数据时出现警告:', error.message);
+    console.log('[tests/setup] cleanup: truncate tables (with local timeouts)');
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL statement_timeout = '4000ms'");
+      await client.query("SET LOCAL lock_timeout = '1500ms'");
+      await client.query('TRUNCATE TABLE bills, orders, rooms, room_types, shift_handover RESTART IDENTITY CASCADE');
+      await client.query('COMMIT');
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      if (!/foreign key|外键约束/i.test(error.message)) {
+        console.warn('清理测试数据时出现警告:', error.message);
+      }
+    } finally {
+      client.release();
     }
+  } catch (outerErr) {
+    console.warn('[tests/setup] cleanup: session failed (ignored):', outerErr.message);
   }
 };

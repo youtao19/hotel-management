@@ -1,0 +1,263 @@
+<template>
+  <q-dialog v-model="localDialog" persistent>
+    <q-card style="min-width: 500px; max-width: 95vw;">
+      <q-card-section class="row items-center q-pb-none">
+        <div class="text-h6">修改订单</div>
+        <q-space />
+        <q-btn icon="close" flat round dense v-close-popup @click="closeDialog" />
+      </q-card-section>
+
+      <q-separator class="q-mt-sm" />
+
+      <q-form @submit="saveOrder" @reset="closeDialog" ref="orderForm">
+        <q-card-section>
+          <div class="q-gutter-y-md">
+            <q-input 
+              v-model="localOrder.guestName" 
+              label="客人姓名" 
+              filled 
+              :rules="[val => !!val || '请输入客人姓名']"
+            >
+              <template v-slot:prepend>
+                <q-icon name="person" />
+              </template>
+            </q-input>
+
+            <q-input 
+              v-model="localOrder.phone" 
+              label="手机号" 
+              filled 
+              :rules="[
+                val => !!val || '请输入手机号',
+                val => val.length === 11 || '手机号必须为11位'
+              ]"
+              mask="###########"
+              unmasked-value
+            >
+              <template v-slot:prepend>
+                <q-icon name="phone" />
+              </template>
+            </q-input>
+
+            <q-input 
+              v-model="localOrder.roomNumber" 
+              label="房间号" 
+              filled 
+              :rules="[val => !!val || '请输入房间号']"
+              :disable="isRoomChangeDisabled"
+            >
+              <template v-slot:prepend>
+                <q-icon name="hotel" />
+              </template>
+              <template v-slot:append>
+                <q-tooltip v-if="isRoomChangeDisabled">
+                  更改房间号请使用专门的换房功能
+                </q-tooltip>
+              </template>
+            </q-input>
+
+            <q-input 
+              v-model="localOrder.remarks" 
+              label="备注" 
+              type="textarea" 
+              filled 
+              autogrow
+              rows="3"
+            >
+              <template v-slot:prepend>
+                <q-icon name="note" />
+              </template>
+            </q-input>
+          </div>
+        </q-card-section>
+
+        <q-card-actions align="right">
+          <q-btn 
+            label="取消" 
+            color="grey-7" 
+            flat 
+            v-close-popup 
+            @click="closeDialog" 
+          />
+          <q-btn 
+            label="保存" 
+            color="primary" 
+            type="submit" 
+            :loading="saving"
+          />
+        </q-card-actions>
+      </q-form>
+    </q-card>
+  </q-dialog>
+</template>
+
+<script setup>
+import { ref, reactive, watch, computed } from 'vue'
+import { useQuasar } from 'quasar'
+
+const $q = useQuasar()
+const orderForm = ref(null)
+
+const props = defineProps({
+  modelValue: Boolean, // 父组件传来的状态
+  order: Object
+})
+
+const emit = defineEmits(['update:modelValue', 'change-order'])
+
+const localDialog = ref(props.modelValue)
+const localOrder = reactive({ ...props.order })
+const originalOrder = ref({ ...props.order }) // 保存原始订单信息用于检测变更
+const saving = ref(false)
+
+// 判断是否禁用房间号修改 (已入住或已退房的订单不应直接修改房间号)
+const isRoomChangeDisabled = computed(() => {
+  const status = props.order?.status
+  return status === 'checked-in' || status === 'checked-out'
+})
+
+// 监听对话框状态
+watch(
+  () => props.modelValue,
+  (newValue) => {
+    localDialog.value = newValue
+    
+    // 当对话框打开时，重新初始化表单
+    if (newValue && props.order) {
+      resetForm()
+    }
+  }
+)
+
+// 监听订单数据变化
+watch(
+  () => props.order,
+  (newValue) => {
+    if (newValue) {
+      // 深拷贝订单数据，确保不会直接修改原始对象
+      Object.assign(localOrder, JSON.parse(JSON.stringify(newValue)))
+      originalOrder.value = JSON.parse(JSON.stringify(newValue))
+    }
+  },
+  { deep: true }
+)
+
+// 重置表单到原始状态
+function resetForm() {
+  if (props.order) {
+    Object.assign(localOrder, JSON.parse(JSON.stringify(props.order)))
+  }
+  
+  if (orderForm.value) {
+    orderForm.value.resetValidation()
+  }
+}
+
+// 关闭对话框
+function closeDialog() {
+  // 检查是否有未保存的更改
+  const hasChanges = checkForChanges()
+  
+  if (hasChanges) {
+    // 确认是否放弃更改
+    $q.dialog({
+      title: '确认取消',
+      message: '您有未保存的更改，确定要放弃吗？',
+      cancel: true,
+      persistent: true
+    }).onOk(() => {
+      // 用户确认放弃更改
+      localDialog.value = false
+      emit('update:modelValue', false)
+    }).onCancel(() => {
+      // 用户取消操作，保持对话框打开
+    })
+  } else {
+    // 没有更改，直接关闭
+    localDialog.value = false
+    emit('update:modelValue', false)
+  }
+}
+
+// 检查是否有未保存的更改
+function checkForChanges() {
+  const original = originalOrder.value
+  
+  // 比较关键字段是否有变化
+  return (
+    localOrder.guestName !== original.guestName ||
+    localOrder.phone !== original.phone ||
+    localOrder.roomNumber !== original.roomNumber ||
+    localOrder.remarks !== original.remarks
+  )
+}
+
+// 保存订单
+async function saveOrder() {
+  // 验证表单
+  if (orderForm.value) {
+    const isValid = await orderForm.value.validate()
+    if (!isValid) {
+      return
+    }
+  }
+  
+  // 检查是否有实际更改
+  if (!checkForChanges()) {
+    $q.notify({
+      type: 'info',
+      message: '未检测到任何更改',
+      position: 'top'
+    })
+    closeDialog()
+    return
+  }
+  
+  // 显示保存状态
+  saving.value = true
+  
+  try {
+    // 使用解构创建一个新对象，避免响应式对象传递问题
+    emit('change-order', { ...localOrder })
+    
+    // 成功通知会在父组件处理
+    localDialog.value = false
+    emit('update:modelValue', false)
+  } catch (error) {
+    $q.notify({
+      type: 'negative',
+      message: '保存失败，请重试',
+      position: 'top'
+    })
+    console.error('保存订单失败:', error)
+  } finally {
+    saving.value = false
+  }
+}
+</script>
+
+<style scoped>
+/* 添加一些样式美化 */
+.q-card {
+  border-radius: 8px;
+}
+
+.q-card-section {
+  padding: 20px;
+}
+
+/* 表单输入样式 */
+:deep(.q-field__control) {
+  border-radius: 4px;
+  background-color: #f5f5f5;
+}
+
+:deep(.q-field--filled.q-field--focused .q-field__control) {
+  background-color: #eaf5fe;
+}
+
+.text-h6 {
+  font-weight: 500;
+  color: #3a3a3a;
+}
+</style>

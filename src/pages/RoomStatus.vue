@@ -1671,7 +1671,7 @@ async function performCheckIn(order) {
     }
 
     // 获取房间信息 (主要为了拿到 room_id)
-    const room = roomStore.getRoomByNumber(order.roomNumber)
+  const room = await roomStore.getRoomByNumber(order.roomNumber)
     if (!room) {
       console.error('预订房间未找到:', order.roomNumber)
       $q.notify({

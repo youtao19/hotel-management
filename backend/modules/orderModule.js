@@ -567,13 +567,111 @@ async function updateOrderStatus(orderId, newStatus) {
   const updateQuery = `UPDATE ${tableName} SET status = $1 WHERE order_id = $2 RETURNING *`;
   const queryParams = [newStatus, orderId];
 
+  // 使用受控会话，设置语句与锁等待超时，避免长时间挂起
+  const { getClient } = require('../database/postgreDB/pg');
+  const t0 = Date.now();
+  console.log(`[orderModule] updateOrderStatus begin id=${orderId} -> ${newStatus}`);
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    await client.query("SET LOCAL statement_timeout = '6000ms'");
+    await client.query("SET LOCAL lock_timeout = '2000ms'");
+
+    const result = await client.query(updateQuery, queryParams);
+    await client.query('COMMIT');
+    console.log(`[orderModule] updateOrderStatus done id=${orderId} rows=${result.rowCount} cost=${Date.now()-t0}ms`);
+    return result.rows.length > 0 ? result.rows[0] : null;
+  } catch (error) {
+    console.log(`[orderModule] updateOrderStatus error id=${orderId} cost=${Date.now()-t0}ms:`, error.message);
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    const msg = error.message || '';
+    const isTimeout = /statement timeout|canceling statement due to statement timeout/i.test(msg);
+    const isLockTimeout = /lock timeout/i.test(msg);
+    if (isTimeout || isLockTimeout) {
+      const err = new Error('更新订单繁忙，请稍后重试');
+      err.code = 'ORDER_UPDATE_BUSY';
+      throw err;
+    }
+    console.error(`更新订单(ID: ${orderId})状态为 '${newStatus}' 失败:`, error);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * 更新订单信息
+ * @param {string} orderId - 订单ID
+ * @param {Object} updateData - 要更新的字段对象
+ * @returns {Promise<Object|null>} 更新后的订单对象或null
+ */
+async function updateOrder(orderId, updateData) {
+  // 构建允许更新的字段列表
+  const allowedFields = [
+    'guest_name',
+    'phone',
+    'room_number',
+    'remarks',
+    'id_card',
+    'gender',
+    'source',
+    'check_in_time',
+    'check_out_time',
+    'should_pay',
+    'paid_amount',
+    'deposit',
+    'pay_way',
+    'room_type',
+    'order_status',
+    'active',
+    'order_number',
+    'discount',
+    'refund_deposit',
+    'refund_time',
+    'refund_method',
+    'refund_amount',
+    'days',
+    'create_time',
+    'is_company',
+    'company_name',
+    'room_rate',
+    'arrival_time',
+    'stay_type'
+  ];
+
+  // 过滤掉不允许更新的字段
+  const fieldsToUpdate = Object.keys(updateData)
+    .filter(key => allowedFields.includes(key))
+    .reduce((obj, key) => {
+      obj[key] = updateData[key];
+      return obj;
+    }, {});
+
+  // 如果没有要更新的字段，直接返回原订单
+  if (Object.keys(fieldsToUpdate).length === 0) {
+    return await getOrderById(orderId);
+  }
+
+  // 构建 SET 语句
+  const setEntries = Object.entries(fieldsToUpdate);
+  const setClause = setEntries.map((_, idx) => `${setEntries[idx][0]} = $${idx + 1}`).join(', ');
+
+  // 查询参数
+  const queryParams = [...setEntries.map(entry => entry[1]), orderId];
+
+  const updateQuery = `UPDATE ${tableName} SET ${setClause} WHERE order_id = $${setEntries.length + 1} RETURNING *`;
+
   try {
     const result = await query(updateQuery, queryParams);
     return result.rows.length > 0 ? result.rows[0] : null;
   } catch (error) {
-    console.error(`更新订单(ID: ${orderId})状态为 '${newStatus}' 失败:`, error);
+    console.error(`更新订单(ID: ${orderId})信息失败:`, error);
     throw error;
   }
+}
+
+
+const table = {
 }
 
 /**
@@ -763,17 +861,17 @@ async function getDepositStatus(orderId) {
   }
 }
 
-const table = {
+// 导出所有函数
+module.exports = {
   checkTableExists,
   createOrder,
   getAllOrders,
   getOrderById,
   updateOrderStatus,
+  updateOrder,
   refundDeposit,
   getDepositStatus,
   isRestRoom,
   calculateTotalPrice,
   validatePriceDateRange
 };
-
-module.exports = table;

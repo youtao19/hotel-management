@@ -19,7 +19,8 @@ export const useOrderStore = defineStore('order', () => {
     try {
       loading.value = true
       error.value = null
-      const response = await orderApi.getAllOrders() // 移除 /api 前缀
+      // 使用带宽限缓存的接口，减少频繁全量查询带来的抖动
+      const response = await orderApi.getAllOrdersWithGrace()
       // 确保从响应的 data 属性中获取数组 (如果后端直接返回 { data: [...] } 结构)
       // 如果后端直接返回数组，则不需要 .data.data
       const rawOrders = response && response.data ? response.data : (Array.isArray(response) ? response : [])
@@ -52,8 +53,8 @@ export const useOrderStore = defineStore('order', () => {
       const errorMessage = typeof err.message === 'string' && err.message.startsWith('<!DOCTYPE html>')
                           ? '获取订单数据失败: 后端返回HTML错误页面'
                           : (err.response?.data?.message || err.message || '获取订单数据失败');
-      error.value = errorMessage;
-      orders.value = []; // 获取失败时清空订单
+  error.value = errorMessage;
+  // 失败时不清空现有列表，保留旧数据以提升可用性
     } finally {
       loading.value = false
     }
@@ -279,7 +280,13 @@ export const useOrderStore = defineStore('order', () => {
       return updatedOrderFromApi;
     } catch (err) {
       console.error('通过API更新订单状态失败:', err.response ? err.response.data : err.message);
-      error.value = err.response?.data?.errors?.[0]?.msg || err.response?.data?.message || '更新订单状态失败';
+      // 将 503 繁忙错误转换为更友好的提示
+      const status = err.response?.status;
+      if (status === 503) {
+        error.value = err.response?.data?.message || '系统繁忙，请稍后重试';
+      } else {
+        error.value = err.response?.data?.errors?.[0]?.msg || err.response?.data?.message || '更新订单状态失败';
+      }
       throw err;
     } finally {
       loading.value = false;
@@ -439,6 +446,73 @@ export const useOrderStore = defineStore('order', () => {
   // 不再自动初始化，由组件控制初始化时机
   // initialize()
 
+  // 获取订单修改历史
+  async function getOrderChangeHistory(orderNumber) {
+    try {
+      console.log(`获取订单 ${orderNumber} 的修改历史`);
+      return await orderApi.getOrderChangeHistory(orderNumber);
+    } catch (err) {
+      console.error(`获取订单 ${orderNumber} 修改历史失败:`, err);
+      throw err;
+    }
+  }
+
+  // 更新订单信息
+  async function updateOrder(orderNumber, orderData) {
+    try {
+      loading.value = true;
+      error.value = null;
+
+      console.log(`更新订单 ${orderNumber} 信息:`, orderData);
+      const response = await orderApi.updateOrder(orderNumber, orderData);
+
+      // 更新本地状态
+      const updatedOrderFromApi = response.order || response;
+
+      // 添加防御性检查
+      if (orders.value && Array.isArray(orders.value)) {
+        const index = orders.value.findIndex(o => o.orderNumber === orderNumber);
+
+        if (index !== -1) {
+          // 更新本地订单数据，包含所有可能的字段
+          orders.value[index] = {
+            ...orders.value[index],
+            guestName: updatedOrderFromApi.guest_name || orders.value[index].guestName,
+            phone: updatedOrderFromApi.phone || orders.value[index].phone,
+            roomNumber: updatedOrderFromApi.room_number || orders.value[index].roomNumber,
+            remarks: updatedOrderFromApi.remarks || orders.value[index].remarks,
+            idNumber: updatedOrderFromApi.id_card || orders.value[index].idNumber,
+            gender: updatedOrderFromApi.gender || orders.value[index].gender,
+            source: updatedOrderFromApi.source || orders.value[index].source,
+            checkInDate: updatedOrderFromApi.check_in_time || orders.value[index].checkInDate,
+            checkOutDate: updatedOrderFromApi.check_out_time || orders.value[index].checkOutDate,
+            shouldPay: updatedOrderFromApi.should_pay || orders.value[index].shouldPay,
+            paidAmount: updatedOrderFromApi.paid_amount || orders.value[index].paidAmount,
+            deposit: updatedOrderFromApi.deposit || orders.value[index].deposit,
+            paymentMethod: updatedOrderFromApi.pay_way || orders.value[index].paymentMethod,
+            roomType: updatedOrderFromApi.room_type || orders.value[index].roomType,
+            status: updatedOrderFromApi.order_status || orders.value[index].status,
+            discount: updatedOrderFromApi.discount || orders.value[index].discount,
+            days: updatedOrderFromApi.days || orders.value[index].days,
+            isCompany: updatedOrderFromApi.is_company || orders.value[index].isCompany,
+            companyName: updatedOrderFromApi.company_name || orders.value[index].companyName,
+            roomRate: updatedOrderFromApi.room_rate || orders.value[index].roomRate,
+            arrivalTime: updatedOrderFromApi.arrival_time || orders.value[index].arrivalTime,
+            stayType: updatedOrderFromApi.stay_type || orders.value[index].stayType
+          };
+        }
+      }
+
+      return updatedOrderFromApi;
+    } catch (err) {
+      console.error('更新订单信息失败:', err.response ? err.response.data : err.message);
+      error.value = err.response?.data?.message || '更新订单信息失败';
+      throw err;
+    } finally {
+      loading.value = false;
+    }
+  }
+
   return {
     orders,
     loading,
@@ -448,6 +522,8 @@ export const useOrderStore = defineStore('order', () => {
     fetchAllOrders,
     updateOrderStatusLocally,
     updateOrderStatusViaApi,
+    getOrderChangeHistory,
+    updateOrder,
     updateOrderCheckOutLocally,
     updateOrderRoom,
     getOrderByNumber,

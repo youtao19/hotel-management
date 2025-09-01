@@ -12,7 +12,13 @@ async function getAllRooms(queryDate = null) {
 
     // 1. 获取所有房间的基本信息
     console.log('开始获取房间基本信息...');
-    const roomsResult = await query('SELECT * FROM rooms ORDER BY room_number');
+  // 使用受控会话，限制语句与锁等待时间，避免大查询拖垮前端
+  const { getClient } = require('../database/postgreDB/pg');
+  const client = await getClient();
+  await client.query('BEGIN READ ONLY');
+  await client.query("SET LOCAL statement_timeout = '7000ms'");
+  await client.query("SET LOCAL lock_timeout = '2000ms'");
+  const roomsResult = await client.query('SELECT * FROM rooms ORDER BY room_number');
     console.log(`查询到 ${roomsResult.rows.length} 个房间`);
 
     const allRooms = roomsResult.rows;
@@ -56,7 +62,7 @@ async function getAllRooms(queryDate = null) {
       `;
     }
 
-    const ordersResult = await query(ordersSQL, queryParams);
+  const ordersResult = await client.query(ordersSQL, queryParams);
     console.log(`查询到 ${ordersResult.rows.length} 个相关订单`);
 
     const ordersByRoom = {};
@@ -96,7 +102,8 @@ async function getAllRooms(queryDate = null) {
       );
     }
 
-    return mergedRooms;
+  await client.query('COMMIT');
+  return mergedRooms;
   } catch (error) {
     console.error('获取所有房间失败:', error);
     throw error;
@@ -156,17 +163,37 @@ async function updateRoomStatus(id, status) {
 
     // 执行房间状态更新，同时更新is_closed字段
     console.log(`执行SQL: UPDATE rooms SET status = '${status}', is_closed = ${isClosed} WHERE room_id = ${id}`);
-    const { rows } = await query(
-      'UPDATE rooms SET status = $1, is_closed = $2 WHERE room_id = $3 RETURNING *',
-      [status, isClosed, id]
-    );
-
-    if (rows.length > 0) {
-      console.log(`更新成功，结果:`, rows[0]);
-    } else {
-      console.log(`未找到ID为 ${id} 的房间`);
+    const { getClient } = require('../database/postgreDB/pg');
+    const client = await getClient();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL statement_timeout = '6000ms'");
+      await client.query("SET LOCAL lock_timeout = '2000ms'");
+      const { rows } = await client.query(
+        'UPDATE rooms SET status = $1, is_closed = $2 WHERE room_id = $3 RETURNING *',
+        [status, isClosed, id]
+      );
+      await client.query('COMMIT');
+      if (rows.length > 0) {
+        console.log(`更新成功，结果:`, rows[0]);
+      } else {
+        console.log(`未找到ID为 ${id} 的房间`);
+      }
+      return rows.length > 0 ? rows[0] : null;
+    } catch (e) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      const msg = e.message || '';
+      const isTimeout = /statement timeout|canceling statement due to statement timeout/i.test(msg);
+      const isLockTimeout = /lock timeout/i.test(msg);
+      if (isTimeout || isLockTimeout) {
+        const err = new Error('更新房间繁忙，请稍后重试');
+        err.code = 'ROOM_UPDATE_BUSY';
+        throw err;
+      }
+      throw e;
+    } finally {
+      client.release();
     }
-    return rows.length > 0 ? rows[0] : null;
   } catch (error) {
     console.error(`更新房间(ID: ${id})状态失败:`, error);
     throw error;

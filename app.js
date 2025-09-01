@@ -6,6 +6,7 @@ const session = require("express-session");
 const setup = require("./appSettings/setup");
 const posgreDB = require("./backend/database/postgreDB/pg");
 const authtication = require("./backend/modules/authentication");
+const orderChangeModule = require("./backend/modules/orderChangeModule");
 
 let app = express();
 
@@ -19,6 +20,9 @@ app.disable('x-powered-by');
 app.use(express.json({ limit: setup.reqSizeLimit, strict: false }));
 app.use(express.urlencoded({ extended: true, limit: setup.reqSizeLimit }));
 app.use(express.text({ limit: setup.reqSizeLimit }));
+
+// 将orderChangeModule添加到app.locals，使其在所有路由中可用
+app.locals.orderChangeModule = orderChangeModule;
 
 const sessionOptions = {
   name: setup.appName + ".sid",
@@ -42,7 +46,7 @@ if (setup.env !== "dev") {
 app.use(session(sessionOptions));
 app.use(authtication.authenticationMiddleware);
 
-if (setup.env === "dev") {
+if (setup.env === "dev" || setup.env === 'test') {
   const history = require('connect-history-api-fallback');
   const cors = require('cors');
   app.use(cors({
@@ -65,6 +69,7 @@ const billRoute = require("./backend/routes/billRoute");
 const reviewRoute = require("./backend/routes/reviewRoute");
 const shiftHandoverRoute = require("./backend/routes/shiftHandoverRoute");
 const revenueRoute = require("./backend/routes/revenueRoute");
+const orderChangeRoute = require("./backend/routes/orderChangeRoute");
 
 app.use("/api/user", userRoute);
 app.use("/api/auth", authRoute);
@@ -75,6 +80,7 @@ app.use("/api/bills", billRoute);
 app.use("/api/reviews", reviewRoute);
 app.use("/api/shift-handover", shiftHandoverRoute);
 app.use("/api/revenue", revenueRoute);
+app.use("/api/order-changes", orderChangeRoute);
 app.get("/api/hup", (req, res) => res.status(200).json({ ok: true }));
 
 app.all("/", function (req, res) {
@@ -82,10 +88,6 @@ app.all("/", function (req, res) {
   res.status(404).json();
 });
 
-app.use(session(sessionOptions));
-app.use(authtication.authenticationMiddleware);
-
-
-
+// 注意：上面的 session/认证中间件已注册，避免重复注册
 
 module.exports = app;

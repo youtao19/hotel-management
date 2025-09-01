@@ -42,6 +42,10 @@
                   v-if="props.row.status === 'pending'">
                   <q-tooltip>办理入住</q-tooltip>
                 </q-btn>
+                <q-btn flat round dense color="teal" icon="edit" @click="openEditOrderDialog(props.row)"
+                  v-if="props.row.status !== 'cancelled'">
+                  <q-tooltip>修改订单</q-tooltip>
+                </q-btn>
                 <q-btn flat round dense color="negative" icon="cancel" @click="cancelOrder(props.row)"
                   v-if="props.row.status === 'checked-in' || props.row.status === 'pending'">
                   <q-tooltip>取消订单</q-tooltip>
@@ -53,6 +57,9 @@
                 <q-btn flat round dense color="orange" icon="hotel_class" @click="openExtendStayDialog(props.row)"
                   v-if="props.row.status === 'checked-out'">
                   <q-tooltip>续住</q-tooltip>
+                </q-btn>
+                <q-btn flat round dense color="purple" icon="history" @click="viewOrderHistory(props.row)">
+                  <q-tooltip>变更历史</q-tooltip>
                 </q-btn>
                 <q-btn flat round dense color="purple" icon="account_balance_wallet" @click="openRefundDepositDialog(props.row)"
                   v-if="canRefundDeposit(props.row)">
@@ -102,6 +109,7 @@
       @checkout="checkoutOrderFromDetails"
       @refund-deposit="openRefundDepositFromDetails"
       @change-order="openChangeOrderDialog"
+      @view-history="viewOrderHistory"
     />
 
 
@@ -148,6 +156,13 @@
       @change-order="openChangeOrderDialog"
     />
 
+    <!-- 订单变更历史对话框 -->
+    <OrderChangeHistory
+      v-model="showOrderChangeHistory"
+      :orderId="historyOrder?.orderNumber"
+      :orderInfo="historyOrder"
+    />
+
     </div>
   </q-page>
 </template>
@@ -166,6 +181,7 @@ import Bill from 'src/components/Bill.vue';
 import ExtendStayDialog from 'src/components/ExtendStayDialog.vue';
 import RefundDepositDialog from 'src/components/RefundDepositDialog.vue';
 import ChangeOrderDialog from 'src/components/ChangeOrderDialog.vue';
+import OrderChangeHistory from 'src/components/OrderChangeHistory.vue';
 
 
 // 初始化 stores
@@ -182,6 +198,10 @@ const loadingOrders = ref(false)
 
 // 修改订单对话框
 const showChangeOrderDialog = ref(false)
+// 订单变更历史对话框
+const showOrderChangeHistory = ref(false)
+// 当前查看历史的订单
+const historyOrder = ref(null)
 
 
 // 订单状态选项
@@ -264,24 +284,29 @@ const orderColumns = [
 
 // 根据搜索和过滤条件筛选订单
 const filteredOrders = computed(() => {
-  let result = orderStore.orders
+  // 添加防御性检查，避免orders为空
+  if (!orderStore.orders || !Array.isArray(orderStore.orders)) {
+    return [];
+  }
+
+  let result = orderStore.orders;
 
   // 根据搜索条件筛选
   if (searchQuery.value) {
-    const query = searchQuery.value.toLowerCase()
+    const query = searchQuery.value.toLowerCase();
     result = result.filter(order =>
-      order.orderNumber.toLowerCase().includes(query) ||
-      order.guestName.toLowerCase().includes(query) ||
-      order.phone.includes(query)
-    )
+      (order.orderNumber || '').toLowerCase().includes(query) ||
+      (order.guestName || '').toLowerCase().includes(query) ||
+      (order.phone || '').includes(query)
+    );
   }
 
   // 根据状态筛选
   if (filterStatus.value) {
-    result = result.filter(order => order.status === filterStatus.value)
+    result = result.filter(order => order.status === filterStatus.value);
   }
 
-  return result
+  return result;
 })
 
 // 获取所有订单数据
@@ -299,6 +324,15 @@ async function fetchAllOrders() {
     });
   } finally {
     loadingOrders.value = false;
+  }
+}
+
+// 静默刷新订单（不影响表格loading状态）
+async function refreshOrdersSilently() {
+  try {
+    await orderStore.fetchAllOrders();
+  } catch (e) {
+    console.warn('静默刷新订单失败:', e?.message || e);
   }
 }
 
@@ -419,7 +453,7 @@ async function performCheckOut(order) {
     }
 
     // 获取房间并将状态更改为清洁中
-    const room = roomStore.getRoomByNumber(order.roomNumber);
+  const room = await roomStore.getRoomByNumber(order.roomNumber);
     if (room && room.room_id) {
       const roomUpdateSuccess = await roomStore.checkOutRoom(room.room_id);
       if (!roomUpdateSuccess) {
@@ -450,7 +484,10 @@ async function performCheckOut(order) {
 
   } catch (error) {
     console.error('办理退房操作失败:', error);
-    const errorMessage = error.response?.data?.message || error.message || '未知错误';
+    const status = error.response?.status;
+    const errorMessage = status === 503
+      ? (error.response?.data?.message || '系统繁忙，请稍后再试')
+      : (error.response?.data?.message || error.message || '未知错误');
     $q.notify({
       type: 'negative',
       message: `办理退房失败: ${errorMessage}`,
@@ -535,7 +572,7 @@ async function performCheckIn(order) {
     }
 
     // 获取房间信息 (主要为了拿到 room_id)
-    const room = roomStore.getRoomByNumber(order.roomNumber);
+  const room = await roomStore.getRoomByNumber(order.roomNumber);
     if (!room) {
       console.error('预订房间未找到:', order.roomNumber);
       // 注意：此时订单状态可能已经更新，但房间状态未更新。需要考虑回滚或提示用户手动处理。
@@ -546,14 +583,19 @@ async function performCheckIn(order) {
       return;
     }
 
-    // 入住成功后刷新房间列表，确保房间状态页面能显示最新的客人信息
-    await roomStore.fetchAllRooms();
+    // 入住成功后刷新房间列表（后台执行，不阻塞UI）
+    roomStore.fetchAllRooms().catch(err => {
+      console.warn('刷新房间列表失败(忽略，不阻塞入住流程):', err?.message || err)
+    });
 
     // 本地订单列表已由 orderStore.updateOrderStatusViaApi 更新，
     // 但如果 currentOrder 正在显示此订单，也需要更新它
     if (currentOrder.value && currentOrder.value.orderNumber === order.orderNumber) {
       currentOrder.value = { ...orderStore.getOrderByNumber(order.orderNumber) }; // 从store获取最新数据
     }
+
+    // 结束表格loading，避免在账单对话框期间长时间转圈
+    loadingOrders.value = false;
 
     // 办理入住成功后，显示账单创建对话框（支持单日和多日订单）
     const updatedOrder = orderStore.getOrderByNumber(order.orderNumber);
@@ -570,7 +612,10 @@ async function performCheckIn(order) {
 
   } catch (error) {
     console.error('办理入住操作失败:', error);
-    const errorMessage = error.response?.data?.message || error.message || '未知错误';
+    const status = error.response?.status;
+    const errorMessage = status === 503
+      ? (error.response?.data?.message || '系统繁忙，请稍后再试')
+      : (error.response?.data?.message || error.message || '未知错误');
     $q.notify({
       type: 'negative',
       message: `办理入住失败: ${errorMessage}`,
@@ -578,9 +623,12 @@ async function performCheckIn(order) {
       multiLine: true
     });
   } finally {
-    loadingOrders.value = false;
-    // 确保订单列表刷新以反映任何变化（即使是失败的情况）
-    fetchAllOrders();
+    // 确保订单列表刷新以反映任何变化（静默执行，不占用表格loading）
+    if (loadingOrders.value) {
+      // 防御：若前面未提前关闭，则关闭
+      loadingOrders.value = false;
+    }
+    refreshOrdersSilently();
   }
 }
 
@@ -1134,8 +1182,121 @@ async function handleRefundDeposit(refundData) {
   }
 }
 
-function openChangeOrderDialog() {
+// 打开编辑订单对话框
+function openEditOrderDialog(order) {
+  if (!order || !order.orderNumber) {
+    $q.notify({ type: 'negative', message: '订单信息无效，无法修改', position: 'top' });
+    return;
+  }
+
+  // 设置当前选中的订单
+  currentOrder.value = { ...order };
+
+  // 打开修改订单对话框
   showChangeOrderDialog.value = true;
+}
+
+async function openChangeOrderDialog(updatedOrder) {
+  // 判断是否为打开对话框还是提交修改
+  if (!updatedOrder || typeof updatedOrder === 'boolean') {
+    // 仅打开对话框
+    showChangeOrderDialog.value = true;
+    return;
+  }
+
+    // 处理订单修改
+  try {
+    loadingOrders.value = true;
+    console.log('正在更新订单:', updatedOrder);
+
+    // 构建要更新的数据对象
+    const updateData = {
+      guest_name: updatedOrder.guestName,
+      phone: updatedOrder.phone,
+      id_number: updatedOrder.idNumber,
+      remarks: updatedOrder.remarks,
+      // 添加修改原因，这将在订单修改历史记录中显示
+      changeReason: "用户修改订单信息"
+    };
+
+    // 根据订单状态判断是否可以修改房间信息
+    const status = updatedOrder.status;
+    if (status !== 'checked-in' && status !== 'checked-out') {
+      // 如果不是已入住或已退房状态，可以修改房间信息
+      updateData.room_type = updatedOrder.roomType;
+      updateData.room_number = updatedOrder.roomNumber;
+      updateData.check_in_date = updatedOrder.checkInDate;
+      updateData.check_out_date = updatedOrder.checkOutDate;
+    }
+
+    // 价格信息
+    updateData.room_price = updatedOrder.roomPrice;
+    updateData.deposit = updatedOrder.deposit;
+    updateData.payment_method = updatedOrder.paymentMethod;
+
+    // 来源信息
+    updateData.order_source = updatedOrder.source;
+    updateData.id_source = updatedOrder.sourceNumber;
+
+    // 调用新的订单更新API
+    const response = await orderStore.updateOrder(updatedOrder.orderNumber, updateData);
+
+    // 更新本地订单数据 - 添加空值检查
+    if (orderStore.orders && orderStore.orders.value) {
+      const index = orderStore.orders.value.findIndex(o => o.orderNumber === updatedOrder.orderNumber);
+      if (index !== -1) {
+        // 更新本地状态中的所有相应字段
+        orderStore.orders.value[index] = {
+          ...orderStore.orders.value[index],
+          // 客人信息
+          guestName: updatedOrder.guestName,
+          phone: updatedOrder.phone,
+          idNumber: updatedOrder.idNumber,
+
+          // 如果可以修改，更新房间信息
+          ...(status !== 'checked-in' && status !== 'checked-out' ? {
+            roomType: updatedOrder.roomType,
+            roomNumber: updatedOrder.roomNumber,
+            checkInDate: updatedOrder.checkInDate,
+            checkOutDate: updatedOrder.checkOutDate
+          } : {}),
+
+          // 价格信息
+          roomPrice: updatedOrder.roomPrice,
+          deposit: updatedOrder.deposit,
+          paymentMethod: updatedOrder.paymentMethod,
+
+          // 来源信息
+          source: updatedOrder.source,
+          sourceNumber: updatedOrder.sourceNumber,
+
+          // 其他信息
+          remarks: updatedOrder.remarks
+        };
+      }
+    }
+
+    // 更新成功提示
+    $q.notify({
+      type: 'positive',
+      message: '订单修改成功',
+      position: 'top'
+    });
+
+    // 刷新订单列表
+    await fetchAllOrders();
+  } catch (error) {
+    console.error('订单修改失败:', error);
+    const errorMessage = error.response?.data?.message || error.message || '未知错误';
+    $q.notify({
+      type: 'negative',
+      message: `订单修改失败: ${errorMessage}`,
+      position: 'top',
+      multiLine: true
+    });
+  } finally {
+    loadingOrders.value = false;
+  }
 }
 
 // 检查是否为多日订单
@@ -1147,6 +1308,21 @@ function checkIfMultiDayOrder(order) {
     const priceDates = Object.keys(order.roomPrice);
     return priceDates.length > 1;
   }
+}
+
+// 查看订单变更历史
+function viewOrderHistory(order) {
+  if (!order) {
+    $q.notify({
+      type: 'negative',
+      message: '无法查看历史：订单信息不存在',
+      position: 'top'
+    });
+    return;
+  }
+
+  historyOrder.value = order;
+  showOrderChangeHistory.value = true;
 
   return false;
 }

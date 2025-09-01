@@ -966,21 +966,16 @@ async function submitOrder() {
     return;
   }
 
-  // 获取选择的房间 (client-side check before API call)
-  const selectedRoom = roomStore.getRoomByNumber(orderData.value.roomNumber)
-
-  // 检查房间是否存在
+  // 获取选择的房间（仅使用本地已加载数据，避免为校验再发慢请求）
+  const selectedRoom =
+    availableRoomsByDate.value.find(r => r.room_number === orderData.value.roomNumber) ||
+    roomStore.rooms?.value?.find(r => r.room_number === orderData.value.roomNumber) ||
+    null
+  // 若本地未命中，仅记录警告，交由后端校验
   if (!selectedRoom) {
-    $q.notify({
-      type: 'negative',
-      message: `房间 ${orderData.value.roomNumber} 不存在`,
-      position: 'top'
-    });
-    return
-  }
-
-  // 检查房间是否关闭
-  if (selectedRoom.is_closed) {
+    console.warn(`本地未找到房间 ${orderData.value.roomNumber}，交由后端校验`)
+  } else if (selectedRoom.is_closed) {
+    // 检查房间是否关闭
     $q.notify({
       type: 'negative',
       message: `房间 ${orderData.value.roomNumber} 已关闭，无法预订`,
@@ -1009,8 +1004,10 @@ async function submitOrder() {
     // 使用 orderStore.addOrder 创建订单
     await orderStore.addOrder(submitData);
 
-    // 刷新房间状态
-    await roomStore.refreshData();
+    // 刷新放后台执行，避免网络波动阻塞跳转
+    roomStore.refreshData().catch(err => {
+      console.warn('创建订单后后台刷新失败(忽略)：', err?.message || err)
+    })
 
     $q.notify({
       type: 'positive',
@@ -1018,8 +1015,8 @@ async function submitOrder() {
       position: 'top'
     });
 
-    // 导航到订单列表页面
-    router.push('/ViewOrders');
+  // 立即导航到订单列表页面
+  router.push('/ViewOrders');
   } catch (error) {
     console.error('订单创建失败:', error);
     let errorMessage = '订单创建失败，请稍后再试。';
@@ -1072,13 +1069,13 @@ function fillTestData() {
     orderData.value.roomType = availableRoomTypes[0].value
 
     // 等待DOM更新
-    nextTick(() => {
+  nextTick(async () => {
       // 设置第一个可用房间
       if (availableRoomOptions.value.length > 0) {
         orderData.value.roomNumber = availableRoomOptions.value[0].value
 
         // 根据选择的房间直接设置房间价格
-        const selectedRoom = roomStore.getRoomByNumber(orderData.value.roomNumber)
+  const selectedRoom = await roomStore.getRoomByNumber(orderData.value.roomNumber)
         if (selectedRoom) {
           console.log('设置房间价格:', selectedRoom.price)
           orderData.value.roomPrice = Number(selectedRoom.price)
@@ -1103,9 +1100,9 @@ function fillTestData() {
   })
 
   // 添加验证
-  nextTick(() => {
+  nextTick(async () => {
     // 验证房间是否正确选择
-    const room = roomStore.getRoomByNumber(orderData.value.roomNumber)
+    const room = await roomStore.getRoomByNumber(orderData.value.roomNumber)
     if (!room) {
       console.error('测试数据填充后，无法找到选择的房间')
     } else {
@@ -1186,11 +1183,11 @@ function fillRandomData() {
   })
 
   // 添加随机数据的验证
-  setTimeout(() => {
+  setTimeout(async () => {
     console.log('房间价格设置情况:', {
       roomNumber: orderData.value.roomNumber,
       roomPrice: orderData.value.roomPrice,
-      selectedRoom: roomStore.getRoomByNumber(orderData.value.roomNumber)
+      selectedRoom: await roomStore.getRoomByNumber(orderData.value.roomNumber)
     })
   }, 500)
 }
@@ -1218,13 +1215,13 @@ function fillRestRoomData() {
     orderData.value.roomType = availableRoomTypes[0].value
 
     // 等待DOM更新
-    nextTick(() => {
+  nextTick(async () => {
       // 设置第一个可用房间
       if (availableRoomOptions.value.length > 0) {
         orderData.value.roomNumber = availableRoomOptions.value[0].value
 
         // 根据选择的房间设置房间价格（休息房半价）
-        const selectedRoom = roomStore.getRoomByNumber(orderData.value.roomNumber)
+  const selectedRoom = await roomStore.getRoomByNumber(orderData.value.roomNumber)
         if (selectedRoom) {
           console.log('设置休息房价格:', Math.round(selectedRoom.price / 2))
           orderData.value.roomPrice = Math.round(Number(selectedRoom.price) / 2)

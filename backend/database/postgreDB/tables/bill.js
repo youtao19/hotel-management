@@ -19,7 +19,8 @@ const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
 const dropQuery = `DROP TABLE IF EXISTS ${tableName}`;
 
 const createIndexQueryStrings = [
-    `CREATE INDEX IF NOT EXISTS idx_bills_order_id ON ${tableName}(order_id)`
+  `CREATE INDEX IF NOT EXISTS idx_bills_order_id ON ${tableName}(order_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_bills_create_time ON ${tableName}(create_time)`
 ];
 
 const table = {

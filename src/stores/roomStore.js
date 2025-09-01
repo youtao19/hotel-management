@@ -69,7 +69,8 @@ export const useRoomStore = defineStore('room', () => {
   async function fetchActiveOrders() {
     try {
       loading.value = true
-      const response = await orderApi.getAllOrders()
+  // 使用带宽限缓存的接口，减少频繁全量查询带来的抖动
+  const response = await orderApi.getAllOrdersWithGrace()
       if (!response || !response.data) {
         throw new Error('订单数据获取失败或格式错误')
       }
@@ -161,7 +162,14 @@ export const useRoomStore = defineStore('room', () => {
       return rooms.value
     } catch (err) {
       console.error('获取房间数据失败:', err)
-      error.value = '获取房间数据失败: ' + (err.message || String(err))
+      const status = err.response?.status
+      if (status === 503) {
+        error.value = err.response?.data?.message || '获取房间数据繁忙，请稍后重试'
+      } else if ((err.code === 'ECONNABORTED') || /timeout/i.test(err.message || '')) {
+        error.value = '获取房间数据超时，请稍后重试'
+      } else {
+        error.value = '获取房间数据失败: ' + (err.message || String(err))
+      }
       return []
     } finally {
       loading.value = false
@@ -584,46 +592,48 @@ export const useRoomStore = defineStore('room', () => {
    * @param {string} number - 房间号
    * @returns {Object|null} 房间对象或null
    */
-  function getRoomByNumber(number) {
+  async function getRoomByNumber(number) {
+    // 防御：房间号为空时直接返回
+    if (number === null || number === undefined || String(number).trim() === '') {
+      console.warn('getRoomByNumber 调用时房间号为空，已跳过请求');
+      return null;
+    }
     // 首先尝试从本地缓存中查找
     const cachedRoom = rooms.value.find(r => r.room_number === number)
     if (cachedRoom) {
       return cachedRoom
     }
 
-    // 本地未找到，再尝试通过API查询
-    return roomApi.getRoomByNumber(number)
-      .then(response => {
-        const roomData = response.data || null
+    try {
+      // 本地未找到，再尝试通过API查询
+      const response = await roomApi.getRoomByNumber(number)
+      const roomData = response.data || null
 
-        // 如果找到房间，处理显示状态
-        if (roomData) {
-          // 创建映射
-          const roomToOrderMap = {}
-          activeOrders.value.forEach(order => {
-            if (order.roomNumber) {
-              roomToOrderMap[order.roomNumber] = order
-            }
-          })
+      if (!roomData) return null
 
-          const processedRoom = processRoomData(roomData, roomToOrderMap)
-
-          // 将查询结果加入本地缓存
-          const existingIndex = rooms.value.findIndex(r => r.room_id === roomData.room_id)
-          if (existingIndex >= 0) {
-            rooms.value[existingIndex] = processedRoom
-          } else {
-            rooms.value.push(processedRoom)
-          }
-
-          return processedRoom
+      // 创建映射
+      const roomToOrderMap = {}
+      activeOrders.value.forEach(order => {
+        if (order.roomNumber) {
+          roomToOrderMap[order.roomNumber] = order
         }
-        return null
       })
-      .catch(err => {
-        console.error(`获取房间号 ${number} 失败:`, err)
-        return null
-      })
+
+      const processedRoom = processRoomData(roomData, roomToOrderMap)
+
+      // 将查询结果加入本地缓存
+      const existingIndex = rooms.value.findIndex(r => r.room_id === roomData.room_id)
+      if (existingIndex >= 0) {
+        rooms.value[existingIndex] = processedRoom
+      } else {
+        rooms.value.push(processedRoom)
+      }
+
+      return processedRoom
+    } catch (err) {
+      console.error(`获取房间号 ${number} 失败:`, err)
+      return null
+    }
   }
 
   /**

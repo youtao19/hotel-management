@@ -103,9 +103,19 @@ export const useBillStore = defineStore('bill', () => {
             bills.value = Array.isArray(response.bills) ? response.bills : [];
             return bills.value;
         } catch (error) {
-            console.error('获取所有账单失败:', error);
-            bills.value = [];
-            throw error;
+                        // 将可恢复错误(如 503 繁忙或超时)降级为警告，避免阻塞订单页面
+                        const code = error?.response?.data?.code || error?.code;
+                        const status = error?.response?.status;
+                        const message = error?.message || '';
+                        const isBusy = code === 'BILLS_BUSY' || status === 503;
+                        const isTimeout = /timeout|ECONNABORTED/i.test(message);
+                        console.warn('获取所有账单失败:', message || error);
+                        if (isBusy || isTimeout) {
+                            // 静默失败，不抛出，保留现有数据
+                            return bills.value;
+                        }
+                        bills.value = [];
+                        throw error;
         }
     }
 

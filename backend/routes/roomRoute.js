@@ -188,7 +188,7 @@ router.post('/:id/status', async (req, res) => {
 
     // 这里改用尝试导入房间表模块的updateRoomStatus方法，绕过直接SQL查询
     console.log('尝试使用房间模块的updateRoomStatus方法');
-    const result = await roomModule.updateRoomStatus(id, status);
+  const result = await roomModule.updateRoomStatus(id, status);
 
     if (!result) {
       console.log('房间未找到:', id);
@@ -199,6 +199,9 @@ router.post('/:id/status', async (req, res) => {
     return res.json({ data: result });
   } catch (err) {
     console.error('更新房间状态错误:', err);
+    if (err && err.code === 'ROOM_UPDATE_BUSY') {
+      return res.status(503).json({ message: '更新房间繁忙，请稍后重试', code: err.code });
+    }
     res.status(500).json({ message: '服务器错误' });
   }
 });

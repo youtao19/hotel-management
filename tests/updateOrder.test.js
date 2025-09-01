@@ -57,21 +57,15 @@ async function createTestRoom(roomNumber, typeCode = 'TEST_STANDARD') {
 
 
 describe('GET /api/orders/:orderNumber/status',() => {
-  beforeEach(async () => {
-    // 使用全局清理函数
-    await global.cleanupTestData();
-
-    // 确保房型和房间存在
-    await createTestRoomType(validOrder.room_type);
-    await createTestRoom(validOrder.room_number, validOrder.room_type);
-
-    // 等待一小段时间确保创建完成
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    // 先删除可能存在的订单，然后创建新的
+  async function prepareOrder() {
+    console.log('[updateOrder.test] prepare: delete existing order');
     await query('DELETE FROM orders WHERE order_id = $1', [validOrder.order_id]);
-
-    // 创建一个预定订单
+    console.log('[updateOrder.test] prepare: ensure room type');
+    await createTestRoomType(validOrder.room_type);
+    console.log('[updateOrder.test] prepare: ensure room');
+    await createTestRoom(validOrder.room_number, validOrder.room_type);
+    await new Promise(r => setTimeout(r, 50));
+    console.log('[updateOrder.test] prepare: insert order');
     await query('INSERT INTO orders (order_id, order_source, guest_name, id_number, phone, room_type, room_number, check_in_date, check_out_date, status, payment_method, room_price, deposit, create_time, remarks) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)', [
       validOrder.order_id,
       validOrder.order_source,
@@ -86,16 +80,16 @@ describe('GET /api/orders/:orderNumber/status',() => {
       validOrder.payment_method,
       validOrder.room_price,
       validOrder.deposit,
-      new Date(), // 添加 create_time 值
+      new Date(),
       validOrder.remarks
     ]);
-
-  });
+  }
 
 
 
 
   it('修改订单状态为已入住', async () => {
+  await prepareOrder();
     const res = await request(app).post(`/api/orders/${validOrder.order_id}/status`).send({
       newStatus: 'checked-in',
       checkInTime: '2025-06-09',
@@ -109,11 +103,16 @@ describe('GET /api/orders/:orderNumber/status',() => {
   })
 
   it('修改订单状态为已退房', async () => {
-    const res = await request(app).post(`/api/orders/${validOrder.order_id}/status`).send({
+  await prepareOrder();
+    console.log('[updateOrder.test] about to POST checked-out');
+    const res = await request(app)
+      .post(`/api/orders/${validOrder.order_id}/status`)
+      .send({
       newStatus: 'checked-out',
       checkInTime: '2025-06-09',
       checkOutTime: '2025-06-10'
-    });
+    })
+      .timeout({ response: 5000, deadline: 7000 });
 
     expect(res.status).toBe(200); // 200 表示请求成功
     expect(res.body).toMatchObject({ // 检查响应体是否包含成功信息
@@ -122,6 +121,7 @@ describe('GET /api/orders/:orderNumber/status',() => {
   })
 
   it('修改订单状态为已取消', async () => {
+  await prepareOrder();
     const res = await request(app).post(`/api/orders/${validOrder.order_id}/status`).send({
       newStatus: 'cancelled',
       checkInTime: '2025-06-09',

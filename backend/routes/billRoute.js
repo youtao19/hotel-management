@@ -76,8 +76,40 @@ router.post('/create', [
 // 获取所有账单
 router.get('/all', async (req, res) => {
   try {
-    const bills = await billModule.getAllBills();
-    res.status(200).json({ message: '获取所有账单成功', bills });
+    // 简单内存缓存（5秒宽限）
+    const cacheKey = 'billsAllCache';
+    const now = Date.now();
+    const ttl = 5000;
+    if (req.app.locals[cacheKey] && (now - req.app.locals[cacheKey].ts) < ttl) {
+      return res.status(200).json({ message: '获取所有账单成功(缓存)', bills: req.app.locals[cacheKey].data, cached: true });
+    }
+
+    // 使用只读事务和较短的语句超时，避免长时间占用
+    const { getClient } = require('../database/postgreDB/pg');
+    const client = await getClient();
+    try {
+      await client.query('BEGIN READ ONLY');
+      await client.query("SET LOCAL statement_timeout = '6000ms'");
+      await client.query("SET LOCAL lock_timeout = '2000ms'");
+
+      const bills = await billModule.getAllBills();
+      // 更新缓存
+      req.app.locals[cacheKey] = { ts: now, data: bills };
+      res.status(200).json({ message: '获取所有账单成功', bills });
+      await client.query('COMMIT');
+    } catch (e) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      const msg = e.message || '';
+      const isTimeout = /statement timeout|canceling statement due to statement timeout/i.test(msg);
+      const isLockTimeout = /lock timeout/i.test(msg);
+      if (isTimeout || isLockTimeout) {
+        console.warn('获取账单超时/锁等待，返回503提示重试:', msg);
+        return res.status(503).json({ message: '获取账单繁忙，请稍后重试', code: 'BILLS_BUSY' });
+      }
+      throw e;
+    } finally {
+      client.release();
+    }
   } catch (error) {
     console.error('获取所有账单失败:', error);
     res.status(500).json({ message: '获取所有账单失败', error: error.message });
