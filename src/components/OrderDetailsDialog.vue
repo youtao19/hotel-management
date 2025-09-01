@@ -109,8 +109,16 @@
                   <q-item-label>{{ formatDate(currentOrder.checkInDate) }} 至 {{ formatDate(currentOrder.checkOutDate) }}</q-item-label>
                 </q-item-section>
               </q-item>
+              <q-item>
+                <q-item-section>
+                  <q-item-label caption>未退押金</q-item-label>
+                  <q-item-label class="text-negative text-weight-medium">¥{{ remainingDeposit }}</q-item-label>
+                </q-item-section>
+              </q-item>
             </q-list>
           </div>
+
+
           <!-- 支付信息 -->
           <div class="col-md-6 col-xs-12">
             <q-list bordered separator>
@@ -130,6 +138,33 @@
                 <q-item-section>
                   <q-item-label caption>押金</q-item-label>
                   <q-item-label class="text-primary text-weight-medium">¥{{ currentOrder.deposit }}</q-item-label>
+                </q-item-section>
+              </q-item>
+
+              <q-item>
+                <q-item-section>
+                  <q-item-label caption>已退押金</q-item-label>
+                  <q-item-label>
+                    <q-badge v-if="refundedAmount > 0" color="purple" text-color="white" :label="`¥${refundedAmount}`" />
+                    <span v-else class="text-grey">未退款</span>
+                  </q-item-label>
+                </q-item-section>
+              </q-item>
+            </q-list>
+          </div>
+          <!-- 退款明细 -->
+          <div class="col-md-12 col-xs-12" v-if="refundRecords.length">
+            <q-list bordered>
+              <q-item>
+                <q-item-section>
+                  <q-item-label caption>退款明细</q-item-label>
+                  <div class="q-mt-xs">
+                    <div v-for="(r, idx) in refundRecords" :key="idx" class="row items-center q-py-xs">
+                      <div class="col-4">金额：<span class="text-primary">¥{{ r.amount }}</span></div>
+                      <div class="col-4">方式：{{ getPaymentMethodName(r.method) || r.method }}</div>
+                      <div class="col-4">时间：{{ formatDateTime(r.time) }}</div>
+                    </div>
+                  </div>
                 </q-item-section>
               </q-item>
             </q-list>
@@ -222,7 +257,7 @@ const billStore = useBillStore()
 // 判断是否可以退押金
 function canRefundDeposit(order) {
   if (!order) return false
-  const allowedStatuses = ['checked-out', 'cancelled']
+  const allowedStatuses = ['checked-out']
   if (!allowedStatuses.includes(order.status)) return false
   // 优先使用订单字段
   let deposit = Number(order.deposit) || 0
@@ -240,4 +275,43 @@ function canRefundDeposit(order) {
   })
   return refunded === 0
 }
+
+// ====== 详情页显示用的押金/退款信息 ======
+const billsForThisOrder = computed(() => {
+  if (!props.currentOrder) return []
+  return billStore.bills.filter(b => b.order_id === props.currentOrder.orderNumber)
+})
+
+const depositAmount = computed(() => {
+  const dep = Number(props.currentOrder?.deposit) || 0
+  if (dep > 0) return dep
+  const b = billsForThisOrder.value.find(x => Number(x.deposit) > 0)
+  return b ? Number(b.deposit) || 0 : 0
+})
+
+const refundRecords = computed(() => {
+  const recs = []
+  billsForThisOrder.value.forEach(b => {
+    if (b && b.change_type === '退押') {
+      const amount = Math.abs(Number(b.change_price) || 0)
+      if (amount > 0) {
+        recs.push({ amount, method: b.pay_way, time: b.create_time })
+      }
+    } else if (typeof b?.refund_deposit === 'number' && Number(b.refund_deposit) < 0) {
+      // 兼容旧结构（refund_deposit 为负表示退押）
+      const amount = Math.abs(Number(b.refund_deposit) || 0)
+      if (amount > 0) recs.push({ amount, method: b.pay_way, time: b.refund_time || b.create_time })
+    }
+  })
+  return recs.sort((a, c) => new Date(a.time) - new Date(c.time))
+})
+
+const refundedAmount = computed(() => {
+  return refundRecords.value.reduce((s, r) => s + (Number(r.amount) || 0), 0)
+})
+
+const remainingDeposit = computed(() => {
+  const left = (Number(depositAmount.value) || 0) - (Number(refundedAmount.value) || 0)
+  return left > 0 ? Number(left.toFixed(2)) : 0
+})
 </script>

@@ -1023,7 +1023,7 @@ async function handleRefreshExtendStayRooms(dateRange) {
 // 3. 账单层 refund_deposit == 0 (尚未退款) 才显示按钮
 // 4. 没有账单记录时回退到订单字段（refundedDeposit==0）
 
-const allowedRefundStatuses = ['checked-out', 'cancelled'] // 如需支持入住中：添加 'checked-in'
+const allowedRefundStatuses = ['checked-out'] // 仅已退房可退押；已取消不允许
 
 const billDepositInfoMap = computed(() => {
   // order_id -> { deposit, refunded }
