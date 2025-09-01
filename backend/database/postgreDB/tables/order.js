@@ -34,7 +34,10 @@ const dropQuery = `DROP TABLE IF EXISTS ${tableName}`;
 const createIndexQueryStrings = [
     `CREATE INDEX IF NOT EXISTS idx_orders_status ON ${tableName}(status)`,
     `CREATE INDEX IF NOT EXISTS idx_orders_check_dates ON ${tableName}(check_in_date, check_out_date)`,
-    `CREATE INDEX IF NOT EXISTS idx_orders_room_price_gin ON ${tableName} USING GIN (room_price)` // JSONB字段的GIN索引
+  `CREATE INDEX IF NOT EXISTS idx_orders_create_time ON ${tableName}(create_time DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_orders_room_price_gin ON ${tableName} USING GIN (room_price)`, // JSONB字段的GIN索引
+  // 仅对展示中的订单做唯一约束，避免历史版本冲突
+  `CREATE UNIQUE INDEX IF NOT EXISTS uniq_orders_active ON ${tableName} (guest_name, check_in_date, check_out_date, room_type) WHERE COALESCE(show, TRUE) = TRUE`
 ];
 
 const table = {

@@ -16,16 +16,20 @@ const VALID_ORDER_STATES = ['pending', 'checked-in', 'checked-out', 'cancelled']
 router.get('/', async (req, res) => {
   try {
     console.log('获取所有订单请求');
-
-    // 检查orders表是否存在
-    const tableCheck = await orderModule.checkTableExists();
-
-    if (!tableCheck.rows[0].exists) {
-      console.log('orders表不存在！');
+    // 在开发调试时可通过 ?debug=1 触发表存在检查，避免生产热路径额外查询
+    if (process.env.NODE_ENV === 'dev' && req.query?.debug === '1') {
+      try {
+        const tableCheck = await orderModule.checkTableExists();
+        if (!tableCheck.rows[0].exists) {
+          console.log('orders表不存在！');
+        }
+      } catch (e) {
+        console.warn('检查orders表存在失败(忽略):', e.message);
+      }
     }
 
-    // 查询所有订单
-    const orders = await orderModule.getAllOrders();
+  // 查询所有订单（仅展示 show = TRUE）
+  const orders = await orderModule.getAllOrders();
     console.log(`成功获取 ${orders.length} 条订单数据`);
     res.json({ data: orders });
   } catch (err) {
@@ -156,6 +160,38 @@ router.post('/new', async (req, res) => {
           error: { code: error.code || 'UNKNOWN', details: error.message }
         });
     }
+  }
+});
+
+/**
+ * 变更订单：插入新订单并隐藏旧订单
+ * POST /api/orders/:orderId/change
+ */
+router.post('/:orderId/change', authenticationMiddleware, async (req, res) => {
+  const { orderId } = req.params;
+  const patch = req.body || {};
+  try {
+    const newOrder = await orderModule.changeOrder(orderId, patch);
+    res.status(201).json({
+      success: true,
+      message: '订单修改成功',
+      data: { order: newOrder }
+    });
+  } catch (error) {
+    console.error('变更订单失败:', error.code || 'NO_CODE', error.message);
+    if (error.code === 'ORDER_NOT_FOUND') {
+      return res.status(404).json({ success: false, message: '原订单不存在' });
+    }
+    if (error.code === 'DUPLICATE_ORDER') {
+      return res.status(409).json({ success: false, message: '相同条件的有效订单已存在', details: error.message });
+    }
+    if (error.code === 'ORDER_VALIDATION_ERROR' || error.code === 'INVALID_ORDER_STATUS' || error.code === 'INVALID_DATE_FORMAT' || error.code === 'INVALID_DATE_RANGE' || error.code === 'INVALID_PHONE_FORMAT' || error.code === 'INVALID_PRICE' || error.code === 'INVALID_PRICE_EMPTY' || error.code === 'INVALID_PRICE_JSON' || error.code === 'INVALID_PRICE_DATE_FORMAT' || error.code === 'INVALID_PRICE_DATE_RANGE' || error.code === 'INVALID_DEPOSIT' || error.code === 'INVALID_ROOM_TYPE' || error.code === 'INVALID_ROOM_NUMBER' || error.code === 'ROOM_CLOSED' || error.code === 'ROOM_ALREADY_BOOKED') {
+      return res.status(400).json({ success: false, message: error.message, code: error.code });
+    }
+    if (error.code === '23505') {
+      return res.status(409).json({ success: false, message: '订单变更失败：数据唯一约束冲突', details: error.detail });
+    }
+    res.status(500).json({ success: false, message: '订单变更失败', error: { code: error.code || 'UNKNOWN', details: error.message } });
   }
 });
 

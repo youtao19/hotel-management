@@ -22,12 +22,28 @@
           <q-btn color="primary" label="搜索" class="full-width" @click="searchOrders" />
         </div>
       </div>
+      <div class="row q-mt-sm">
+        <div class="col">
+          <q-btn 
+            flat 
+            dense 
+            color="primary" 
+            icon="refresh" 
+            label="刷新订单" 
+            size="sm"
+            @click="handleManualRefresh"
+            :loading="loadingOrders || orderStore.loading"
+          >
+            <q-tooltip>重新获取最新订单数据</q-tooltip>
+          </q-btn>
+        </div>
+      </div>
     </div>
 
     <q-card>
       <q-card-section>
         <q-table :rows="filteredOrders" :columns="orderColumns" row-key="orderNumber" :pagination="{ rowsPerPage: 10 }"
-          :loading="loadingOrders" no-data-label="没有找到订单">
+          :loading="loadingOrders || orderStore.loading" no-data-label="没有找到订单">
           <template v-slot:loading>
             <q-inner-loading showing color="primary" />
           </template>
@@ -143,9 +159,11 @@
 
     <!-- 修改订单对话框 -->
     <ChangeOrderDialog
+      v-if="currentOrder"
       v-model="showChangeOrderDialog"
       :order="currentOrder"
-      @change-order="openChangeOrderDialog"
+      :roomTypeOptions="viewStore.roomTypeOptions"
+      @change-order="handleChangeOrder"
     />
 
     </div>
@@ -159,7 +177,7 @@ import { useOrderStore } from '../stores/orderStore' // 导入订单 store
 import { useRoomStore } from '../stores/roomStore' // 导入房间 store
 import { useViewStore } from '../stores/viewStore' // 导入视图 store
 import { useBillStore } from '../stores/billStore' // 导入账单 store
-import { roomApi } from '../api/index.js' // 导入房间API
+import { roomApi, orderApi } from '../api/index.js' // 导入API
 import OrderDetailsDialog from 'src/components/OrderDetailsDialog.vue';
 import ChangeRoomDialog from 'src/components/ChangeRoomDialog.vue';
 import Bill from 'src/components/Bill.vue';
@@ -292,13 +310,65 @@ async function fetchAllOrders() {
     console.log('获取到的订单数据:', orderStore.orders);
   } catch (error) {
     console.error('获取订单数据失败:', error);
+    
+    let message = '获取订单数据失败';
+    if (error.code === 'ECONNABORTED') {
+      message = '请求超时，正在自动重试...';
+    } else if (error.code === 'ECONNREFUSED') {
+      message = '无法连接到服务器，请检查网络连接';
+    } else if (error.message?.includes('timeout')) {
+      message = '请求超时，已自动重试多次，请稍后手动刷新';
+    }
+    
     $q.notify({
       type: 'negative',
-      message: '获取订单数据失败，请刷新页面重试',
-      position: 'top'
+      message: message,
+      position: 'top',
+      timeout: 5000,
+      actions: [
+        {
+          icon: 'refresh',
+          color: 'white',
+          handler: () => {
+            fetchAllOrders();
+          }
+        }
+      ]
     });
   } finally {
     loadingOrders.value = false;
+  }
+}
+
+// 手动刷新订单数据（强制刷新，跳过防抖）
+async function handleManualRefresh() {
+  try {
+    console.log('执行手动强制刷新...');
+    await orderStore.forceRefreshOrders();
+    $q.notify({
+      type: 'positive',
+      message: '订单数据刷新成功',
+      position: 'top',
+      timeout: 2000
+    });
+  } catch (error) {
+    console.error('手动刷新失败:', error);
+    
+    let message = '手动刷新失败';
+    if (error.code === 'ECONNABORTED') {
+      message = '请求超时，请检查网络连接';
+    } else if (error.code === 'ECONNREFUSED') {
+      message = '无法连接到服务器，请检查网络连接';
+    } else if (error.message?.includes('timeout')) {
+      message = '请求超时，请稍后再试';
+    }
+    
+    $q.notify({
+      type: 'negative',
+      message: message,
+      position: 'top',
+      timeout: 5000
+    });
   }
 }
 
@@ -359,8 +429,8 @@ async function cancelOrder(order) {
       });
     } finally {
       loadingOrders.value = false;
-      // 确保订单列表刷新以反映任何变化
-      fetchAllOrders();
+      // 移除自动刷新，避免不必要的网络请求
+      // 用户可以手动刷新页面获取最新状态
     }
   }
 }
@@ -541,8 +611,7 @@ async function performCheckIn(order) {
       // 注意：此时订单状态可能已经更新，但房间状态未更新。需要考虑回滚或提示用户手动处理。
       $q.notify({ type: 'warning', message: '订单已更新为入住，但预订的房间信息未找到，请检查房间状态！', position: 'top', multiLine: true });
       loadingOrders.value = false;
-      // 刷新订单列表以显示最新状态
-      fetchAllOrders();
+      // 移除自动刷新，避免不必要的网络请求导致转圈
       return;
     }
 
@@ -579,8 +648,7 @@ async function performCheckIn(order) {
     });
   } finally {
     loadingOrders.value = false;
-    // 确保订单列表刷新以反映任何变化（即使是失败的情况）
-    fetchAllOrders();
+    // 移除自动刷新，避免不必要的网络请求导致转圈
   }
 }
 
@@ -1134,8 +1202,73 @@ async function handleRefundDeposit(refundData) {
   }
 }
 
-function openChangeOrderDialog() {
-  showChangeOrderDialog.value = true;
+function openChangeOrderDialog(order) {
+  // 允许从详情对话框直接触发（无参数），也允许从行操作传入订单
+  if (order) currentOrder.value = order
+  if (!currentOrder.value) return
+  showChangeOrderDialog.value = true
+}
+
+// 提交修改订单
+async function handleChangeOrder(patch) {
+  try {
+    if (!currentOrder.value || !currentOrder.value.orderNumber) {
+      $q.notify({ type: 'negative', message: '当前订单无效，无法修改', position: 'top' });
+      return;
+    }
+    const orderId = currentOrder.value.orderNumber;
+    const res = await orderApi.changeOrder(orderId, patch);
+    if (res?.success) {
+      $q.notify({ type: 'positive', message: '订单修改成功，已生成新订单', position: 'top' });
+      showChangeOrderDialog.value = false;
+      showOrderDetails.value = false;
+  // 清空搜索与过滤，避免旧订单号筛选导致空列表
+  searchQuery.value = '';
+  filterStatus.value = null;
+  // 立即在本地替换旧订单，避免等待刷新期间看到两条（旧+新）
+  const newOrder = res.data?.order;
+  if (newOrder?.order_id) {
+    const mapped = {
+      orderNumber: newOrder.order_id,
+      guestName: newOrder.guest_name,
+      phone: newOrder.phone,
+      idNumber: newOrder.id_number,
+      roomType: newOrder.room_type,
+      roomNumber: newOrder.room_number,
+      checkInDate: formatDate(newOrder.check_in_date),
+      checkOutDate: formatDate(newOrder.check_out_date),
+      status: newOrder.status,
+      paymentMethod: newOrder.payment_method,
+      roomPrice: newOrder.room_price,
+      deposit: newOrder.deposit,
+      createTime: newOrder.create_time,
+      remarks: newOrder.remarks,
+      source: newOrder.order_source,
+      sourceNumber: newOrder.id_source,
+    };
+    // 用新订单替换旧订单，避免出现两条
+    const idx = orderStore.orders.findIndex(o => o.orderNumber === orderId);
+    if (idx !== -1) {
+      orderStore.orders.splice(idx, 1, mapped);
+    } else {
+      // 若列表中找不到旧订单（例如已过滤），则添加到顶部
+      orderStore.orders.unshift(mapped);
+    }
+    // 打开新订单详情（延迟执行，避免立即触发其他刷新逻辑）
+    setTimeout(() => {
+      currentOrder.value = mapped;
+      viewOrderDetails(mapped);
+    }, 50);
+  }
+  // 不再进行后台刷新，避免不必要的网络请求导致转圈和超时
+  // 本地状态已经是最新的，无需重复获取
+    } else {
+      throw new Error(res?.message || '修改订单失败');
+    }
+  } catch (e) {
+    const msg = e.response?.data?.message || e.message || '未知错误';
+    $q.notify({ type: 'negative', message: `修改订单失败：${msg}` , position: 'top', multiLine: true });
+  }
 }
 
 // 检查是否为多日订单

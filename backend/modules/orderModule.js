@@ -1,4 +1,4 @@
-const { query } = require('../database/postgreDB/pg');
+const { query, getClient } = require('../database/postgreDB/pg');
 const shiftHandoverModule = require('./shiftHandoverModule');
 const billModule = require('./billModule');
 
@@ -41,7 +41,7 @@ function isValidOrderStatus(status) {
  * @param {Object} orderData 订单数据
  * @returns {Promise<Object|null>} 存在的订单或null
  */
-async function checkExistingOrder(orderData) {
+async function checkExistingOrder(orderData, exec = query) {
   const { guest_name, check_in_date, check_out_date, room_type } = orderData;
 
   const checkQuery = `
@@ -50,10 +50,11 @@ async function checkExistingOrder(orderData) {
     AND check_in_date = $2
     AND check_out_date = $3
     AND room_type = $4
-    AND status NOT IN ('cancelled', 'checked-out')
+  AND status NOT IN ('cancelled', 'checked-out')
+  AND COALESCE(show, true) = TRUE
   `;
 
-  const result = await query(checkQuery, [guest_name, check_in_date, check_out_date, room_type]);
+  const result = await exec(checkQuery, [guest_name, check_in_date, check_out_date, room_type]);
   return result.rows.length > 0 ? result.rows[0] : null;
 }
 
@@ -334,7 +335,7 @@ function validateOrderData(orderData) {
  * @param {Object} orderData 订单数据
  * @returns {Promise<Object>} 创建的订单
  */
-async function createOrder(orderData) {
+async function createOrder(orderData, exec = query) {
   try {
   console.log('🛠️ [createOrder] 输入原始数据:', JSON.stringify(orderData, null, 2));
     // 1. 数据验证
@@ -342,7 +343,7 @@ async function createOrder(orderData) {
   console.log('✅ [createOrder] 基础验证通过');
 
     // 2. 检查是否存在重复订单
-    const existingOrder = await checkExistingOrder(orderData);
+  const existingOrder = await checkExistingOrder(orderData, exec);
     if (existingOrder) {
       const error = new Error('订单重复');
       error.code = 'DUPLICATE_ORDER';
@@ -352,7 +353,7 @@ async function createOrder(orderData) {
 
     // 3. 验证房型是否存在
     const roomTypeQuery = 'SELECT * FROM room_types WHERE type_code = $1';
-    const roomTypeResult = await query(roomTypeQuery, [orderData.room_type]);
+  const roomTypeResult = await exec(roomTypeQuery, [orderData.room_type]);
     if (roomTypeResult.rows.length === 0) {
       const error = new Error(`房型 '${orderData.room_type}' 不存在`);
       error.code = 'INVALID_ROOM_TYPE';
@@ -361,7 +362,7 @@ async function createOrder(orderData) {
 
     // 4. 验证房间是否存在且可用
     const roomQuery = 'SELECT * FROM rooms WHERE room_number = $1';
-    const roomResult = await query(roomQuery, [orderData.room_number]);
+  const roomResult = await exec(roomQuery, [orderData.room_number]);
     if (roomResult.rows.length === 0) {
       const error = new Error(`房间号 '${orderData.room_number}' 不存在`);
       error.code = 'INVALID_ROOM_NUMBER';
@@ -381,12 +382,13 @@ async function createOrder(orderData) {
     let conflictQuery;
     let conflictParams;
 
-    if (isCurrentOrderRestRoom) {
+  if (isCurrentOrderRestRoom) {
       // 休息房冲突检查：同一天同一房间不能有其他订单（排除已取消和已退房的订单）
       conflictQuery = `
         SELECT * FROM orders
         WHERE room_number = $1
         AND status NOT IN ('cancelled', 'checked-out')
+    AND COALESCE(show, true) = TRUE
         AND (
           (check_in_date = $2) OR
           (check_out_date = $2) OR
@@ -400,6 +402,7 @@ async function createOrder(orderData) {
         SELECT * FROM orders
         WHERE room_number = $1
         AND status NOT IN ('cancelled', 'checked-out')
+    AND COALESCE(show, true) = TRUE
         AND check_in_date < $2
         AND check_out_date > $3
       `;
@@ -410,7 +413,7 @@ async function createOrder(orderData) {
       ];
     }
 
-    const conflictResult = await query(conflictQuery, conflictParams);
+  const conflictResult = await exec(conflictQuery, conflictParams);
 
     if (conflictResult.rows.length > 0) {
       const conflictOrder = conflictResult.rows[0];
@@ -506,7 +509,7 @@ async function createOrder(orderData) {
     ];
 
   console.log('🗃️ [createOrder] 即将插入 values:', values.map(v => (typeof v === 'string' && v.length > 120 ? v.slice(0,120)+'…' : v)));
-  const result = await query(insertQuery, values);
+  const result = await exec(insertQuery, values);
   console.log('✅ [createOrder] 插入成功 order_id=', result.rows[0]?.order_id);
     return result.rows[0];
 
@@ -529,7 +532,7 @@ async function createOrder(orderData) {
  */
 async function getAllOrders() {
   try {
-    const result = await query('SELECT * FROM orders ORDER BY create_time DESC');
+  const result = await query('SELECT * FROM orders WHERE COALESCE(show, true) = TRUE ORDER BY create_time DESC');
     return result.rows;
   } catch (error) {
     console.error('获取所有订单失败:', error);
@@ -573,6 +576,125 @@ async function updateOrderStatus(orderId, newStatus) {
   } catch (error) {
     console.error(`更新订单(ID: ${orderId})状态为 '${newStatus}' 失败:`, error);
     throw error;
+  }
+}
+
+/**
+ * 变更订单：插入新订单并隐藏旧订单
+ * @param {string} originalOrderId
+ * @param {Object} patch
+ * @returns {Promise<Object>} 新订单
+ */
+async function changeOrder(originalOrderId, patch = {}) {
+  // 读取原订单
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    const originRes = await client.query(`SELECT * FROM ${tableName} WHERE order_id=$1 FOR UPDATE`, [originalOrderId]);
+  if (!originRes.rows.length) {
+    const e = new Error('原订单不存在');
+    e.code = 'ORDER_NOT_FOUND';
+      throw e;
+  }
+  const original = originRes.rows[0];
+
+  // 驼峰到下划线映射
+  const mapCamelToSnake = (obj) => {
+    const m = {
+      orderNumber: 'order_id',
+      idSource: 'id_source',
+      orderSource: 'order_source',
+      guestName: 'guest_name',
+      idNumber: 'id_number',
+      roomType: 'room_type',
+      roomNumber: 'room_number',
+      checkInDate: 'check_in_date',
+      checkOutDate: 'check_out_date',
+      status: 'status',
+      paymentMethod: 'payment_method',
+      roomPrice: 'room_price',
+      deposit: 'deposit',
+      createTime: 'create_time',
+      remarks: 'remarks',
+      phone: 'phone'
+    };
+    const out = {};
+    for (const k in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, k)) {
+        out[m[k] || k] = obj[k];
+      }
+    }
+    return out;
+  };
+
+  const patchSnake = mapCamelToSnake(patch);
+  const merged = { ...original, ...patchSnake };
+
+  // 生成新订单号：以 baseId 为基准（原单或其源的“根”），按变更次数递增 -01/-02 ...，保持长度上限
+  const pickBase = original.id_source && original.id_source.trim() !== '' ? original.id_source : original.order_id;
+  // 去掉旧风格的 -rev-… 尾巴与可能已有的 -NN 数字后缀，得到“根订单号”
+  const stripRev = (s) => s.replace(/(?:-rev-[^-]+)+$/i, '');
+  const stripSeq = (s) => s.replace(/-\d{2}$/,'');
+  let baseId = stripSeq(stripRev(pickBase || ''));
+  if (!baseId) baseId = original.order_id; // 兜底
+  const cntRes = await client.query(
+    `SELECT COUNT(*)::int AS cnt FROM ${tableName} WHERE id_source=$1 OR order_id LIKE $2`,
+    [baseId, `${baseId}-%`]
+  );
+  const nextIdx = (cntRes.rows?.[0]?.cnt || 0) + 1;
+  const suffix = String(nextIdx).padStart(2, '0');
+  const newOrderId = `${baseId}-${suffix}`.slice(0, 50);
+  console.log(`[changeOrder] 使用短号逻辑 baseId=${baseId} nextIdx=${nextIdx} firstTryId=${newOrderId}`);
+
+  const makeOrderData = (oid) => ({
+    order_id: oid,
+    id_source: baseId,
+    order_source: merged.order_source,
+    guest_name: merged.guest_name,
+    phone: merged.phone,
+    id_number: merged.id_number,
+    room_type: merged.room_type,
+    room_number: merged.room_number,
+    check_in_date: merged.check_in_date,
+    check_out_date: merged.check_out_date,
+    status: merged.status,
+    payment_method: merged.payment_method,
+    room_price: merged.room_price,
+    deposit: merged.deposit,
+    create_time: new Date(),
+    remarks: merged.remarks
+  });
+
+  // 先隐藏原订单，并规范其 id_source 为根 baseId，避免计数混乱
+  await client.query(`UPDATE ${tableName} SET show=FALSE, id_source=$2 WHERE order_id=$1`, [originalOrderId, baseId]);
+  // 使用同一事务的 exec 执行器创建新订单（主键冲突时递增后缀重试），用 SAVEPOINT 保证失败后可继续
+    const exec = client.query.bind(client);
+    let inserted = null;
+    const tryMax = 10;
+  const sp = 'sp_ins';
+  await client.query(`SAVEPOINT ${sp}`);
+    for (let i = 0; i < tryMax; i++) {
+      const oid = `${baseId}-${String(nextIdx + i).padStart(2, '0')}`.slice(0, 50);
+  if (i > 0) console.log(`[changeOrder] 主键冲突重试 第${i+1}次 尝试 order_id=${oid}`);
+      try {
+        inserted = await createOrder(makeOrderData(oid), exec);
+        break;
+      } catch (e) {
+        const dup = e.code === '23505' || /orders_pkey|order_id|重复|唯一/.test(e.message || '');
+    // 回滚到保存点，清理失败的插入影响，允许下一次尝试继续
+    try { await client.query(`ROLLBACK TO SAVEPOINT ${sp}`); } catch {}
+    if (!dup || i === tryMax - 1) throw e;
+        // 冲突则继续下一轮，生成下一个序号
+      }
+    }
+    await client.query('COMMIT');
+    return inserted;
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch {}
+    if (!err.code && /(唯一|重复|冲突)/.test(err.message)) err.code = 'DUPLICATE_ORDER';
+    throw err;
+  } finally {
+    client.release();
   }
 }
 
@@ -769,6 +891,7 @@ const table = {
   getAllOrders,
   getOrderById,
   updateOrderStatus,
+  changeOrder,
   refundDeposit,
   getDepositStatus,
   isRestRoom,

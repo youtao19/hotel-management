@@ -13,50 +13,135 @@ export const useOrderStore = defineStore('order', () => {
   const loading = ref(false)
   // 错误信息
   const error = ref(null)
+  // 防抖：避免重复请求
+  let isRequesting = false
+  // 单航班：复用进行中的请求，避免并发重复刷新
+  let inFlightPromise = null
 
   // 获取所有订单
   async function fetchAllOrders() {
-    try {
-      loading.value = true
-      error.value = null
-      const response = await orderApi.getAllOrders() // 移除 /api 前缀
-      // 确保从响应的 data 属性中获取数组 (如果后端直接返回 { data: [...] } 结构)
-      // 如果后端直接返回数组，则不需要 .data.data
-      const rawOrders = response && response.data ? response.data : (Array.isArray(response) ? response : [])
-      // 映射后端字段到前端期望的字段名并处理日期格式
-      orders.value = rawOrders.map(order => ({
-        orderNumber: order.order_id,
-        guestName: order.guest_name,
-        phone: order.phone,
-        idNumber: order.id_number,
-        roomType: order.room_type,
-        roomNumber: order.room_number,
-        // 格式化日期，确保统一格式（YYYY-MM-DD）
-        checkInDate: formatOrderDate(order.check_in_date),
-        checkOutDate: formatOrderDate(order.check_out_date),
-        status: order.status,
-        paymentMethod: order.payment_method,
-        roomPrice: order.room_price,
-        deposit: order.deposit,
-        refundedDeposit: order.refunded_deposit || 0,
-  // refundRecords / refundedDeposit 改为由账单层获取，这里先占位0与空数组（调用端如需精确数据应查询账单）
-  refundRecords: [],
-        createTime: order.create_time,
-        remarks: order.remarks,
-        source: order.order_source,
-        sourceNumber: order.id_source
-      }))
-    } catch (err) {
-      console.error('获取订单数据失败:', err.response ? err.response.data : err.message)
-      // 检查 err.message 是否已经是 HTML 字符串
-      const errorMessage = typeof err.message === 'string' && err.message.startsWith('<!DOCTYPE html>')
-                          ? '获取订单数据失败: 后端返回HTML错误页面'
-                          : (err.response?.data?.message || err.message || '获取订单数据失败');
-      error.value = errorMessage;
-      orders.value = []; // 获取失败时清空订单
-    } finally {
-      loading.value = false
+    // 单航班：若已存在进行中的请求，直接复用
+    if (inFlightPromise) {
+      console.log('复用进行中的订单请求');
+      return inFlightPromise;
     }
+
+    // 先创建单航班承诺，避免 isRequesting 与 inFlightPromise 之间的竞态
+    inFlightPromise = (async () => {
+      isRequesting = true;
+      loading.value = true;
+      error.value = null;
+      try {
+        // 优先使用带重试机制的API，提升手动刷新的成功率
+        console.log('开始获取订单数据...');
+        const response = await orderApi.getAllOrdersWithGrace();
+        // 兼容多种返回结构：{data:[...]}, {data:{data:[...]}}, 直接数组
+        const rawOrders = Array.isArray(response)
+          ? response
+          : (Array.isArray(response?.data)
+              ? response.data
+              : (Array.isArray(response?.data?.data) ? response.data.data : []));
+        // 映射后端字段到前端期望的字段名并处理日期格式
+        orders.value = rawOrders.map(order => ({
+          orderNumber: order.order_id,
+          guestName: order.guest_name,
+          phone: order.phone,
+          idNumber: order.id_number,
+          roomType: order.room_type,
+          roomNumber: order.room_number,
+          // 格式化日期，确保统一格式（YYYY-MM-DD）
+          checkInDate: formatOrderDate(order.check_in_date),
+          checkOutDate: formatOrderDate(order.check_out_date),
+          status: order.status,
+          paymentMethod: order.payment_method,
+          roomPrice: order.room_price,
+          deposit: order.deposit,
+          refundedDeposit: order.refunded_deposit || 0,
+          // refundRecords / refundedDeposit 改为由账单层获取，这里先占位0与空数组（调用端如需精确数据应查询账单）
+          refundRecords: [],
+          createTime: order.create_time,
+          remarks: order.remarks,
+          source: order.order_source,
+          sourceNumber: order.id_source
+        }));
+        console.log('订单数据获取成功，共', orders.value.length, '条');
+      } catch (err) {
+        console.error('获取订单数据失败:', err.response ? err.response.data : err.message);
+        const errorMessage = typeof err.message === 'string' && err.message.startsWith('<!DOCTYPE html>')
+                            ? '获取订单数据失败: 后端返回HTML错误页面'
+                            : (err.response?.data?.message || err.message || '获取订单数据失败');
+        error.value = errorMessage;
+        throw err;
+      } finally {
+        loading.value = false;
+        isRequesting = false;
+        inFlightPromise = null;
+      }
+    })();
+
+    return inFlightPromise;
+  }
+
+  // 强制刷新订单数据（跳过防抖，用于手动刷新）
+  async function forceRefreshOrders() {
+    // 手动刷新同样遵循单航班：有进行中请求则复用
+    if (inFlightPromise) {
+      console.log('手动刷新复用进行中的订单请求');
+      return inFlightPromise;
+    }
+
+    console.log('强制刷新订单数据...');
+    // 先创建单航班承诺，内部再设置进行中标记，避免竞态
+    inFlightPromise = (async () => {
+      isRequesting = true;
+      loading.value = true;
+      error.value = null;
+      try {
+        const response = await orderApi.getAllOrdersWithGrace();
+        // 处理响应数据（复用相同的处理逻辑）
+        const rawOrders = Array.isArray(response)
+          ? response
+          : (Array.isArray(response?.data)
+              ? response.data
+              : (Array.isArray(response?.data?.data) ? response.data.data : []));
+
+        orders.value = rawOrders.map(order => ({
+          orderNumber: order.order_id,
+          guestName: order.guest_name,
+          phone: order.phone,
+          idNumber: order.id_number,
+          roomType: order.room_type,
+          roomNumber: order.room_number,
+          checkInDate: formatOrderDate(order.check_in_date),
+          checkOutDate: formatOrderDate(order.check_out_date),
+          status: order.status,
+          paymentMethod: order.payment_method,
+          roomPrice: order.room_price,
+          deposit: order.deposit,
+          refundedDeposit: order.refunded_deposit || 0,
+          refundRecords: [],
+          createTime: order.create_time,
+          remarks: order.remarks,
+          source: order.order_source,
+          sourceNumber: order.id_source
+        }));
+
+        console.log('强制刷新完成，共', orders.value.length, '条');
+      } catch (err) {
+        console.error('强制刷新失败:', err.message);
+        const errorMessage = typeof err.message === 'string' && err.message.startsWith('<!DOCTYPE html>')
+                            ? '获取订单数据失败: 后端返回HTML错误页面'
+                            : (err.response?.data?.message || err.message || '获取订单数据失败');
+        error.value = errorMessage;
+        throw err;
+      } finally {
+        loading.value = false;
+        isRequesting = false;
+        inFlightPromise = null;
+      }
+    })();
+
+    return inFlightPromise;
   }
 
   /**
@@ -446,6 +531,7 @@ export const useOrderStore = defineStore('order', () => {
     addOrder,
     getAllOrdersLocal,
     fetchAllOrders,
+    forceRefreshOrders,
     updateOrderStatusLocally,
     updateOrderStatusViaApi,
     updateOrderCheckOutLocally,
