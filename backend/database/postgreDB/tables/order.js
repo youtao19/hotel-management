@@ -15,9 +15,10 @@ const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
     check_out_date DATE NOT NULL, -- 离店日期
     status VARCHAR(20) NOT NULL, -- 订单状态
     payment_method VARCHAR(20), -- 支付方式
-  room_price JSONB NOT NULL, -- 房间价格(JSON格式: {"YYYY-MM-DD": 价格} 或 数字)
+    room_price JSONB NOT NULL, -- 房间价格(JSON格式: {"YYYY-MM-DD": 价格} 或 数字)
     deposit DECIMAL(10,2), -- 押金
     create_time TIMESTAMP NOT NULL, -- 创建时间
+    show BOOLEAN DEFAULT TRUE, -- 是否显示
     remarks TEXT, -- 备注
     FOREIGN KEY (room_type) REFERENCES room_types(type_code), -- 房间类型外键
     FOREIGN KEY (room_number) REFERENCES rooms(room_number), -- 房间号外键

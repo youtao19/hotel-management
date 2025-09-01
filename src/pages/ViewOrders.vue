@@ -101,6 +101,7 @@
       @change-room="openChangeRoomDialog"
       @checkout="checkoutOrderFromDetails"
       @refund-deposit="openRefundDepositFromDetails"
+      @change-order="openChangeOrderDialog"
     />
 
 
@@ -140,7 +141,12 @@
       @refund-deposit="handleRefundDeposit"
     />
 
-
+    <!-- 修改订单对话框 -->
+    <ChangeOrderDialog
+      v-model="showChangeOrderDialog"
+      :order="currentOrder"
+      @change-order="openChangeOrderDialog"
+    />
 
     </div>
   </q-page>
@@ -159,6 +165,7 @@ import ChangeRoomDialog from 'src/components/ChangeRoomDialog.vue';
 import Bill from 'src/components/Bill.vue';
 import ExtendStayDialog from 'src/components/ExtendStayDialog.vue';
 import RefundDepositDialog from 'src/components/RefundDepositDialog.vue';
+import ChangeOrderDialog from 'src/components/ChangeOrderDialog.vue';
 
 
 // 初始化 stores
@@ -172,6 +179,10 @@ const $q = useQuasar() // 初始化 $q 对象
 const searchQuery = ref('')
 const filterStatus = ref(null)
 const loadingOrders = ref(false)
+
+// 修改订单对话框
+const showChangeOrderDialog = ref(false)
+
 
 // 订单状态选项
 const statusOptions = [
@@ -1121,6 +1132,10 @@ async function handleRefundDeposit(refundData) {
       position: 'top'
     })
   }
+}
+
+function openChangeOrderDialog() {
+  showChangeOrderDialog.value = true;
 }
 
 // 检查是否为多日订单

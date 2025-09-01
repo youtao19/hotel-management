@@ -184,7 +184,18 @@
       </q-card-section>
 
       <q-card-actions align="right">
-        <q-btn flat label="关闭" color="primary" v-close-popup />
+        <q-btn
+          flat
+          label="修改订单"
+          color="secondary"
+          @click="emitChangeOrder"
+        />
+        <q-btn
+          flat
+          label="关闭"
+          color="primary"
+          v-close-popup
+        />
         <q-btn
           v-if="currentOrder && currentOrder.status === 'pending'"
           flat
@@ -222,7 +233,7 @@
 </template>
 
 <script setup>
-import { toRefs, computed } from 'vue';
+import { computed } from 'vue';
 
 const props = defineProps({
   modelValue: Boolean,
@@ -235,7 +246,14 @@ const props = defineProps({
   formatDateTime: Function
 });
 
-const emit = defineEmits(['update:modelValue', 'check-in', 'change-room', 'checkout', 'refund-deposit']);
+const emit = defineEmits([
+  'update:modelValue',
+  'check-in',
+  'change-room',
+  'checkout',
+  'refund-deposit',
+  'change-order'
+]);
 
 function emitCheckIn() {
   emit('check-in');
@@ -249,6 +267,10 @@ function emitCheckout() {
 
 function emitRefundDeposit() {
   emit('refund-deposit');
+}
+
+function emitChangeOrder() {
+  emit('change-order');
 }
 
 import { useBillStore } from 'src/stores/billStore'
@@ -314,4 +336,6 @@ const remainingDeposit = computed(() => {
   const left = (Number(depositAmount.value) || 0) - (Number(refundedAmount.value) || 0)
   return left > 0 ? Number(left.toFixed(2)) : 0
 })
+
+
 </script>
