@@ -547,7 +547,6 @@ watch([cashierName, notes, totalRooms, restRooms, vipCards, goodReview], () => {
 // 刷新所有数据的统一入口函数
 async function refreshAllData() {
   try {
-  loadingShow({ message: '加载数据中...' })
 
     // 确保合计正确计算
     calculateTotals()

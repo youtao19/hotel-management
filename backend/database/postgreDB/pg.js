@@ -19,6 +19,8 @@ const { getConfig } = require('./dbConfig');
 
 const dbConfig = getConfig();
 
+dbConfig.connectionTimeoutMillis = 20000; // 增加连接超时时间
+
 // 创建连接池实例
 let pool = null;
 

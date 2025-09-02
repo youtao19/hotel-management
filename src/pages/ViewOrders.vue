@@ -449,24 +449,36 @@ async function performCheckOut(order) {
         message: '办理退房失败，请重试',
         position: 'top'
       });
+      loadingOrders.value = false; // 失败时也需要停止loading
       return;
     }
 
-    // 获取房间并将状态更改为清洁中
-  const room = await roomStore.getRoomByNumber(order.roomNumber);
-    if (room && room.room_id) {
-      const roomUpdateSuccess = await roomStore.checkOutRoom(room.room_id);
-      if (!roomUpdateSuccess) {
-        $q.notify({
-          type: 'warning',
-          message: '订单已退房，但更新房间状态为清洁中失败，请检查房间状态！',
-          position: 'top',
-          multiLine: true
-        });
-      } else {
-        await roomStore.fetchAllRooms(); // 刷新房间列表
+    // --- 异步更新房间状态，不阻塞UI ---
+    // 使用.then()处理后续操作，即使失败也不影响主流程
+    roomStore.getRoomByNumber(order.roomNumber).then(async (room) => {
+      if (room && room.room_id) {
+        const roomUpdateSuccess = await roomStore.checkOutRoom(room.room_id);
+        if (roomUpdateSuccess) {
+          await roomStore.fetchAllRooms(); // 刷新房间列表
+        } else {
+           $q.notify({
+            type: 'warning',
+            message: `房间${order.roomNumber}状态更新失败，请手动设置为“清扫中”`,
+            position: 'bottom-right',
+            timeout: 7000
+          });
+        }
       }
-    }
+    }).catch(err => {
+       console.error(`获取房间 ${order.roomNumber} 信息失败，无法自动更新其状态:`, err);
+       $q.notify({
+          type: 'warning',
+          message: `无法自动更新房间${order.roomNumber}状态，请手动操作`,
+          position: 'bottom-right',
+          timeout: 7000
+        });
+    });
+
 
     // 更新当前正在查看的订单详情
     if (currentOrder.value && currentOrder.value.orderNumber === order.orderNumber) {
