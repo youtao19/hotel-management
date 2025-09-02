@@ -8,6 +8,7 @@ const addRefundFieldsToOrders = require('./add_refund_fields_to_orders');
 const createReviewInvitationsTable = require('./create_review_invitations_table');
 const removeReviewFieldsFromBills = require('./remove_review_fields_from_bills');
 const makeRefundTimeNullable = require('./make_refund_time_nullable');
+const createOrderChangesTable = require('./create_order_changes_table');
 
 /**
  * 执行所有迁移
@@ -26,6 +27,7 @@ async function runMigrations() {
     await createReviewInvitationsTable.migrate();
     await removeReviewFieldsFromBills.migrate();
     await makeRefundTimeNullable.migrate();
+  await createOrderChangesTable.migrate();
 
     console.log('所有迁移执行完成');
     process.exit(0);

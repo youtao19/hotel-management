@@ -233,6 +233,23 @@ router.post('/:orderNumber/status', authenticationMiddleware, [
 });
 
 /**
+ * 更新订单
+ * PUT /api/orders/:orderNumber
+ */
+router.put('/:orderNumber', authenticationMiddleware, async (req, res) => {
+    const { orderNumber } = req.params;
+    const updatedFields = req.body;
+
+    try {
+        const updatedOrder = await orderModule.updateOrder(orderNumber, updatedFields);
+        res.json({ success: true, message: '订单更新成功', data: updatedOrder });
+    } catch (error) {
+        console.error(`更新订单 ${orderNumber} 失败:`, error);
+        res.status(500).json({ success: false, message: '更新订单失败', error: error.message });
+    }
+});
+
+/**
  * 退押金
  * POST /api/orders/:orderNumber/refund-deposit
  */

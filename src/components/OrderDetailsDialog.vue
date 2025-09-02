@@ -130,17 +130,8 @@
               </q-item>
               <q-item>
                 <q-item-section>
-                  <q-item-label caption>当日房价</q-item-label>
-                  <q-item-label class="text-primary text-weight-medium">
-                    <span v-if="displayTodayPrice !== null">¥{{ displayTodayPrice }}</span>
-                    <span v-else class="text-grey">—</span>
-                  </q-item-label>
-                </q-item-section>
-              </q-item>
-              <q-item>
-                <q-item-section>
                   <q-item-label caption>房间金额</q-item-label>
-                  <q-item-label class="text-primary text-weight-medium">¥{{ totalRoomPrice }}</q-item-label>
+                  <q-item-label class="text-primary text-weight-medium">¥{{ currentOrder.roomPrice }}</q-item-label>
                 </q-item-section>
               </q-item>
               <q-item>
@@ -193,17 +184,13 @@
       </q-card-section>
 
       <q-card-actions align="right">
+        <q-btn flat label="关闭" color="primary" v-close-popup />
         <q-btn
+          v-if="currentOrder && (currentOrder.status === 'pending' || currentOrder.status === 'checked-in' || currentOrder.status === 'checked-out')"
           flat
-          label="修改订单"
-          color="secondary"
-          @click="emitChangeOrder"
-        />
-        <q-btn
-          flat
-          label="关闭"
+          label="更改订单"
           color="primary"
-          v-close-popup
+          @click="emitChangeOrder"
         />
         <q-btn
           v-if="currentOrder && currentOrder.status === 'pending'"
@@ -242,7 +229,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { toRefs, computed } from 'vue';
 
 const props = defineProps({
   modelValue: Boolean,
@@ -255,14 +242,11 @@ const props = defineProps({
   formatDateTime: Function
 });
 
-const emit = defineEmits([
-  'update:modelValue',
-  'check-in',
-  'change-room',
-  'checkout',
-  'refund-deposit',
-  'change-order'
-]);
+const emit = defineEmits(['update:modelValue', 'check-in', 'change-room', 'checkout', 'refund-deposit', 'change-order']);
+
+function emitChangeOrder() {
+  emit('change-order');
+}
 
 function emitCheckIn() {
   emit('check-in');
@@ -276,10 +260,6 @@ function emitCheckout() {
 
 function emitRefundDeposit() {
   emit('refund-deposit');
-}
-
-function emitChangeOrder() {
-  emit('change-order');
 }
 
 import { useBillStore } from 'src/stores/billStore'
@@ -345,55 +325,4 @@ const remainingDeposit = computed(() => {
   const left = (Number(depositAmount.value) || 0) - (Number(refundedAmount.value) || 0)
   return left > 0 ? Number(left.toFixed(2)) : 0
 })
-
-// ====== 房价显示（支持单价或按日价格对象）======
-const isObjectPrice = computed(() => {
-  const rp = props.currentOrder?.roomPrice
-  return rp && typeof rp === 'object' && rp !== null
-})
-
-const totalRoomPrice = computed(() => {
-  if (!props.currentOrder) return 0
-  const rp = props.currentOrder.roomPrice
-  if (!isObjectPrice.value) return Number(rp || 0)
-  // 合计多日价格
-  return Object.values(rp).reduce((sum, v) => sum + (Number(v) || 0), 0)
-})
-
-function toYmd(d) {
-  const dt = typeof d === 'string' ? new Date(d) : d
-  const y = dt.getFullYear()
-  const m = String(dt.getMonth() + 1).padStart(2, '0')
-  const day = String(dt.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
-const displayTodayPrice = computed(() => {
-  if (!props.currentOrder) return null
-  const rp = props.currentOrder.roomPrice
-  if (!rp) return null
-  // 单价：直接返回
-  if (!isObjectPrice.value) return Number(rp)
-  // 多日价格：优先“已入住”当天价格；否则显示入住当日价格
-  const today = toYmd(new Date())
-  const checkIn = props.currentOrder.checkInDate
-  const checkOut = props.currentOrder.checkOutDate
-  const status = props.currentOrder.status
-  // 判断 today 是否在入住区间 [checkIn, checkOut) 内
-  const inStayRange = () => {
-    if (!checkIn || !checkOut) return false
-    return today >= checkIn && today < checkOut
-  }
-  if (status === 'checked-in' && inStayRange() && rp[today] != null) {
-    return Number(rp[today]) || 0
-  }
-  // 退一步：显示入住当日价格
-  if (checkIn && rp[checkIn] != null) return Number(rp[checkIn]) || 0
-  // 再退一步：按最早一天展示
-  const keys = Object.keys(rp).sort()
-  if (keys.length) return Number(rp[keys[0]]) || 0
-  return null
-})
-
-
 </script>

@@ -22,28 +22,24 @@
           <q-btn color="primary" label="搜索" class="full-width" @click="searchOrders" />
         </div>
       </div>
-      <div class="row q-mt-sm">
+    </div>
+
+    <!-- 添加错误提示和重试按钮 -->
+    <div v-if="fetchError" class="q-pa-md bg-red-1 text-red q-mb-md">
+      <div class="row items-center">
+        <q-icon name="error" size="md" class="q-mr-sm" />
         <div class="col">
-          <q-btn 
-            flat 
-            dense 
-            color="primary" 
-            icon="refresh" 
-            label="刷新订单" 
-            size="sm"
-            @click="handleManualRefresh"
-            :loading="loadingOrders || orderStore.loading"
-          >
-            <q-tooltip>重新获取最新订单数据</q-tooltip>
-          </q-btn>
+          <div class="text-bold">加载订单数据失败</div>
+          <div>{{ fetchError }}</div>
         </div>
+        <q-btn color="primary" label="重试" @click="retryFetchOrders" :loading="loadingOrders" />
       </div>
     </div>
 
     <q-card>
       <q-card-section>
         <q-table :rows="filteredOrders" :columns="orderColumns" row-key="orderNumber" :pagination="{ rowsPerPage: 10 }"
-          :loading="loadingOrders || orderStore.loading" no-data-label="没有找到订单">
+          :loading="loadingOrders" no-data-label="没有找到订单">
           <template v-slot:loading>
             <q-inner-loading showing color="primary" />
           </template>
@@ -73,6 +69,10 @@
                 <q-btn flat round dense color="purple" icon="account_balance_wallet" @click="openRefundDepositDialog(props.row)"
                   v-if="canRefundDeposit(props.row)">
                   <q-tooltip>退押金</q-tooltip>
+                </q-btn>
+                <q-btn flat round dense color="secondary" icon="edit" @click="openChangeOrderDialog"
+                  v-if="props.row.status !== 'checked-out'">
+                  <q-tooltip>更改订单</q-tooltip>
                 </q-btn>
               </q-btn-group>
             </q-td>
@@ -121,6 +121,15 @@
     />
 
 
+    <!-- 更改订单对话框 -->
+    <ChangeOrderDialog
+      v-model="showChangeOrderDialog"
+      :order="currentOrder"
+      :availableRooms="changeOrderRooms"
+      :getRoomTypeName="getRoomTypeName"
+      @order-updated="handleOrderUpdated"
+    />
+
     <!-- 更改房间对话框 -->
     <ChangeRoomDialog
       v-model="showChangeRoomDialog"
@@ -157,14 +166,7 @@
       @refund-deposit="handleRefundDeposit"
     />
 
-    <!-- 修改订单对话框 -->
-    <ChangeOrderDialog
-      v-if="currentOrder"
-      v-model="showChangeOrderDialog"
-      :order="currentOrder"
-      :roomTypeOptions="viewStore.roomTypeOptions"
-      @change-order="handleChangeOrder"
-    />
+
 
     </div>
   </q-page>
@@ -177,13 +179,13 @@ import { useOrderStore } from '../stores/orderStore' // 导入订单 store
 import { useRoomStore } from '../stores/roomStore' // 导入房间 store
 import { useViewStore } from '../stores/viewStore' // 导入视图 store
 import { useBillStore } from '../stores/billStore' // 导入账单 store
-import { roomApi, orderApi } from '../api/index.js' // 导入API
+import { roomApi } from '../api/index.js' // 导入房间API
 import OrderDetailsDialog from 'src/components/OrderDetailsDialog.vue';
+import ChangeOrderDialog from 'src/components/ChangeOrderDialog.vue';
 import ChangeRoomDialog from 'src/components/ChangeRoomDialog.vue';
 import Bill from 'src/components/Bill.vue';
 import ExtendStayDialog from 'src/components/ExtendStayDialog.vue';
 import RefundDepositDialog from 'src/components/RefundDepositDialog.vue';
-import ChangeOrderDialog from 'src/components/ChangeOrderDialog.vue';
 
 
 // 初始化 stores
@@ -197,10 +199,7 @@ const $q = useQuasar() // 初始化 $q 对象
 const searchQuery = ref('')
 const filterStatus = ref(null)
 const loadingOrders = ref(false)
-
-// 修改订单对话框
-const showChangeOrderDialog = ref(false)
-
+const fetchError = ref(null) // 新增：用于显示获取订单数据的错误
 
 // 订单状态选项
 const statusOptions = [
@@ -302,80 +301,45 @@ const filteredOrders = computed(() => {
   return result
 })
 
-// 获取所有订单数据
+// 获取所有订单数据 - 增强错误处理
 async function fetchAllOrders() {
   try {
-    loadingOrders.value = true;
-    await orderStore.fetchAllOrders();
-    console.log('获取到的订单数据:', orderStore.orders);
+    fetchError.value = null // 清除之前的错误
+    loadingOrders.value = true
+
+    await orderStore.fetchAllOrders()
+    console.log('获取到的订单数据:', orderStore.orders)
+
   } catch (error) {
-    console.error('获取订单数据失败:', error);
-    
-    let message = '获取订单数据失败';
-    if (error.code === 'ECONNABORTED') {
-      message = '请求超时，正在自动重试...';
-    } else if (error.code === 'ECONNREFUSED') {
-      message = '无法连接到服务器，请检查网络连接';
-    } else if (error.message?.includes('timeout')) {
-      message = '请求超时，已自动重试多次，请稍后手动刷新';
-    }
-    
+    console.error('获取订单数据失败:', error)
+    const errorMessage = error.code === 'ECONNABORTED'
+      ? '请求超时，服务器响应时间过长，请稍后重试'
+      : (error.message || '请刷新页面重试')
+
+    fetchError.value = errorMessage
+
     $q.notify({
       type: 'negative',
-      message: message,
+      message: '获取订单数据失败: ' + errorMessage,
       position: 'top',
-      timeout: 5000,
-      actions: [
-        {
-          icon: 'refresh',
-          color: 'white',
-          handler: () => {
-            fetchAllOrders();
-          }
-        }
-      ]
-    });
+      timeout: 5000
+    })
   } finally {
-    loadingOrders.value = false;
+    loadingOrders.value = false
   }
 }
 
-// 手动刷新订单数据（强制刷新，跳过防抖）
-async function handleManualRefresh() {
-  try {
-    console.log('执行手动强制刷新...');
-    await orderStore.forceRefreshOrders();
-    $q.notify({
-      type: 'positive',
-      message: '订单数据刷新成功',
-      position: 'top',
-      timeout: 2000
-    });
-  } catch (error) {
-    console.error('手动刷新失败:', error);
-    
-    let message = '手动刷新失败';
-    if (error.code === 'ECONNABORTED') {
-      message = '请求超时，请检查网络连接';
-    } else if (error.code === 'ECONNREFUSED') {
-      message = '无法连接到服务器，请检查网络连接';
-    } else if (error.message?.includes('timeout')) {
-      message = '请求超时，请稍后再试';
-    }
-    
-    $q.notify({
-      type: 'negative',
-      message: message,
-      position: 'top',
-      timeout: 5000
-    });
-  }
+// 重试获取订单
+async function retryFetchOrders() {
+  await fetchAllOrders()
 }
 
 // 订单详情相关
 const showOrderDetails = ref(false)
 const currentOrder = ref(null)
 const showChangeRoomDialog = ref(false)
+const showChangeOrderDialog = ref(false)
+const changeOrderRooms = ref([]) // 修复：添加缺少的右括号
 
 // 在 script 部分添加相关变量和方法
 const availableRoomOptions = ref([]); // 用于存储从API获取的可用房间选项
@@ -429,8 +393,8 @@ async function cancelOrder(order) {
       });
     } finally {
       loadingOrders.value = false;
-      // 移除自动刷新，避免不必要的网络请求
-      // 用户可以手动刷新页面获取最新状态
+      // 确保订单列表刷新以反映任何变化
+      fetchAllOrders();
     }
   }
 }
@@ -545,14 +509,14 @@ function searchOrders() {
   console.log('搜索订单:', searchQuery.value, filterStatus.value);
 
   // 设置加载状态
-  loadingOrders.value = true;
+  // loadingOrders.value = true;
 
-  // 短暂延迟模拟数据刷新，确保UI能够响应数据变化
-  setTimeout(() => {
-    // 不需要额外操作，filteredOrders计算属性会自动重新计算
-    // 这里的setTimeout只是为了确保UI触发更新
-    loadingOrders.value = false;
-  }, 100);
+  // // 短暂延迟模拟数据刷新，确保UI能够响应数据变化
+  // setTimeout(() => {
+  //   // 不需要额外操作，filteredOrders计算属性会自动重新计算
+  //   // 这里的setTimeout只是为了确保UI触发更新
+  //   loadingOrders.value = false;
+  // }, 100);
 }
 
 // 获取房间类型名称
@@ -611,7 +575,8 @@ async function performCheckIn(order) {
       // 注意：此时订单状态可能已经更新，但房间状态未更新。需要考虑回滚或提示用户手动处理。
       $q.notify({ type: 'warning', message: '订单已更新为入住，但预订的房间信息未找到，请检查房间状态！', position: 'top', multiLine: true });
       loadingOrders.value = false;
-      // 移除自动刷新，避免不必要的网络请求导致转圈
+      // 刷新订单列表以显示最新状态
+      fetchAllOrders();
       return;
     }
 
@@ -648,7 +613,8 @@ async function performCheckIn(order) {
     });
   } finally {
     loadingOrders.value = false;
-    // 移除自动刷新，避免不必要的网络请求导致转圈
+    // 确保订单列表刷新以反映任何变化（即使是失败的情况）
+    fetchAllOrders();
   }
 }
 
@@ -1108,7 +1074,7 @@ const billDepositInfoMap = computed(() => {
   // order_id -> { deposit, refunded }
   const map = {}
   billStore.bills.forEach(b => {
-    // 锁定第一张含押金账单
+    // 锁定第一张含押金的账单
     if (!map[b.order_id] && (b.deposit || 0) > 0) {
       const deposit = Number(b.deposit) || 0
       const refunded = Math.abs(Number(b.refund_deposit) || 0) // refund_deposit 为负数
@@ -1202,72 +1168,88 @@ async function handleRefundDeposit(refundData) {
   }
 }
 
-function openChangeOrderDialog(order) {
-  // 允许从详情对话框直接触发（无参数），也允许从行操作传入订单
-  if (order) currentOrder.value = order
-  if (!currentOrder.value) return
-  showChangeOrderDialog.value = true
+// 打开更改订单对话框
+async function openChangeOrderDialog() {
+  if (!currentOrder.value) return;
+  try {
+    const startDate = formatDate(currentOrder.value.checkInDate)
+    const endDate = formatDate(currentOrder.value.checkOutDate)
+    if (!startDate || !endDate) {
+      $q.notify({ type: 'negative', message: '订单日期无效，无法加载可用房间', position: 'top' })
+      return
+    }
+    const rooms = await roomStore.getAvailableRoomsByDate(startDate, endDate)
+    // 把当前房间也加入选项，方便保留不变
+    const currentRoom = roomStore.getRoomByNumber(currentOrder.value.roomNumber)
+    const merged = [...rooms]
+    if (currentRoom) {
+      const exists = merged.find(r => r.room_number === currentRoom.room_number)
+      if (!exists) merged.unshift(currentRoom)
+    }
+    changeOrderRooms.value = merged
+  } catch (e) {
+    console.warn('加载更改订单可用房间失败:', e)
+    changeOrderRooms.value = []
+  } finally {
+    showChangeOrderDialog.value = true
+  }
 }
 
-// 提交修改订单
-async function handleChangeOrder(patch) {
+// 处理订单更新 - 修复通知处理逻辑
+async function handleOrderUpdated(updatedOrderData) {
+  const dismiss = $q.notify({
+    type: 'ongoing',
+    message: '正在更新订单信息...',
+    position: 'top',
+    timeout: 0,
+    progress: true
+  });
+
   try {
-    if (!currentOrder.value || !currentOrder.value.orderNumber) {
-      $q.notify({ type: 'negative', message: '当前订单无效，无法修改', position: 'top' });
-      return;
+    // 先关闭对话框
+    showChangeOrderDialog.value = false;
+    loadingOrders.value = true;
+    fetchError.value = null;
+
+    // 调用API更新订单
+    await orderStore.updateOrder(updatedOrderData.orderNumber, updatedOrderData);
+
+    // 更新成功，显示成功通知
+    dismiss(); // 先关闭进行中的通知
+    $q.notify({
+      type: 'positive',
+      message: '订单信息更新成功',
+      position: 'top',
+      timeout: 2000
+    });
+
+    // 刷新列表 - orderStore.updateOrder 内部已经调用了 fetchAllOrders
+
+    // 如果正在查看该订单的详情，更新详情数据
+    if (currentOrder.value && currentOrder.value.orderNumber === updatedOrderData.orderNumber) {
+      const freshOrder = await orderStore.getOrderByNumber(updatedOrderData.orderNumber, true);
+      if (freshOrder) {
+        currentOrder.value = { ...freshOrder };
+      }
     }
-    const orderId = currentOrder.value.orderNumber;
-    const res = await orderApi.changeOrder(orderId, patch);
-    if (res?.success) {
-      $q.notify({ type: 'positive', message: '订单修改成功，已生成新订单', position: 'top' });
-      showChangeOrderDialog.value = false;
-      showOrderDetails.value = false;
-  // 清空搜索与过滤，避免旧订单号筛选导致空列表
-  searchQuery.value = '';
-  filterStatus.value = null;
-  // 立即在本地替换旧订单，避免等待刷新期间看到两条（旧+新）
-  const newOrder = res.data?.order;
-  if (newOrder?.order_id) {
-    const mapped = {
-      orderNumber: newOrder.order_id,
-      guestName: newOrder.guest_name,
-      phone: newOrder.phone,
-      idNumber: newOrder.id_number,
-      roomType: newOrder.room_type,
-      roomNumber: newOrder.room_number,
-      checkInDate: formatDate(newOrder.check_in_date),
-      checkOutDate: formatDate(newOrder.check_out_date),
-      status: newOrder.status,
-      paymentMethod: newOrder.payment_method,
-      roomPrice: newOrder.room_price,
-      deposit: newOrder.deposit,
-      createTime: newOrder.create_time,
-      remarks: newOrder.remarks,
-      source: newOrder.order_source,
-      sourceNumber: newOrder.id_source,
-    };
-    // 用新订单替换旧订单，避免出现两条
-    const idx = orderStore.orders.findIndex(o => o.orderNumber === orderId);
-    if (idx !== -1) {
-      orderStore.orders.splice(idx, 1, mapped);
-    } else {
-      // 若列表中找不到旧订单（例如已过滤），则添加到顶部
-      orderStore.orders.unshift(mapped);
+
+  } catch (error) {
+    dismiss(); // 确保出错时也关闭通知
+    console.error('更新订单失败:', error);
+
+    $q.notify({
+      type: 'negative',
+      message: '更新订单失败: ' + (error.message || '未知错误'),
+      position: 'top',
+      timeout: 5000
+    });
+
+  } finally {
+    loadingOrders.value = false;
+    // 确保万无一失，再次检查并关闭
+    if (typeof dismiss === 'function') {
+      dismiss();
     }
-    // 打开新订单详情（延迟执行，避免立即触发其他刷新逻辑）
-    setTimeout(() => {
-      currentOrder.value = mapped;
-      viewOrderDetails(mapped);
-    }, 50);
-  }
-  // 不再进行后台刷新，避免不必要的网络请求导致转圈和超时
-  // 本地状态已经是最新的，无需重复获取
-    } else {
-      throw new Error(res?.message || '修改订单失败');
-    }
-  } catch (e) {
-    const msg = e.response?.data?.message || e.message || '未知错误';
-    $q.notify({ type: 'negative', message: `修改订单失败：${msg}` , position: 'top', multiLine: true });
   }
 }
 
@@ -1285,13 +1267,25 @@ function checkIfMultiDayOrder(order) {
 }
 
 onMounted(async () => {
-  await fetchAllOrders()
-  // 加载账单数据以支持退押按钮显示逻辑
-  try { await billStore.fetchAllBills() } catch (e) { console.warn('加载账单失败(不影响订单显示):', e.message) }
+  try {
+    await fetchAllOrders()
+    // 加载账单数据以支持退押按钮显示逻辑
+    try {
+      await billStore.fetchAllBills()
+    } catch (e) {
+      console.warn('加载账单失败(不影响订单显示):', e.message)
+    }
+  } catch (error) {
+    console.error('初始化数据失败:', error)
+  }
 })
 </script>
 
 <style scoped>
+.view-orders {
+  max-width: 1200px;
+  margin: 0 auto;
+}
 .view-orders {
   max-width: 1200px;
   margin: 0 auto;

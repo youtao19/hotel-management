@@ -19,9 +19,11 @@
         "start": "concurrently \"npm run devStart\" \"npm run dev\"",
         "devStart": "cross-env NODE_ENV=dev nodemon server.js",
         "export-schema": "node scripts/exportSchema.js",
-        "export-structure": "node scripts/exportStructure.js",
+    "export-structure": "node scripts/exportStructure.js",
         "export-all": "node scripts/exportAll.js",
         "db:backup": "node scripts/exportAll.js",
+    "db:init": "node -e \"require('./backend/database/postgreDB/pg').initializeHotelDB()\"",
+    "db:migrate": "node backend/database/postgreDB/migrations/run-migrations.js",
         "migrate:shift-handover": "node scripts/migrateShiftHandover.js",
         "remove-html-snapshot": "node scripts/removeHtmlSnapshotFields.js",
         "fix-pay-way-field": "node scripts/fixPayWayFieldLength.js"

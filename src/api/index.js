@@ -3,7 +3,7 @@ import axios from 'axios'
 // 创建axios实例
 const api = axios.create({
   baseURL: 'http://localhost:3000/api', // 后端API运行在3000端口
-  timeout: 20000, // 基础请求超时时间
+  timeout: 30000, // 增加到30秒
   withCredentials: false // 避免CORS预检请求
 })
 
@@ -28,7 +28,23 @@ api.interceptors.response.use(
     // 直接返回响应数据，无需解析
     return response.data
   },
-  error => {
+  async error => {
+    const originalRequest = error.config
+
+    // 如果是超时错误且没有重试过
+    if (error.code === 'ECONNABORTED' && error.message.includes('timeout') && !originalRequest._retry) {
+      console.log('请求超时，正在重试...')
+      originalRequest._retry = true
+      originalRequest.timeout = 60000 // 重试时使用更长的超时时间
+
+      try {
+        return await api(originalRequest)
+      } catch (retryError) {
+        console.error('重试请求失败:', retryError)
+        return Promise.reject(retryError)
+      }
+    }
+
     // 处理错误响应
     console.error('API请求错误:', error.response || error)
     return Promise.reject(error)
@@ -84,52 +100,18 @@ export const roomApi = {
 export const orderApi = {
   // 获取所有订单
   getAllOrders: () => api.get('/orders'),
-  // 提供一个更高超时与智能重试的获取函数（供列表初次加载或慢机环境使用）
-  getAllOrdersWithGrace: async () => {
-    const maxRetries = 3;
-    const baseTimeout = 15000; // 15秒基础超时
-    
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        const timeout = baseTimeout + (attempt - 1) * 10000; // 15s, 25s, 35s
-        const instance = axios.create({
-          baseURL: 'http://localhost:3000/api',
-          timeout: timeout,
-          withCredentials: false
-        });
-        
-        console.log(`尝试获取订单数据 (第${attempt}次，超时${timeout}ms)`);
-        const response = await instance.get('/orders');
-        console.log('获取订单数据成功');
-        return response.data;
-        
-      } catch (err) {
-        console.warn(`第${attempt}次获取订单失败:`, err.message);
-        
-        // 如果是最后一次尝试，直接抛出错误
-        if (attempt === maxRetries) {
-          throw err;
-        }
-        
-        // 如果是超时或网络错误，等待后重试
-        if (err.code === 'ECONNABORTED' || err.code === 'ENOTFOUND' || err.code === 'ECONNREFUSED') {
-          const delay = 1000 * attempt; // 1秒、2秒、3秒的延迟
-          console.log(`等待${delay}ms后重试...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          continue;
-        }
-        
-        // 其他错误直接抛出
-        throw err;
-      }
-    }
-  },
+
+  // 根据ID获取订单
+  getOrderById: (orderId) => api.get(`/orders/${orderId}`),
 
   // 添加新订单
   addOrder: (orderData) => api.post('/orders/new', orderData),
 
   // 更新订单状态
   updateOrderStatus: (orderId, statusData) => api.post(`/orders/${orderId}/status`, statusData),
+
+  // 更新订单（支持多字段）
+  updateOrder: (orderId, updatedFields) => api.put(`/orders/${orderId}`, updatedFields),
 
   // 更新订单房间信息
   updateOrderRoom: (orderId, roomData) => api.patch(`/orders/${orderId}/room`, roomData),
@@ -145,9 +127,6 @@ export const orderApi = {
 
   // 获取押金状态
   getDepositInfo: (orderNumber) => api.get(`/orders/${orderNumber}/deposit-info`),
-
-  // 变更订单：插入新单并隐藏旧单
-  changeOrder: (orderId, patch) => api.post(`/orders/${orderId}/change`, patch),
 }
 
 // 用户相关接口

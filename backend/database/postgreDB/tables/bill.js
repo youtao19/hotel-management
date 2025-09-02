@@ -12,8 +12,8 @@ const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
     pay_way VARCHAR(50) NOT NULL, -- 支付方式
     create_time TIMESTAMP NOT NULL, -- 创建时间
     stay_date DATE, -- 入住时间
-  remarks TEXT, -- 备注
-  FOREIGN KEY (order_id) REFERENCES orders(order_id) -- 订单号外键
+    remarks TEXT, -- 备注
+    FOREIGN KEY (order_id) REFERENCES orders(order_id) -- 订单号外键
 )`;
 
 const dropQuery = `DROP TABLE IF EXISTS ${tableName}`;
