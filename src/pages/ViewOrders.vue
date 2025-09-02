@@ -24,6 +24,18 @@
       </div>
     </div>
 
+    <!-- 添加错误提示和重试按钮 -->
+    <div v-if="fetchError" class="q-pa-md bg-red-1 text-red q-mb-md">
+      <div class="row items-center">
+        <q-icon name="error" size="md" class="q-mr-sm" />
+        <div class="col">
+          <div class="text-bold">加载订单数据失败</div>
+          <div>{{ fetchError }}</div>
+        </div>
+        <q-btn color="primary" label="重试" @click="retryFetchOrders" :loading="loadingOrders" />
+      </div>
+    </div>
+
     <q-card>
       <q-card-section>
         <q-table :rows="filteredOrders" :columns="orderColumns" row-key="orderNumber" :pagination="{ rowsPerPage: 10 }"
@@ -187,6 +199,7 @@ const $q = useQuasar() // 初始化 $q 对象
 const searchQuery = ref('')
 const filterStatus = ref(null)
 const loadingOrders = ref(false)
+const fetchError = ref(null) // 新增：用于显示获取订单数据的错误
 
 // 订单状态选项
 const statusOptions = [
@@ -288,22 +301,37 @@ const filteredOrders = computed(() => {
   return result
 })
 
-// 获取所有订单数据
+// 获取所有订单数据 - 增强错误处理
 async function fetchAllOrders() {
   try {
-    loadingOrders.value = true;
-    await orderStore.fetchAllOrders();
-    console.log('获取到的订单数据:', orderStore.orders);
+    fetchError.value = null // 清除之前的错误
+    loadingOrders.value = true
+
+    await orderStore.fetchAllOrders()
+    console.log('获取到的订单数据:', orderStore.orders)
+
   } catch (error) {
-    console.error('获取订单数据失败:', error);
+    console.error('获取订单数据失败:', error)
+    const errorMessage = error.code === 'ECONNABORTED'
+      ? '请求超时，服务器响应时间过长，请稍后重试'
+      : (error.message || '请刷新页面重试')
+
+    fetchError.value = errorMessage
+
     $q.notify({
       type: 'negative',
-      message: '获取订单数据失败，请刷新页面重试',
-      position: 'top'
-    });
+      message: '获取订单数据失败: ' + errorMessage,
+      position: 'top',
+      timeout: 5000
+    })
   } finally {
-    loadingOrders.value = false;
+    loadingOrders.value = false
   }
+}
+
+// 重试获取订单
+async function retryFetchOrders() {
+  await fetchAllOrders()
 }
 
 // 订单详情相关
@@ -311,7 +339,7 @@ const showOrderDetails = ref(false)
 const currentOrder = ref(null)
 const showChangeRoomDialog = ref(false)
 const showChangeOrderDialog = ref(false)
-const changeOrderRooms = ref([])
+const changeOrderRooms = ref([]) // 修复：添加缺少的右括号
 
 // 在 script 部分添加相关变量和方法
 const availableRoomOptions = ref([]); // 用于存储从API获取的可用房间选项
@@ -481,14 +509,14 @@ function searchOrders() {
   console.log('搜索订单:', searchQuery.value, filterStatus.value);
 
   // 设置加载状态
-  loadingOrders.value = true;
+  // loadingOrders.value = true;
 
-  // 短暂延迟模拟数据刷新，确保UI能够响应数据变化
-  setTimeout(() => {
-    // 不需要额外操作，filteredOrders计算属性会自动重新计算
-    // 这里的setTimeout只是为了确保UI触发更新
-    loadingOrders.value = false;
-  }, 100);
+  // // 短暂延迟模拟数据刷新，确保UI能够响应数据变化
+  // setTimeout(() => {
+  //   // 不需要额外操作，filteredOrders计算属性会自动重新计算
+  //   // 这里的setTimeout只是为了确保UI触发更新
+  //   loadingOrders.value = false;
+  // }, 100);
 }
 
 // 获取房间类型名称
@@ -1046,7 +1074,7 @@ const billDepositInfoMap = computed(() => {
   // order_id -> { deposit, refunded }
   const map = {}
   billStore.bills.forEach(b => {
-    // 锁定第一张含押金账单
+    // 锁定第一张含押金的账单
     if (!map[b.order_id] && (b.deposit || 0) > 0) {
       const deposit = Number(b.deposit) || 0
       const refunded = Math.abs(Number(b.refund_deposit) || 0) // refund_deposit 为负数
@@ -1167,22 +1195,61 @@ async function openChangeOrderDialog() {
   }
 }
 
-// 处理订单更新
+// 处理订单更新 - 修复通知处理逻辑
 async function handleOrderUpdated(updatedOrderData) {
+  const dismiss = $q.notify({
+    type: 'ongoing',
+    message: '正在更新订单信息...',
+    position: 'top',
+    timeout: 0,
+    progress: true
+  });
+
   try {
+    // 先关闭对话框
+    showChangeOrderDialog.value = false;
     loadingOrders.value = true;
-  await orderStore.updateOrder(updatedOrderData.orderNumber, updatedOrderData);
-    await fetchAllOrders();
+    fetchError.value = null;
+
+    // 调用API更新订单
+    await orderStore.updateOrder(updatedOrderData.orderNumber, updatedOrderData);
+
+    // 更新成功，显示成功通知
+    dismiss(); // 先关闭进行中的通知
+    $q.notify({
+      type: 'positive',
+      message: '订单信息更新成功',
+      position: 'top',
+      timeout: 2000
+    });
+
+    // 刷新列表 - orderStore.updateOrder 内部已经调用了 fetchAllOrders
+
+    // 如果正在查看该订单的详情，更新详情数据
     if (currentOrder.value && currentOrder.value.orderNumber === updatedOrderData.orderNumber) {
-      currentOrder.value = { ...orderStore.getOrderByNumber(updatedOrderData.orderNumber) };
+      const freshOrder = await orderStore.getOrderByNumber(updatedOrderData.orderNumber, true);
+      if (freshOrder) {
+        currentOrder.value = { ...freshOrder };
+      }
     }
-    $q.notify({ type: 'positive', message: '订单信息更新成功', position: 'top' });
+
   } catch (error) {
+    dismiss(); // 确保出错时也关闭通知
     console.error('更新订单失败:', error);
-    $q.notify({ type: 'negative', message: '更新订单失败', position: 'top' });
+
+    $q.notify({
+      type: 'negative',
+      message: '更新订单失败: ' + (error.message || '未知错误'),
+      position: 'top',
+      timeout: 5000
+    });
+
   } finally {
     loadingOrders.value = false;
-    showChangeOrderDialog.value = false;
+    // 确保万无一失，再次检查并关闭
+    if (typeof dismiss === 'function') {
+      dismiss();
+    }
   }
 }
 
@@ -1200,13 +1267,25 @@ function checkIfMultiDayOrder(order) {
 }
 
 onMounted(async () => {
-  await fetchAllOrders()
-  // 加载账单数据以支持退押按钮显示逻辑
-  try { await billStore.fetchAllBills() } catch (e) { console.warn('加载账单失败(不影响订单显示):', e.message) }
+  try {
+    await fetchAllOrders()
+    // 加载账单数据以支持退押按钮显示逻辑
+    try {
+      await billStore.fetchAllBills()
+    } catch (e) {
+      console.warn('加载账单失败(不影响订单显示):', e.message)
+    }
+  } catch (error) {
+    console.error('初始化数据失败:', error)
+  }
 })
 </script>
 
 <style scoped>
+.view-orders {
+  max-width: 1200px;
+  margin: 0 auto;
+}
 .view-orders {
   max-width: 1200px;
   margin: 0 auto;

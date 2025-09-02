@@ -582,73 +582,83 @@ async function updateOrderStatus(orderId, newStatus) {
  * @param {Object} updatedFields - 需要更新的字段
  * @returns {Promise<Object>} 更新后的订单对象
  */
-async function updateOrder(orderId, updatedFields) {
+async function updateOrder(orderNumber, updatedData, changedBy = 'system') {
   const client = await getClient();
   try {
     await client.query('BEGIN');
 
-    // 1. 获取旧订单数据
-    const oldOrderResult = await client.query('SELECT * FROM orders WHERE order_id = $1 FOR UPDATE', [orderId]);
-    if (oldOrderResult.rows.length === 0) {
-      throw new Error(`订单号 '${orderId}' 不存在`);
+    // 获取原始订单数据
+    const { rows: [oldOrder] } = await client.query(
+      `SELECT * FROM ${tableName} WHERE order_id = $1`,
+      [orderNumber]
+    );
+
+    if (!oldOrder) {
+      throw new Error(`订单 ${orderNumber} 不存在`);
     }
-    const oldOrder = oldOrderResult.rows[0];
 
-    // 2. 准备更新的数据和变更记录
-    const changes = {};
-    const updateValues = [];
-    const updateFields = [];
-    let valueIndex = 1;
+    // 构建更新字段部分
+    const updates = [];
+    const values = [];
+    const changes = {}; // 记录变更
+    let paramIndex = 1;
 
-    for (const key in updatedFields) {
-      if (Object.prototype.hasOwnProperty.call(updatedFields, key) && key !== 'order_id' && key !== 'isRoomChanged') {
-        // 使用 JSON.stringify 来比较对象和数组
-        const oldValue = JSON.stringify(oldOrder[key]);
-        const newValue = JSON.stringify(updatedFields[key]);
+    // 处理可更新字段
+    const updateableFields = ['guest_name', 'phone', 'id_number', 'room_type',
+                            'room_number', 'check_in_date', 'check_out_date',
+                            'payment_method', 'room_price', 'deposit', 'remarks'];
 
-        if (oldValue !== newValue) {
-          changes[key] = { old: oldOrder[key], new: updatedFields[key] };
-          updateFields.push(`${key} = $${valueIndex++}`);
-          // 如果是jsonb字段，需要特别处理
-          if (key === 'room_price') {
-             updateValues.push(JSON.stringify(updatedFields[key]));
-          } else {
-             updateValues.push(updatedFields[key]);
-          }
-        }
+    updateableFields.forEach(field => {
+      if (updatedData[field] !== undefined) {
+        updates.push(`${field} = $${paramIndex}`);
+        values.push(updatedData[field]);
+        changes[field] = {
+          old: oldOrder[field],
+          new: updatedData[field]
+        };
+        paramIndex++;
       }
+    });
+
+    // 如果没有要更新的字段，则提前返回
+    if (updates.length === 0) {
+      await client.query('ROLLBACK');
+      return { message: "没有字段需要更新" };
     }
 
-    if (updateFields.length === 0) {
-      console.log('没有字段需要更新');
-      await client.query('COMMIT');
-      return oldOrder;
-    }
+    // 更新订单表 - 移除对 updated_at 的更新
+    const updateQuery = `
+      UPDATE ${tableName}
+      SET ${updates.join(', ')}
+      WHERE order_id = $${paramIndex}
+      RETURNING *
+    `;
 
-    // 3. 更新订单表
-    const updateQuery = `UPDATE orders SET ${updateFields.join(', ')} WHERE order_id = $${valueIndex} RETURNING *`;
-    updateValues.push(orderId);
-    const updatedOrderResult = await client.query(updateQuery, updateValues);
-    const updatedOrder = updatedOrderResult.rows[0];
+    values.push(orderNumber);
+    const { rows: [updatedOrder] } = await client.query(updateQuery, values);
 
-    // 4. 记录变更历史
-    const changeLog = {
-      order_id: orderId,
-      changed_by: 'system', // 这里可以替换为实际操作员
-      changes: changes,
-      reason: updatedFields.reason || '用户界面修改'
-    };
-    const insertChangeQuery = 'INSERT INTO order_changes (order_id, changed_by, changes, reason) VALUES ($1, $2, $3, $4)';
-    await client.query(insertChangeQuery, [changeLog.order_id, changeLog.changed_by, JSON.stringify(changeLog.changes), changeLog.reason]);
+    // 记录变更到 order_changes 表
+    const insertChangeQuery = `
+      INSERT INTO order_changes
+      (order_id, changed_by, changes, reason)
+      VALUES ($1, $2, $3, $4)
+    `;
+
+    await client.query(insertChangeQuery, [
+      orderNumber,
+      changedBy,
+      JSON.stringify(changes),
+      updatedData.reason || '订单信息更新'
+    ]);
 
     await client.query('COMMIT');
     return updatedOrder;
-
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error(`更新订单(ID: ${orderId})失败:`, error);
+    console.error('更新订单失败:', error);
     throw error;
   } finally {
+    // 确保释放客户端连接
     client.release();
   }
 }

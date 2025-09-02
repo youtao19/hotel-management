@@ -3,7 +3,7 @@ import axios from 'axios'
 // 创建axios实例
 const api = axios.create({
   baseURL: 'http://localhost:3000/api', // 后端API运行在3000端口
-  timeout: 10000, // 请求超时时间
+  timeout: 30000, // 增加到30秒
   withCredentials: false // 避免CORS预检请求
 })
 
@@ -28,7 +28,23 @@ api.interceptors.response.use(
     // 直接返回响应数据，无需解析
     return response.data
   },
-  error => {
+  async error => {
+    const originalRequest = error.config
+
+    // 如果是超时错误且没有重试过
+    if (error.code === 'ECONNABORTED' && error.message.includes('timeout') && !originalRequest._retry) {
+      console.log('请求超时，正在重试...')
+      originalRequest._retry = true
+      originalRequest.timeout = 60000 // 重试时使用更长的超时时间
+
+      try {
+        return await api(originalRequest)
+      } catch (retryError) {
+        console.error('重试请求失败:', retryError)
+        return Promise.reject(retryError)
+      }
+    }
+
     // 处理错误响应
     console.error('API请求错误:', error.response || error)
     return Promise.reject(error)
@@ -84,6 +100,9 @@ export const roomApi = {
 export const orderApi = {
   // 获取所有订单
   getAllOrders: () => api.get('/orders'),
+
+  // 根据ID获取订单
+  getOrderById: (orderId) => api.get(`/orders/${orderId}`),
 
   // 添加新订单
   addOrder: (orderData) => api.post('/orders/new', orderData),
