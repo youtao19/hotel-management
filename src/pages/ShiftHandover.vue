@@ -72,7 +72,7 @@
       </div>
     </div>
 
-    
+
   </q-page>
 </template>
 
@@ -315,10 +315,11 @@ async function savePageData() {
     $q.notify({
       type: 'positive',
       message: '页面数据保存成功',
-      caption: '草稿已保存',
       position: 'top',
       timeout: 3000
     });
+
+    console.log('保存的页面数据:', pageData);
 
   } catch (error) {
     console.error('保存页面数据失败:', error);

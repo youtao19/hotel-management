@@ -127,6 +127,7 @@
       :order="currentOrder"
       :availableRooms="changeOrderRooms"
       :getRoomTypeName="getRoomTypeName"
+      :isMultiDayOrder="checkIfMultiDayOrder(currentOrder)"
       @order-updated="handleOrderUpdated"
     />
 

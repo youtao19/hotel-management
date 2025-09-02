@@ -7,13 +7,13 @@
         <q-btn icon="close" flat round dense v-close-popup />
       </q-card-section>
 
-      <q-card-section v-if="orderData">
+      <q-card-section v-if="editableOrder">
         <q-form @submit.prevent="submitChange">
-          <q-input v-model="orderData.guestName" label="客人姓名" dense class="q-mb-md" />
-          <q-input v-model="orderData.phone" label="手机号" dense class="q-mb-md" />
-          <q-input v-model="orderData.idNumber" label="身份证号" dense class="q-mb-md" />
+          <q-input v-model="editableOrder.guestName" label="客人姓名" dense class="q-mb-md" />
+          <q-input v-model="editableOrder.phone" label="手机号" dense class="q-mb-md" />
+          <q-input v-model="editableOrder.idNumber" label="身份证号" dense class="q-mb-md" />
           <q-select
-            v-model="orderData.roomNumber"
+            v-model="editableOrder.roomNumber"
             :options="roomOptions"
             label="房间号"
             dense
@@ -22,10 +22,37 @@
             @update:model-value="handleRoomChange"
             class="q-mb-md"
           />
-          <q-input v-model.number="displayRoomPrice" @update:model-value="updateDisplayRoomPrice" label="房间价格" type="number" dense class="q-mb-md" />
-          <q-input v-model.number="orderData.deposit" label="押金" type="number" dense class="q-mb-md" />
+          <div class="q-mt-md">
+            <div class="text-subtitle1">房费明细</div>
+            <div v-if="isMultiDayOrder">
+              <div v-for="(price, date) in editableOrder.roomPrice" :key="date" class="row q-col-gutter-sm q-mb-sm">
+                <div class="col-6">
+                  <q-input
+                    :label="date"
+                    v-model.number="editableOrder.roomPrice[date]"
+                    type="number"
+                    filled
+                    dense
+                  />
+                </div>
+                <div class="col-6 flex items-center">
+                  <span class="text-grey-7">元/晚</span>
+                </div>
+              </div>
+            </div>
+            <div v-else>
+              <q-input
+                label="总房费"
+                v-model.number="editableOrder.roomPrice[editableOrder.checkInDate]"
+                type="number"
+                filled
+                dense
+              />
+            </div>
+          </div>
+          <q-input v-model.number="editableOrder.deposit" label="押金" type="number" dense class="q-mb-md" />
           <q-input
-            v-model="orderData.checkInDate"
+            v-model="editableOrder.checkInDate"
             label="入住日期"
             type="date"
             dense
@@ -33,14 +60,14 @@
             stack-label
           />
           <q-input
-            v-model="orderData.checkOutDate"
+            v-model="editableOrder.checkOutDate"
             label="离店日期"
             type="date"
             dense
             class="q-mb-md"
             stack-label
           />
-          <q-input v-model="orderData.remarks" label="备注" type="textarea" dense autogrow />
+          <q-input v-model="editableOrder.remarks" label="备注" type="textarea" dense autogrow />
         </q-form>
       </q-card-section>
 
@@ -67,21 +94,35 @@ const emit = defineEmits([
   'order-updated'
 ]);
 
-const orderData = ref(null);
+const editableOrder = ref(null);
 const originalRoomNumber = ref(null);
 
 // 监听订单变化
 watch(() => props.order, (newOrder) => {
   if (newOrder) {
-    // 创建一个副本以避免直接修改 prop
-    orderData.value = {
-      ...newOrder,
-      checkInDate: newOrder.checkInDate ? newOrder.checkInDate.split('T')[0] : '',
-      checkOutDate: newOrder.checkOutDate ? newOrder.checkOutDate.split('T')[0] : ''
-    };
+    const clonedOrder = JSON.parse(JSON.stringify(newOrder));
+
+    // 确保 checkInDate 和 checkOutDate 是 YYYY-MM-DD 格式
+    clonedOrder.checkInDate = clonedOrder.checkInDate ? clonedOrder.checkInDate.split('T')[0] : '';
+    clonedOrder.checkOutDate = clonedOrder.checkOutDate ? clonedOrder.checkOutDate.split('T')[0] : '';
+
+    // 如果 roomPrice 是数字，转换为对象格式以便统一处理
+    if (typeof clonedOrder.roomPrice === 'number') {
+      const price = clonedOrder.roomPrice;
+      clonedOrder.roomPrice = {};
+      // 对于单日订单，将价格赋给入住日期
+      if (clonedOrder.checkInDate) {
+        clonedOrder.roomPrice[clonedOrder.checkInDate] = price;
+      }
+    } else if (typeof clonedOrder.roomPrice !== 'object' || clonedOrder.roomPrice === null) {
+      // 如果 roomPrice 既不是数字也不是对象，则初始化为空对象
+      clonedOrder.roomPrice = {};
+    }
+
+    editableOrder.value = clonedOrder;
     originalRoomNumber.value = newOrder.roomNumber;
   } else {
-    orderData.value = null;
+    editableOrder.value = null;
     originalRoomNumber.value = null;
   }
 }, { immediate: true, deep: true });
@@ -101,50 +142,47 @@ const roomOptions = computed(() => {
   });
 });
 
-// 处理房间选择变化
-function handleRoomChange(newValue) {
-  if (!orderData.value) return;
-  const opt = roomOptions.value.find(o => o.value === newValue);
-  if (opt) {
-    // 选择新房间时，联动更新展示价格
-    displayRoomPrice.value = opt.price;
-  }
-}
-
-// 展示/编辑用的房价：兼容 orders.room_price(jsonb 或 number)
-const displayRoomPrice = computed({
-  get() {
-    const rp = orderData.value?.roomPrice;
-    if (rp == null) return 0;
-    if (typeof rp === 'number' || typeof rp === 'string') return Number(rp) || 0;
-    if (typeof rp === 'object') {
-      const keys = Object.keys(rp);
-      if (keys.length === 0) return 0;
-      // 优先用入住日期对应的价格
-      const inDate = orderData.value?.checkInDate;
-      if (inDate && rp[inDate] != null) return Number(rp[inDate]) || 0;
-      // 否则取最早的一个键
-      keys.sort();
-      return Number(rp[keys[0]]) || 0;
-    }
-    return 0;
-  },
-  set(val) {
-    if (!orderData.value) return;
-    orderData.value.roomPrice = Number(val) || 0;
-  }
+// 判断是否为多日订单
+const isMultiDayOrder = computed(() => {
+  if (!editableOrder.value) return false;
+  const checkIn = new Date(editableOrder.value.checkInDate);
+  const checkOut = new Date(editableOrder.value.checkOutDate);
+  // 比较日期部分，忽略时间
+  return checkIn.toISOString().split('T')[0] !== checkOut.toISOString().split('T')[0];
 });
 
 // 处理房间选择变化
-function updateDisplayRoomPrice(val) {
-  displayRoomPrice.value = Number(val) || 0;
+function handleRoomChange(newValue) {
+  if (!editableOrder.value) return;
+  const opt = roomOptions.value.find(o => o.value === newValue);
+  if (opt) {
+    // 选择新房间时，更新当前房间价格（仅影响当前选择的房间，不影响多日价格）
+    // 如果是多日订单，这里不应该直接修改 roomPrice，而是让用户手动调整每日价格
+    // 对于单日订单，可以更新 roomPrice
+    if (!isMultiDayOrder.value && editableOrder.value.checkInDate) {
+      editableOrder.value.roomPrice[editableOrder.value.checkInDate] = opt.price;
+    }
+  }
 }
 
-// 处理房间选择变化
+// 处理提交
 function submitChange() {
-  if (orderData.value) {
-    const isRoomChanged = orderData.value.roomNumber !== originalRoomNumber.value;
-    emit('order-updated', { ...orderData.value, isRoomChanged });
+  if (editableOrder.value) {
+    const isRoomChanged = editableOrder.value.roomNumber !== originalRoomNumber.value;
+
+    // 如果是单日订单，将 roomPrice 对象转换回数字
+    if (!isMultiDayOrder.value) {
+      const dates = Object.keys(editableOrder.value.roomPrice);
+      if (dates.length === 1) {
+        editableOrder.value.roomPrice = editableOrder.value.roomPrice[dates[0]];
+      } else {
+        // 如果单日订单的 roomPrice 对象有多个日期，这可能是个错误，或者需要更复杂的逻辑
+        // 这里简单地取第一个日期的价格，或者根据业务逻辑处理
+        editableOrder.value.roomPrice = dates.length > 0 ? editableOrder.value.roomPrice[dates[0]] : 0;
+      }
+    }
+
+    emit('order-updated', { ...editableOrder.value, isRoomChanged });
     emit('update:modelValue', false);
   }
 }
