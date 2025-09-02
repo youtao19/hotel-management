@@ -1,0 +1,3 @@
+ALTER TABLE shift_handover
+DROP COLUMN IF EXISTS status,
+DROP COLUMN IF EXISTS details;

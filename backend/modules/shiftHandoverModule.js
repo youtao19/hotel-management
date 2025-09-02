@@ -277,231 +277,6 @@ async function getStatistics(startDate, endDate = null) {
 }
 
 /**
- * 保存交接班记录
- * @param {Object} handoverData - 交接班数据
- * @returns {Promise<Object>} 保存的交接班记录
- */
-async function saveHandover(handoverData) {
-  const {
-    date,
-    handoverPerson,
-    receivePerson,
-    cashierName,
-    notes,
-    taskList,
-    specialStats // paymentData is no longer saved here
-  } = handoverData;
-
-  // Prepare statistics JSONB for saving specialStats (including vipCards)
-  const statisticsToSave = specialStats || {};
-
-  // 检查是否已存在 finalized 记录
-  const existingFinalized = await db.query(
-    `SELECT * FROM shift_handover WHERE shift_date = $1 AND status = 'finalized'`,
-    [date]
-  );
-
-  if (existingFinalized.rows.length > 0) {
-    // 更新现有 finalized 记录
-    const query = `
-      UPDATE shift_handover
-      SET
-        handover_person = $1,
-        receive_person = $2,
-        cashier_name = $3,
-        remarks = $4,
-        task_list = $5,
-        details = $6, // details will be an empty object or null
-        statistics = $7,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE shift_date = $8 AND status = 'finalized'
-      RETURNING *;
-    `;
-    const values = [
-      handoverPerson || '',
-      receivePerson || '',
-      cashierName || '',
-      notes || '',
-      JSON.stringify(taskList || []),
-      JSON.stringify({}), // details is now an empty object
-      JSON.stringify(statisticsToSave),
-      date
-    ];
-    return (await db.query(query, values)).rows[0];
-  } else {
-    // 检查是否存在 draft 记录
-    const existingDraft = await db.query(
-      `SELECT * FROM shift_handover WHERE shift_date = $1 AND status = 'draft'`,
-      [date]
-    );
-
-    if (existingDraft.rows.length > 0) {
-      // 将 draft 记录更新为 finalized
-      const query = `
-        UPDATE shift_handover
-        SET
-          handover_person = $1,
-          receive_person = $2,
-          cashier_name = $3,
-          remarks = $4,
-          task_list = $5,
-          details = $6, // details will be an empty object or null
-          statistics = $7,
-          status = 'finalized', -- 状态更新为 finalized
-          updated_at = CURRENT_TIMESTAMP
-        WHERE shift_date = $8 AND status = 'draft'
-        RETURNING *;
-      `;
-      const values = [
-        handoverPerson || '',
-        receivePerson || '',
-        cashierName || '',
-        notes || '',
-        JSON.stringify(taskList || []),
-        JSON.stringify({}), // details is now an empty object
-        JSON.stringify(statisticsToSave),
-        date
-      ];
-      return (await db.query(query, values)).rows[0];
-    } else {
-      // 插入新的 finalized 记录
-      const query = `
-        INSERT INTO shift_handover (
-          shift_date, handover_person, receive_person, cashier_name, remarks,
-          task_list, details, statistics, status, shift_time
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'finalized', $9)
-        RETURNING *;
-      `;
-      const values = [
-        date,
-        handoverPerson || '',
-        receivePerson || '',
-        cashierName || '',
-        notes || '',
-        JSON.stringify(taskList || []),
-        JSON.stringify({}), // details is now an empty object
-        JSON.stringify(statisticsToSave),
-        new Date().toTimeString().slice(0, 5)
-      ];
-      return (await db.query(query, values)).rows[0];
-    }
-  }
-}
-
-/**
- * 获取历史交接班记录
- * @param {string} startDate - 开始日期
- * @param {string} endDate - 结束日期
- * @returns {Promise<Array>} 交接班记录列表
- */
-async function getHandoverHistory(startDate, endDate, page = 1, limit = 10, cashierName = '') {
-  let sql = `
-    SELECT
-      h.*,
-      h.statistics->>'totalIncome' as total_income,
-      h.statistics->>'handoverAmount' as handover_amount
-    FROM shift_handover h
-    WHERE 1=1
-  `;
-
-  const params = [];
-  let paramIndex = 1;
-
-  // 添加日期筛选
-  if (startDate) {
-    sql += ` AND h.shift_date >= $${paramIndex}`;
-    params.push(startDate);
-    paramIndex++;
-  }
-
-  if (endDate) {
-    sql += ` AND h.shift_date <= $${paramIndex}`;
-    params.push(endDate);
-    paramIndex++;
-  }
-
-  // 添加收银员筛选
-  if (cashierName) {
-    sql += ` AND h.cashier_name ILIKE $${paramIndex}`;
-    params.push(`%${cashierName}%`);
-    paramIndex++;
-  }
-
-  sql += ` ORDER BY h.id DESC`;
-
-  // 添加分页
-  const offset = (page - 1) * limit;
-  sql += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
-  params.push(limit, offset);
-
-  try {
-    const result = await query(sql, params);
-
-    // 获取总数
-    let countSql = `
-      SELECT COUNT(*) as total
-      FROM shift_handover h
-      WHERE 1=1
-    `;
-
-    const countParams = [];
-    let countParamIndex = 1;
-
-    if (startDate) {
-      countSql += ` AND h.shift_date >= $${countParamIndex}`;
-      countParams.push(startDate);
-      countParamIndex++;
-    }
-
-    if (endDate) {
-      countSql += ` AND h.shift_date <= $${countParamIndex}`;
-      countParams.push(endDate);
-      countParamIndex++;
-    }
-
-    if (cashierName) {
-      countSql += ` AND h.cashier_name ILIKE $${countParamIndex}`;
-      countParams.push(`%${cashierName}%`);
-    }
-
-    const countResult = await query(countSql, countParams);
-    const total = parseInt(countResult.rows[0].total);
-
-    // 处理返回数据，确保details字段正确解析
-    const processedRows = result.rows.map(row => {
-      try {
-        // 解析details字段中的完整数据
-        const details = typeof row.details === 'string' ? JSON.parse(row.details) : row.details;
-
-        return {
-          ...row,
-          details: details,
-          // 兼容性处理：如果details中包含新格式数据，提取到顶层
-          paymentData: details.paymentData || null,
-          taskList: details.taskList || null,
-          specialStats: details.specialStats || null,
-          // 移除html_snapshot字段引用
-        };
-      } catch (parseError) {
-        console.error('解析交接班详情数据失败:', parseError);
-        return row;
-      }
-    });
-
-    return {
-      data: processedRows,
-      total: total,
-      page: page,
-      limit: limit
-    };
-  } catch (error) {
-    console.error('获取交接班历史记录失败:', error);
-    throw error;
-  }
-}
-
-/**
  * 导出交接班数据为Excel格式
  * @param {Object} handoverData - 交接班数据
  * @returns {Promise<Buffer>} Excel文件缓冲区
@@ -512,27 +287,10 @@ async function exportHandoverToExcel(handoverData) {
   try {
     const XLSX = require('xlsx');
 
-    const { type, details, statistics, date } = handoverData;
+    const { type, statistics, date } = handoverData;
 
     // 创建工作簿
     const workbook = XLSX.utils.book_new();
-
-    // 创建明细工作表
-    const detailsData = details.map((item, index) => ({
-      '序号': index + 1,
-      '房号': item.room_number,
-      '客户姓名': item.guest_name || '未知客户',
-      '单号': item.order_number,
-      '房费': item.room_fee,
-      '押金': item.deposit,
-      '支付方式': item.payment_method,
-      '总金额': item.total_amount,
-      '开房时间': item.check_in_date,
-      '退房时间': item.check_out_date
-    }));
-
-    const detailsWorksheet = XLSX.utils.json_to_sheet(detailsData);
-    XLSX.utils.book_append_sheet(workbook, detailsWorksheet, '收款明细');
 
     // 创建统计工作表
     const statisticsData = [
@@ -702,17 +460,9 @@ async function exportNewHandoverToExcel(handoverData) {
  * @param {string} currentDate - 当前日期
  * @returns {Promise<Object|null>} 当天的交接班记录
  */
-async function getCurrentHandoverData(date, status = null) {
+async function getCurrentHandoverData(date) {
   let sqlQuery = `SELECT * FROM shift_handover WHERE shift_date = $1`;
   const values = [date];
-
-  if (status) {
-    sqlQuery += ` AND status = $2`;
-    values.push(status);
-  } else {
-    // 如果没有指定状态，优先返回 finalized，否则返回 draft
-    sqlQuery += ` ORDER BY CASE WHEN status = 'finalized' THEN 1 ELSE 2 END LIMIT 1`;
-  }
 
   const result = await query(sqlQuery, values);
   return result.rows[0] || null;
@@ -743,19 +493,10 @@ async function getPreviousHandoverData(currentDate) {
       const currentRecord = currentDayResult.rows[0];
       console.log(`找到当天交接班记录: ID=${currentRecord.id}, 日期=${currentRecord.shift_date}, 类型=${currentRecord.type}`);
 
-      // 解析details字段
-      let currentDetails = {};
-      try {
-        currentDetails = typeof currentRecord.details === 'string' ?
-          JSON.parse(currentRecord.details) : currentRecord.details;
-      } catch (parseError) {
-        console.error('解析当天交接班详情数据失败:', parseError);
-      }
-
       // 如果当天记录包含退押金数据，需要重新生成统计信息
       let enhancedStatistics = null;
-      if (currentDetails.refundDeposits && currentDetails.refundDeposits.length > 0) {
-        console.log(`当天记录包含 ${currentDetails.refundDeposits.length} 条退押金记录，重新生成统计信息`);
+      if (currentRecord.refundDeposits && currentRecord.refundDeposits.length > 0) {
+        console.log(`当天记录包含 ${currentRecord.refundDeposits.length} 条退押金记录，重新生成统计信息`);
 
         // 重新获取当天的完整统计数据
         try {
@@ -763,7 +504,7 @@ async function getPreviousHandoverData(currentDate) {
           enhancedStatistics = todayStats;
 
           // 将退押金数据合并到统计中
-          currentDetails.refundDeposits.forEach(refund => {
+          currentRecord.refundDeposits.forEach(refund => {
             const method = normalizePaymentMethod(refund.method);
             if (enhancedStatistics.paymentDetails && enhancedStatistics.paymentDetails[method]) {
               enhancedStatistics.paymentDetails[method].hotelDeposit += refund.actualRefundAmount;
@@ -776,8 +517,7 @@ async function getPreviousHandoverData(currentDate) {
 
       return {
         ...currentRecord,
-        details: currentDetails,
-        paymentData: currentDetails.paymentData || null,
+        paymentData: currentRecord.paymentData || null,
         statistics: enhancedStatistics || currentRecord.statistics,
         isCurrentDay: true // 标记这是当天的数据
       };
@@ -811,18 +551,9 @@ async function getPreviousHandoverData(currentDate) {
       const record = result.rows[0];
       console.log(`找到前一天交接班记录: ID=${record.id}, 日期=${record.shift_date}`);
 
-      // 解析details字段
-      let details = {};
-      try {
-        details = typeof record.details === 'string' ? JSON.parse(record.details) : record.details;
-      } catch (parseError) {
-        console.error('解析前一天交接班详情数据失败:', parseError);
-      }
-
       return {
         ...record,
-        details: details,
-        paymentData: details.paymentData || null
+        paymentData: record.paymentData || null
       };
     }
 
@@ -842,19 +573,9 @@ async function getPreviousHandoverData(currentDate) {
       const fallbackRecord = fallbackResult.rows[0];
       console.log(`找到最近的交接班记录: ID=${fallbackRecord.id}, 日期=${fallbackRecord.shift_date}`);
 
-      // 解析details字段
-      let fallbackDetails = {};
-      try {
-        fallbackDetails = typeof fallbackRecord.details === 'string' ?
-          JSON.parse(fallbackRecord.details) : fallbackRecord.details;
-      } catch (parseError) {
-        console.error('解析最近交接班详情数据失败:', parseError);
-      }
-
       return {
         ...fallbackRecord,
-        details: fallbackDetails,
-        paymentData: fallbackDetails.paymentData || null
+        paymentData: fallbackRecord.paymentData || null
       };
     }
 
@@ -888,7 +609,7 @@ async function importReceiptsToShiftHandover(importData) {
 
     // 检查当天是否已有交接班记录
     const existingQuery = `
-      SELECT id, details
+      SELECT id
       FROM shift_handover
       WHERE shift_date = $1
       ORDER BY updated_at DESC
@@ -903,16 +624,6 @@ async function importReceiptsToShiftHandover(importData) {
     if (existingResult.rows.length > 0) {
       // 已有记录，更新现有记录
       handoverId = existingResult.rows[0].id
-      try {
-        const existingDetails = existingResult.rows[0].details || {}
-        existingPaymentData = existingDetails.paymentData || {}
-        if (typeof existingPaymentData === 'string') {
-          existingPaymentData = JSON.parse(existingPaymentData)
-        }
-      } catch (e) {
-        console.warn('解析现有支付数据失败:', e.message)
-        existingPaymentData = {}
-      }
       console.log('✏️ 更新现有交接班记录，ID:', handoverId)
     } else {
       // 新建记录
@@ -972,7 +683,6 @@ async function importReceiptsToShiftHandover(importData) {
 
     // 更新详细信息
     const updatedDetails = {
-      ...(existingResult.rows[0]?.details || {}),
       paymentData: updatedPaymentData,
       importInfo: {
         importDate: new Date().toISOString(),
@@ -986,13 +696,12 @@ async function importReceiptsToShiftHandover(importData) {
       // 更新现有记录
       const updateQuery = `
         UPDATE shift_handover
-        SET details = $1, updated_at = CURRENT_TIMESTAMP
-        WHERE id = $2
+        SET updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1
         RETURNING id
       `
 
       const updateResult = await query(updateQuery, [
-        JSON.stringify(updatedDetails),
         handoverId
       ])
 
@@ -1003,15 +712,13 @@ async function importReceiptsToShiftHandover(importData) {
       const insertQuery = `
         INSERT INTO shift_handover (
           shift_date,
-          type,
-          details,
           statistics,
           cashier_name,
           shift_time,
           created_at,
           updated_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         RETURNING id
       `
 
@@ -1024,8 +731,6 @@ async function importReceiptsToShiftHandover(importData) {
 
       const insertResult = await query(insertQuery, [
         date,                              // shift_date
-        'import',                          // type
-        JSON.stringify(updatedDetails),    // details
         JSON.stringify(defaultStatistics), // statistics
         '系统导入',                         // cashier_name
         'auto'                             // shift_time
@@ -1062,21 +767,14 @@ async function saveAmountChanges(amountData) {
     vipCards: vipCards || 0 // Only save vipCards here
   };
 
-  // 尝试查找现有记录，优先查找 finalized，其次 draft
+  // 尝试查找现有记录
   let existingRecord = await query(
-    `SELECT * FROM shift_handover WHERE shift_date = $1 AND status = 'finalized'`,
+    `SELECT * FROM shift_handover WHERE shift_date = $1`,
     [date]
   );
 
-  if (existingRecord.rows.length === 0) {
-    existingRecord = await query(
-      `SELECT * FROM shift_handover WHERE shift_date = $1 AND status = 'draft'`,
-      [date]
-    );
-  }
-
   if (existingRecord.rows.length > 0) {
-    // 更新现有草稿或在 finalized 记录上更新可修改部分
+    // 更新现有记录
     const sqlQuery = `
       UPDATE shift_handover
       SET
@@ -1087,7 +785,7 @@ async function saveAmountChanges(amountData) {
         receive_person = $6,
         remarks = $7,
         updated_at = CURRENT_TIMESTAMP
-      WHERE shift_date = $4 AND status = 'draft' -- 确保只更新草稿
+      WHERE shift_date = $4
       RETURNING *;
     `;
     const values = [
@@ -1101,13 +799,12 @@ async function saveAmountChanges(amountData) {
     ];
     const result = await query(sqlQuery, values);
     if (result.rows.length === 0) {
-        // 如果没有更新到草稿，可能是因为只有 finalized 记录，此时需要插入新的 draft
-        // 或者更合理的做法是，如果存在 finalized，则不允许再保存 draft
-        // 这里简化处理，如果没更新到 draft，就尝试插入新的 draft
+        // If no record was updated, it means there was no existing record for the given date.
+        // In this case, we should insert a new record.
         const insertSqlQuery = `
-            INSERT INTO shift_handover (shift_date, task_list, statistics, cashier_name, status, shift_time, handover_person, receive_person, remarks)
-            VALUES ($1, $2, $3, $4, 'draft', $5, $6, $7, $8)
-            ON CONFLICT (shift_date, status) DO UPDATE SET
+            INSERT INTO shift_handover (shift_date, task_list, statistics, cashier_name, shift_time, handover_person, receive_person, remarks)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            ON CONFLICT (shift_date) DO UPDATE SET
                 task_list = EXCLUDED.task_list,
                 statistics = EXCLUDED.statistics,
                 cashier_name = EXCLUDED.cashier_name,
@@ -1131,10 +828,10 @@ async function saveAmountChanges(amountData) {
     }
     return result.rows[0];
   } else {
-    // 插入新的草稿记录
+    // 插入新的记录
     const sqlQuery = `
-      INSERT INTO shift_handover (shift_date, task_list, statistics, cashier_name, status, shift_time, handover_person, receive_person, remarks)
-      VALUES ($1, $2, $3, $4, 'draft', $5, $6, $7, $8)
+      INSERT INTO shift_handover (shift_date, task_list, statistics, cashier_name, shift_time, handover_person, receive_person, remarks)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING *;
     `;
     const values = [
@@ -1184,7 +881,7 @@ async function recordRefundDepositToHandover(refundData) {
 
     // 检查退房日期是否已有交接班记录
     const existingQuery = `
-      SELECT id, details
+      SELECT id
       FROM shift_handover
       WHERE shift_date = $1
       ORDER BY updated_at DESC
@@ -1193,11 +890,9 @@ async function recordRefundDepositToHandover(refundData) {
 
     const existingResult = await query(existingQuery, [refundDate]); // 检查退房日期是否已有交接班记录
     let handoverId = null; // 交接班记录ID
-    let existingDetails = {}; // 现有交接班详情
 
     if (existingResult.rows.length > 0) {
       handoverId = existingResult.rows[0].id; // 交接班记录ID
-      existingDetails = existingResult.rows[0].details || {}; // 现有交接班详情
       console.log('📋 找到退房日期的现有交接班记录，ID:', handoverId);
     }
 
@@ -1216,59 +911,30 @@ async function recordRefundDepositToHandover(refundData) {
     const standardizedMethod = normalizePaymentMethod(method);
 
     // 更新交接班详情
-    const updatedDetails = {
-      ...existingDetails,
-      refundDeposits: [
-        ...(existingDetails.refundDeposits || []),
-        refundRecord
-      ],
-      // 更新支付数据中的退押金统计
-      paymentData: {
-        ...existingDetails.paymentData,
+    const updatedStatistics = {
+      // 同时更新统计数据中的 paymentDetails（用于前端显示）
+      paymentDetails: {
+        // 确保支付方式存在
         [standardizedMethod]: {
-          ...existingDetails.paymentData?.[standardizedMethod],
-          // 增加退押金金额（作为支出）
-          refundDeposit: (existingDetails.paymentData?.[standardizedMethod]?.refundDeposit || 0) + actualRefundAmount,
-          // 更新总计（减去退押金）
-          total: (existingDetails.paymentData?.[standardizedMethod]?.total || 0) - actualRefundAmount
+          hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0
         }
-      },
-      lastRefundUpdate: new Date().toISOString()
+      }
     };
 
-    // 同时更新统计数据中的 paymentDetails（用于前端显示）
-    if (existingDetails.statistics && existingDetails.statistics.paymentDetails) {
-      if (!updatedDetails.statistics) {
-        updatedDetails.statistics = { ...existingDetails.statistics };
-      }
-      if (!updatedDetails.statistics.paymentDetails) {
-        updatedDetails.statistics.paymentDetails = { ...existingDetails.statistics.paymentDetails };
-      }
-
-      // 确保支付方式存在
-      if (!updatedDetails.statistics.paymentDetails[standardizedMethod]) {
-        updatedDetails.statistics.paymentDetails[standardizedMethod] = {
-          hotelIncome: 0, restIncome: 0, hotelDeposit: 0, restDeposit: 0
-        };
-      }
-
-      // 更新退押金统计（增加退押金金额）
-      updatedDetails.statistics.paymentDetails[standardizedMethod].hotelDeposit += actualRefundAmount;
-    }
-
-
+    // 更新退押金统计（增加退押金金额）
+    updatedStatistics.paymentDetails[standardizedMethod].hotelDeposit += actualRefundAmount;
 
     if (handoverId) {
       // 更新现有记录
       const updateQuery = `
         UPDATE shift_handover
-        SET details = $1, updated_at = CURRENT_TIMESTAMP
+        SET statistics = $1, updated_at = CURRENT_TIMESTAMP
         WHERE id = $2
         RETURNING id
       `;
 
       const updateResult = await query(updateQuery, [
-        JSON.stringify(updatedDetails),
+        JSON.stringify(updatedStatistics),
         handoverId
       ]);
 
@@ -1279,15 +945,13 @@ async function recordRefundDepositToHandover(refundData) {
       const insertQuery = `
         INSERT INTO shift_handover (
           shift_date,
-          type,
-          details,
           statistics,
           cashier_name,
           shift_time,
           created_at,
           updated_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         RETURNING id
       `;
 
@@ -1298,9 +962,7 @@ async function recordRefundDepositToHandover(refundData) {
 
       const insertResult = await query(insertQuery, [
         refundDate,                        // shift_date
-        'refund',                          // type
-        JSON.stringify(updatedDetails),    // details
-        JSON.stringify(defaultStatistics), // statistics
+        JSON.stringify(updatedStatistics), // statistics
         operator,                          // cashier_name
         'refund'                           // shift_time
       ]);
@@ -1311,55 +973,6 @@ async function recordRefundDepositToHandover(refundData) {
 
   } catch (error) {
     console.error('记录退押金到交接班系统失败:', error);
-    throw error;
-  }
-}
-
-/**
- * 删除交接班记录
- * @param {number} recordId - 记录ID
- * @returns {Promise<Object>} 删除结果
- */
-async function deleteHandoverRecord(recordId) {
-  try {
-    console.log(`开始删除交接班记录，ID: ${recordId}`);
-
-    // 首先检查记录是否存在
-    const checkQuery = 'SELECT id, shift_date, cashier_name FROM shift_handover WHERE id = $1';
-    const checkResult = await query(checkQuery, [recordId]);
-
-    if (checkResult.rows.length === 0) {
-      console.log(`交接班记录不存在，ID: ${recordId}`);
-      return {
-        success: false,
-        message: '交接班记录不存在'
-      };
-    }
-
-    const record = checkResult.rows[0];
-    console.log(`找到交接班记录: ID=${record.id}, 日期=${record.shift_date}, 收银员=${record.cashier_name}`);
-
-    // 执行删除操作
-    const deleteQuery = 'DELETE FROM shift_handover WHERE id = $1';
-    const deleteResult = await query(deleteQuery, [recordId]);
-
-    if (deleteResult.rowCount > 0) {
-      console.log(`✅ 交接班记录删除成功，ID: ${recordId}`);
-      return {
-        success: true,
-        message: '交接班记录删除成功',
-        deletedRecord: record
-      };
-    } else {
-      console.log(`❌ 交接班记录删除失败，ID: ${recordId}`);
-      return {
-        success: false,
-        message: '删除操作失败'
-      };
-    }
-
-  } catch (error) {
-    console.error('删除交接班记录失败:', error);
     throw error;
   }
 }
@@ -1551,8 +1164,6 @@ async function getShiftSpecialStats(date) {
 module.exports = {
   getReceiptDetails,
   getStatistics,
-  saveHandover,
-  getHandoverHistory,
   exportHandoverToExcel,
   exportNewHandoverToExcel,
   getPreviousHandoverData,
@@ -1560,7 +1171,6 @@ module.exports = {
   importReceiptsToShiftHandover,
   saveAmountChanges,
   recordRefundDepositToHandover,
-  deleteHandoverRecord,
   getShiftTable,
   getRemarks,
   getShiftSpecialStats

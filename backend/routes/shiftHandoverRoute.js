@@ -3,14 +3,11 @@ const router = express.Router();
 const {
   getReceiptDetails,
   getStatistics,
-  saveHandover,
-  getHandoverHistory,
   exportHandoverToExcel,
   getPreviousHandoverData,
   getCurrentHandoverData,
   importReceiptsToShiftHandover,
   saveAmountChanges,
-  deleteHandoverRecord,
   getShiftTable,
   getRemarks,
   getShiftSpecialStats
@@ -70,86 +67,6 @@ router.get('/receipts', async (req, res) => {
  * @param {string} startDate - 开始日期
  * @param {string} endDate - 结束日期
  */
-router.get('/statistics', async (req, res) => {
-  try {
-    const { date, startDate, endDate } = req.query;
-
-    // 支持两种参数格式：date 或 startDate/endDate
-    const finalStartDate = startDate || date || new Date().toISOString().split('T')[0];
-    const finalEndDate = endDate || date || new Date().toISOString().split('T')[0];
-
-    const statistics = await getStatistics(finalStartDate, finalEndDate);
-    res.json(statistics);
-  } catch (error) {
-    console.error('获取统计数据失败:', error);
-    res.status(500).json({ message: '获取统计数据失败' });
-  }
-});
-
-// 保存交接班记录
-router.post('/save', async (req, res) => {
-  try {
-    const handoverData = {
-      ...req.body,
-      cashier_name: req.body.cashier_name || '',
-      shift_time: req.body.shift_time || new Date().toTimeString().slice(0, 5)
-    };
-
-    const result = await saveHandover(handoverData);
-    res.status(201).json({
-      success: true,
-      message: '交接班记录保存成功',
-      id: result.id,
-      data: result
-    });
-  } catch (error) {
-    console.error('保存交接班记录失败:', error);
-
-    // 根据错误类型返回不同的状态码
-    if (error.message.includes('不能为空') || error.message.includes('必须是')) {
-      res.status(400).json({
-        success: false,
-        message: '保存交接班记录失败',
-        error: error.message
-      });
-    } else {
-      res.status(500).json({
-        success: false,
-        message: '保存交接班记录失败',
-        error: error.message
-      });
-    }
-  }
-});
-
-// 获取历史记录
-router.get('/history', async (req, res) => {
-  try {
-    const {
-      startDate,
-      endDate,
-      page = 1,
-      limit = 10,
-      cashierName = ''
-    } = req.query;
-
-    const history = await getHandoverHistory(
-      startDate,
-      endDate,
-      parseInt(page),
-      parseInt(limit),
-      cashierName
-    );
-
-    res.json(history);
-  } catch (error) {
-    console.error('获取交接班历史记录失败:', error);
-    res.status(500).json({
-      message: '获取交接班历史记录失败',
-      error: error.message
-    });
-  }
-});
 
 // 获取前一天的交接班记录
 router.get('/previous-handover', async (req, res) => {
@@ -364,45 +281,6 @@ router.post('/save-amounts', async (req, res) => {
     res.status(500).json({
       success: false,
       message: '保存金额修改失败',
-      error: error.message
-    });
-  }
-});
-
-// 删除交接班记录
-router.delete('/:recordId', async (req, res) => {
-  try {
-    const { recordId } = req.params;
-
-    // 验证记录ID
-    if (!recordId || isNaN(parseInt(recordId))) {
-      return res.status(400).json({
-        success: false,
-        message: '无效的记录ID'
-      });
-    }
-
-    console.log(`接收到删除交接班记录请求，记录ID: ${recordId}`);
-
-    const result = await deleteHandoverRecord(parseInt(recordId));
-
-    if (result.success) {
-      res.status(200).json({
-        success: true,
-        message: '交接班记录删除成功'
-      });
-    } else {
-      res.status(404).json({
-        success: false,
-        message: result.message || '记录不存在'
-      });
-    }
-
-  } catch (error) {
-    console.error('删除交接班记录失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '删除交接班记录失败',
       error: error.message
     });
   }

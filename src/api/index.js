@@ -239,20 +239,11 @@ export const shiftHandoverApi = {
   // 获取前一天的交接班记录
   getPreviousHandoverData: (params) => api.get('/shift-handover/previous-handover', { params }),
 
-  // 获取当天的交接班记录 (根据状态)
-  getCurrentHandover: (date, status) => {
+  // 获取当天的交接班记录
+  getCurrentHandover: (date) => {
     const params = { date };
-    if (status) {
-      params.status = status;
-    }
     return api.get('/shift-handover/current-handover', { params });
   },
-
-  // 保存交接班记录
-  saveHandover: (handoverData) => api.post('/shift-handover/save', handoverData),
-
-  // 获取历史记录
-  getHandoverHistory: (params) => api.get('/shift-handover/history', { params }),
 
   // 导出Excel
   exportHandover: (handoverData) => api.post('/shift-handover/export', handoverData, { responseType: 'blob' }),
@@ -265,9 +256,6 @@ export const shiftHandoverApi = {
 
   // 保存金额修改
   saveAmountChanges: (amountData) => api.post('/shift-handover/save-amounts', amountData),
-
-  // 删除交接班记录
-  deleteHandoverRecord: (recordId) => api.delete(`/shift-handover/${recordId}`),
 
   // 获取交接班表格
   getShiftTable: (params) => api.get('/shift-handover/table', { params }),

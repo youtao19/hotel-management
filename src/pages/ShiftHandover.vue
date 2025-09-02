@@ -9,8 +9,6 @@
           <q-btn color="primary" icon="print" label="打印" @click="printHandover" />
           <q-btn color="green" icon="download" label="导出Excel" @click="exportToExcel" />
           <q-btn color="purple" icon="save" label="保存页面" @click="savePageData" :loading="savingAmounts" />
-          <q-btn color="orange" icon="save" label="保存交接记录" @click="saveHandover" />
-          <q-btn color="blue" icon="history" label="历史记录" @click="openHistoryDialog" />
         </div>
       </div>
 
@@ -74,8 +72,7 @@
       </div>
     </div>
 
-    <!-- 历史记录组件 -->
-    <ShiftHandoverHistory ref="historyDialogRef" @close="onHistoryDialogClose" />
+    
   </q-page>
 </template>
 
@@ -84,7 +81,6 @@ import { ref, onMounted, watch, computed } from 'vue'
 import { date } from 'quasar'
 import { useQuasar } from 'quasar'
 import { shiftHandoverApi } from '../api/index.js'
-import ShiftHandoverHistory from '../components/ShiftHandoverHistory.vue'
 import ShiftHandoverPaymentTable from '../components/ShiftHandoverPaymentTable.vue'
 import ShiftHandoverMemoList from '../components/ShiftHandoverMemoList.vue'
 import ShiftHandoverSpecialStats from '../components/ShiftHandoverSpecialStats.vue'
@@ -137,9 +133,6 @@ const totalDeposit = computed(() => {
   })
   return total
 })
-
-// 历史记录组件引用
-const historyDialogRef = ref(null)
 
 
 // 支付方式数据结构
@@ -281,41 +274,6 @@ async function loadShiftTableData() {
 const totalRooms = ref(29)
 const restRooms = ref(3)
 const vipCards = ref(6)
-
-
-// 保存交接记录
-async function saveHandover() {
-  try {
-    const handoverData = {
-      date: selectedDate.value,
-      handoverPerson: handoverPerson.value,
-      receivePerson: receivePerson.value,
-      cashierName: cashierName.value,
-      notes: notes.value,
-      taskList: taskList.value,
-      paymentData: paymentData.value,
-      specialStats: {
-        totalRooms: totalRooms.value,
-        restRooms: restRooms.value,
-        vipCards: vipCards.value,
-        goodReview: goodReview.value
-      }
-    }
-
-    await shiftHandoverApi.saveHandover(handoverData)
-
-    $q.notify({
-      type: 'positive',
-      message: '交接记录保存成功'
-    })
-  } catch (error) {
-    console.error('保存交接记录失败:', error)
-    $q.notify({
-      type: 'negative',
-      message: '保存交接记录失败'
-    })
-  }
-}
 
 // 保存页面数据（保存所有页面数据，包括金额、统计数据等）
 async function savePageData() {
@@ -521,18 +479,6 @@ async function loadRemarksIntoMemo() {
   }
 }
 
-// 历史记录相关方法
-function openHistoryDialog() {
-  if (historyDialogRef.value) {
-    historyDialogRef.value.openDialog()
-  }
-}
-
-function onHistoryDialogClose() {
-  // 历史记录对话框关闭时的处理
-  // 省略冗余日志
-}
-
 
 
 // 监听备忘录变化
@@ -554,27 +500,11 @@ async function refreshAllData() {
 
     let handoverRecord = null;
 
-    // 1. 尝试获取 finalized 状态的记录
+    // Simply fetch the record for the selected date
     try {
-      // 假设 shiftHandoverApi.getCurrentHandover 支持 status 参数
-      const finalizedRes = await shiftHandoverApi.getCurrentHandover(selectedDate.value, 'finalized');
-      if (finalizedRes) { // 直接检查 finalizedRes 是否为 null/undefined
-        handoverRecord = finalizedRes;
-      }
+      handoverRecord = await shiftHandoverApi.getCurrentHandover(selectedDate.value);
     } catch (e) {
-      console.warn('未找到 finalized 记录或获取失败:', e);
-    }
-
-    // 2. 如果没有 finalized 记录，尝试获取 draft 状态的记录
-    if (!handoverRecord) {
-      try {
-        const draftRes = await shiftHandoverApi.getCurrentHandover(selectedDate.value, 'draft');
-        if (draftRes) { // 直接检查 draftRes 是否为 null/undefined
-          handoverRecord = draftRes;
-        }
-      } catch (e) {
-        console.warn('未找到 draft 记录或获取失败:', e);
-      }
+      console.warn('未找到记录或获取失败:', e);
     }
 
     // 3. 根据获取到的记录填充页面数据
@@ -584,20 +514,20 @@ async function refreshAllData() {
       cashierName.value = handoverRecord.cashier_name || '';
       notes.value = handoverRecord.remarks || '';
       taskList.value = handoverRecord.task_list || [];
-      paymentData.value = handoverRecord.details || {};
-      // specialStats 需要单独处理，因为前端和后端结构可能不完全一致
-      // totalRooms.value = handoverRecord.statistics?.totalRooms || 0;
-      // restRooms.value = handoverRecord.statistics?.restRooms || 0;
-      // vipCards.value = handoverRecord.statistics?.vipCards || 0;
-      // goodReview.value = handoverRecord.statistics?.goodReview || '邀1得1';
+      paymentData.value = handoverRecord.paymentData || {}; // Changed from handoverRecord.details
+      // specialStats needs to be handled from handoverRecord.statistics
+      totalRooms.value = handoverRecord.statistics?.totalRooms || 0;
+      restRooms.value = handoverRecord.statistics?.restRooms || 0;
+      vipCards.value = handoverRecord.statistics?.vipCards || 0;
+      goodReview.value = handoverRecord.statistics?.goodReview || '邀1得1';
     } else {
-      // 如果当天没有记录，清空页面数据或加载默认值
+      // If no record found for the day, clear page data or load default values
       handoverPerson.value = '';
       receivePerson.value = '';
-      cashierName.value = '张'; // 默认值
+      cashierName.value = '张'; // Default value
       notes.value = '';
       taskList.value = [];
-      // 重置 paymentData 为初始结构
+      // Reset paymentData to initial structure
       paymentData.value = {
         cash: { reserveCash: 320, hotelIncome: 0, restIncome: 0, carRentIncome: 0, total: 0, hotelDeposit: 0, restDeposit: 0, retainedAmount: 320 },
         wechat: { reserveCash: 0, hotelIncome: 0, restIncome: 0, carRentIncome: 0, total: 0, hotelDeposit: 0, restDeposit: 0, retainedAmount: 0 },
