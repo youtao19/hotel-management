@@ -91,6 +91,9 @@ export const orderApi = {
   // 更新订单状态
   updateOrderStatus: (orderId, statusData) => api.post(`/orders/${orderId}/status`, statusData),
 
+  // 更新订单（支持多字段）
+  updateOrder: (orderId, updatedFields) => api.put(`/orders/${orderId}`, updatedFields),
+
   // 更新订单房间信息
   updateOrderRoom: (orderId, roomData) => api.patch(`/orders/${orderId}/room`, roomData),
 

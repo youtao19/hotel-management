@@ -335,6 +335,72 @@ export const useOrderStore = defineStore('order', () => {
     return orders.value.find(order => order.orderNumber === orderNumber)
   }
 
+  // 更新订单（调用后端）
+  async function updateOrder(orderNumber, updatedFields) {
+    try {
+      loading.value = true;
+      error.value = null;
+
+      // 字段映射：前端 -> 后端
+      const payload = { ...updatedFields };
+      // 将 camelCase 映射到 snake_case（仅处理我们允许的字段）
+      const map = {
+        guestName: 'guest_name',
+        phone: 'phone',
+        idNumber: 'id_number',
+        roomType: 'room_type',
+        roomNumber: 'room_number',
+        checkInDate: 'check_in_date',
+        checkOutDate: 'check_out_date',
+        status: 'status',
+        paymentMethod: 'payment_method',
+        roomPrice: 'room_price',
+        deposit: 'deposit',
+        remarks: 'remarks'
+      };
+      const body = {};
+      Object.keys(map).forEach(k => {
+        if (payload[k] !== undefined) body[map[k]] = payload[k];
+      });
+
+      // 规范日期为 YYYY-MM-DD
+      const dateKeys = ['check_in_date', 'check_out_date'];
+      dateKeys.forEach(k => {
+        if (body[k]) body[k] = formatOrderDate(body[k]);
+      });
+
+      const resp = await orderApi.updateOrder(orderNumber, body);
+      const updated = resp?.data || resp; // 兼容响应结构
+
+      // 更新本地 orders
+      const idx = orders.value.findIndex(o => o.orderNumber === orderNumber);
+      if (idx !== -1) {
+        const merged = {
+          ...orders.value[idx],
+          guestName: updated.guest_name ?? orders.value[idx].guestName,
+          phone: updated.phone ?? orders.value[idx].phone,
+          idNumber: updated.id_number ?? orders.value[idx].idNumber,
+          roomType: updated.room_type ?? orders.value[idx].roomType,
+          roomNumber: updated.room_number ?? orders.value[idx].roomNumber,
+          checkInDate: updated.check_in_date ? formatOrderDate(updated.check_in_date) : orders.value[idx].checkInDate,
+          checkOutDate: updated.check_out_date ? formatOrderDate(updated.check_out_date) : orders.value[idx].checkOutDate,
+          paymentMethod: updated.payment_method ?? orders.value[idx].paymentMethod,
+          roomPrice: updated.room_price ?? orders.value[idx].roomPrice,
+          deposit: updated.deposit ?? orders.value[idx].deposit,
+          remarks: updated.remarks ?? orders.value[idx].remarks,
+        };
+        orders.value[idx] = merged;
+      }
+      return updated;
+    } catch (err) {
+      console.error('更新订单失败:', err.response?.data || err.message);
+      error.value = err.response?.data?.message || err.message || '更新订单失败';
+      throw err;
+    } finally {
+      loading.value = false;
+    }
+  }
+
   // 获取特定房间号的活跃订单（待入住或已入住状态）
   function getActiveOrderByRoomNumber(roomNumber) {
     return orders.value.find(order =>
@@ -450,6 +516,7 @@ export const useOrderStore = defineStore('order', () => {
     updateOrderStatusViaApi,
     updateOrderCheckOutLocally,
     updateOrderRoom,
+  updateOrder,
     getOrderByNumber,
     getActiveOrderByRoomNumber,
     formatOrderDate,

@@ -186,6 +186,13 @@
       <q-card-actions align="right">
         <q-btn flat label="关闭" color="primary" v-close-popup />
         <q-btn
+          v-if="currentOrder && (currentOrder.status === 'pending' || currentOrder.status === 'checked-in' || currentOrder.status === 'checked-out')"
+          flat
+          label="更改订单"
+          color="primary"
+          @click="emitChangeOrder"
+        />
+        <q-btn
           v-if="currentOrder && currentOrder.status === 'pending'"
           flat
           label="办理入住"
@@ -235,7 +242,11 @@ const props = defineProps({
   formatDateTime: Function
 });
 
-const emit = defineEmits(['update:modelValue', 'check-in', 'change-room', 'checkout', 'refund-deposit']);
+const emit = defineEmits(['update:modelValue', 'check-in', 'change-room', 'checkout', 'refund-deposit', 'change-order']);
+
+function emitChangeOrder() {
+  emit('change-order');
+}
 
 function emitCheckIn() {
   emit('check-in');

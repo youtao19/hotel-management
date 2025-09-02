@@ -58,6 +58,10 @@
                   v-if="canRefundDeposit(props.row)">
                   <q-tooltip>退押金</q-tooltip>
                 </q-btn>
+                <q-btn flat round dense color="secondary" icon="edit" @click="openChangeOrderDialog"
+                  v-if="props.row.status !== 'checked-out'">
+                  <q-tooltip>更改订单</q-tooltip>
+                </q-btn>
               </q-btn-group>
             </q-td>
           </template>
@@ -101,8 +105,18 @@
       @change-room="openChangeRoomDialog"
       @checkout="checkoutOrderFromDetails"
       @refund-deposit="openRefundDepositFromDetails"
+      @change-order="openChangeOrderDialog"
     />
 
+
+    <!-- 更改订单对话框 -->
+    <ChangeOrderDialog
+      v-model="showChangeOrderDialog"
+      :order="currentOrder"
+      :availableRooms="changeOrderRooms"
+      :getRoomTypeName="getRoomTypeName"
+      @order-updated="handleOrderUpdated"
+    />
 
     <!-- 更改房间对话框 -->
     <ChangeRoomDialog
@@ -155,6 +169,7 @@ import { useViewStore } from '../stores/viewStore' // 导入视图 store
 import { useBillStore } from '../stores/billStore' // 导入账单 store
 import { roomApi } from '../api/index.js' // 导入房间API
 import OrderDetailsDialog from 'src/components/OrderDetailsDialog.vue';
+import ChangeOrderDialog from 'src/components/ChangeOrderDialog.vue';
 import ChangeRoomDialog from 'src/components/ChangeRoomDialog.vue';
 import Bill from 'src/components/Bill.vue';
 import ExtendStayDialog from 'src/components/ExtendStayDialog.vue';
@@ -295,6 +310,8 @@ async function fetchAllOrders() {
 const showOrderDetails = ref(false)
 const currentOrder = ref(null)
 const showChangeRoomDialog = ref(false)
+const showChangeOrderDialog = ref(false)
+const changeOrderRooms = ref([])
 
 // 在 script 部分添加相关变量和方法
 const availableRoomOptions = ref([]); // 用于存储从API获取的可用房间选项
@@ -1120,6 +1137,52 @@ async function handleRefundDeposit(refundData) {
       message: '退押金处理失败: ' + (error.message || '未知错误'),
       position: 'top'
     })
+  }
+}
+
+// 打开更改订单对话框
+async function openChangeOrderDialog() {
+  if (!currentOrder.value) return;
+  try {
+    const startDate = formatDate(currentOrder.value.checkInDate)
+    const endDate = formatDate(currentOrder.value.checkOutDate)
+    if (!startDate || !endDate) {
+      $q.notify({ type: 'negative', message: '订单日期无效，无法加载可用房间', position: 'top' })
+      return
+    }
+    const rooms = await roomStore.getAvailableRoomsByDate(startDate, endDate)
+    // 把当前房间也加入选项，方便保留不变
+    const currentRoom = roomStore.getRoomByNumber(currentOrder.value.roomNumber)
+    const merged = [...rooms]
+    if (currentRoom) {
+      const exists = merged.find(r => r.room_number === currentRoom.room_number)
+      if (!exists) merged.unshift(currentRoom)
+    }
+    changeOrderRooms.value = merged
+  } catch (e) {
+    console.warn('加载更改订单可用房间失败:', e)
+    changeOrderRooms.value = []
+  } finally {
+    showChangeOrderDialog.value = true
+  }
+}
+
+// 处理订单更新
+async function handleOrderUpdated(updatedOrderData) {
+  try {
+    loadingOrders.value = true;
+  await orderStore.updateOrder(updatedOrderData.orderNumber, updatedOrderData);
+    await fetchAllOrders();
+    if (currentOrder.value && currentOrder.value.orderNumber === updatedOrderData.orderNumber) {
+      currentOrder.value = { ...orderStore.getOrderByNumber(updatedOrderData.orderNumber) };
+    }
+    $q.notify({ type: 'positive', message: '订单信息更新成功', position: 'top' });
+  } catch (error) {
+    console.error('更新订单失败:', error);
+    $q.notify({ type: 'negative', message: '更新订单失败', position: 'top' });
+  } finally {
+    loadingOrders.value = false;
+    showChangeOrderDialog.value = false;
   }
 }
 

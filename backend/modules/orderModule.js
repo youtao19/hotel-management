@@ -1,4 +1,4 @@
-const { query } = require('../database/postgreDB/pg');
+const { query, getClient } = require('../database/postgreDB/pg');
 const shiftHandoverModule = require('./shiftHandoverModule');
 const billModule = require('./billModule');
 
@@ -577,6 +577,83 @@ async function updateOrderStatus(orderId, newStatus) {
 }
 
 /**
+ * 更新订单
+ * @param {string} orderId - 订单ID
+ * @param {Object} updatedFields - 需要更新的字段
+ * @returns {Promise<Object>} 更新后的订单对象
+ */
+async function updateOrder(orderId, updatedFields) {
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+
+    // 1. 获取旧订单数据
+    const oldOrderResult = await client.query('SELECT * FROM orders WHERE order_id = $1 FOR UPDATE', [orderId]);
+    if (oldOrderResult.rows.length === 0) {
+      throw new Error(`订单号 '${orderId}' 不存在`);
+    }
+    const oldOrder = oldOrderResult.rows[0];
+
+    // 2. 准备更新的数据和变更记录
+    const changes = {};
+    const updateValues = [];
+    const updateFields = [];
+    let valueIndex = 1;
+
+    for (const key in updatedFields) {
+      if (Object.prototype.hasOwnProperty.call(updatedFields, key) && key !== 'order_id' && key !== 'isRoomChanged') {
+        // 使用 JSON.stringify 来比较对象和数组
+        const oldValue = JSON.stringify(oldOrder[key]);
+        const newValue = JSON.stringify(updatedFields[key]);
+
+        if (oldValue !== newValue) {
+          changes[key] = { old: oldOrder[key], new: updatedFields[key] };
+          updateFields.push(`${key} = $${valueIndex++}`);
+          // 如果是jsonb字段，需要特别处理
+          if (key === 'room_price') {
+             updateValues.push(JSON.stringify(updatedFields[key]));
+          } else {
+             updateValues.push(updatedFields[key]);
+          }
+        }
+      }
+    }
+
+    if (updateFields.length === 0) {
+      console.log('没有字段需要更新');
+      await client.query('COMMIT');
+      return oldOrder;
+    }
+
+    // 3. 更新订单表
+    const updateQuery = `UPDATE orders SET ${updateFields.join(', ')} WHERE order_id = $${valueIndex} RETURNING *`;
+    updateValues.push(orderId);
+    const updatedOrderResult = await client.query(updateQuery, updateValues);
+    const updatedOrder = updatedOrderResult.rows[0];
+
+    // 4. 记录变更历史
+    const changeLog = {
+      order_id: orderId,
+      changed_by: 'system', // 这里可以替换为实际操作员
+      changes: changes,
+      reason: updatedFields.reason || '用户界面修改'
+    };
+    const insertChangeQuery = 'INSERT INTO order_changes (order_id, changed_by, changes, reason) VALUES ($1, $2, $3, $4)';
+    await client.query(insertChangeQuery, [changeLog.order_id, changeLog.changed_by, JSON.stringify(changeLog.changes), changeLog.reason]);
+
+    await client.query('COMMIT');
+    return updatedOrder;
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error(`更新订单(ID: ${orderId})失败:`, error);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * 退押金
  * @param {Object} refundData - 退押金数据
  * @returns {Promise<Object>} 更新后的订单对象
@@ -769,11 +846,13 @@ const table = {
   getAllOrders,
   getOrderById,
   updateOrderStatus,
+  updateOrder,
   refundDeposit,
   getDepositStatus,
   isRestRoom,
   calculateTotalPrice,
-  validatePriceDateRange
+  validatePriceDateRange,
+  updateOrder
 };
 
 module.exports = table;
