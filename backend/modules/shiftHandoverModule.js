@@ -1051,7 +1051,10 @@ async function saveAmountChanges(amountData) {
     date,
     taskList, // Admin-added memos
     vipCards, // From specialStats
-    cashierName // From specialStats
+    cashierName, // From specialStats
+    handoverPerson, // Add this
+    receivePerson,  // Add this
+    notes           // Add this
   } = amountData;
 
   // Prepare statistics JSONB for saving vipCards
@@ -1080,6 +1083,9 @@ async function saveAmountChanges(amountData) {
         task_list = $1,
         statistics = $2,
         cashier_name = $3,
+        handover_person = $5,
+        receive_person = $6,
+        remarks = $7,
         updated_at = CURRENT_TIMESTAMP
       WHERE shift_date = $4 AND status = 'draft' -- 确保只更新草稿
       RETURNING *;
@@ -1088,7 +1094,10 @@ async function saveAmountChanges(amountData) {
       JSON.stringify(taskList || []),
       JSON.stringify(statisticsToSave), // Use statisticsToSave for vipCards
       cashierName || '',
-      date
+      date,
+      handoverPerson || '',
+      receivePerson || '',
+      notes || ''
     ];
     const result = await query(sqlQuery, values);
     if (result.rows.length === 0) {
@@ -1096,12 +1105,15 @@ async function saveAmountChanges(amountData) {
         // 或者更合理的做法是，如果存在 finalized，则不允许再保存 draft
         // 这里简化处理，如果没更新到 draft，就尝试插入新的 draft
         const insertSqlQuery = `
-            INSERT INTO shift_handover (shift_date, task_list, statistics, cashier_name, status, shift_time)
-            VALUES ($1, $2, $3, $4, 'draft', $5)
+            INSERT INTO shift_handover (shift_date, task_list, statistics, cashier_name, status, shift_time, handover_person, receive_person, remarks)
+            VALUES ($1, $2, $3, $4, 'draft', $5, $6, $7, $8)
             ON CONFLICT (shift_date, status) DO UPDATE SET
                 task_list = EXCLUDED.task_list,
                 statistics = EXCLUDED.statistics,
                 cashier_name = EXCLUDED.cashier_name,
+                handover_person = EXCLUDED.handover_person,
+                receive_person = EXCLUDED.receive_person,
+                remarks = EXCLUDED.remarks,
                 updated_at = CURRENT_TIMESTAMP
             RETURNING *;
         `;
@@ -1110,7 +1122,10 @@ async function saveAmountChanges(amountData) {
             JSON.stringify(taskList || []),
             JSON.stringify(statisticsToSave), // Use statisticsToSave for vipCards
             cashierName || '',
-            new Date().toTimeString().slice(0, 5)
+            new Date().toTimeString().slice(0, 5),
+            handoverPerson || '',
+            receivePerson || '',
+            notes || ''
         ];
         return (await query(insertSqlQuery, insertValues)).rows[0];
     }
@@ -1118,8 +1133,8 @@ async function saveAmountChanges(amountData) {
   } else {
     // 插入新的草稿记录
     const sqlQuery = `
-      INSERT INTO shift_handover (shift_date, task_list, statistics, cashier_name, status, shift_time)
-      VALUES ($1, $2, $3, $4, 'draft', $5)
+      INSERT INTO shift_handover (shift_date, task_list, statistics, cashier_name, status, shift_time, handover_person, receive_person, remarks)
+      VALUES ($1, $2, $3, $4, 'draft', $5, $6, $7, $8)
       RETURNING *;
     `;
     const values = [
@@ -1127,7 +1142,10 @@ async function saveAmountChanges(amountData) {
       JSON.stringify(taskList || []),
       JSON.stringify(statisticsToSave), // Use statisticsToSave for vipCards
       cashierName || '',
-      new Date().toTimeString().slice(0, 5)
+      new Date().toTimeString().slice(0, 5),
+      handoverPerson || '',
+      receivePerson || '',
+      notes || ''
     ];
     return (await query(sqlQuery, values)).rows[0];
   }

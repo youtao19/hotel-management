@@ -43,7 +43,7 @@ const props = defineProps({
   restRooms: { type: Number, required: true },
   vipCards: { type: Number, required: true },
   cashierName: { type: String, required: true },
-  notes: { type: String, required: true },
+  notes: { type: String, default: '' },
   goodReview: { type: String, default: '邀1得1' },
   readOnly: { type: Boolean, default: false }
 })

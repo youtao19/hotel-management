@@ -334,8 +334,8 @@ async function savePageData() {
 
     const pageData = {
       date: selectedDate.value,
-      // handoverPerson: handoverPerson.value, // 移除
-      // receivePerson: receivePerson.value, // 移除
+      handoverPerson: handoverPerson.value,
+      receivePerson: receivePerson.value,
       cashierName: cashierName.value,
       notes: notes.value,
       taskList: JSON.parse(JSON.stringify(taskList.value)),
