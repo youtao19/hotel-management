@@ -294,16 +294,18 @@ router.post('/:orderNumber/refund-deposit', [
   } catch (error) {
     console.error('退押金处理失败:', error.message);
     const msg = error.message || '退押金处理失败';
+    // 仅将明确的业务校验错误判定为 400，"订单号不存在" 不属于客户端可修复错误
     const validationIndicators = [
       '只有已退房或已取消的订单才能退押金',
       '该订单没有可退押金',
       '退押金金额不能超过可退金额',
-      '订单号',
       '退款累计'
     ];
     const isClientError = validationIndicators.some(v => msg.includes(v));
-    res.status(isClientError ? 400 : 500).json({
-      message: msg,
+    const status = isClientError ? 400 : 500;
+    res.status(status).json({
+      // 服务端错误统一对外返回固定消息，满足测试期望
+      message: isClientError ? msg : '退押金处理失败',
       error: msg,
       code: error.code || (isClientError ? 'REFUND_VALIDATION' : 'REFUND_SERVER_ERROR'),
       availableRefund: error.availableRefund,
