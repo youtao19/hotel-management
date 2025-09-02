@@ -329,14 +329,13 @@ async function savePageData() {
       throw new Error('请填写收银员姓名')
     }
 
-  savingAmounts.value = true
-  loadingShow({ message: '保存数据中...' })
+  savingAmounts.value = true;
+  loadingShow({ message: '保存数据中...' });
 
-    // 准备完整的页面数据，使用深拷贝避免响应式对象的引用问题
     const pageData = {
       date: selectedDate.value,
-      handoverPerson: handoverPerson.value,
-      receivePerson: receivePerson.value,
+      // handoverPerson: handoverPerson.value, // 移除
+      // receivePerson: receivePerson.value, // 移除
       cashierName: cashierName.value,
       notes: notes.value,
       taskList: JSON.parse(JSON.stringify(taskList.value)),
@@ -349,34 +348,32 @@ async function savePageData() {
         totalIncome: totalIncome.value,
         totalDeposit: totalDeposit.value
       }
-    }
+    };
 
     // 调用保存API端点
-    await shiftHandoverApi.saveAmountChanges(pageData)
+    await shiftHandoverApi.saveAmountChanges(pageData);
 
-    // 标记没有未保存的变更
-    hasChanges.value = false
-
+    hasChanges.value = false;
     $q.notify({
       type: 'positive',
       message: '页面数据保存成功',
-      caption: '所有数据已保存到数据库',
+      caption: '草稿已保存',
       position: 'top',
       timeout: 3000
-    })
+    });
 
   } catch (error) {
-    console.error('保存页面数据失败:', error)
+    console.error('保存页面数据失败:', error);
     $q.notify({
       type: 'negative',
       message: '保存页面数据失败',
       caption: error.message || '请检查数据并重试',
       position: 'top',
       timeout: 5000
-    })
+    });
   } finally {
-  savingAmounts.value = false
-  loadingHide()
+    savingAmounts.value = false;
+    loadingHide();
   }
 }
 
@@ -493,7 +490,7 @@ async function loadRemarksIntoMemo() {
           : new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 
         return {
-          id: r?.id ?? (Date.now() + idx),
+          id: `order-${r.order_id}-${r.remarks ? r.remarks.replace(/\s/g, '_') : 'no_remark'}-${idx}`, // More stable ID
           title: `房间号：${room}，备注：${remarkText}`,
           time: timeStr,
           completed: false,
@@ -503,9 +500,15 @@ async function loadRemarksIntoMemo() {
       })
 
       // 覆盖显示为后端当天结果
-      taskList.value = formatted
+      // taskList.value = formatted
+      // 合并订单备注到现有备忘录列表
+      // 过滤掉可能重复的项，例如基于id
+      const existingTaskIds = new Set(taskList.value.map(task => task.id));
+      const newRemarks = formatted.filter(remark => !existingTaskIds.has(remark.id));
+      taskList.value = [...taskList.value, ...newRemarks];
     } else {
-      taskList.value = []
+      // If list.length is 0, do not clear taskList.value, as it might contain admin-added tasks.
+      // taskList.value = []
     }
   } catch (e) {
     console.error('加载备忘录失败:', e)
@@ -547,33 +550,87 @@ watch([cashierName, notes, totalRooms, restRooms, vipCards, goodReview], () => {
 // 刷新所有数据的统一入口函数
 async function refreshAllData() {
   try {
-  loadingShow({ message: '加载数据中...' })
+    loadingShow({ message: '加载数据中...' });
+
+    let handoverRecord = null;
+
+    // 1. 尝试获取 finalized 状态的记录
+    try {
+      // 假设 shiftHandoverApi.getCurrentHandover 支持 status 参数
+      const finalizedRes = await shiftHandoverApi.getCurrentHandover(selectedDate.value, 'finalized');
+      if (finalizedRes) { // 直接检查 finalizedRes 是否为 null/undefined
+        handoverRecord = finalizedRes;
+      }
+    } catch (e) {
+      console.warn('未找到 finalized 记录或获取失败:', e);
+    }
+
+    // 2. 如果没有 finalized 记录，尝试获取 draft 状态的记录
+    if (!handoverRecord) {
+      try {
+        const draftRes = await shiftHandoverApi.getCurrentHandover(selectedDate.value, 'draft');
+        if (draftRes) { // 直接检查 draftRes 是否为 null/undefined
+          handoverRecord = draftRes;
+        }
+      } catch (e) {
+        console.warn('未找到 draft 记录或获取失败:', e);
+      }
+    }
+
+    // 3. 根据获取到的记录填充页面数据
+    if (handoverRecord) {
+      handoverPerson.value = handoverRecord.handover_person || '';
+      receivePerson.value = handoverRecord.receive_person || '';
+      cashierName.value = handoverRecord.cashier_name || '';
+      notes.value = handoverRecord.remarks || '';
+      taskList.value = handoverRecord.task_list || [];
+      paymentData.value = handoverRecord.details || {};
+      // specialStats 需要单独处理，因为前端和后端结构可能不完全一致
+      // totalRooms.value = handoverRecord.statistics?.totalRooms || 0;
+      // restRooms.value = handoverRecord.statistics?.restRooms || 0;
+      // vipCards.value = handoverRecord.statistics?.vipCards || 0;
+      // goodReview.value = handoverRecord.statistics?.goodReview || '邀1得1';
+    } else {
+      // 如果当天没有记录，清空页面数据或加载默认值
+      handoverPerson.value = '';
+      receivePerson.value = '';
+      cashierName.value = '张'; // 默认值
+      notes.value = '';
+      taskList.value = [];
+      // 重置 paymentData 为初始结构
+      paymentData.value = {
+        cash: { reserveCash: 320, hotelIncome: 0, restIncome: 0, carRentIncome: 0, total: 0, hotelDeposit: 0, restDeposit: 0, retainedAmount: 320 },
+        wechat: { reserveCash: 0, hotelIncome: 0, restIncome: 0, carRentIncome: 0, total: 0, hotelDeposit: 0, restDeposit: 0, retainedAmount: 0 },
+        digital: { reserveCash: 0, hotelIncome: 0, restIncome: 0, carRentIncome: 0, total: 0, hotelDeposit: 0, restDeposit: 0, retainedAmount: 0 },
+        other: { reserveCash: 0, hotelIncome: 0, restIncome: 0, carRentIncome: 0, total: 0, hotelDeposit: 0, restDeposit: 0, retainedAmount: 0 }
+      };
+    }
 
     // 确保合计正确计算
-    calculateTotals()
+    calculateTotals();
 
-    // 加载备忘录
-    await loadRemarksIntoMemo()
-
-    // 加载特殊统计
-    await loadSpecialStats()
+    // 加载特殊统计 (确保 specialStats 总是最新的)
+    await loadSpecialStats();
 
     // 先根据选中日期汇总交接表数据到 store
-    await shiftHandoverStore.insertDataToShiftTable(selectedDate.value)
+    await shiftHandoverStore.insertDataToShiftTable(selectedDate.value);
 
     // 加载交接表数据
-    await loadShiftTableData()
+    await loadShiftTableData();
+
+    // 加载订单备注到备忘录
+    await loadRemarksIntoMemo();
 
   } catch (error) {
-    console.error('刷新数据失败:', error)
+    console.error('刷新数据失败:', error);
     $q.notify({
       type: 'negative',
       message: '刷新数据失败',
       caption: error.message,
       timeout: 3000
-    })
+    });
   } finally {
-  loadingHide()
+    loadingHide();
   }
 }
 

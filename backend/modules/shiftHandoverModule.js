@@ -282,102 +282,110 @@ async function getStatistics(startDate, endDate = null) {
  * @returns {Promise<Object>} 保存的交接班记录
  */
 async function saveHandover(handoverData) {
-  // 验证必填字段
-  if (!handoverData || typeof handoverData !== 'object') {
-    throw new Error('交接班数据不能为空');
-  }
-
-  // 兼容新旧格式
   const {
-    // 新格式字段
     date,
-    shift,
     handoverPerson,
     receivePerson,
     cashierName,
     notes,
-    paymentData,
-    totalSummary,
-    handoverAmount,
-    specialStats,
     taskList,
-    htmlSnapshot,
-
-    // 旧格式字段 (向后兼容)
-    type = 'hotel',
-    details = [],
-    statistics = {},
-    remarks = '',
-    cashier_name,
-    shift_time,
-    shift_date = new Date().toISOString().split('T')[0]
+    specialStats // paymentData is no longer saved here
   } = handoverData;
 
-  // 确定最终字段值 (新格式优先)
-  const finalCashierName = cashierName || cashier_name;
-  const finalShiftTime = shift_time || new Date().toTimeString().slice(0, 5);
-  const finalShiftDate = date || shift_date;
-  const finalRemarks = notes || remarks;
-  const finalHandoverPerson = handoverPerson || '';
-  const finalReceivePerson = receivePerson || '';
+  // Prepare statistics JSONB for saving specialStats (including vipCards)
+  const statisticsToSave = specialStats || {};
 
-  // 验证必填字段
-  if (!finalCashierName || finalCashierName.trim() === '' || finalCashierName === '未知') {
-    throw new Error('收银员姓名不能为空');
-  }
+  // 检查是否已存在 finalized 记录
+  const existingFinalized = await db.query(
+    `SELECT * FROM shift_handover WHERE shift_date = $1 AND status = 'finalized'`,
+    [date]
+  );
 
-  // 构造完整的交接班数据
-  const fullHandoverData = {
-    // 基本信息
-    date: finalShiftDate,
-    shift: shift || '白班',
-    handoverPerson: finalHandoverPerson,
-    receivePerson: finalReceivePerson,
-    cashierName: finalCashierName,
-    notes: finalRemarks,
+  if (existingFinalized.rows.length > 0) {
+    // 更新现有 finalized 记录
+    const query = `
+      UPDATE shift_handover
+      SET
+        handover_person = $1,
+        receive_person = $2,
+        cashier_name = $3,
+        remarks = $4,
+        task_list = $5,
+        details = $6, // details will be an empty object or null
+        statistics = $7,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE shift_date = $8 AND status = 'finalized'
+      RETURNING *;
+    `;
+    const values = [
+      handoverPerson || '',
+      receivePerson || '',
+      cashierName || '',
+      notes || '',
+      JSON.stringify(taskList || []),
+      JSON.stringify({}), // details is now an empty object
+      JSON.stringify(statisticsToSave),
+      date
+    ];
+    return (await db.query(query, values)).rows[0];
+  } else {
+    // 检查是否存在 draft 记录
+    const existingDraft = await db.query(
+      `SELECT * FROM shift_handover WHERE shift_date = $1 AND status = 'draft'`,
+      [date]
+    );
 
-    // 支付数据
-    paymentData: paymentData || {},
-    totalSummary: totalSummary || {},
-    handoverAmount: handoverAmount || 0,
-    specialStats: specialStats || {},
-    taskList: taskList || [],
-
-    // 兼容旧格式
-    type,
-    details,
-    statistics
-  };
-
-  const sql = `
-    INSERT INTO shift_handover (
-      type,
-      details,
-      statistics,
-      remarks,
-      cashier_name,
-      shift_time,
-      shift_date
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-    RETURNING *;
-  `;
-
-  try {
-    const result = await query(sql, [
-      type,
-      JSON.stringify(fullHandoverData),
-      JSON.stringify(totalSummary || statistics || {}),
-      finalRemarks,
-      finalCashierName.trim(),
-      finalShiftTime,
-      finalShiftDate
-    ]);
-
-    console.log('✅ 交接班记录保存成功，ID:', result.rows[0].id);
-    return result.rows[0];
-  } catch (error) {
-    console.error('保存交接班记录失败:', error);
-    throw error;
+    if (existingDraft.rows.length > 0) {
+      // 将 draft 记录更新为 finalized
+      const query = `
+        UPDATE shift_handover
+        SET
+          handover_person = $1,
+          receive_person = $2,
+          cashier_name = $3,
+          remarks = $4,
+          task_list = $5,
+          details = $6, // details will be an empty object or null
+          statistics = $7,
+          status = 'finalized', -- 状态更新为 finalized
+          updated_at = CURRENT_TIMESTAMP
+        WHERE shift_date = $8 AND status = 'draft'
+        RETURNING *;
+      `;
+      const values = [
+        handoverPerson || '',
+        receivePerson || '',
+        cashierName || '',
+        notes || '',
+        JSON.stringify(taskList || []),
+        JSON.stringify({}), // details is now an empty object
+        JSON.stringify(statisticsToSave),
+        date
+      ];
+      return (await db.query(query, values)).rows[0];
+    } else {
+      // 插入新的 finalized 记录
+      const query = `
+        INSERT INTO shift_handover (
+          shift_date, handover_person, receive_person, cashier_name, remarks,
+          task_list, details, statistics, status, shift_time
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'finalized', $9)
+        RETURNING *;
+      `;
+      const values = [
+        date,
+        handoverPerson || '',
+        receivePerson || '',
+        cashierName || '',
+        notes || '',
+        JSON.stringify(taskList || []),
+        JSON.stringify({}), // details is now an empty object
+        JSON.stringify(statisticsToSave),
+        new Date().toTimeString().slice(0, 5)
+      ];
+      return (await db.query(query, values)).rows[0];
+    }
   }
 }
 
@@ -694,46 +702,20 @@ async function exportNewHandoverToExcel(handoverData) {
  * @param {string} currentDate - 当前日期
  * @returns {Promise<Object|null>} 当天的交接班记录
  */
-async function getCurrentHandoverData(currentDate) {
-  console.log(`查找当天交接班记录: 日期=${currentDate}`);
+async function getCurrentHandoverData(date, status = null) {
+  let sqlQuery = `SELECT * FROM shift_handover WHERE shift_date = $1`;
+  const values = [date];
 
-  const sql = `
-    SELECT *
-    FROM shift_handover h
-    WHERE h.shift_date::date = $1::date
-    ORDER BY h.updated_at DESC
-    LIMIT 1
-  `;
-
-  try {
-    const result = await query(sql, [currentDate]);
-    console.log(`当天交接班记录查询结果: 找到${result.rows.length}条记录`);
-
-    if (result.rows.length > 0) {
-      const record = result.rows[0];
-      console.log(`找到当天交接班记录: ID=${record.id}, 日期=${record.shift_date}, 类型=${record.type}`);
-
-      // 解析details字段
-      let details = {};
-      try {
-        details = typeof record.details === 'string' ? JSON.parse(record.details) : record.details;
-      } catch (parseError) {
-        console.error('解析当天交接班详情数据失败:', parseError);
-      }
-
-      return {
-        ...record,
-        details: details,
-        paymentData: details.paymentData || null
-      };
-    }
-
-    console.log('未找到当天的交接班记录');
-    return null;
-  } catch (error) {
-    console.error('获取当天交接班记录失败:', error);
-    throw error;
+  if (status) {
+    sqlQuery += ` AND status = $2`;
+    values.push(status);
+  } else {
+    // 如果没有指定状态，优先返回 finalized，否则返回 draft
+    sqlQuery += ` ORDER BY CASE WHEN status = 'finalized' THEN 1 ELSE 2 END LIMIT 1`;
   }
+
+  const result = await query(sqlQuery, values);
+  return result.rows[0] || null;
 }
 
 /**
@@ -1064,129 +1046,90 @@ async function importReceiptsToShiftHandover(importData) {
  * @param {Object} pageData - 页面数据
  * @returns {Promise<Object>} 保存结果
  */
-async function saveAmountChanges(pageData) {
-  try {
-    console.log('💾 保存页面数据:', pageData.date)
+async function saveAmountChanges(amountData) {
+  const {
+    date,
+    taskList, // Admin-added memos
+    vipCards, // From specialStats
+    cashierName // From specialStats
+  } = amountData;
 
-    const {
-      date,
-      paymentData,
-      notes,
-      handoverPerson,
-      receivePerson,
-      cashierName,
-      taskList,
-      specialStats
-    } = pageData
+  // Prepare statistics JSONB for saving vipCards
+  const statisticsToSave = {
+    vipCards: vipCards || 0 // Only save vipCards here
+  };
 
-    // 检查当天是否已有记录
-    const existingQuery = `
-      SELECT id, details
-      FROM shift_handover
-      WHERE shift_date = $1
-      ORDER BY updated_at DESC
-      LIMIT 1
-    `
+  // 尝试查找现有记录，优先查找 finalized，其次 draft
+  let existingRecord = await query(
+    `SELECT * FROM shift_handover WHERE shift_date = $1 AND status = 'finalized'`,
+    [date]
+  );
 
-    const existingResult = await query(existingQuery, [date])
+  if (existingRecord.rows.length === 0) {
+    existingRecord = await query(
+      `SELECT * FROM shift_handover WHERE shift_date = $1 AND status = 'draft'`,
+      [date]
+    );
+  }
 
-    if (existingResult.rows.length > 0) {
-      // 更新现有记录的金额数据
-      const handoverId = existingResult.rows[0].id
-
-      let existingDetails = {}
-      try {
-        existingDetails = existingResult.rows[0].details || {}
-        if (typeof existingDetails === 'string') {
-          existingDetails = JSON.parse(existingDetails)
-        }
-      } catch (e) {
-        console.warn('解析现有详情数据失败:', e.message)
-        existingDetails = {}
-      }
-
-      const updatedDetails = {
-        ...existingDetails,
-        paymentData: paymentData,
-        notes: notes,
-        handoverPerson: handoverPerson,
-        receivePerson: receivePerson,
-        cashierName: cashierName,
-        taskList: taskList || [],
-        specialStats: specialStats || {},
-        lastPageUpdate: new Date().toISOString()
-      }
-
-      const updateQuery = `
-        UPDATE shift_handover
-        SET details = $1, type = $2, cashier_name = $3, updated_at = CURRENT_TIMESTAMP
-        WHERE id = $4
-        RETURNING id
-      `
-
-      const updateResult = await query(updateQuery, [
-        JSON.stringify(updatedDetails),
-        'page_data',
-        cashierName || '系统',
-        handoverId
-      ])
-
-      console.log('✅ 页面数据保存成功，ID:', updateResult.rows[0].id)
-      return { id: updateResult.rows[0].id, action: 'page_data_updated' }
-    } else {
-      // 创建新记录（包含完整页面数据），需要设置必填字段
-      const details = {
-        paymentData: paymentData,
-        notes: notes,
-        handoverPerson: handoverPerson,
-        receivePerson: receivePerson,
-        cashierName: cashierName,
-        taskList: taskList || [],
-        specialStats: specialStats || {},
-        lastPageUpdate: new Date().toISOString(),
-        type: 'page_data'
-      }
-
-      const insertQuery = `
-        INSERT INTO shift_handover (
-          shift_date,
-          type,
-          details,
-          statistics,
-          cashier_name,
-          shift_time,
-          created_at,
-          updated_at
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        RETURNING id
-      `
-
-      // 设置必要的默认值
-      const defaultStatistics = {
-        type: 'page_data',
-        lastUpdate: new Date().toISOString(),
-        totalRooms: specialStats?.totalRooms || 0,
-        restRooms: specialStats?.restRooms || 0,
-        vipCards: specialStats?.vipCards || 0
-      }
-
-      const insertResult = await query(insertQuery, [
-        date,                              // shift_date
-        'page_data',                       // type
-        JSON.stringify(details),           // details
-        JSON.stringify(defaultStatistics), // statistics
-        cashierName || '系统',             // cashier_name
-        'page'                             // shift_time (must be ≤10 chars)
-      ])
-
-      console.log('✅ 新建页面数据记录成功，ID:', insertResult.rows[0].id)
-      return { id: insertResult.rows[0].id, action: 'page_data_created' }
+  if (existingRecord.rows.length > 0) {
+    // 更新现有草稿或在 finalized 记录上更新可修改部分
+    const sqlQuery = `
+      UPDATE shift_handover
+      SET
+        task_list = $1,
+        statistics = $2,
+        cashier_name = $3,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE shift_date = $4 AND status = 'draft' -- 确保只更新草稿
+      RETURNING *;
+    `;
+    const values = [
+      JSON.stringify(taskList || []),
+      JSON.stringify(statisticsToSave), // Use statisticsToSave for vipCards
+      cashierName || '',
+      date
+    ];
+    const result = await query(sqlQuery, values);
+    if (result.rows.length === 0) {
+        // 如果没有更新到草稿，可能是因为只有 finalized 记录，此时需要插入新的 draft
+        // 或者更合理的做法是，如果存在 finalized，则不允许再保存 draft
+        // 这里简化处理，如果没更新到 draft，就尝试插入新的 draft
+        const insertSqlQuery = `
+            INSERT INTO shift_handover (shift_date, task_list, statistics, cashier_name, status, shift_time)
+            VALUES ($1, $2, $3, $4, 'draft', $5)
+            ON CONFLICT (shift_date, status) DO UPDATE SET
+                task_list = EXCLUDED.task_list,
+                statistics = EXCLUDED.statistics,
+                cashier_name = EXCLUDED.cashier_name,
+                updated_at = CURRENT_TIMESTAMP
+            RETURNING *;
+        `;
+        const insertValues = [
+            date,
+            JSON.stringify(taskList || []),
+            JSON.stringify(statisticsToSave), // Use statisticsToSave for vipCards
+            cashierName || '',
+            new Date().toTimeString().slice(0, 5)
+        ];
+        return (await query(insertSqlQuery, insertValues)).rows[0];
     }
-
-  } catch (error) {
-    console.error('保存金额修改失败:', error)
-    throw error
+    return result.rows[0];
+  } else {
+    // 插入新的草稿记录
+    const sqlQuery = `
+      INSERT INTO shift_handover (shift_date, task_list, statistics, cashier_name, status, shift_time)
+      VALUES ($1, $2, $3, $4, 'draft', $5)
+      RETURNING *;
+    `;
+    const values = [
+      date,
+      JSON.stringify(taskList || []),
+      JSON.stringify(statisticsToSave), // Use statisticsToSave for vipCards
+      cashierName || '',
+      new Date().toTimeString().slice(0, 5)
+    ];
+    return (await query(sqlQuery, values)).rows[0];
   }
 }
 

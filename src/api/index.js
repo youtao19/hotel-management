@@ -239,8 +239,14 @@ export const shiftHandoverApi = {
   // 获取前一天的交接班记录
   getPreviousHandoverData: (params) => api.get('/shift-handover/previous-handover', { params }),
 
-  // 获取当天的交接班记录
-  getCurrentHandoverData: (params) => api.get('/shift-handover/current-handover', { params }),
+  // 获取当天的交接班记录 (根据状态)
+  getCurrentHandover: (date, status) => {
+    const params = { date };
+    if (status) {
+      params.status = status;
+    }
+    return api.get('/shift-handover/current-handover', { params });
+  },
 
   // 保存交接班记录
   saveHandover: (handoverData) => api.post('/shift-handover/save', handoverData),

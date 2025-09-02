@@ -184,12 +184,11 @@
       </q-card-section>
 
       <q-card-actions align="right">
-        <q-btn flat label="关闭" color="primary" v-close-popup />
         <q-btn
           v-if="currentOrder && (currentOrder.status === 'pending' || currentOrder.status === 'checked-in' || currentOrder.status === 'checked-out')"
           flat
-          label="更改订单"
-          color="primary"
+          label="修改订单"
+          color="secondary"
           @click="emitChangeOrder"
         />
         <q-btn
@@ -223,6 +222,7 @@
           icon="account_balance_wallet"
           @click="emitRefundDeposit"
         />
+        <q-btn flat label="关闭" color="primary" v-close-popup />
       </q-card-actions>
     </q-card>
   </q-dialog>

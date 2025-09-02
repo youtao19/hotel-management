@@ -3,16 +3,21 @@ const { query } = require('../pg');
 // 创建交接班表
 const createQuery = `
   CREATE TABLE IF NOT EXISTS shift_handover (
-    id SERIAL PRIMARY KEY, -- 交接班ID
-    type VARCHAR(20) NOT NULL DEFAULT 'hotel', -- 交接班类型
-    details JSONB NOT NULL DEFAULT '[]', -- 交接班详情
-    statistics JSONB NOT NULL DEFAULT '{}', -- 交接班统计信息
-    remarks TEXT, -- 备注
-    cashier_name VARCHAR(100) NOT NULL, -- 收银员姓名
-    shift_time VARCHAR(10) NOT NULL, -- 班次时间
-    shift_date DATE NOT NULL, -- 班次日期
+    id SERIAL PRIMARY KEY,
+    type VARCHAR(20) NOT NULL DEFAULT 'hotel',
+    details JSONB NOT NULL DEFAULT '[]',
+    statistics JSONB NOT NULL DEFAULT '{}',
+    remarks TEXT,
+    task_list JSONB DEFAULT '[]'::jsonb,
+    cashier_name VARCHAR(100) NOT NULL,
+    shift_time VARCHAR(10) NOT NULL,
+    shift_date DATE NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'draft', -- 新增状态字段
+    handover_person VARCHAR(100), -- 交班人
+    receive_person VARCHAR(100), -- 接班人
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (shift_date, status) -- 确保同一日期下，draft 和 finalized 状态的记录是唯一的
   );
 `;
 
