@@ -14,14 +14,22 @@ export const useOrderStore = defineStore('order', () => {
   // 错误信息
   const error = ref(null)
 
+  // 防重入：共享进行中的获取请求，避免并发拉取导致级联触发
+  let inFlightFetchAll = null
+
   // 获取所有订单
   async function fetchAllOrders(retryCount = 0) {
-    try {
-      loading.value = true
-      error.value = null
-      console.log('开始获取订单数据...')
+    // 若已有请求在进行，复用该 Promise，防止重复触发更新造成循环
+    if (inFlightFetchAll) {
+      try { return await inFlightFetchAll } finally { /* 不重置，这里由首个 finally 重置 */ }
+    }
+    inFlightFetchAll = (async () => {
+      try {
+        loading.value = true
+        error.value = null
+        console.log('开始获取订单数据...')
 
-      const response = await orderApi.getAllOrders()
+        const response = await orderApi.getAllOrders()
 
       // 确保从响应的 data 属性中获取数组
       const rawOrders = response && response.data ? response.data : (Array.isArray(response) ? response : [])
@@ -49,8 +57,8 @@ export const useOrderStore = defineStore('order', () => {
         sourceNumber: order.id_source
       }))
 
-      return orders.value
-    } catch (err) {
+        return orders.value
+      } catch (err) {
       console.error('获取订单数据失败:', err.response ? err.response.data : err.message)
 
       // 如果是超时错误，且重试次数小于2，则进行重试
@@ -69,9 +77,15 @@ export const useOrderStore = defineStore('order', () => {
         orders.value = []
       }
 
-      throw err
+        throw err
+      } finally {
+        loading.value = false
+      }
+    })()
+    try {
+      return await inFlightFetchAll
     } finally {
-      loading.value = false
+      inFlightFetchAll = null
     }
   }
 
@@ -472,8 +486,7 @@ export const useOrderStore = defineStore('order', () => {
         orders.value[idx] = merged;
       }
 
-      // 强制刷新整个列表以确保数据一致性并打破潜在的响应式循环
-      await fetchAllOrders();
+
 
       return updated;
     } catch (err) {

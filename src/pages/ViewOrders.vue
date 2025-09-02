@@ -286,12 +286,13 @@ const filteredOrders = computed(() => {
 
   // 根据搜索条件筛选
   if (searchQuery.value) {
-    const query = searchQuery.value.toLowerCase()
-    result = result.filter(order =>
-      order.orderNumber.toLowerCase().includes(query) ||
-      order.guestName.toLowerCase().includes(query) ||
-      order.phone.includes(query)
-    )
+    const query = String(searchQuery.value).toLowerCase()
+    result = result.filter(order => {
+      const orderNo = order.orderNumber != null ? String(order.orderNumber).toLowerCase() : ''
+      const guest = order.guestName != null ? String(order.guestName).toLowerCase() : ''
+      const phone = order.phone != null ? String(order.phone) : ''
+      return orderNo.includes(query) || guest.includes(query) || phone.includes(query)
+    })
   }
 
   // 根据状态筛选
@@ -394,8 +395,6 @@ async function cancelOrder(order) {
       });
     } finally {
       loadingOrders.value = false;
-      // 确保订单列表刷新以反映任何变化
-      fetchAllOrders();
     }
   }
 }
@@ -423,7 +422,9 @@ async function checkoutOrder(order) {
   // 使用 Quasar Dialog 显示确认对话框
   $q.dialog({
     title: '确认办理退房',
-    message: `确定要为订单 ${order.orderNumber} (客人: ${order.guestName}, 房间: ${order.roomNumber}) 办理退房吗？\n\n办理退房后房间将设置为清扫中状态。`,
+    message: `确定要为订单 ${order.orderNumber} (客人: ${order.guestName}, 房间: ${order.roomNumber}) 办理退房吗？
+
+办理退房后房间将设置为清扫中状态。`,
     cancel: true,
     persistent: true
   }).onOk(async () => {
@@ -475,7 +476,7 @@ async function performCheckOut(order) {
     }
 
     // 刷新订单列表
-    await fetchAllOrders();
+    // await fetchAllOrders(); // Removed
 
     $q.notify({
       type: 'positive',
@@ -540,7 +541,9 @@ async function checkInOrder(order) {
   // 使用 Quasar Dialog 显示确认对话框
   $q.dialog({
     title: '确认办理入住',
-    message: `确定要为订单 ${order.orderNumber} (客人: ${order.guestName}, 房间: ${order.roomNumber}) 办理入住吗？\n\n办理入住后将自动创建账单。`,
+    message: `确定要为订单 ${order.orderNumber} (客人: ${order.guestName}, 房间: ${order.roomNumber}) 办理入住吗？
+
+办理入住后将自动创建账单。`,
     cancel: true,
     persistent: true
   }).onOk(async () => {
@@ -577,7 +580,7 @@ async function performCheckIn(order) {
       $q.notify({ type: 'warning', message: '订单已更新为入住，但预订的房间信息未找到，请检查房间状态！', position: 'top', multiLine: true });
       loadingOrders.value = false;
       // 刷新订单列表以显示最新状态
-      fetchAllOrders();
+      // fetchAllOrders(); // Removed
       return;
     }
 
@@ -614,8 +617,6 @@ async function performCheckIn(order) {
     });
   } finally {
     loadingOrders.value = false;
-    // 确保订单列表刷新以反映任何变化（即使是失败的情况）
-    fetchAllOrders();
   }
 }
 
@@ -667,7 +668,7 @@ async function changeRoom(newRoomNumber) {
       await roomStore.fetchAllRooms();
 
       // 刷新订单列表
-      await fetchAllOrders();
+      // await fetchAllOrders(); // Removed
 
       // 显示成功消息
       $q.notify({
@@ -757,7 +758,7 @@ async function openChangeRoomDialog() {
     const rooms = await roomStore.getAvailableRoomsByDate(startDate, endDate);
     console.log('Rooms received from API:', rooms); // 打印从API获取的房间
 
-    // 更新 availableRoomOptions
+    // 更新可用房间选项
     availableRoomOptions.value = rooms
       .filter(room => room.room_number !== currentOrder.value.roomNumber)
       .map(room => ({
@@ -875,7 +876,7 @@ async function handleBillCreated() {
     }
 
     // 刷新订单列表
-    await fetchAllOrders();
+    // await fetchAllOrders(); // Removed
 
     $q.notify({
       type: 'positive',
@@ -932,7 +933,6 @@ async function openExtendStayDialog(order) {
       type: room.type_code,
       price: room.price
     }));
-
     console.log('Processed extend stay room options:', extendStayRoomOptions.value);
     showExtendStayDialog.value = true;
 
@@ -985,11 +985,12 @@ async function handleExtendStay(extendStayData) {
       showExtendStayDialog.value = false;
 
       // 刷新订单列表
-      await fetchAllOrders();
+      // await fetchAllOrders(); // Removed
 
       $q.notify({
         type: 'positive',
-        message: `🎉 续住订单创建成功！\n订单号：${newOrderNumber}`,
+        message: `🎉 续住订单创建成功！
+订单号：${newOrderNumber}`,
         position: 'top',
         multiLine: true,
         timeout: 5000,
@@ -1150,7 +1151,7 @@ async function handleRefundDeposit(refundData) {
   showRefundDepositDialog.value = false
 
   // 刷新订单与账单数据（账单 refund_deposit 更新后隐藏按钮）
-  await fetchAllOrders()
+  // await fetchAllOrders() // Removed
   await billStore.fetchAllBills()
 
     $q.notify({
@@ -1226,11 +1227,11 @@ async function handleOrderUpdated(updatedOrderData) {
 
     // 刷新列表 - orderStore.updateOrder 内部已经调用了 fetchAllOrders
 
-    // 如果正在查看该订单的详情，更新详情数据
+    // 如果正在查看该订单的详情，从 store 中更新详情数据
     if (currentOrder.value && currentOrder.value.orderNumber === updatedOrderData.orderNumber) {
-      const freshOrder = await orderStore.getOrderByNumber(updatedOrderData.orderNumber, true);
-      if (freshOrder) {
-        currentOrder.value = { ...freshOrder };
+      const updatedOrderFromStore = orderStore.orders.find(o => o.orderNumber === updatedOrderData.orderNumber);
+      if (updatedOrderFromStore) {
+        currentOrder.value = updatedOrderFromStore;
       }
     }
 
