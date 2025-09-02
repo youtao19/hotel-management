@@ -1,54 +1,55 @@
 const request = require('supertest');
 const app = require('../app');
 const { query } = require('../backend/database/postgreDB/pg');
+const { createTestRoomType, createTestRoom, createTestOrder } = require('./test-helpers');
 
 describe('POST /api/orders/:orderNumber/refund-deposit', () => {
-  const testOrder = {
-    order_id: 'TEST_REFUND_001',
-    order_source: 'front_desk',
-    guest_name: '测试退款',
-    id_number: '111111111111111111',
-    phone: '13900000000',
-    room_type: 'TEST_REFUND_TYPE', // 使用测试房型
-    room_number: '403', // 使用一个测试中不常用的房间号
-    check_in_date: '2025-08-01',
-    check_out_date: '2025-08-02',
-    status: 'checked-out', // 退款前订单通常是已退房状态
-    payment_method: '微信',
-    room_price: '300.00',
-    deposit: '150.00',
-    remarks: '测试退款订单'
-  };
+  beforeEach(global.cleanupTestData);
+  let testOrderData;
 
   beforeEach(async () => {
-    // 使用全局清理函数
-    await global.cleanupTestData();
+    // Create a room type and room for the test order
+    const roomType = await createTestRoomType({ type_code: 'TEST_REFUND_TYPE' });
+    const room = await createTestRoom(roomType.type_code);
 
-    // 插入依赖数据
-    await query(`
-      INSERT INTO room_types (type_code, type_name, base_price, description, is_closed)
-      VALUES ($1, '测试退款房型', 300, '测试用房型', false)
-      ON CONFLICT (type_code) DO NOTHING
-    `, [testOrder.room_type]);
-
-    await query(`
-      INSERT INTO rooms (room_id, room_number, type_code, status, price, is_closed)
-      VALUES (10403, $1, $2, 'clean', 300, false)
-      ON CONFLICT (room_number) DO UPDATE SET
-      type_code = EXCLUDED.type_code, status = EXCLUDED.status, price = EXCLUDED.price
-    `, [testOrder.room_number, testOrder.room_type]);
-
-    // 插入测试订单
-    await query(
-      `INSERT INTO orders (order_id, order_source, guest_name, id_number, phone, room_type, room_number, check_in_date, check_out_date, status, payment_method, room_price, deposit, create_time, remarks)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), $14)`,
-      [
-        testOrder.order_id, testOrder.order_source, testOrder.guest_name, testOrder.id_number,
-        testOrder.phone, testOrder.room_type, testOrder.room_number, testOrder.check_in_date,
-        testOrder.check_out_date, testOrder.status, testOrder.payment_method, testOrder.room_price,
-        testOrder.deposit, testOrder.remarks
-      ]
-    );
+    // Create the test order using the helper
+    testOrderData = await createTestOrder({
+      room_type: roomType.type_code,
+      room_number: room.room_number,
+      check_in_date: '2025-08-01',
+      check_out_date: '2025-08-02',
+      status: 'checked-out',
+      payment_method: 'wechat',
+      room_price: { '2025-08-01': 300.00 },
+      deposit: '150.00',
+      remarks: '测试退款订单'
+    });
+  // 将订单持久化到测试数据库，供退押金接口使用（直接插入以确保存在）
+  await query(
+    `INSERT INTO orders (
+       order_id, id_source, order_source, guest_name, phone, id_number,
+       room_type, room_number, check_in_date, check_out_date, status,
+       payment_method, room_price, deposit, create_time, remarks
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14,$15,$16)`,
+    [
+      testOrderData.order_id,
+      testOrderData.id_source,
+      testOrderData.order_source,
+      testOrderData.guest_name,
+      testOrderData.phone,
+      testOrderData.id_number,
+      testOrderData.room_type,
+      testOrderData.room_number,
+      testOrderData.check_in_date,
+      testOrderData.check_out_date,
+      testOrderData.status,
+      testOrderData.payment_method,
+      JSON.stringify(testOrderData.room_price),
+      testOrderData.deposit,
+      new Date(),
+      testOrderData.remarks
+    ]
+  );
   });
 
   it('应成功处理退押金请求', async () => {
@@ -60,7 +61,7 @@ describe('POST /api/orders/:orderNumber/refund-deposit', () => {
     };
 
     const res = await request(app)
-      .post(`/api/orders/${testOrder.order_id}/refund-deposit`)
+      .post(`/api/orders/${testOrderData.order_id}/refund-deposit`)
       .send(refundData);
 
     expect(res.status).toBe(200);
@@ -81,7 +82,7 @@ describe('POST /api/orders/:orderNumber/refund-deposit', () => {
     };
 
     const res = await request(app)
-      .post(`/api/orders/${testOrder.order_id}/refund-deposit`)
+      .post(`/api/orders/${testOrderData.order_id}/refund-deposit`)
       .send(refundData);
 
     expect(res.status).toBe(400);
@@ -99,7 +100,7 @@ describe('POST /api/orders/:orderNumber/refund-deposit', () => {
     };
 
     const res = await request(app)
-      .post(`/api/orders/${testOrder.order_id}/refund-deposit`)
+      .post(`/api/orders/${testOrderData.order_id}/refund-deposit`)
       .send(refundData);
 
     expect(res.status).toBe(400);

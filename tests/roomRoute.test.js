@@ -1,91 +1,15 @@
-/**
- * 房间路由测试文件
- *
- * 测试覆盖范围：
- * - GET /api/rooms - 获取所有房间
- * - GET /api/rooms/available - 获取可用房间
- * - GET /api/rooms/:id - 获取指定房间
- * - GET /api/rooms/number/:number - 根据房间号获取房间
- * - GET /api/rooms/test-repair/:id - 测试维修端点
- * - POST /api/rooms/:id/status - 更新房间状态
- * - POST /api/rooms - 添加新房间
- * - PUT /api/rooms/:id - 更新房间信息
- * - DELETE /api/rooms/:id - 删除房间
- *
- * 测试内容包括：
- * - 正常功能测试
- * - 错误处理测试
- * - 数据验证测试
- * - 边界情况测试
- * - 响应数据结构验证
- */
-
 const request = require('supertest');
 const app = require('../app');
 const { query } = require('../backend/database/postgreDB/pg');
+const { createTestRoomType, createTestRoom, createTestOrder } = require('./test-helpers');
 
 describe('Room Routes Tests', () => {
-  beforeEach(async () => {
-    // 使用全局清理函数
-    await global.cleanupTestData();
-
-    // 等待一小段时间确保数据库操作完成
-    await new Promise(resolve => setTimeout(resolve, 100));
-  });
-
-  // 创建测试房型的辅助函数
-  async function createTestRoomType(typeCode = 'TEST_STANDARD', typeName = '测试标准间', basePrice = '288.00') {
-    const timestamp = Date.now().toString().slice(-6);
-    const uniqueTypeCode = `${typeCode}_${timestamp}`;
-
-    await query(
-      'INSERT INTO room_types (type_code, type_name, base_price, description) VALUES ($1, $2, $3, $4)',
-      [uniqueTypeCode, `${typeName}_${timestamp}`, basePrice, '测试房型描述']
-    );
-
-    return uniqueTypeCode;
-  }
-
-  // 创建测试房间的辅助函数
-  async function createTestRoom(typeCode, roomNumber = '101', status = 'available', price = '288.00') {
-    const timestamp = Date.now().toString().slice(-6);
-    const uniqueRoomNumber = `T${roomNumber}_${timestamp}`.slice(0, 20); // 确保不超过VARCHAR(20)限制
-
-    // 获取新的房间ID
-    const idResult = await query('SELECT MAX(room_id) as max_id FROM rooms');
-    const roomId = (idResult.rows[0].max_id || 0) + 1;
-
-    await query(
-      'INSERT INTO rooms (room_id, room_number, type_code, status, price) VALUES ($1, $2, $3, $4, $5)',
-      [roomId, uniqueRoomNumber, typeCode, status, price]
-    );
-
-    return { roomId, roomNumber: uniqueRoomNumber };
-  }
-
-  // 创建测试订单的辅助函数
-  async function createTestOrder(roomNumber, typeCode, orderId = null, status = 'pending') {
-    const timestamp = Date.now().toString().slice(-6);
-    const uniqueOrderId = orderId || `TEST_ORDER_${timestamp}`;
-    const today = new Date().toISOString().split('T')[0];
-    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-    await query(
-      `INSERT INTO orders (order_id, order_source, guest_name, phone, id_number, room_type, room_number,
-       check_in_date, check_out_date, status, room_price, deposit, create_time)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-      [uniqueOrderId, 'front_desk', `测试客人_${timestamp}`, `1380013${timestamp.slice(-4)}`,
-       `12345678901234567${timestamp.slice(-1)}`, typeCode, roomNumber,
-       today, tomorrow, status, '288.00', '100.00', new Date()]
-    );
-
-    return uniqueOrderId;
-  }
+  beforeEach(global.cleanupTestData);
 
   describe('GET /api/rooms', () => {
     it('应该成功获取所有房间', async () => {
-      const typeCode = await createTestRoomType();
-      await createTestRoom(typeCode);
+      const roomType = await createTestRoomType();
+      await createTestRoom(roomType.type_code);
 
       const res = await request(app)
         .get('/api/rooms');
@@ -97,8 +21,8 @@ describe('Room Routes Tests', () => {
     });
 
     it('应该支持日期查询参数', async () => {
-      const typeCode = await createTestRoomType();
-      await createTestRoom(typeCode);
+      const roomType = await createTestRoomType();
+      await createTestRoom(roomType.type_code);
       const queryDate = '2024-01-01';
 
       const res = await request(app)
@@ -127,6 +51,7 @@ describe('Room Routes Tests', () => {
 
     it('当没有房间数据时应该返回空数组', async () => {
       // 清空所有房间数据
+      await query('DELETE FROM bills');
       await query('DELETE FROM orders');
       await query('DELETE FROM rooms');
       await query('DELETE FROM room_types');
@@ -142,8 +67,8 @@ describe('Room Routes Tests', () => {
 
   describe('GET /api/rooms/available', () => {
     it('应该成功获取可用房间', async () => {
-      const typeCode = await createTestRoomType();
-      await createTestRoom(typeCode);
+      const roomType = await createTestRoomType();
+      await createTestRoom(roomType.type_code);
 
       const startDate = '2024-12-01';
       const endDate = '2024-12-02';
@@ -159,17 +84,17 @@ describe('Room Routes Tests', () => {
     });
 
     it('应该支持房型过滤', async () => {
-      const typeCode = await createTestRoomType();
-      await createTestRoom(typeCode);
+      const roomType = await createTestRoomType();
+      await createTestRoom(roomType.type_code);
 
       const startDate = '2024-12-01';
       const endDate = '2024-12-02';
 
       const res = await request(app)
-        .get(`/api/rooms/available?startDate=${startDate}&endDate=${endDate}&typeCode=${typeCode}`);
+        .get(`/api/rooms/available?startDate=${startDate}&endDate=${endDate}&typeCode=${roomType.type_code}`);
 
       expect(res.status).toBe(200);
-      expect(res.body.query.typeCode).toBe(typeCode);
+      expect(res.body.query.typeCode).toBe(roomType.type_code);
     });
 
     it('缺少日期参数时应该返回400', async () => {
@@ -197,8 +122,8 @@ describe('Room Routes Tests', () => {
     });
 
     it('应该支持同一天入住和退房（休息房）', async () => {
-      const typeCode = await createTestRoomType();
-      await createTestRoom(typeCode);
+      const roomType = await createTestRoomType();
+      await createTestRoom(roomType.type_code);
 
       const date = '2024-12-01';
 
@@ -213,15 +138,15 @@ describe('Room Routes Tests', () => {
 
   describe('GET /api/rooms/:id', () => {
     it('应该成功获取指定房间', async () => {
-      const typeCode = await createTestRoomType();
-      const { roomId } = await createTestRoom(typeCode);
+      const roomType = await createTestRoomType();
+      const room = await createTestRoom(roomType.type_code);
 
       const res = await request(app)
-        .get(`/api/rooms/${roomId}`);
+        .get(`/api/rooms/${room.room_id}`);
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('data');
-      expect(res.body.data.room_id).toBe(roomId);
+      expect(res.body.data.room_id).toBe(room.room_id);
     });
 
     it('房间不存在时应该返回404', async () => {
@@ -235,15 +160,15 @@ describe('Room Routes Tests', () => {
 
   describe('GET /api/rooms/number/:number', () => {
     it('应该成功根据房间号获取房间', async () => {
-      const typeCode = await createTestRoomType();
-      const { roomNumber } = await createTestRoom(typeCode);
+      const roomType = await createTestRoomType();
+      const room = await createTestRoom(roomType.type_code);
 
       const res = await request(app)
-        .get(`/api/rooms/number/${roomNumber}`);
+        .get(`/api/rooms/number/${room.room_number}`);
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('data');
-      expect(res.body.data.room_number).toBe(roomNumber);
+      expect(res.body.data.room_number).toBe(room.room_number);
     });
 
     it('房间号不存在时应该返回404', async () => {
@@ -257,11 +182,11 @@ describe('Room Routes Tests', () => {
 
   describe('GET /api/rooms/test-repair/:id', () => {
     it('应该成功设置房间为维修状态', async () => {
-      const typeCode = await createTestRoomType();
-      const { roomId } = await createTestRoom(typeCode);
+      const roomType = await createTestRoomType();
+      const room = await createTestRoom(roomType.type_code);
 
       const res = await request(app)
-        .get(`/api/rooms/test-repair/${roomId}`);
+        .get(`/api/rooms/test-repair/${room.room_id}`);
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('message', '房间状态已更新为维修');
@@ -279,11 +204,11 @@ describe('Room Routes Tests', () => {
 
   describe('POST /api/rooms/:id/status', () => {
     it('应该成功更新房间状态', async () => {
-      const typeCode = await createTestRoomType();
-      const { roomId } = await createTestRoom(typeCode);
+      const roomType = await createTestRoomType();
+      const room = await createTestRoom(roomType.type_code);
 
       const res = await request(app)
-        .post(`/api/rooms/${roomId}/status`)
+        .post(`/api/rooms/${room.room_id}/status`)
         .send({ status: 'cleaning' });
 
       expect(res.status).toBe(200);
@@ -291,11 +216,11 @@ describe('Room Routes Tests', () => {
     });
 
     it('请求体为空时应该返回400', async () => {
-      const typeCode = await createTestRoomType();
-      const { roomId } = await createTestRoom(typeCode);
+      const roomType = await createTestRoomType();
+      const room = await createTestRoom(roomType.type_code);
 
       const res = await request(app)
-        .post(`/api/rooms/${roomId}/status`)
+        .post(`/api/rooms/${room.room_id}/status`)
         .send({});
 
       expect(res.status).toBe(400);
@@ -303,11 +228,11 @@ describe('Room Routes Tests', () => {
     });
 
     it('状态值未提供时应该返回400', async () => {
-      const typeCode = await createTestRoomType();
-      const { roomId } = await createTestRoom(typeCode);
+      const roomType = await createTestRoomType();
+      const room = await createTestRoom(roomType.type_code);
 
       const res = await request(app)
-        .post(`/api/rooms/${roomId}/status`)
+        .post(`/api/rooms/${room.room_id}/status`)
         .send({ other: 'value' });
 
       expect(res.status).toBe(400);
@@ -315,11 +240,11 @@ describe('Room Routes Tests', () => {
     });
 
     it('无效状态值时应该返回400', async () => {
-      const typeCode = await createTestRoomType();
-      const { roomId } = await createTestRoom(typeCode);
+      const roomType = await createTestRoomType();
+      const room = await createTestRoom(roomType.type_code);
 
       const res = await request(app)
-        .post(`/api/rooms/${roomId}/status`)
+        .post(`/api/rooms/${room.room_id}/status`)
         .send({ status: 'invalid_status' });
 
       expect(res.status).toBe(400);
@@ -337,14 +262,14 @@ describe('Room Routes Tests', () => {
     });
 
     it('应该支持所有有效的房间状态', async () => {
-      const typeCode = await createTestRoomType();
+      const roomType = await createTestRoomType();
       const validStatuses = ['available', 'occupied', 'cleaning', 'repair', 'reserved'];
 
       for (const status of validStatuses) {
-        const { roomId } = await createTestRoom(typeCode);
+        const room = await createTestRoom(roomType.type_code);
 
         const res = await request(app)
-          .post(`/api/rooms/${roomId}/status`)
+          .post(`/api/rooms/${room.room_id}/status`)
           .send({ status });
 
         expect(res.status).toBe(200);
@@ -355,12 +280,12 @@ describe('Room Routes Tests', () => {
 
   describe('POST /api/rooms', () => {
     it('应该成功添加新房间', async () => {
-      const typeCode = await createTestRoomType();
-      const timestamp = Date.now().toString().slice(-6);
+      const roomType = await createTestRoomType();
+      const suffix = Date.now().toString().slice(-6);
 
       const roomData = {
-        room_number: `T_NEW_${timestamp}`.slice(0, 20),
-        type_code: typeCode,
+        room_number: `T_NEW_${suffix}`.slice(0, 20),
+        type_code: roomType.type_code,
         status: 'available',
         price: '388.00'
       };
@@ -393,12 +318,12 @@ describe('Room Routes Tests', () => {
     });
 
     it('房间号已存在时应该返回400', async () => {
-      const typeCode = await createTestRoomType();
-      const { roomNumber } = await createTestRoom(typeCode);
+      const roomType = await createTestRoomType();
+      const room = await createTestRoom(roomType.type_code);
 
       const duplicateData = {
-        room_number: roomNumber,
-        type_code: typeCode,
+        room_number: room.room_number,
+        type_code: roomType.type_code,
         status: 'available',
         price: '288.00'
       };
@@ -412,10 +337,10 @@ describe('Room Routes Tests', () => {
     });
 
     it('房型不存在时应该返回500错误', async () => {
-      const timestamp = Date.now().toString().slice(-6);
+      const suffix = Date.now().toString().slice(-6);
 
       const roomData = {
-        room_number: `T_INV_${timestamp}`.slice(0, 20),
+        room_number: `T_INV_${suffix}`.slice(0, 20),
         type_code: 'NONEXISTENT_TYPE',
         status: 'available',
         price: '288.00'
@@ -432,18 +357,18 @@ describe('Room Routes Tests', () => {
 
   describe('PUT /api/rooms/:id', () => {
     it('应该成功更新房间信息', async () => {
-      const typeCode = await createTestRoomType();
-      const { roomId, roomNumber } = await createTestRoom(typeCode);
+      const roomType = await createTestRoomType();
+      const room = await createTestRoom(roomType.type_code);
 
       const updateData = {
-        room_number: roomNumber,
-        type_code: typeCode,
+        room_number: room.room_number,
+        type_code: roomType.type_code,
         status: 'cleaning',
         price: '388.00'
       };
 
       const res = await request(app)
-        .put(`/api/rooms/${roomId}`)
+        .put(`/api/rooms/${room.room_id}`)
         .send(updateData);
 
       expect(res.status).toBe(200);
@@ -452,17 +377,17 @@ describe('Room Routes Tests', () => {
     });
 
     it('缺少必要字段时应该返回400', async () => {
-      const typeCode = await createTestRoomType();
-      const { roomId } = await createTestRoom(typeCode);
+      const roomType = await createTestRoomType();
+      const room = await createTestRoom(roomType.type_code);
 
       const incompleteData = {
         room_number: 'TEST_UPDATE',
-        type_code: typeCode
+        type_code: roomType.type_code
         // 缺少 status 和 price
       };
 
       const res = await request(app)
-        .put(`/api/rooms/${roomId}`)
+        .put(`/api/rooms/${room.room_id}`)
         .send(incompleteData);
 
       expect(res.status).toBe(400);
@@ -470,11 +395,11 @@ describe('Room Routes Tests', () => {
     });
 
     it('房间不存在时应该返回404', async () => {
-      const typeCode = await createTestRoomType();
+      const roomType = await createTestRoomType();
 
       const updateData = {
         room_number: 'TEST_NONEXISTENT',
-        type_code: typeCode,
+        type_code: roomType.type_code,
         status: 'available',
         price: '288.00'
       };
@@ -488,19 +413,19 @@ describe('Room Routes Tests', () => {
     });
 
     it('更新房间号为已存在的房间号时应该返回400', async () => {
-      const typeCode = await createTestRoomType();
-      const { roomId: roomId1 } = await createTestRoom(typeCode, '101');
-      const { roomNumber: roomNumber2 } = await createTestRoom(typeCode, '102');
+      const roomType = await createTestRoomType();
+      const room1 = await createTestRoom(roomType.type_code, { room_number: '101' });
+      const room2 = await createTestRoom(roomType.type_code, { room_number: '102' });
 
       const updateData = {
-        room_number: roomNumber2, // 使用已存在的房间号
-        type_code: typeCode,
+        room_number: room2.room_number, // 使用已存在的房间号
+        type_code: roomType.type_code,
         status: 'available',
         price: '288.00'
       };
 
       const res = await request(app)
-        .put(`/api/rooms/${roomId1}`)
+        .put(`/api/rooms/${room1.room_id}`)
         .send(updateData);
 
       expect(res.status).toBe(400);
@@ -510,18 +435,18 @@ describe('Room Routes Tests', () => {
 
   describe('DELETE /api/rooms/:id', () => {
     it('应该成功删除房间', async () => {
-      const typeCode = await createTestRoomType();
-      const { roomId, roomNumber } = await createTestRoom(typeCode);
+      const roomType = await createTestRoomType();
+      const room = await createTestRoom(roomType.type_code);
 
       const res = await request(app)
-        .delete(`/api/rooms/${roomId}`);
+        .delete(`/api/rooms/${room.room_id}`);
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('message', '房间删除成功');
 
       // 验证房间已被删除
       const checkRes = await request(app)
-        .get(`/api/rooms/${roomId}`);
+        .get(`/api/rooms/${room.room_id}`);
       expect(checkRes.status).toBe(404);
     });
 
@@ -534,28 +459,28 @@ describe('Room Routes Tests', () => {
     });
 
     it('有活跃订单时应该返回400', async () => {
-      const typeCode = await createTestRoomType();
-      const { roomId, roomNumber } = await createTestRoom(typeCode);
+      const roomType = await createTestRoomType();
+      const room = await createTestRoom(roomType.type_code);
 
-      // 创建活跃订单
-      await createTestOrder(roomNumber, typeCode, null, 'pending');
+  // 创建活跃订单（插入到数据库以便被删除逻辑检测到）
+  await createTestOrder({ room_number: room.room_number, room_type: roomType.type_code, status: 'pending' }, { insert: true });
 
       const res = await request(app)
-        .delete(`/api/rooms/${roomId}`);
+        .delete(`/api/rooms/${room.room_id}`);
 
       expect(res.status).toBe(400);
       expect(res.body).toHaveProperty('message', '无法删除，房间有活跃订单');
     });
 
     it('有已入住订单时应该返回400', async () => {
-      const typeCode = await createTestRoomType();
-      const { roomId, roomNumber } = await createTestRoom(typeCode);
+      const roomType = await createTestRoomType();
+      const room = await createTestRoom(roomType.type_code);
 
-      // 创建已入住订单
-      await createTestOrder(roomNumber, typeCode, null, 'checked-in');
+  // 创建已入住订单（插入到数据库以便被删除逻辑检测到）
+  await createTestOrder({ room_number: room.room_number, room_type: roomType.type_code, status: 'checked-in' }, { insert: true });
 
       const res = await request(app)
-        .delete(`/api/rooms/${roomId}`);
+        .delete(`/api/rooms/${room.room_id}`);
 
       expect(res.status).toBe(400);
       expect(res.body).toHaveProperty('message', '无法删除，房间有活跃订单');
@@ -577,12 +502,12 @@ describe('Room Routes Tests', () => {
   // 测试数据验证
   describe('Data Validation', () => {
     it('应该正确处理特殊字符的房间号', async () => {
-      const typeCode = await createTestRoomType();
-      const timestamp = Date.now().toString().slice(-6);
+      const roomType = await createTestRoomType();
+      const suffix = Date.now().toString().slice(-6);
 
       const roomData = {
-        room_number: `T_SP_${timestamp}`.slice(0, 20), // 确保不超过VARCHAR(20)限制
-        type_code: typeCode,
+        room_number: `T_SP_${suffix}`.slice(0, 20),
+        type_code: roomType.type_code,
         status: 'available',
         price: '288.00'
       };
@@ -595,12 +520,12 @@ describe('Room Routes Tests', () => {
     });
 
     it('应该正确处理零价格', async () => {
-      const typeCode = await createTestRoomType();
-      const timestamp = Date.now().toString().slice(-6);
+      const roomType = await createTestRoomType();
+      const suffix = Date.now().toString().slice(-6);
 
       const roomData = {
-        room_number: `T_ZERO_${timestamp}`.slice(0, 20),
-        type_code: typeCode,
+        room_number: `T_ZERO_${suffix}`.slice(0, 20),
+        type_code: roomType.type_code,
         status: 'available',
         price: '0.00'
       };
@@ -614,12 +539,12 @@ describe('Room Routes Tests', () => {
     });
 
     it('应该正确处理负数价格', async () => {
-      const typeCode = await createTestRoomType();
-      const timestamp = Date.now().toString().slice(-6);
+      const roomType = await createTestRoomType();
+      const suffix = Date.now().toString().slice(-6);
 
       const roomData = {
-        room_number: `T_NEG_${timestamp}`.slice(0, 20),
-        type_code: typeCode,
+        room_number: `T_NEG_${suffix}`.slice(0, 20),
+        type_code: roomType.type_code,
         status: 'available',
         price: '-100.00'
       };
@@ -633,12 +558,12 @@ describe('Room Routes Tests', () => {
     });
 
     it('应该正确处理高精度价格', async () => {
-      const typeCode = await createTestRoomType();
-      const timestamp = Date.now().toString().slice(-6);
+      const roomType = await createTestRoomType();
+      const suffix = Date.now().toString().slice(-6);
 
       const roomData = {
-        room_number: `T_PREC_${timestamp}`.slice(0, 20),
-        type_code: typeCode,
+        room_number: `T_PREC_${suffix}`.slice(0, 20),
+        type_code: roomType.type_code,
         status: 'available',
         price: '999.99'
       };
@@ -655,8 +580,8 @@ describe('Room Routes Tests', () => {
   // 测试响应数据结构
   describe('Response Data Structure', () => {
     it('GET /api/rooms 响应应该包含正确的数据结构', async () => {
-      const typeCode = await createTestRoomType();
-      await createTestRoom(typeCode);
+      const roomType = await createTestRoomType();
+      await createTestRoom(roomType.type_code);
 
       const res = await request(app)
         .get('/api/rooms');
@@ -676,8 +601,8 @@ describe('Room Routes Tests', () => {
     });
 
     it('GET /api/rooms/available 响应应该包含正确的数据结构', async () => {
-      const typeCode = await createTestRoomType();
-      await createTestRoom(typeCode);
+      const roomType = await createTestRoomType();
+      await createTestRoom(roomType.type_code);
 
       const res = await request(app)
         .get('/api/rooms/available?startDate=2024-12-01&endDate=2024-12-02');
@@ -690,12 +615,12 @@ describe('Room Routes Tests', () => {
     });
 
     it('POST /api/rooms 响应应该包含正确的数据结构', async () => {
-      const typeCode = await createTestRoomType();
-      const timestamp = Date.now().toString().slice(-6);
+      const roomType = await createTestRoomType();
+      const suffix = Date.now().toString().slice(-6);
 
       const roomData = {
-        room_number: `T_RESP_${timestamp}`.slice(0, 20),
-        type_code: typeCode,
+        room_number: `T_RESP_${suffix}`.slice(0, 20),
+        type_code: roomType.type_code,
         status: 'available',
         price: '388.00'
       };

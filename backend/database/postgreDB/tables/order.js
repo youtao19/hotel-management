@@ -19,12 +19,10 @@ const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
     deposit DECIMAL(10,2), -- 押金
     create_time TIMESTAMP NOT NULL, -- 创建时间
     remarks TEXT, -- 备注
-    FOREIGN KEY (room_type) REFERENCES room_types(type_code), -- 房间类型外键
-    FOREIGN KEY (room_number) REFERENCES rooms(room_number), -- 房间号外键
-    CONSTRAINT unique_order_constraint UNIQUE (guest_name, check_in_date, check_out_date, room_type), -- 唯一约束
-  -- 允许 room_price 为对象(多日)或数字(单日/休息房)
-  -- 允许 room_price 为对象(多日)或数字(单日/休息房)，以及字符串数字（兼容部分测试用例）
-  CONSTRAINT chk_room_price_json CHECK (jsonb_typeof(room_price) IN ('object','number','string'))
+    FOREIGN KEY (room_type) REFERENCES room_types(type_code),
+    FOREIGN KEY (room_number) REFERENCES rooms(room_number),
+    CONSTRAINT unique_order_constraint UNIQUE (guest_name, check_in_date, check_out_date, room_type),
+    CONSTRAINT chk_room_price_json CHECK (jsonb_typeof(room_price) IN ('object','number','string'))
 )`;
 
 
@@ -34,9 +32,9 @@ const createIndexQueryStrings = [
     `CREATE INDEX IF NOT EXISTS idx_orders_status ON ${tableName}(status)`,
     `CREATE INDEX IF NOT EXISTS idx_orders_check_dates ON ${tableName}(check_in_date, check_out_date)`,
   `CREATE INDEX IF NOT EXISTS idx_orders_create_time ON ${tableName}(create_time DESC)`,
-  `CREATE INDEX IF NOT EXISTS idx_orders_room_price_gin ON ${tableName} USING GIN (room_price)`, // JSONB字段的GIN索引
+  `CREATE INDEX IF NOT EXISTS idx_orders_room_price_gin ON ${tableName} USING GIN (room_price)`,
   // 仅对展示中的订单做唯一约束，避免历史版本冲突
-  `CREATE UNIQUE INDEX IF NOT EXISTS uniq_orders_active ON ${tableName} (guest_name, check_in_date, check_out_date, room_type) WHERE COALESCE(show, TRUE) = TRUE`
+  `CREATE UNIQUE INDEX IF NOT EXISTS uniq_orders_active ON ${tableName} (guest_name, check_in_date, check_out_date, room_type)`
 ];
 
 const table = {

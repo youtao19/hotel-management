@@ -1,82 +1,10 @@
-/**
- * 房型路由测试文件
- *
- * 测试覆盖范围：
- * - GET /api/room-types - 获取所有房型
- * - GET /api/room-types/:code - 获取指定房型
- * - POST /api/room-types - 创建新房型
- * - PUT /api/room-types/:code - 更新房型
- * - DELETE /api/room-types/:code - 删除房型
- *
- * 测试内容包括：
- * - 正常功能测试
- * - 错误处理测试
- * - 数据验证测试
- * - 边界情况测试
- * - 响应数据结构验证
- */
-
 const request = require('supertest');
 const app = require('../app');
-const { initializeHotelDB, closePool, query } = require('../backend/database/postgreDB/pg');
+const { query } = require('../backend/database/postgreDB/pg');
+const { createTestRoomType, createTestRoom } = require('./test-helpers');
 
 describe('Room Type Routes Tests', () => {
-  beforeAll(async () => {
-    await initializeHotelDB();
-  });
-
-  beforeEach(async () => {
-    // 清理测试数据 - 按外键依赖顺序删除
-    await query('DELETE FROM bills WHERE order_id LIKE \'TEST%\'');
-    await query('DELETE FROM orders WHERE order_id LIKE \'TEST%\' OR room_number LIKE \'TEST%\' OR room_type LIKE \'TEST%\'');
-    await query('DELETE FROM rooms WHERE type_code LIKE \'TEST%\' OR room_number LIKE \'TEST%\'');
-    await query('DELETE FROM room_types WHERE type_code LIKE \'TEST%\'');
-
-    // 等待一小段时间确保数据库操作完成
-    await new Promise(resolve => setTimeout(resolve, 100));
-  });
-
-  afterAll(async () => {
-    // 清理测试数据 - 按外键依赖顺序删除
-    await query('DELETE FROM bills WHERE order_id LIKE \'TEST%\'');
-    await query('DELETE FROM orders WHERE order_id LIKE \'TEST%\' OR room_number LIKE \'TEST%\' OR room_type LIKE \'TEST%\'');
-    await query('DELETE FROM rooms WHERE type_code LIKE \'TEST%\' OR room_number LIKE \'TEST%\'');
-    await query('DELETE FROM room_types WHERE type_code LIKE \'TEST%\'');
-    await closePool();
-  });
-
-  // 创建测试房型的辅助函数
-  async function createTestRoomType(typeCode = 'TEST_STANDARD', typeName = '测试标准间', basePrice = '288.00', description = '测试房型描述') {
-    const timestamp = Date.now().toString().slice(-6);
-    const uniqueTypeCode = `${typeCode}_${timestamp}`;
-
-    const roomTypeData = {
-      type_code: uniqueTypeCode,
-      type_name: `${typeName}_${timestamp}`,
-      base_price: basePrice,
-      description: description
-    };
-
-    const response = await request(app)
-      .post('/api/room-types')
-      .send(roomTypeData);
-
-    return { response, roomTypeData };
-  }
-
-  // 创建测试房间的辅助函数
-  async function createTestRoom(typeCode, roomNumber = '101') {
-    const timestamp = Date.now().toString().slice(-6);
-    const uniqueRoomNumber = `${roomNumber}_${timestamp}`;
-    const roomId = parseInt(timestamp);
-
-    await query(
-      'INSERT INTO rooms (room_id, room_number, type_code, status, price) VALUES ($1, $2, $3, $4, $5)',
-      [roomId, uniqueRoomNumber, typeCode, 'clean', '288.00']
-    );
-
-    return { roomId, roomNumber: uniqueRoomNumber };
-  }
+  beforeEach(global.cleanupTestData);
 
   describe('GET /api/room-types', () => {
     it('应该成功获取所有房型', async () => {
@@ -94,8 +22,8 @@ describe('Room Type Routes Tests', () => {
 
     it('应该按type_code排序返回房型', async () => {
       // 创建多个测试房型
-      await createTestRoomType('TEST_A', '测试房型A');
-      await createTestRoomType('TEST_B', '测试房型B');
+      await createTestRoomType({ type_code: 'TEST_A' });
+      await createTestRoomType({ type_code: 'TEST_B' });
 
       const res = await request(app)
         .get('/api/room-types');
@@ -127,16 +55,16 @@ describe('Room Type Routes Tests', () => {
 
   describe('GET /api/room-types/:code', () => {
     it('应该成功获取指定房型', async () => {
-      const { roomTypeData } = await createTestRoomType();
+      const roomType = await createTestRoomType();
 
       const res = await request(app)
-        .get(`/api/room-types/${roomTypeData.type_code}`);
+        .get(`/api/room-types/${roomType.type_code}`);
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('data');
-      expect(res.body.data.type_code).toBe(roomTypeData.type_code);
-      expect(res.body.data.type_name).toBe(roomTypeData.type_name);
-      expect(res.body.data.base_price).toBe(roomTypeData.base_price);
+      expect(res.body.data.type_code).toBe(roomType.type_code);
+      expect(res.body.data.type_name).toBe(roomType.type_name);
+      expect(res.body.data.base_price).toBe(roomType.base_price);
     });
 
     it('当房型不存在时应该返回404', async () => {
@@ -158,10 +86,10 @@ describe('Room Type Routes Tests', () => {
 
   describe('POST /api/room-types', () => {
     it('应该成功创建新房型', async () => {
-      const timestamp = Date.now().toString().slice(-6);
+      const suffix = Date.now().toString().slice(-6);
       const roomTypeData = {
-        type_code: `TEST_NEW_${timestamp}`,
-        type_name: `新测试房型_${timestamp}`,
+        type_code: `TEST_NEW_${suffix}`,
+        type_name: `新测试房型_${suffix}`,
         base_price: '388.00',
         description: '这是一个新的测试房型'
       };
@@ -179,10 +107,10 @@ describe('Room Type Routes Tests', () => {
     });
 
     it('应该成功创建不带描述的房型', async () => {
-      const timestamp = Date.now().toString().slice(-6);
+      const suffix = Date.now().toString().slice(-6);
       const roomTypeData = {
-        type_code: `TEST_NO_DESC_${timestamp}`,
-        type_name: `无描述房型_${timestamp}`,
+        type_code: `TEST_NO_DESC_${suffix}`,
+        type_name: `无描述房型_${suffix}`,
         base_price: '258.00'
       };
 
@@ -210,11 +138,11 @@ describe('Room Type Routes Tests', () => {
     });
 
     it('房型代码已存在时应该返回400错误', async () => {
-      const { roomTypeData } = await createTestRoomType();
+      const roomType = await createTestRoomType();
 
       // 尝试创建相同代码的房型
       const duplicateData = {
-        type_code: roomTypeData.type_code,
+        type_code: roomType.type_code,
         type_name: '重复的房型',
         base_price: '388.00'
       };
@@ -228,10 +156,10 @@ describe('Room Type Routes Tests', () => {
     });
 
     it('应该正确处理价格格式', async () => {
-      const timestamp = Date.now().toString().slice(-6);
+      const suffix = Date.now().toString().slice(-6);
       const roomTypeData = {
-        type_code: `TEST_PRICE_${timestamp}`,
-        type_name: `价格测试房型_${timestamp}`,
+        type_code: `TEST_PRICE_${suffix}`,
+        type_name: `价格测试房型_${suffix}`,
         base_price: 299.99
       };
 
@@ -246,7 +174,7 @@ describe('Room Type Routes Tests', () => {
 
   describe('PUT /api/room-types/:code', () => {
     it('应该成功更新房型', async () => {
-      const { roomTypeData } = await createTestRoomType();
+      const roomType = await createTestRoomType();
 
       const updateData = {
         type_name: '更新后的房型名称',
@@ -255,18 +183,18 @@ describe('Room Type Routes Tests', () => {
       };
 
       const res = await request(app)
-        .put(`/api/room-types/${roomTypeData.type_code}`)
+        .put(`/api/room-types/${roomType.type_code}`)
         .send(updateData);
 
       expect(res.status).toBe(200);
       expect(res.body.data.type_name).toBe(updateData.type_name);
       expect(res.body.data.base_price).toBe(updateData.base_price);
       expect(res.body.data.description).toBe(updateData.description);
-      expect(res.body.data.type_code).toBe(roomTypeData.type_code); // 代码不变
+      expect(res.body.data.type_code).toBe(roomType.type_code); // 代码不变
     });
 
     it('应该成功更新房型并清空描述', async () => {
-      const { roomTypeData } = await createTestRoomType();
+      const roomType = await createTestRoomType();
 
       const updateData = {
         type_name: '清空描述的房型',
@@ -275,7 +203,7 @@ describe('Room Type Routes Tests', () => {
       };
 
       const res = await request(app)
-        .put(`/api/room-types/${roomTypeData.type_code}`)
+        .put(`/api/room-types/${roomType.type_code}`)
         .send(updateData);
 
       expect(res.status).toBe(200);
@@ -283,7 +211,7 @@ describe('Room Type Routes Tests', () => {
     });
 
     it('缺少必要字段时应该返回400错误', async () => {
-      const { roomTypeData } = await createTestRoomType();
+      const roomType = await createTestRoomType();
 
       const incompleteData = {
         type_name: '不完整的更新'
@@ -291,7 +219,7 @@ describe('Room Type Routes Tests', () => {
       };
 
       const res = await request(app)
-        .put(`/api/room-types/${roomTypeData.type_code}`)
+        .put(`/api/room-types/${roomType.type_code}`)
         .send(incompleteData);
 
       expect(res.status).toBe(400);
@@ -315,17 +243,17 @@ describe('Room Type Routes Tests', () => {
 
   describe('DELETE /api/room-types/:code', () => {
     it('应该成功删除房型', async () => {
-      const { roomTypeData } = await createTestRoomType();
+      const roomType = await createTestRoomType();
 
       const res = await request(app)
-        .delete(`/api/room-types/${roomTypeData.type_code}`);
+        .delete(`/api/room-types/${roomType.type_code}`);
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('message', '房型删除成功');
 
       // 验证房型已被删除
       const checkRes = await request(app)
-        .get(`/api/room-types/${roomTypeData.type_code}`);
+        .get(`/api/room-types/${roomType.type_code}`);
       expect(checkRes.status).toBe(404);
     });
 
@@ -338,13 +266,13 @@ describe('Room Type Routes Tests', () => {
     });
 
     it('有房间使用此房型时应该返回400错误', async () => {
-      const { roomTypeData } = await createTestRoomType();
+      const roomType = await createTestRoomType();
 
       // 创建使用此房型的房间
-      await createTestRoom(roomTypeData.type_code);
+      await createTestRoom(roomType.type_code);
 
       const res = await request(app)
-        .delete(`/api/room-types/${roomTypeData.type_code}`);
+        .delete(`/api/room-types/${roomType.type_code}`);
 
       expect(res.status).toBe(400);
       expect(res.body).toHaveProperty('message', '无法删除，还有房间使用此房型');
@@ -366,9 +294,9 @@ describe('Room Type Routes Tests', () => {
   // 测试数据验证
   describe('Data Validation', () => {
     it('应该正确处理空字符串字段', async () => {
-      const timestamp = Date.now().toString().slice(-6);
+      const suffix = Date.now().toString().slice(-6);
       const roomTypeData = {
-        type_code: `TEST_EMPTY_${timestamp}`,
+        type_code: `TEST_EMPTY_${suffix}`,
         type_name: '',
         base_price: '288.00'
       };
@@ -383,10 +311,10 @@ describe('Room Type Routes Tests', () => {
     });
 
     it('应该正确处理负数价格', async () => {
-      const timestamp = Date.now().toString().slice(-6);
+      const suffix = Date.now().toString().slice(-6);
       const roomTypeData = {
-        type_code: `TEST_NEG_${timestamp}`,
-        type_name: `负价格房型_${timestamp}`,
+        type_code: `TEST_NEG_${suffix}`,
+        type_name: `负价格房型_${suffix}`,
         base_price: '-100.00'
       };
 
@@ -399,11 +327,11 @@ describe('Room Type Routes Tests', () => {
     });
 
     it('应该正确处理超长字符串', async () => {
-      const timestamp = Date.now().toString().slice(-6);
+      const suffix = Date.now().toString().slice(-6);
       const longString = 'A'.repeat(100);
 
       const roomTypeData = {
-        type_code: `TEST_LONG_${timestamp}`,
+        type_code: `TEST_LONG_${suffix}`,
         type_name: longString,
         base_price: '288.00'
       };
@@ -418,9 +346,9 @@ describe('Room Type Routes Tests', () => {
     });
 
     it('应该正确处理null值', async () => {
-      const timestamp = Date.now().toString().slice(-6);
+      const suffix = Date.now().toString().slice(-6);
       const roomTypeData = {
-        type_code: `TEST_NULL_${timestamp}`,
+        type_code: `TEST_NULL_${suffix}`,
         type_name: null,
         base_price: '288.00'
       };
@@ -434,10 +362,10 @@ describe('Room Type Routes Tests', () => {
     });
 
     it('应该正确处理非数字价格', async () => {
-      const timestamp = Date.now().toString().slice(-6);
+      const suffix = Date.now().toString().slice(-6);
       const roomTypeData = {
-        type_code: `TEST_INVALID_PRICE_${timestamp}`,
-        type_name: `无效价格房型_${timestamp}`,
+        type_code: `TEST_INVALID_PRICE_${suffix}`,
+        type_name: `无效价格房型_${suffix}`,
         base_price: 'invalid_price'
       };
 
@@ -473,10 +401,10 @@ describe('Room Type Routes Tests', () => {
     });
 
     it('GET /api/room-types/:code 响应应该包含正确的数据结构', async () => {
-      const { roomTypeData } = await createTestRoomType();
+      const roomType = await createTestRoomType();
 
       const res = await request(app)
-        .get(`/api/room-types/${roomTypeData.type_code}`);
+        .get(`/api/room-types/${roomType.type_code}`);
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('data');
@@ -488,10 +416,10 @@ describe('Room Type Routes Tests', () => {
     });
 
     it('POST /api/room-types 响应应该包含正确的数据结构', async () => {
-      const timestamp = Date.now().toString().slice(-6);
+      const suffix = Date.now().toString().slice(-6);
       const roomTypeData = {
-        type_code: `TEST_RESPONSE_${timestamp}`,
-        type_name: `响应测试房型_${timestamp}`,
+        type_code: `TEST_RESPONSE_${suffix}`,
+        type_name: `响应测试房型_${suffix}`,
         base_price: '388.00',
         description: '测试响应数据结构'
       };
@@ -513,10 +441,10 @@ describe('Room Type Routes Tests', () => {
   // 测试边界情况
   describe('Edge Cases', () => {
     it('应该正确处理零价格', async () => {
-      const timestamp = Date.now().toString().slice(-6);
+      const suffix = Date.now().toString().slice(-6);
       const roomTypeData = {
-        type_code: `TEST_ZERO_${timestamp}`,
-        type_name: `零价格房型_${timestamp}`,
+        type_code: `TEST_ZERO_${suffix}`,
+        type_name: `零价格房型_${suffix}`,
         base_price: '0.00'
       };
 
@@ -529,12 +457,12 @@ describe('Room Type Routes Tests', () => {
     });
 
     it('应该正确处理最大长度的房型代码', async () => {
-      const timestamp = Date.now().toString().slice(-6);
-      const maxLengthCode = `TEST_${'A'.repeat(10)}_${timestamp}`.slice(0, 20); // VARCHAR(20)
+      const suffix = Date.now().toString().slice(-6);
+      const maxLengthCode = `TEST_${'A'.repeat(10)}_${suffix}`.slice(0, 20); // VARCHAR(20)
 
       const roomTypeData = {
         type_code: maxLengthCode,
-        type_name: `最大长度代码房型_${timestamp}`,
+        type_name: `最大长度代码房型_${suffix}`,
         base_price: '288.00'
       };
 
@@ -546,11 +474,11 @@ describe('Room Type Routes Tests', () => {
     });
 
     it('应该正确处理最大长度的房型名称', async () => {
-      const timestamp = Date.now().toString().slice(-6);
-      const maxLengthName = `测试${'A'.repeat(40)}_${timestamp}`.slice(0, 50); // VARCHAR(50)
+      const suffix = Date.now().toString().slice(-6);
+      const maxLengthName = `测试${'A'.repeat(40)}_${suffix}`.slice(0, 50); // VARCHAR(50)
 
       const roomTypeData = {
-        type_code: `TEST_MAX_NAME_${timestamp}`,
+        type_code: `TEST_MAX_NAME_${suffix}`,
         type_name: maxLengthName,
         base_price: '288.00'
       };
@@ -563,10 +491,10 @@ describe('Room Type Routes Tests', () => {
     });
 
     it('应该正确处理高精度价格', async () => {
-      const timestamp = Date.now().toString().slice(-6);
+      const suffix = Date.now().toString().slice(-6);
       const roomTypeData = {
-        type_code: `TEST_PREC_${timestamp}`, // 缩短代码以符合VARCHAR(20)限制
-        type_name: `高精度价格房型_${timestamp}`,
+        type_code: `TEST_PREC_${suffix}`, // 缩短代码以符合VARCHAR(20)限制
+        type_name: `高精度价格房型_${suffix}`,
         base_price: '999.99'
       };
 
