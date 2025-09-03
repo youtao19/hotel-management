@@ -104,8 +104,6 @@ export const useOrderStore = defineStore('order', () => {
       loading.value = true
       error.value = null
 
-
-
       // 数据验证
       if (!order) {
         throw new Error('订单数据不能为空');

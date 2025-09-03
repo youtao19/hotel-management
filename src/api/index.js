@@ -144,7 +144,7 @@ export const userApi = {
 // 账单相关接口
 export const billApi = {
   // 创建账单
-  createBill: (billData) => api.post('/bills/create', billData),
+  createBill: (billData) => api.post('/bills/new', billData),
 
   // 获得账单
   getBillByOrderId: (orderId) => api.get(`/bills/${orderId}`),
@@ -153,7 +153,7 @@ export const billApi = {
   getBillsByOrderId: (orderId) => api.get(`/bills/order/${orderId}`),
 
   // 获取所有账单
-  getAllBills: () => api.get('/bills/all'),
+  getAllBills: () => api.get('/bills'),
 
   // 邀请客户好评
   inviteReview: (orderId) => api.post(`/bills/${orderId}/invite-review`),

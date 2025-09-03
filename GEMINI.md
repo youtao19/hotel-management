@@ -61,3 +61,5 @@ npm test
 *   **API 路由:** 所有 API 路由都在 `backend/routes/` 目录中定义，并以 `/api` 为前缀。
 *   **前端组件:** 前端被组织成页面 (pages)、组件 (components) 和状态管理 (stores/Pinia)。
 *   **数据库迁移:** 数据库模式的变更通过 `backend/database/postgreDB/migrations/` 目录下的迁移脚本进行管理。
+
+*   **回答语言:** 始终用中文回复我

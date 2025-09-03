@@ -226,18 +226,21 @@ const availableRefundAmount = computed(() => {
   return Math.max(0, originalDeposit - refundedDeposit)
 })
 
+// 实际退款金额（自动计算）
 const actualRefundAmount = computed(() => {
   const refundAmount = refundForm.value.amount || 0
   const deductAmount = refundForm.value.deductAmount || 0
   return Math.max(0, refundAmount - deductAmount)
 })
 
+// 剩余可退押金（自动计算）
 const remainingDepositAfter = computed(() => {
   const baseDeposit = remoteDepositInfo.value ? remoteDepositInfo.value.deposit : (props.order?.deposit || 0)
   const refunded = remoteDepositInfo.value ? remoteDepositInfo.value.refunded : (props.order?.refundedDeposit || 0)
   return Math.max(0, baseDeposit - refunded - actualRefundAmount.value)
 })
 
+// 表单有效性校验
 const isFormValid = computed(() => {
   return refundForm.value.amount > 0 &&
          refundForm.value.method &&
@@ -275,10 +278,12 @@ function closeDialog() {
   emit('update:modelValue', false)
 }
 
+// 退款标题
 function formatRefundTitle(r) {
   return `退款 ¥${r.actualRefundAmount || r.refundAmount || 0}`
 }
 
+// 退款副标题
 function formatRefundSubtitle(r) {
   const t = r.refundTime ? new Date(r.refundTime).toLocaleString() : ''
   const m = viewStore.getPaymentMethodName(r.method || '')
@@ -286,6 +291,7 @@ function formatRefundSubtitle(r) {
   return `${t} · ${m}${op ? (' · ' + op) : ''}`
 }
 
+// 处理退款
 async function handleRefundDeposit() {
   // 表单验证
   if (!isFormValid.value) {
@@ -362,6 +368,7 @@ async function handleRefundDeposit() {
     loading.value = false
   }
 }
+
 </script>
 
 <style scoped>

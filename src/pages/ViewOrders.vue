@@ -379,7 +379,8 @@ async function cancelOrder(order) {
 
       // 更新当前正在查看的订单详情 (如果适用)
       if (currentOrder.value && currentOrder.value.orderNumber === order.orderNumber) {
-        currentOrder.value = { ...orderStore.getOrderByNumber(order.orderNumber) }; // 从store获取最新数据
+        const latest = await orderStore.getOrderByNumber(order.orderNumber)
+        if (latest) currentOrder.value = { ...latest } // 从store获取最新数据
       }
 
       $q.notify({ type: 'positive', message: '订单已取消', position: 'top' });
@@ -472,7 +473,8 @@ async function performCheckOut(order) {
 
     // 更新当前正在查看的订单详情
     if (currentOrder.value && currentOrder.value.orderNumber === order.orderNumber) {
-      currentOrder.value = { ...orderStore.getOrderByNumber(order.orderNumber) };
+      const latest = await orderStore.getOrderByNumber(order.orderNumber)
+      if (latest) currentOrder.value = { ...latest }
     }
 
     // 刷新订单列表
@@ -562,49 +564,8 @@ async function performCheckIn(order) {
   try {
     console.log('办理入住:', order.orderNumber, '房间:', order.roomNumber);
 
-    // 调用新的 store action 更新订单状态
-    const updatedOrderFromApi = await orderStore.updateOrderStatusViaApi(order.orderNumber, 'checked-in');
-
-    if (!updatedOrderFromApi) {
-      // store action 应该会抛出错误，但以防万一
-      $q.notify({ type: 'negative', message: '办理入住失败，API未返回更新后的订单', position: 'top' });
-      loadingOrders.value = false;
-      return;
-    }
-
-    // 获取房间信息 (主要为了拿到 room_id)
-    const room = roomStore.getRoomByNumber(order.roomNumber);
-    if (!room) {
-      console.error('预订房间未找到:', order.roomNumber);
-      // 注意：此时订单状态可能已经更新，但房间状态未更新。需要考虑回滚或提示用户手动处理。
-      $q.notify({ type: 'warning', message: '订单已更新为入住，但预订的房间信息未找到，请检查房间状态！', position: 'top', multiLine: true });
-      loadingOrders.value = false;
-      // 刷新订单列表以显示最新状态
-      // fetchAllOrders(); // Removed
-      return;
-    }
-
-    // 入住成功后刷新房间列表，确保房间状态页面能显示最新的客人信息
-    await roomStore.fetchAllRooms();
-
-    // 本地订单列表已由 orderStore.updateOrderStatusViaApi 更新，
-    // 但如果 currentOrder 正在显示此订单，也需要更新它
-    if (currentOrder.value && currentOrder.value.orderNumber === order.orderNumber) {
-      currentOrder.value = { ...orderStore.getOrderByNumber(order.orderNumber) }; // 从store获取最新数据
-    }
-
-    // 办理入住成功后，显示账单创建对话框（支持单日和多日订单）
-    const updatedOrder = orderStore.getOrderByNumber(order.orderNumber);
-
     showBillDialog.value = true;
-    billOrder.value = { ...updatedOrder };
-
-    const isMultiDay = checkIfMultiDayOrder(updatedOrder);
-    const message = isMultiDay
-      ? '入住成功，请编辑每日房费并创建多日账单'
-      : '入住成功，请完成账单创建';
-
-    $q.notify({ type: 'positive', message, position: 'top' });
+    billOrder.value = { ...order }; // Pass the original order to the bill dialog
 
   } catch (error) {
     console.error('办理入住操作失败:', error);
@@ -868,24 +829,58 @@ async function handleBillCreated() {
       return;
     }
 
-    console.log('账单创建成功，订单:', billOrder.value.orderNumber);
+    const orderNumber = billOrder.value.orderNumber;
+    console.log('账单创建成功，订单:', orderNumber);
 
-    // 更新当前正在查看的订单详情
-    if (currentOrder.value && currentOrder.value.orderNumber === billOrder.value.orderNumber) {
-      currentOrder.value = { ...orderStore.getOrderByNumber(billOrder.value.orderNumber) };
+    // 1. 获取原始订单数据进行比较
+    const originalOrder = await orderStore.getOrderByNumber(orderNumber, true); // Force refresh from backend
+
+    const fieldsToUpdate = {};
+    // Compare roomPrice
+    if (billOrder.value.roomPrice !== originalOrder.roomPrice) {
+      fieldsToUpdate.roomPrice = billOrder.value.roomPrice;
+    }
+    // Compare deposit
+    if (billOrder.value.deposit !== originalOrder.deposit) {
+      fieldsToUpdate.deposit = billOrder.value.deposit;
     }
 
-    // 刷新订单列表
-    // await fetchAllOrders(); // Removed
+    // 2. 如果房费或押金有修改，更新订单表
+    if (Object.keys(fieldsToUpdate).length > 0) {
+      console.log('检测到房费/押金变更，正在更新订单:', fieldsToUpdate);
+      await orderStore.updateOrder(orderNumber, fieldsToUpdate);
+    }
+
+    // 3. 更新订单状态为“已入住”
+    const updatedOrderFromApi = await orderStore.updateOrderStatusViaApi(orderNumber, 'checked-in');
+
+    if (!updatedOrderFromApi) {
+      $q.notify({ type: 'negative', message: '办理入住失败，API未返回更新后的订单', position: 'top' });
+      return;
+    }
+
+    // 4. 刷新房间列表，确保房间状态页面能显示最新的客人信息
+    await roomStore.fetchAllRooms();
+
+    // 5. 更新当前正在查看的订单详情
+    if (currentOrder.value && currentOrder.value.orderNumber === orderNumber) {
+      currentOrder.value = { ...orderStore.getOrderByNumber(orderNumber) }; // 从store获取最新数据
+    }
+
+    // 6. 显示成功通知
+    const isMultiDay = checkIfMultiDayOrder(billOrder.value); // Use billOrder.value for multi-day check
+    const message = isMultiDay
+      ? '入住成功，请编辑每日房费并创建多日账单'
+      : '入住成功，请完成账单创建';
 
     $q.notify({
       type: 'positive',
-      message: '账单创建成功，入住手续已完成',
+      message: message,
       position: 'top'
     });
 
-  // 关闭账单对话框（双保险）
-  showBillDialog.value = false;
+    // 关闭账单对话框
+    showBillDialog.value = false;
 
   } catch (error) {
     console.error('处理账单创建成功事件失败:', error);
@@ -894,6 +889,10 @@ async function handleBillCreated() {
       message: '账单创建成功，但更新界面失败，请刷新页面',
       position: 'top'
     });
+  } finally {
+    // Ensure loading state is handled, assuming performCheckIn sets it to true
+    // and handleBillCreated is responsible for setting it to false.
+    loadingOrders.value = false;
   }
 }
 
@@ -998,9 +997,9 @@ async function handleExtendStay(extendStayData) {
           {
             label: '查看订单',
             color: 'white',
-            handler: () => {
+            handler: async () => {
               // 找到新创建的订单并查看详情
-              const newOrder = orderStore.getOrderByNumber(newOrderNumber);
+              const newOrder = await orderStore.getOrderByNumber(newOrderNumber);
               if (newOrder) {
                 viewOrderDetails(newOrder);
               }
@@ -1141,7 +1140,7 @@ async function handleRefundDeposit(refundData) {
 
     // 更新当前正在查看的订单详情
     if (currentOrder.value && currentOrder.value.orderNumber === refundData.orderNumber) {
-      const updatedOrder = orderStore.getOrderByNumber(refundData.orderNumber)
+      const updatedOrder = await orderStore.getOrderByNumber(refundData.orderNumber)
       if (updatedOrder) {
         currentOrder.value = updatedOrder
       }

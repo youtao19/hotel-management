@@ -117,7 +117,7 @@ const $q = useQuasar()
 const paymentMethodOptions = viewStore.paymentMethodOptions
 
 // 支付方式选择
-const selectedPaymentMethod = ref(props.currentOrder?.paymentMethod || 'cash')
+const selectedPaymentMethod = ref(props.currentOrder?.paymentMethod || '现金')
 
 // 计算房费显示值
 function calculateRoomFeeDisplay(roomPrice) {
@@ -333,6 +333,8 @@ function updateRoomFee(newValue) {
   billData.value.room_fee = numericValue;
 }
 
+
+
 async function createBill() {
   try {
     console.log('当前订单数据:', props.currentOrder)
@@ -502,8 +504,8 @@ watch(
       billData.value.guest_name = order.guestName || ''
       billData.value.deposit = order.deposit || 0
       billData.value.room_fee = order.roomPrice || 0
-  billData.value.refund_deposit = 0 // 固定为不退押金（数值）
-      selectedPaymentMethod.value = order.paymentMethod || 'cash' // 更新支付方式选择
+      billData.value.refund_deposit = 0 // 固定为不退押金（数值）
+      selectedPaymentMethod.value = order.paymentMethod || '现金' // 更新支付方式选择
       billData.value.pay_way = { value: selectedPaymentMethod.value } // 后端期望的格式
     }
   },
