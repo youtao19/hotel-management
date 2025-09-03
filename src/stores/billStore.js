@@ -100,7 +100,16 @@ export const useBillStore = defineStore('bill', () => {
     async function fetchAllBills() {
         try {
             const response = await billApi.getAllBills();
-            bills.value = Array.isArray(response.bills) ? response.bills : [];
+            const list = Array.isArray(response?.bills)
+              ? response.bills
+              : Array.isArray(response?.data)
+              ? response.data
+              : Array.isArray(response?.rows)
+              ? response.rows
+              : Array.isArray(response)
+              ? response
+              : [];
+            bills.value = list;
             return bills.value;
         } catch (error) {
             console.error('获取所有账单失败:', error);
@@ -137,9 +146,35 @@ export const useBillStore = defineStore('bill', () => {
         }
     }
 
+
+    /**
+     * 获取一个订单的所有账单
+     * @param {string} orderId - 订单ID
+     * @returns {Array} 订单的所有账单
+     */
+        async function getBillsByOrderId(orderId) {
+            try {
+                const response = await billApi.getBillsByOrderId(orderId);
+                const list = Array.isArray(response?.bills)
+                    ? response.bills
+                    : Array.isArray(response?.data)
+                    ? response.data
+                    : Array.isArray(response?.rows)
+                    ? response.rows
+                    : Array.isArray(response)
+                    ? response
+                    : [];
+                return list;
+            } catch (error) {
+                console.error('获取订单账单失败:', error);
+                throw error;
+            }
+        }
+
     return {
         bills,
         currentBill,
+        getBillsByOrderId,
         addBill,
         createSingleBill,
         inviteReview,

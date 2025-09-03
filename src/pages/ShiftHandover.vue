@@ -85,6 +85,7 @@ import ShiftHandoverPaymentTable from '../components/ShiftHandoverPaymentTable.v
 import ShiftHandoverMemoList from '../components/ShiftHandoverMemoList.vue'
 import ShiftHandoverSpecialStats from '../components/ShiftHandoverSpecialStats.vue'
 import { useShiftHandoverStore } from 'src/stores/shiftHandoverStore.js'
+import { billApi } from '../api/index.js'
 
 const $q = useQuasar()
 
@@ -603,8 +604,8 @@ onMounted(async () => {
 })
 
 async function test1() {
-  const content = await shiftHandoverStore.fetchSpecialStats('2025-08-26');
-  console.log('测试按钮被点击', content.data);
+  const content = await billApi.getBillsByOrderId('O202509030275');
+  console.log('测试按钮被点击', typeof(content.data[0]), content.data[0]);
 }
 
 </script>

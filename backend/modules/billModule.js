@@ -137,13 +137,8 @@ async function getBillByOrderId(order_id){
 async function getBillsByOrderId(order_id){
     try {
         const sqlQuery = `
-            SELECT b.*,
-                   ri.invited AS review_invited,
-                   ri.positive_review,
-                   ri.invite_time AS review_invite_time,
-                   ri.update_time AS review_update_time
+            SELECT b.*
             FROM bills b
-            LEFT JOIN review_invitations ri ON ri.order_id = b.order_id
             WHERE b.order_id = $1
             ORDER BY b.create_time ASC
         `;
@@ -191,8 +186,6 @@ async function applyDepositRefund(order_id, actualRefundAmount, refundMethod, re
     }
 }
 
-
-
 // 获取所有账单（包含好评信息）
 async function getAllBills() {
     try {
@@ -213,7 +206,6 @@ async function getAllBills() {
         throw error;
     }
 }
-
 
 
 module.exports = {

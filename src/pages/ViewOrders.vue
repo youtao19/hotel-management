@@ -70,10 +70,6 @@
                   v-if="canRefundDeposit(props.row)">
                   <q-tooltip>退押金</q-tooltip>
                 </q-btn>
-                <q-btn flat round dense color="secondary" icon="edit" @click="openChangeOrderDialog"
-                  v-if="props.row.status !== 'checked-out'">
-                  <q-tooltip>更改订单</q-tooltip>
-                </q-btn>
               </q-btn-group>
             </q-td>
           </template>
@@ -187,6 +183,7 @@ import ChangeRoomDialog from 'src/components/ChangeRoomDialog.vue';
 import CheckIn from 'src/components/CheckIn.vue';
 import ExtendStayDialog from 'src/components/ExtendStayDialog.vue';
 import RefundDepositDialog from 'src/components/RefundDepositDialog.vue';
+import { watch } from 'vue'
 
 
 // 初始化 stores
@@ -412,6 +409,46 @@ const loadingExtendStayRooms = ref(false)
 // 退押金相关变量
 const showRefundDepositDialog = ref(false)
 const refundDepositOrder = ref(null)
+// 退押按钮可见性的本地缓存：true 可退；false 不可退；未定义 表示尚未计算
+const refundableMap = ref({})
+
+// 计算单个订单是否可退押（异步，结果写入 refundableMap）
+async function computeRefundable(order) {
+  try {
+    if (!order) return;
+    const key = String(order.orderNumber);
+    // 仅对已退房且押金>0的订单计算
+    const deposit = Number(order.deposit) || 0;
+    if (!allowedRefundStatuses.includes(order.status) || deposit <= 0) {
+      refundableMap.value[key] = false;
+      return;
+    }
+
+    // 拉取该订单的账单
+    const bills = await billStore.getBillsByOrderId(key);
+    let refundedFromBills = 0;
+    let hasRefundRow = false;
+    (bills || []).forEach(b => {
+      if (b?.change_type === '退押') {
+        hasRefundRow = true;
+        const cp = Number(b?.change_price) || 0;
+        if (cp < 0) refundedFromBills += -cp;
+      }
+    });
+    const legacyRefund = (bills || []).reduce((sum, b) => {
+      const rd = Number(b?.refund_deposit);
+      if (!isNaN(rd) && rd < 0) return sum + (-rd);
+      return sum;
+    }, 0);
+    const totalRefunded = Math.max(refundedFromBills + legacyRefund, Number(order.refundedDeposit || 0));
+
+    // 规则：发生过退押记录或累计退额>=押金，则不可再次退押
+    refundableMap.value[key] = !(hasRefundRow || totalRefunded >= deposit);
+  } catch (e) {
+    console.warn('computeRefundable 失败，按不可退处理:', e);
+    if (order?.orderNumber) refundableMap.value[String(order.orderNumber)] = false;
+  }
+}
 
 // 办理退房
 async function checkoutOrder(order) {
@@ -906,6 +943,14 @@ async function handleCheckInCompleted(checkInData) {
 
     // 5. 刷新房间列表（这会重新计算所有房间的显示状态）
     await roomStore.fetchAllRooms();
+    await orderStore.fetchAllOrders(); // 刷新订单列表
+
+
+    // 更新当前正在查看的订单详情 (如果适用)
+      if (currentOrder.value && currentOrder.value.orderNumber === order.orderNumber) {
+        const latest = await orderStore.getOrderByNumber(order.orderNumber)
+        if (latest) currentOrder.value = { ...latest } // 从store获取最新数据
+      }
 
     // 7. 显示成功通知
     $q.notify({
@@ -1097,52 +1142,22 @@ async function handleRefreshExtendStayRooms(dateRange) {
   }
 }
 
-// ===== 退押金按钮显示逻辑（调整：已发生一次退款后隐藏） =====
-// 新业务规则：发生任意一次退款（不管是否全额，只要 refund_deposit < 0 表示已执行过退款）后不再允许继续退款。
-// 原因：第一次退款可能已包含扣款（损坏赔偿等），剩余差额为“扣留”部分，不再退还。
-// 逻辑：
-// 1. 状态必须在 allowedRefundStatuses
-// 2. 押金>0
-// 3. 账单层 refund_deposit == 0 (尚未退款) 才显示按钮
-// 4. 没有账单记录时回退到订单字段（refundedDeposit==0）
-
 const allowedRefundStatuses = ['checked-out'] // 仅已退房可退押；已取消不允许
 
-const billDepositInfoMap = computed(() => {
-  // order_id -> { deposit, refunded }
-  const map = {}
-  billStore.bills.forEach(b => {
-    // 锁定第一张含押金的账单
-    if (!map[b.order_id] && (b.deposit || 0) > 0) {
-      const deposit = Number(b.deposit) || 0
-      const refunded = Math.abs(Number(b.refund_deposit) || 0) // refund_deposit 为负数
-      map[b.order_id] = { deposit, refunded }
-    }
-  })
-  return map
-})
-
+// 判断是否可以退押金（同步，使用本地账单缓存，避免渲染期异步报错）
 function canRefundDeposit(order) {
-  if (!order) return false
-  if (!allowedRefundStatuses.includes(order.status)) return false
-  // 优先使用 billStore 中的账单信息判断（支持 change_type='退押'）
-  const billsForOrder = billStore.bills.filter(b => b.order_id === order.orderNumber)
-  // 计算 deposit（优先 order.deposit，其次 bills 中第一条含押金的记录）
-  let deposit = Number(order.deposit) || 0
-  if (deposit === 0) {
-    const bWithDep = billsForOrder.find(b => Number(b.deposit) > 0)
-    if (bWithDep) deposit = Number(bWithDep.deposit) || 0
-  }
-  // 计算已退押金：兼容 legacy refund_deposit 和 change_type='退押'
-  let refunded = 0
-  billsForOrder.forEach(b => {
-    refunded += Math.abs(Number(b.refund_deposit) || 0)
-    if (b.change_type === '退押') refunded += Math.abs(Number(b.change_price) || 0)
-  })
+  try {
+    if (!order) return false;
 
-  if (deposit <= 0) return false
-  if (refunded > 0) return false
-  return true
+  // 同步读取缓存，默认隐藏直到计算完成
+  const key = String(order.orderNumber);
+  const cached = refundableMap.value[key];
+  if (cached === undefined) return false;
+  return cached === true;
+  } catch (e) {
+    console.warn('canRefundDeposit 计算失败，按不可退处理以避免误退:', e);
+    return false;
+  }
 }
 
 // 打开退押金对话框
@@ -1183,12 +1198,16 @@ async function handleRefundDeposit(refundData) {
       }
     }
 
-  // 关闭对话框
-  showRefundDepositDialog.value = false
+    // 关闭对话框
+    showRefundDepositDialog.value = false
 
-  // 刷新订单与账单数据（账单 refund_deposit 更新后隐藏按钮）
-  await fetchAllOrders();
-  await billStore.fetchAllBills();
+    // 刷新订单与账单数据（账单 refund_deposit 更新后隐藏按钮）
+    await fetchAllOrders();
+    await billStore.fetchAllBills();
+
+  // 重新计算该订单的可退状态
+    const order = await orderStore.getOrderByNumber(refundData.orderNumber);
+    if (order) await computeRefundable(order);
 
     $q.notify({
       type: 'positive',
@@ -1309,14 +1328,47 @@ onMounted(async () => {
     await fetchAllOrders()
     // 加载账单数据以支持退押按钮显示逻辑
     try {
-      await billStore.fetchAllBills()
+      if (!Array.isArray(billStore.bills) || billStore.bills.length === 0) {
+        await billStore.fetchAllBills()
+      }
     } catch (e) {
       console.warn('加载账单失败(不影响订单显示):', e.message)
     }
+
+    // 计算所有候选订单的退押可见性
+    const list = Array.isArray(orderStore.orders) ? orderStore.orders : [];
+    const tasks = list
+      .filter(o => allowedRefundStatuses.includes(o.status) && Number(o.deposit) > 0)
+      .map(o => computeRefundable(o));
+    if (tasks.length) await Promise.allSettled(tasks);
   } catch (error) {
     console.error('初始化数据失败:', error)
   }
 })
+
+// 监听订单退押状态变化
+watch(() => orderStore.orders, (newOrders) => {
+  if (Array.isArray(newOrders)) {
+    // 重新计算所有候选订单的退押可见性
+    const tasks = newOrders
+      .filter(o => allowedRefundStatuses.includes(o.status) && Number(o.deposit) > 0)
+      .map(o => computeRefundable(o));
+    if (tasks.length) {
+      Promise.allSettled(tasks).catch(e => {
+        console.warn('重新计算退押可见性失败:', e.message);
+      });
+    }
+  }
+}, { deep: true });
+
+// 监听订单是否修改
+watch(() => currentOrder.value, (newOrder, oldOrder) => {
+  if (newOrder && oldOrder && newOrder.orderNumber !== oldOrder.orderNumber) {
+    // 订单被修改，重新加载相关数据
+    fetchOrderDetails(newOrder.orderNumber);
+  }
+});
+
 </script>
 
 <style scoped>
