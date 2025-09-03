@@ -541,7 +541,7 @@ import { useViewStore } from '../stores/viewStore'
 import { useOrderStore } from '../stores/orderStore'
 import { useQuasar } from 'quasar'
 import langZhCn from 'quasar/lang/zh-CN' // 导入中文语言包
-import Bill from '../components/Bill.vue' // 导入账单组件
+import Bill from '../components/CheckIn.vue' // 导入账单组件
 
 // 获取房间store和视图store
 const roomStore = useRoomStore()

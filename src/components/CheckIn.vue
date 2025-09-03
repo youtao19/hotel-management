@@ -89,7 +89,7 @@
           </tbody>
         </q-markup-table>
         <div class="row justify-center q-gutter-xl q-mt-lg">
-          <q-btn label="确认" color="primary" unelevated rounded size="lg" class="bill-btn" @click="createBill" />
+          <q-btn label="确认" color="primary" unelevated rounded size="lg" class="bill-btn" @click="handleCheckInCompleted" />
           <q-btn label="取消" color="negative" unelevated rounded size="lg" class="bill-btn" v-close-popup />
         </div>
       </q-card-section>
@@ -107,7 +107,7 @@ const props = defineProps({
   modelValue: Boolean,
   currentOrder: Object,
 })
-const emit = defineEmits(['update:modelValue', 'bill-created'])
+const emit = defineEmits(['update:modelValue', 'bill-created', 'complete_check_in'])
 
 const billStore = useBillStore()
 const viewStore = useViewStore()
@@ -191,7 +191,7 @@ const billData = ref({
   remarks: props.currentOrder?.remarks || ''
 })
 
-console.log('💰 账单房费初始化：', safeInitialRoomFee, typeof safeInitialRoomFee);
+console.log('💰 房费初始化：', safeInitialRoomFee, typeof safeInitialRoomFee);
 
 // 监听订单变化，更新账单数据和可编辑价格
 watch(() => props.currentOrder, (newOrder) => {
@@ -215,7 +215,7 @@ watch(() => props.currentOrder, (newOrder) => {
       billData.value.room_fee = safeRoomFee;
       billData.value.remarks = newOrder.remarks || '';
 
-      console.log('💰 账单房费已同步：', billData.value.room_fee, typeof billData.value.room_fee);
+      console.log('💰 房费已同步：', billData.value.room_fee, typeof billData.value.room_fee);
     });
 
     // 同步支付方式
@@ -333,167 +333,6 @@ function updateRoomFee(newValue) {
   billData.value.room_fee = numericValue;
 }
 
-
-// 创建账单
-async function createBill() {
-  try {
-    console.log('当前订单数据:', props.currentOrder)
-
-    // 验证必要字段
-    if (!props.currentOrder?.orderNumber) {
-      throw new Error('订单号不能为空')
-    }
-    if (!props.currentOrder?.roomNumber) {
-      throw new Error('房间号不能为空')
-    }
-    if (!props.currentOrder?.guestName) {
-      throw new Error('客人姓名不能为空')
-    }
-    if (!selectedPaymentMethod.value) {
-      throw new Error('支付方式不能为空')
-    }
-
-    if (isMultiDayOrder.value) {
-      // 多日订单：创建多个账单
-      await createMultiDayBills();
-    } else {
-      // 单日订单：创建单个账单
-      await createSingleDayBill();
-    }
-  } catch (error) {
-    console.error('创建账单失败:', error);
-    $q.notify({
-      type: 'negative',
-      message: error.message || '账单创建失败',
-      position: 'top'
-    });
-  }
-}
-
-// 创建单日账单
-async function createSingleDayBill() {
-  // 计算总金额（房费 + 押金）
-  const roomFee = parseFloat(billData.value.room_fee) || 0
-  const deposit = parseFloat(billData.value.deposit) || 0
-  const calculatedTotalAmount = roomFee + deposit
-
-  // 构建账单数据，确保格式符合后端要求
-  const billDataToSend = {
-    order_id: props.currentOrder.orderNumber, // 使用订单号作为 order_id
-    room_number: props.currentOrder.roomNumber,
-    guest_name: props.currentOrder.guestName,
-    deposit: deposit, // 使用输入框中的押金值
-    refund_deposit: 0, // 0 表示未退
-    room_fee: roomFee, // 使用输入框中的房费值
-    total_income: calculatedTotalAmount,
-    pay_way: { value: selectedPaymentMethod.value }, // 后端期望的格式
-    remarks: billData.value.remarks || ''
-  }
-
-  console.log("准备发送的单日账单数据：", billDataToSend)
-
-  // 验证数据完整性
-  if (!billDataToSend.order_id || !billDataToSend.room_number || !billDataToSend.guest_name) {
-    throw new Error('关键信息缺失，无法创建账单')
-  }
-
-  const createResult = await billStore.addBill(billDataToSend)
-
-  // 若服务端返回 skippedInsert，说明在多日场景或仅更新了 orders
-  if (createResult && createResult.skippedInsert) {
-    $q.notify({ type: 'positive', message: '订单已更新（未在账单表插入）', position: 'top' });
-  } else {
-    $q.notify({ type: 'positive', message: '账单创建成功', position: 'top' });
-  }
-
-  // 触发账单创建完成事件
-  emit('bill-created');
-  // 主动关闭对话框
-  emit('update:modelValue', false);
-}
-
-// 创建多日账单
-async function createMultiDayBills() {
-  const priceDates = Object.keys(editableDailyPrices.value).sort();
-  const totalBills = priceDates.length;
-
-  if (totalBills === 0) {
-    throw new Error('没有找到有效的价格数据');
-  }
-
-  // 显示进度通知
-  let progressNotify = $q.notify({
-    type: 'ongoing',
-    message: `正在创建多日账单：第1/${totalBills}个...`,
-    position: 'top',
-    timeout: 0,
-    spinner: true
-  });
-
-  const createdBills = [];
-  const deposit = parseFloat(billData.value.deposit) || 0;
-
-  try {
-    for (let i = 0; i < priceDates.length; i++) {
-      const currentDate = priceDates[i];
-      const currentPrice = parseFloat(editableDailyPrices.value[currentDate]) || 0;
-
-      // 更新进度通知
-      progressNotify({
-        message: `正在创建多日账单：第${i + 1}/${totalBills}个...`,
-        caption: `处理 ${formatDisplayDate(currentDate)} 的账单`
-      });
-
-      // 构建单日账单数据
-      const billDataToSend = {
-        order_id: props.currentOrder.orderNumber,
-        room_number: props.currentOrder.roomNumber,
-        guest_name: props.currentOrder.guestName,
-        deposit: i === 0 ? deposit : 0, // 只在第一个账单记录押金
-        refund_deposit: 0,
-        room_fee: currentPrice,
-        total_income: currentPrice + (i === 0 ? deposit : 0),
-        pay_way: { value: selectedPaymentMethod.value },
-        remarks: `${formatDisplayDate(currentDate)} 住宿费用 (第${i + 1}/${totalBills}个账单)`
-      };
-
-      console.log(`创建第${i + 1}个账单:`, billDataToSend);
-
-      // 调用账单API创建单日账单
-      const createdBill = await billStore.createSingleBill(billDataToSend);
-      // createdBill 可能为 { skippedInsert: true, updatedOrder }
-      if (!(createdBill && createdBill.skippedInsert)) {
-        createdBills.push(createdBill);
-      }
-
-      // 短暂延迟，避免创建时间完全相同
-      await new Promise(resolve => setTimeout(resolve, 200));
-    }
-
-    // 关闭进度通知
-    progressNotify();
-
-    // 显示成功提示
-    $q.notify({
-      type: 'positive',
-      message: `多日账单创建成功，共创建 ${totalBills} 个账单`,
-      position: 'top'
-    });
-
-    console.log('多日账单创建成功，账单数量:', createdBills.length);
-
-    // 触发账单创建完成事件
-    emit('bill-created');
-    // 主动关闭对话框
-    emit('update:modelValue', false);
-
-  } catch (error) {
-    // 关闭进度通知
-    progressNotify();
-    throw error; // 重新抛出错误，让上层处理
-  }
-}
-
 // 同步 currentOrder 的数据
 watch(
   () => props.currentOrder,
@@ -526,6 +365,19 @@ const totalAmount = computed(() => {
   const deposit = parseFloat(billData.value.deposit) || 0
   return roomFee + deposit
 })
+
+// 处理入住成功
+async function handleCheckInCompleted() {
+  const checkInData = {
+    deposit: billData.value.deposit,
+    roomPrice: isMultiDayOrder.value ? editableDailyPrices.value : safeRoomFeeValue.value,
+    paymentMethod: selectedPaymentMethod.value,
+  };
+  emit('complete_check_in', checkInData);
+  emit('update:modelValue', false); // Close the dialog
+}
+
+
 </script>
 
 <style scoped>
