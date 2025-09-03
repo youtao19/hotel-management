@@ -334,7 +334,7 @@ function updateRoomFee(newValue) {
 }
 
 
-
+// 创建账单
 async function createBill() {
   try {
     console.log('当前订单数据:', props.currentOrder)
@@ -382,8 +382,8 @@ async function createSingleDayBill() {
     order_id: props.currentOrder.orderNumber, // 使用订单号作为 order_id
     room_number: props.currentOrder.roomNumber,
     guest_name: props.currentOrder.guestName,
-  deposit: deposit, // 使用输入框中的押金值
-  refund_deposit: 0, // 0 表示未退
+    deposit: deposit, // 使用输入框中的押金值
+    refund_deposit: 0, // 0 表示未退
     room_fee: roomFee, // 使用输入框中的房费值
     total_income: calculatedTotalAmount,
     pay_way: { value: selectedPaymentMethod.value }, // 后端期望的格式
@@ -449,8 +449,8 @@ async function createMultiDayBills() {
         order_id: props.currentOrder.orderNumber,
         room_number: props.currentOrder.roomNumber,
         guest_name: props.currentOrder.guestName,
-  deposit: i === 0 ? deposit : 0, // 只在第一个账单记录押金
-  refund_deposit: 0,
+        deposit: i === 0 ? deposit : 0, // 只在第一个账单记录押金
+        refund_deposit: 0,
         room_fee: currentPrice,
         total_income: currentPrice + (i === 0 ? deposit : 0),
         pay_way: { value: selectedPaymentMethod.value },
@@ -484,8 +484,8 @@ async function createMultiDayBills() {
 
     // 触发账单创建完成事件
     emit('bill-created');
-  // 主动关闭对话框
-  emit('update:modelValue', false);
+    // 主动关闭对话框
+    emit('update:modelValue', false);
 
   } catch (error) {
     // 关闭进度通知

@@ -477,8 +477,8 @@ async function performCheckOut(order) {
       if (latest) currentOrder.value = { ...latest }
     }
 
-    // 刷新订单列表
-    // await fetchAllOrders(); // Removed
+    // 刷新订单列表，确保退房状态实时更新
+    await fetchAllOrders();
 
     $q.notify({
       type: 'positive',
@@ -513,14 +513,14 @@ function searchOrders() {
   console.log('搜索订单:', searchQuery.value, filterStatus.value);
 
   // 设置加载状态
-  // loadingOrders.value = true;
+  loadingOrders.value = true;
 
-  // // 短暂延迟模拟数据刷新，确保UI能够响应数据变化
-  // setTimeout(() => {
-  //   // 不需要额外操作，filteredOrders计算属性会自动重新计算
-  //   // 这里的setTimeout只是为了确保UI触发更新
-  //   loadingOrders.value = false;
-  // }, 100);
+  // 短暂延迟模拟数据刷新，确保UI能够响应数据变化
+  setTimeout(() => {
+    // 不需要额外操作，filteredOrders计算属性会自动重新计算
+    // 这里的setTimeout只是为了确保UI触发更新
+    loadingOrders.value = false;
+  }, 100);
 }
 
 // 获取房间类型名称
@@ -565,7 +565,7 @@ async function performCheckIn(order) {
     console.log('办理入住:', order.orderNumber, '房间:', order.roomNumber);
 
     showBillDialog.value = true;
-    billOrder.value = { ...order }; // Pass the original order to the bill dialog
+    billOrder.value = { ...order }; // 传递订单数据到账单组件
 
   } catch (error) {
     console.error('办理入住操作失败:', error);
@@ -628,8 +628,8 @@ async function changeRoom(newRoomNumber) {
       // 刷新房间状态
       await roomStore.fetchAllRooms();
 
-      // 刷新订单列表
-      // await fetchAllOrders(); // Removed
+      // 刷新订单列表，确保房间更换信息实时更新
+      await fetchAllOrders();
 
       // 显示成功消息
       $q.notify({
@@ -955,10 +955,16 @@ async function handleExtendStay(extendStayData) {
     // 使用对话框中用户设置的订单号
     const newOrderNumber = extendStayData.orderNumber;
 
+    // 为续住订单的客人姓名添加唯一标识符，避免数据库约束冲突
+    // 使用时间戳的后4位作为唯一标识
+    const timestamp = Date.now();
+    const uniqueId = String(timestamp).slice(-4);
+    const extendStayGuestName = `${extendStayData.guestName}[续${uniqueId}]`;
+
     // 创建新订单数据，使用 addOrder 期望的格式
     const newOrderData = {
       orderNumber: newOrderNumber,
-      guestName: extendStayData.guestName,
+      guestName: extendStayGuestName, // 使用带唯一标识的客人姓名
       phone: extendStayData.phone,
       idNumber: extendStayData.idNumber || '000000000000000000', // 使用原订单的身份证号，如果没有则使用默认值
       roomType: extendStayData.roomType,
@@ -969,7 +975,7 @@ async function handleExtendStay(extendStayData) {
       paymentMethod: 'cash', // 默认现金支付，管理员可以修改
       roomPrice: extendStayData.roomPrice, // 单日房价
       deposit: 0, // 续住默认押金为0
-      remarks: `续住订单，原订单号：${extendStayData.originalOrderNumber}。${extendStayData.notes || ''}`.trim(),
+      remarks: `续住订单，原客人：${extendStayData.guestName}，原订单号：${extendStayData.originalOrderNumber}。${extendStayData.notes || ''}`.trim(),
       source: 'extend_stay', // 标记为续住来源
       sourceNumber: extendStayData.originalOrderNumber || ''
     };
@@ -983,8 +989,8 @@ async function handleExtendStay(extendStayData) {
       // 关闭对话框
       showExtendStayDialog.value = false;
 
-      // 刷新订单列表
-      // await fetchAllOrders(); // Removed
+      // 刷新订单列表，确保新创建的续住订单立即显示
+      await fetchAllOrders();
 
       $q.notify({
         type: 'positive',
@@ -1150,8 +1156,8 @@ async function handleRefundDeposit(refundData) {
   showRefundDepositDialog.value = false
 
   // 刷新订单与账单数据（账单 refund_deposit 更新后隐藏按钮）
-  // await fetchAllOrders() // Removed
-  await billStore.fetchAllBills()
+  await fetchAllOrders();
+  await billStore.fetchAllBills();
 
     $q.notify({
       type: 'positive',

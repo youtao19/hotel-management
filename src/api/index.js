@@ -219,15 +219,6 @@ export const revenueApi = {
   getQuickStats: () => api.get('/revenue/quick-stats'),
 }
 
-// 库存相关接口
-export const inventoryApi = {
-  // 获取指定日期的库存
-  getInventoryByDate: (date) => api.get(`/inventory/date/${date}`),
-
-  // 更新库存
-  updateInventory: (date, typeCode, data) => api.patch(`/inventory/${date}/${typeCode}`, data),
-}
-
 // 交接班相关接口
 export const shiftHandoverApi = {
   // 获取收款明细

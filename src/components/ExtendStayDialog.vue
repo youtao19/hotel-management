@@ -395,12 +395,17 @@ function generateNewOrderNumber() {
   const day = String(now.getDate()).padStart(2, '0')
   const hour = String(now.getHours()).padStart(2, '0')
   const minute = String(now.getMinutes()).padStart(2, '0')
-  const random = Math.floor(Math.random() * 100).toString().padStart(2, '0')
+  const second = String(now.getSeconds()).padStart(2, '0')
+  const millisecond = String(now.getMilliseconds()).padStart(3, '0')
 
-  // 格式：原订单号前6位-EXT月日时分随机数 (严格控制在20位以内)
+  // 使用毫秒时间戳的后4位作为随机数，确保唯一性
+  const timestamp = now.getTime()
+  const uniqueId = String(timestamp).slice(-4)
+
+  // 格式：原订单号前4位-EXT月日时分秒+唯一ID (严格控制在20位以内)
   const originalNumber = props.currentOrder?.orderNumber || 'ORDER'
-  const shortOriginal = originalNumber.substring(0, 6) // 只取前6位
-  newOrderNumber.value = `${shortOriginal}EXT${month}${day}${hour}${minute}${random}`
+  const shortOriginal = originalNumber.substring(0, 4) // 只取前4位给更多空间
+  newOrderNumber.value = `${shortOriginal}EXT${month}${day}${hour}${minute}${uniqueId}`
 }
 
 // 选择原房间
