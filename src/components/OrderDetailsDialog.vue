@@ -185,6 +185,14 @@
 
       <q-card-actions align="right">
         <q-btn
+          v-if="currentOrder"
+          flat
+          label="金额调整"
+          color="accent"
+          icon="add_card"
+          @click="showAdjustmentDialog = true"
+        />
+        <q-btn
           v-if="currentOrder && (currentOrder.status === 'pending' || currentOrder.status === 'checked-in' || currentOrder.status === 'checked-out')"
           flat
           label="修改订单"
@@ -225,11 +233,20 @@
         <q-btn flat label="关闭" color="primary" v-close-popup />
       </q-card-actions>
     </q-card>
+
+    <!-- 金额调整对话框 -->
+    <BillAdjustmentDialog
+      v-if="currentOrder"
+      v-model="showAdjustmentDialog"
+      :order-id="currentOrder.orderNumber"
+      @success="handleAdjustmentSuccess"
+    />
   </q-dialog>
 </template>
 
 <script setup>
-import { toRefs, computed } from 'vue';
+import { ref, toRefs, computed } from 'vue';
+import BillAdjustmentDialog from './BillAdjustmentDialog.vue'; // 1. 导入新组件
 
 const props = defineProps({
   modelValue: Boolean,
@@ -242,7 +259,15 @@ const props = defineProps({
   formatDateTime: Function
 });
 
-const emit = defineEmits(['update:modelValue', 'check-in', 'change-room', 'checkout', 'refund-deposit', 'change-order']);
+const emit = defineEmits(['update:modelValue', 'check-in', 'change-room', 'checkout', 'refund-deposit', 'change-order', 'refresh']);
+
+// 2. 添加控制对话框显示的状态
+const showAdjustmentDialog = ref(false);
+
+function handleAdjustmentSuccess() {
+  showAdjustmentDialog.value = false;
+  emit('refresh'); // 通知父组件刷新数据
+}
 
 function emitChangeOrder() {
   emit('change-order');

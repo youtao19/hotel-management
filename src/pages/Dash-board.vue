@@ -3,7 +3,7 @@
     <div class="q-pa-md">
       <div class="row q-col-gutter-md">
 
-      <!-- 统计卡片区域 -->
+      <!-- 统计卡片区域
       <div class="col-md-3 col-sm-6 col-xs-12">
         <q-card class="dashboard-card">
           <q-card-section class="bg-positive text-white">
@@ -68,7 +68,7 @@
             <q-btn flat color="warning" label="查看详情" />
           </q-card-actions>
         </q-card>
-      </div>
+      </div> -->
 
       <!-- 房间状态概览 -->
       <div class="col-md-8 col-xs-12">

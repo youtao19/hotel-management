@@ -208,10 +208,66 @@ async function getAllBills() {
 }
 
 
+const orderModule = require('./orderModule');
+
+// 创建一笔手动的账单调整（例如赔偿、额外服务费等）
+async function createBillAdjustment(req, res) {
+    try {
+        const { orderId, amount, type, paymentMethod, notes } = req.body;
+
+        // 1. 验证输入
+        if (!orderId || amount === undefined || !type || !paymentMethod) {
+            return res.status(400).json({ message: '缺少必要参数: orderId, amount, type, paymentMethod' });
+        }
+
+        const numericAmount = Number(amount);
+        if (isNaN(numericAmount)) {
+            return res.status(400).json({ message: '金额必须是有效的数字' });
+        }
+
+        // 2. 获取订单信息
+        const order = await orderModule.getOrderById(orderId);
+        if (!order) {
+            return res.status(404).json({ message: `订单号 '${orderId}' 不存在` });
+        }
+        const { room_number, guest_name } = order;
+
+        // 3. 插入新的账单记录
+        const insertSql = `
+            INSERT INTO bills (order_id, room_number, guest_name, pay_way, create_time, change_price, change_type, remarks)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING *
+        `;
+
+        const createTime = new Date();
+        const values = [
+            orderId,
+            room_number,
+            guest_name,
+            paymentMethod,
+            createTime,
+            numericAmount, // 正数表示收入，负数表示支出
+            type,
+            notes || null
+        ];
+
+        const result = await query(insertSql, values);
+
+        console.log(`[createBillAdjustment] 成功为订单 ${orderId} 创建一笔调整: ${type} ${numericAmount}`);
+        res.status(201).json(result.rows[0]);
+
+    } catch (error) {
+        console.error('创建账单调整失败:', error);
+        res.status(500).json({ message: '服务器内部错误' });
+    }
+}
+
+
 module.exports = {
     createBill,
     getBillByOrderId,
     getBillsByOrderId,
     getAllBills,
-    applyDepositRefund
+    applyDepositRefund,
+    createBillAdjustment
 };

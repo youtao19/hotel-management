@@ -3,6 +3,7 @@ const router = express.Router();
 router.use(express.json());
 
 const billModule = require('../modules/billModule');
+const authentication = require("../modules/authentication");
 
 // 获取所有账单
 router.get('/', async (req, res) => {
@@ -13,6 +14,9 @@ router.get('/', async (req, res) => {
     res.status(500).json({ message: '获取所有账单失败', error: err.message });
   }
 });
+
+// 创建一笔手动的账单调整
+router.post('/adjustment', authentication.ensureAuthenticated, billModule.createBillAdjustment);
 
 // 获取单个账单（占位实现）
 router.get('/:id', async (req, res) => {

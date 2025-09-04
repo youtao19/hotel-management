@@ -89,6 +89,21 @@ import { billApi } from '../api/index.js'
 
 const $q = useQuasar()
 
+// 深合并工具函数
+function deepMerge(target, source) {
+  const output = { ...target };
+  if (target && typeof target === 'object' && source && typeof source === 'object') {
+    Object.keys(source).forEach(key => {
+      if (source[key] && typeof source[key] === 'object' && key in target) {
+        output[key] = deepMerge(target[key], source[key]);
+      } else {
+        output[key] = source[key];
+      }
+    });
+  }
+  return output;
+}
+
 // 安全封装：避免在 Loading 插件未启用时抛错
 const loadingShow = (opts) => {
   try { $q?.loading?.show?.(opts) } catch (_) { /* noop */ }
@@ -288,8 +303,8 @@ async function savePageData() {
       throw new Error('请填写收银员姓名')
     }
 
-  savingAmounts.value = true;
-  loadingShow({ message: '保存数据中...' });
+    savingAmounts.value = true;
+    loadingShow({ message: '保存数据中...' });
 
     const pageData = {
       date: selectedDate.value,
@@ -500,13 +515,41 @@ async function refreshAllData() {
   try {
     loadingShow({ message: '加载数据中...' });
 
-    let handoverRecord = null;
+    // 1. 获取前一天的备用金
+    const current = new Date(selectedDate.value);
+    const previous = new Date(current);
+    previous.setDate(current.getDate() - 1);
+    const previousDateStr = date.formatDate(previous, 'YYYY-MM-DD');
 
-    // Simply fetch the record for the selected date
+    let reserveCashData = {};
+    try {
+      const previousHandover = await shiftHandoverApi.getCurrentHandover(previousDateStr);
+      if (previousHandover && previousHandover.paymentData) {
+        reserveCashData = {
+          wechat: previousHandover.paymentData.wechat?.retainedAmount || 0,
+          digital: previousHandover.paymentData.digital?.retainedAmount || 0,
+          other: previousHandover.paymentData.other?.retainedAmount || 0,
+        };
+        console.log(`成功获取 ${previousDateStr} 的交接款作为备用金:`, reserveCashData);
+      }
+    } catch (e) {
+      console.warn(`获取前一天 (${previousDateStr}) 的备用金失败:`, e);
+    }
+
+    // 定义默认的支付数据结构
+    const defaultPaymentData = {
+      cash: { reserveCash: 320, hotelIncome: 0, restIncome: 0, carRentIncome: 0, total: 0, hotelDeposit: 0, restDeposit: 0, retainedAmount: 320 },
+      wechat: { reserveCash: 0, hotelIncome: 0, restIncome: 0, carRentIncome: 0, total: 0, hotelDeposit: 0, restDeposit: 0, retainedAmount: 0 },
+      digital: { reserveCash: 0, hotelIncome: 0, restIncome: 0, carRentIncome: 0, total: 0, hotelDeposit: 0, restDeposit: 0, retainedAmount: 0 },
+      other: { reserveCash: 0, hotelIncome: 0, restIncome: 0, carRentIncome: 0, total: 0, hotelDeposit: 0, restDeposit: 0, retainedAmount: 0 }
+    };
+
+    // 2. 获取当天的记录（如果有）
+    let handoverRecord = null;
     try {
       handoverRecord = await shiftHandoverApi.getCurrentHandover(selectedDate.value);
     } catch (e) {
-      console.warn('未找到记录或获取失败:', e);
+      console.warn('未找到当天记录或获取失败:', e);
     }
 
     // 3. 根据获取到的记录填充页面数据
@@ -516,27 +559,25 @@ async function refreshAllData() {
       cashierName.value = handoverRecord.cashier_name || '';
       notes.value = handoverRecord.remarks || '';
       taskList.value = handoverRecord.task_list || [];
-      paymentData.value = handoverRecord.paymentData || {}; // Changed from handoverRecord.details
-      // specialStats needs to be handled from handoverRecord.statistics
+      // 使用深合并，确保 paymentData 结构完整
+      paymentData.value = deepMerge(defaultPaymentData, handoverRecord.paymentData || {});
       totalRooms.value = handoverRecord.statistics?.totalRooms || 0;
       restRooms.value = handoverRecord.statistics?.restRooms || 0;
       vipCards.value = handoverRecord.statistics?.vipCards || 0;
       goodReview.value = handoverRecord.statistics?.goodReview || '邀1得1';
     } else {
-      // If no record found for the day, clear page data or load default values
       handoverPerson.value = '';
       receivePerson.value = '';
-      cashierName.value = '张'; // Default value
+      cashierName.value = '张';
       notes.value = '';
       taskList.value = [];
-      // Reset paymentData to initial structure
-      paymentData.value = {
-        cash: { reserveCash: 320, hotelIncome: 0, restIncome: 0, carRentIncome: 0, total: 0, hotelDeposit: 0, restDeposit: 0, retainedAmount: 320 },
-        wechat: { reserveCash: 0, hotelIncome: 0, restIncome: 0, carRentIncome: 0, total: 0, hotelDeposit: 0, restDeposit: 0, retainedAmount: 0 },
-        digital: { reserveCash: 0, hotelIncome: 0, restIncome: 0, carRentIncome: 0, total: 0, hotelDeposit: 0, restDeposit: 0, retainedAmount: 0 },
-        other: { reserveCash: 0, hotelIncome: 0, restIncome: 0, carRentIncome: 0, total: 0, hotelDeposit: 0, restDeposit: 0, retainedAmount: 0 }
-      };
+      paymentData.value = defaultPaymentData;
     }
+
+    // 4. 将获取到的备用金填充到支付数据中 (在加载当天数据之后，确保覆盖)
+    paymentData.value.wechat.reserveCash = reserveCashData.wechat || 0;
+    paymentData.value.digital.reserveCash = reserveCashData.digital || 0;
+    paymentData.value.other.reserveCash = reserveCashData.other || 0;
 
     // 确保合计正确计算
     calculateTotals();
