@@ -160,10 +160,8 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useQuasar } from 'quasar'
-import { useBillStore } from '../stores/billStore'
 import { useReviewStore } from '../stores/reviewStore'
 
-const billStore = useBillStore()
 const reviewStore = useReviewStore()
 const $q = useQuasar()
 
@@ -218,7 +216,7 @@ const allReviewColumns = [
   { name: 'order_id', label: '订单号', field: 'order_id', align: 'left' },
   { name: 'guest_name', label: '客户姓名', field: 'guest_name', align: 'left' },
   { name: 'room_number', label: '房间号', field: 'room_number', align: 'center' },
-  { name: 'create_time', label: '账单时间', field: 'create_time', align: 'center', format: val => formatDateTime(val) },
+  { name: 'create_time', label: '下单时间', field: 'create_time', align: 'center', format: val => formatDateTime(val) },
   { name: 'review_status', label: '评价状态', field: 'review_status', align: 'center' },
   { name: 'review_update_time', label: '评价时间', field: 'review_update_time', align: 'center', format: val => val ? formatDateTime(val) : '-' }
 ]
@@ -293,16 +291,16 @@ async function fetchData() {
     loading.value = true
 
     // 并行获取所有数据
-    const [pendingInvitationsData, pendingReviewsData, allBillsData] = await Promise.all([
+    const [pendingInvitationsData, pendingReviewsData, allReviewsData] = await Promise.all([
       reviewStore.fetchPendingInvitations(),
       reviewStore.fetchPendingReviews(),
-      billStore.fetchAllBills()
+      reviewStore.fetchAllReviews()
     ])
 
     // 确保数据为数组格式
     pendingInvitations.value = Array.isArray(pendingInvitationsData) ? pendingInvitationsData : []
     pendingReviews.value = Array.isArray(pendingReviewsData) ? pendingReviewsData : []
-    allBills.value = Array.isArray(allBillsData) ? allBillsData : []
+    allBills.value = Array.isArray(allReviewsData) ? allReviewsData : []
 
     console.log('获取数据成功:', {
       pendingInvitations: pendingInvitations.value.length,

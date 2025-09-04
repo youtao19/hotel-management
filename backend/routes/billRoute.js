@@ -4,12 +4,13 @@ router.use(express.json());
 
 const billModule = require('../modules/billModule');
 
-// 简单占位：返回空账单列表
+// 获取所有账单
 router.get('/', async (req, res) => {
   try {
-    res.json({ data: [] });
+    const bills = await billModule.getAllBills();
+    res.json({ bills });
   } catch (err) {
-    res.status(500).json({ message: '服务器错误', error: err.message });
+    res.status(500).json({ message: '获取所有账单失败', error: err.message });
   }
 });
 

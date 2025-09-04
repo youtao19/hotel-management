@@ -10,7 +10,7 @@
               <q-icon name="search" class="cursor-pointer" @click="searchOrders" />
             </template>
             <template v-slot:hint>
-              输入订单号、客人姓名或手机号
+              输入订单号、客人姓名、手机号或房间号
             </template>
           </q-input>
         </div>
@@ -288,7 +288,8 @@ const filteredOrders = computed(() => {
       const orderNo = order.orderNumber != null ? String(order.orderNumber).toLowerCase() : ''
       const guest = order.guestName != null ? String(order.guestName).toLowerCase() : ''
       const phone = order.phone != null ? String(order.phone) : ''
-      return orderNo.includes(query) || guest.includes(query) || phone.includes(query)
+      const room = order.roomNumber != null ? String(order.roomNumber).toLowerCase() : ''
+      return orderNo.includes(query) || guest.includes(query) || phone.includes(query) || room.includes(query)
     })
   }
 
@@ -582,7 +583,7 @@ async function checkInOrder(order) {
     title: '确认办理入住',
     message: `确定要为订单 ${order.orderNumber} (客人: ${order.guestName}, 房间: ${order.roomNumber}) 办理入住吗？
 
-办理入住后将自动创建账单。`,
+  办理入住后将自动创建账单。`,
     cancel: true,
     persistent: true
   }).onOk(async () => {
@@ -1280,7 +1281,6 @@ async function handleOrderUpdated(updatedOrderData) {
       timeout: 2000
     });
 
-    // 刷新列表 - orderStore.updateOrder 内部已经调用了 fetchAllOrders
 
     // 如果正在查看该订单的详情，从 store 中更新详情数据
     if (currentOrder.value && currentOrder.value.orderNumber === updatedOrderData.orderNumber) {

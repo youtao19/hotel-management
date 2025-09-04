@@ -108,32 +108,6 @@ router.put('/:orderId/status', [
 });
 
 /**
- * 获取特定订单的好评信息
- * GET /api/reviews/:orderId
- */
-router.get('/:orderId', async (req, res) => {
-  try {
-    const { orderId } = req.params;
-
-    // 检查订单是否存在
-    const order = await orderModule.getOrderById(orderId);
-    if (!order) {
-      return res.status(404).json({ message: '订单不存在' });
-    }
-
-    const reviewInfo = await reviewInvitationModule.getReviewByOrderId(orderId);
-    res.status(200).json({
-      message: '获取好评信息成功',
-      order: order,
-      review: reviewInfo
-    });
-  } catch (error) {
-    console.error('获取好评信息失败:', error);
-    res.status(500).json({ message: '获取好评信息失败', error: error.message });
-  }
-});
-
-/**
  * 获取所有有好评记录的订单（用于统计分析）
  * GET /api/reviews/all
  */
@@ -175,6 +149,32 @@ router.get('/statistics', async (req, res) => {
   } catch (error) {
     console.error('获取好评统计失败:', error);
     res.status(500).json({ message: '获取好评统计失败', error: error.message });
+  }
+});
+
+/**
+ * 获取特定订单的好评信息
+ * GET /api/reviews/:orderId
+ */
+router.get('/:orderId', async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    // 检查订单是否存在
+    const order = await orderModule.getOrderById(orderId);
+    if (!order) {
+      return res.status(404).json({ message: '订单不存在' });
+    }
+
+    const reviewInfo = await reviewInvitationModule.getReviewByOrderId(orderId);
+    res.status(200).json({
+      message: '获取好评信息成功',
+      order: order,
+      review: reviewInfo
+    });
+  } catch (error) {
+    console.error('获取好评信息失败:', error);
+    res.status(500).json({ message: '获取好评信息失败', error: error.message });
   }
 });
 
