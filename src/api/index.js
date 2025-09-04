@@ -56,7 +56,9 @@ export const roomApi = {
   // 获取所有房间
   getAllRooms: (date = null) => {
     const url = date ? `/rooms?date=${date}` : '/rooms';
-    return api.get(url);
+    const cacheBuster = `_=${new Date().getTime()}`;
+    const finalUrl = url.includes('?') ? `${url}&${cacheBuster}` : `${url}?${cacheBuster}`;
+    return api.get(finalUrl);
   },
 
   // 根据ID获取房间

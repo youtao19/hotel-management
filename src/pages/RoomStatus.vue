@@ -7,58 +7,58 @@
       <!-- <h1 class="text-h4 q-mb-md">房间状态</h1> -->
 
       <!-- 日期筛选器（始终显示） -->
-    <div class="date-filters q-mb-md">
-      <q-card flat bordered>
-        <q-card-section class="q-pa-md">
-          <div class="row q-col-gutter-md items-center">
-            <!-- 单个日期选择器 -->
-            <div class="col-md-6 col-sm-8 col-xs-12">
-              <q-input
-                outlined
-                dense
-                label="查看指定日期房间状态"
-                readonly
-                :model-value="formattedSelectedDate || '点击选择日期'"
-                placeholder="YYYY-MM-DD"
-                clearable
-                clear-icon="close"
-                @clear="clearSelectedDate"
-              >
-                <template v-slot:append>
-                  <q-icon name="event" class="cursor-pointer">
-                    <q-popup-proxy cover transition-show="scale" transition-hide="scale">
-                      <q-date
-                        v-model="selectedDate"
-                        default-view="Calendar"
-                        today-btn
-                        @update:model-value="onDateChange"
-                        :locale="langZhCn.date"
-                      >
-                        <div class="row items-center justify-end q-pa-sm">
-                          <q-btn v-close-popup label="确定" color="primary" flat/>
-                        </div>
-                      </q-date>
-                    </q-popup-proxy>
-                  </q-icon>
-                </template>
-              </q-input>
-            </div>
+      <div class="date-filters q-mb-md">
+        <q-card flat bordered>
+          <q-card-section class="q-pa-md">
+            <div class="row q-col-gutter-md items-center">
+              <!-- 单个日期选择器 -->
+              <div class="col-md-6 col-sm-8 col-xs-12">
+                <q-input
+                  outlined
+                  dense
+                  label="查看指定日期房间状态"
+                  readonly
+                  :model-value="formattedSelectedDate || '点击选择日期'"
+                  placeholder="YYYY-MM-DD"
+                  clearable
+                  clear-icon="close"
+                  @clear="clearSelectedDate"
+                >
+                  <template v-slot:append>
+                    <q-icon name="event" class="cursor-pointer">
+                      <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+                        <q-date
+                          v-model="selectedDate"
+                          default-view="Calendar"
+                          today-btn
+                          @update:model-value="onDateChange"
+                          :locale="langZhCn.date"
+                        >
+                          <div class="row items-center justify-end q-pa-sm">
+                            <q-btn v-close-popup label="确定" color="primary" flat />
+                          </div>
+                        </q-date>
+                      </q-popup-proxy>
+                    </q-icon>
+                  </template>
+                </q-input>
+              </div>
 
-            <!-- 查询按钮 -->
-            <div class="col-md-6 col-sm-4 col-xs-12">
-              <q-btn
-                color="primary"
-                icon="search"
-                label="查询房间状态"
-                @click="queryRoomStatus"
-                :loading="roomStore.loading"
-                class="full-width"
-              />
+              <!-- 查询按钮 -->
+              <div class="col-md-6 col-sm-4 col-xs-12">
+                <q-btn
+                  color="primary"
+                  icon="search"
+                  label="查询房间状态"
+                  @click="queryRoomStatus"
+                  :loading="roomStore.loading"
+                  class="full-width"
+                />
+              </div>
             </div>
-          </div>
-        </q-card-section>
-      </q-card>
-    </div>
+          </q-card-section>
+        </q-card>
+      </div>
 
 
 
@@ -710,11 +710,13 @@ watch(() => route.query, (newQuery) => {
   if (newQuery.status !== filterStatus.value) {
     if (newQuery.status) {
       // 确保状态值是有效的
-      const statusValue = newQuery.status
+  let statusValue = newQuery.status
+  // 归一化：兼容 pending -> reserved
+  if (statusValue === 'pending') statusValue = 'reserved'
       console.log('尝试应用状态筛选:', statusValue)
 
       // 验证状态值是否有效，防止非法值导致的筛选问题
-      const validStatus = ['available', 'occupied', 'pending', 'cleaning', 'repair'].includes(statusValue)
+  const validStatus = ['available', 'occupied', 'reserved', 'cleaning', 'repair'].includes(statusValue)
 
       if (validStatus) {
         console.log('状态值有效，设置筛选:', statusValue)
@@ -814,26 +816,29 @@ const filteredRooms = computed(() => {
   }
 
   // 获取URL中的状态参数，优先于组件状态
-  const urlStatus = route.query.status;
+  let urlStatus = route.query.status;
   const urlType = route.query.type;
+
+  // 归一化 URL 状态
+  if (urlStatus === 'pending') urlStatus = 'reserved'
 
   // 构建筛选条件
   const filters = {};
 
-  // 设置房型筛选 - URL参数优先
-  if (urlType) {
-    filters.type = urlType;
-  } else if (selectedRoomType.value) {
+  // 设置房型筛选 - 本地优先（交互优先于URL）
+  if (selectedRoomType.value) {
     filters.type = selectedRoomType.value;
   } else if (filterType.value) {
     filters.type = filterType.value;
+  } else if (urlType) {
+    filters.type = urlType;
   }
 
-  // 设置状态筛选 - URL参数优先
-  if (urlStatus) {
-    filters.status = urlStatus;
-  } else if (filterStatus.value) {
+  // 设置状态筛选 - 本地优先（交互优先于URL）
+  if (filterStatus.value) {
     filters.status = filterStatus.value;
+  } else if (urlStatus) {
+    filters.status = urlStatus;
   }
 
   // 如果没有任何筛选条件，直接返回所有房间
@@ -856,9 +861,9 @@ const statusOptions = computed(() => [
   { label: '全部状态', value: null },
   { label: '可入住', value: 'available' },
   { label: '已入住', value: 'occupied' },
-  { label: '清理中', value: 'cleaning' },
-  { label: '维修中', value: 'repair' },
-  { label: '待确认', value: 'pending' }
+  { label: '已预订', value: 'reserved' },
+  { label: '清扫中', value: 'cleaning' },
+  { label: '维修中', value: 'repair' }
 ])
 
 /**
@@ -982,7 +987,7 @@ const getEventColor = (timestamp) => {
       color = 'orange'; // 已预订显示橙色
       break;
     case 'available':
-      color = 'green'; // 可入住显示绿色
+      color = ''; // 可入住不显示特殊颜色
       break;
     default:
       color = 'grey'; // 默认灰色
@@ -1140,6 +1145,16 @@ const onRoomTypeSelect = (value) => {
     query: { ...route.query, type: value || undefined }
   })
 }
+
+// 监听状态筛选变化，联动到 URL
+watch(filterStatus, (val) => {
+  let status = val
+  if (status === 'pending') status = 'reserved'
+  router.replace({
+    path: route.path,
+    query: { ...route.query, status: status || undefined }
+  })
+})
 
 /**
  * 重置所有筛选
@@ -1964,14 +1979,14 @@ async function clearCleaning(roomId) {
 /**
  * 查看房间对应订单备注（仅预定/入住）
  */
-function showOrderRemarks(room) {
+async function showOrderRemarks(room) {
   try {
     // 优先通过订单号匹配
     const orderNumber = room.order_id || room.orderId
     let targetOrder = null
 
     if (orderNumber) {
-      targetOrder = orderStore.getOrderByNumber(orderNumber)
+      targetOrder = await orderStore.getOrderByNumber(orderNumber)
     }
 
     // 备用：通过房间号 + 日期范围/状态匹配

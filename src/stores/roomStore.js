@@ -21,6 +21,20 @@ const ORDER_STATES = {
   CANCELLED: 'cancelled'        // 已取消
 };
 
+// 归一化订单状态：兼容后端可能返回的中文或大小写不一致的状态
+function normalizeOrderStatus(status) {
+  if (!status) return status;
+  const s = String(status).trim();
+  const map = {
+    '待入住': ORDER_STATES.PENDING,
+    '已入住': ORDER_STATES.CHECKED_IN,
+    '已退房': ORDER_STATES.CHECKED_OUT,
+    '已取消': ORDER_STATES.CANCELLED
+  };
+  // 优先中文映射，否则返回原值（可能已是英文规范）
+  return map[s] || s;
+}
+
 // 状态映射关系定义 - 订单状态到房间状态的映射
 const ORDER_TO_ROOM_STATE_MAP = {
   [ORDER_STATES.CHECKED_IN]: ROOM_STATES.OCCUPIED,    // 已入住 -> 已入住
@@ -77,7 +91,8 @@ export const useRoomStore = defineStore('room', () => {
       if (!Array.isArray(response.data)) {
         throw new Error('订单数据格式错误，期望数组但得到: ' + JSON.stringify(response.data))
       }
-      const allOrders = response.data
+  // 统一订单状态，避免中文/英文导致的判断偏差
+  const allOrders = response.data.map(o => ({ ...o, status: normalizeOrderStatus(o.status) }))
 
       // 筛选活跃订单（待入住和已入住）
       activeOrders.value = allOrders.filter(order =>
@@ -183,6 +198,7 @@ export const useRoomStore = defineStore('room', () => {
     // 如果找到关联订单，更新房间信息
     if (relatedOrder) {
       orderStatus = relatedOrder.status || orderStatus
+      orderStatus = normalizeOrderStatus(orderStatus)
       guestName = relatedOrder.guestName || guestName // 确保保留原始guest_name（如果relatedOrder中为空）
       checkOutDate = relatedOrder.checkOutDate || checkOutDate // 确保保留原始check_out_date（如果relatedOrder中为空）
       orderId = relatedOrder.orderNumber || orderId
@@ -204,7 +220,8 @@ export const useRoomStore = defineStore('room', () => {
 
       // 根据订单状态确定房间显示状态
       if (room.order_status) {
-        const mappedStatus = ORDER_TO_ROOM_STATE_MAP[room.order_status]
+        const normalized = normalizeOrderStatus(room.order_status)
+        const mappedStatus = ORDER_TO_ROOM_STATE_MAP[normalized]
         if (mappedStatus) {
           displayStatus = mappedStatus
           console.log(`房间 ${room.room_number} 状态映射(从房间数据): ${room.order_status} -> ${displayStatus}`)
@@ -245,7 +262,8 @@ export const useRoomStore = defineStore('room', () => {
       console.log(`房间 ${room.room_number} 在 ${queryDate} 的订单状态: ${room.order_status}`)
 
       // 根据订单状态确定房间显示状态
-      const mappedStatus = ORDER_TO_ROOM_STATE_MAP[room.order_status]
+      const normalized = normalizeOrderStatus(room.order_status)
+      const mappedStatus = ORDER_TO_ROOM_STATE_MAP[normalized]
       if (mappedStatus) {
         displayStatus = mappedStatus
         console.log(`房间 ${room.room_number} 状态映射: ${room.order_status} -> ${displayStatus}`)
@@ -377,7 +395,7 @@ export const useRoomStore = defineStore('room', () => {
    */
   function processRoomDataForDateRange(room, startDate, endDate) {
     // 查找在该日期范围内与房间相关的订单
-    const relevantOrders = orderStore.orders.filter(order => {
+  const relevantOrders = orderStore.orders.filter(order => {
       if (order.roomNumber !== room.room_number) return false;
 
       // 检查订单日期范围是否与查询日期范围有重叠
@@ -402,11 +420,12 @@ export const useRoomStore = defineStore('room', () => {
 
     // 如果有相关订单，处理状态
     if (relevantOrders.length > 0) {
-      // 优先处理已入住的订单
-      const checkedInOrder = relevantOrders.find(order => order.status === ORDER_STATES.CHECKED_IN);
-      const pendingOrder = relevantOrders.find(order => order.status === ORDER_STATES.PENDING);
+  // 先做状态归一化，优先处理已入住的订单
+  const normalizedOrders = relevantOrders.map(o => ({ ...o, status: normalizeOrderStatus(o.status) }));
+  const checkedInOrder = normalizedOrders.find(order => order.status === ORDER_STATES.CHECKED_IN);
+  const pendingOrder = normalizedOrders.find(order => order.status === ORDER_STATES.PENDING);
 
-      const activeOrder = checkedInOrder || pendingOrder || relevantOrders[0];
+  const activeOrder = checkedInOrder || pendingOrder || normalizedOrders[0];
 
       if (activeOrder) {
         orderStatus = activeOrder.status;
@@ -416,7 +435,7 @@ export const useRoomStore = defineStore('room', () => {
         orderId = activeOrder.orderNumber;
 
         // 根据订单状态确定房间显示状态
-        const mappedStatus = ORDER_TO_ROOM_STATE_MAP[orderStatus];
+  const mappedStatus = ORDER_TO_ROOM_STATE_MAP[orderStatus];
         if (mappedStatus) {
           displayStatus = mappedStatus;
         }
@@ -660,9 +679,10 @@ export const useRoomStore = defineStore('room', () => {
 
     if (relatedOrder) {
       // 如果有关联订单，根据订单状态设置房间显示状态
-      if (relatedOrder.status === ORDER_STATES.PENDING) {
+  const st = normalizeOrderStatus(relatedOrder.status)
+  if (st === ORDER_STATES.PENDING) {
         room.displayStatus = ROOM_STATES.RESERVED
-      } else if (relatedOrder.status === ORDER_STATES.CHECKED_IN) {
+  } else if (st === ORDER_STATES.CHECKED_IN) {
         room.displayStatus = ROOM_STATES.OCCUPIED
       }
     } else {
@@ -829,7 +849,7 @@ export const useRoomStore = defineStore('room', () => {
 
     // 订单状态优先
     if (room.orderStatus || room.order_status) {
-      const status = room.orderStatus || room.order_status;
+      const status = normalizeOrderStatus(room.orderStatus || room.order_status);
       // 使用映射获取对应的房间状态
       const mappedStatus = ORDER_TO_ROOM_STATE_MAP[status];
       if (mappedStatus) {

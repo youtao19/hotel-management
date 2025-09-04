@@ -49,7 +49,7 @@
             <div class="text-caption">{{ occupancyStats.occupiedRooms }}/{{ occupancyStats.totalRooms }} 房间已入住</div>
           </q-card-section>
           <q-card-actions align="right">
-            <q-btn flat color="info" label="查看详情" to="/Room-status" />
+            <q-btn flat color="info" label="查看详情" to="/room-status" />
           </q-card-actions>
         </q-card>
       </div>
@@ -118,40 +118,17 @@
               <q-card-section>
                 <div class="text-subtitle2 q-mb-sm">房型分布</div>
                 <q-linear-progress
+                  v-for="(t, idx) in roomTypeDistribution"
+                  :key="t.type"
                   v-if="!roomStore.loading"
                   size="25px"
-                  :value="roomStats.standardOccupancy"
-                  color="primary"
+                  :value="t.occupancy"
+                  :color="colorPalette[idx % colorPalette.length]"
                   class="q-mb-sm"
                 >
                   <div class="absolute-full flex flex-center">
-                    <q-badge color="primary" text-color="white">
-                      标准间: {{ roomStats.standardOccupied }}/{{ roomStats.standardTotal }}
-                    </q-badge>
-                  </div>
-                </q-linear-progress>
-                <q-linear-progress
-                  v-if="!roomStore.loading"
-                  size="25px"
-                  :value="roomStats.deluxeOccupancy"
-                  color="secondary"
-                  class="q-mb-sm"
-                >
-                  <div class="absolute-full flex flex-center">
-                    <q-badge color="secondary" text-color="white">
-                      豪华间: {{ roomStats.deluxeOccupied }}/{{ roomStats.deluxeTotal }}
-                    </q-badge>
-                  </div>
-                </q-linear-progress>
-                <q-linear-progress
-                  v-if="!roomStore.loading"
-                  size="25px"
-                  :value="roomStats.suiteOccupancy"
-                  color="accent"
-                >
-                  <div class="absolute-full flex flex-center">
-                    <q-badge color="accent" text-color="white">
-                      套房: {{ roomStats.suiteOccupied }}/{{ roomStats.suiteTotal }}
+                    <q-badge :color="colorPalette[idx % colorPalette.length]" text-color="white">
+                      {{ t.label }}: {{ t.occupied }}/{{ t.total }}
                     </q-badge>
                   </div>
                 </q-linear-progress>
@@ -365,39 +342,56 @@ const roomStats = computed(() => {
   const cleaning = roomStore.countByStatus.cleaning
   const maintenance = roomStore.countByStatus.repair || 0
 
-  // 获取标准间数据 - 修正字段名称为 type_code
-  const standardRooms = roomStore.rooms.filter(room => room.type_code === 'standard')
-  const standardTotal = standardRooms.length
-  const standardOccupied = standardRooms.filter(room => roomStore.getRoomDisplayStatus(room) === 'occupied').length
-  const standardOccupancy = standardTotal > 0 ? standardOccupied / standardTotal : 0
-
-  // 获取豪华间数据 - 修正字段名称为 type_code
-  const deluxeRooms = roomStore.rooms.filter(room => room.type_code === 'deluxe')
-  const deluxeTotal = deluxeRooms.length
-  const deluxeOccupied = deluxeRooms.filter(room => roomStore.getRoomDisplayStatus(room) === 'occupied').length
-  const deluxeOccupancy = deluxeTotal > 0 ? deluxeOccupied / deluxeTotal : 0
-
-  // 获取套房数据 - 修正字段名称为 type_code
-  const suiteRooms = roomStore.rooms.filter(room => room.type_code === 'suite')
-  const suiteTotal = suiteRooms.length
-  const suiteOccupied = suiteRooms.filter(room => roomStore.getRoomDisplayStatus(room) === 'occupied').length
-  const suiteOccupancy = suiteTotal > 0 ? suiteOccupied / suiteTotal : 0
-
   return {
     available,
     occupied,
     cleaning,
-    maintenance,
-    standardOccupied,
-    standardTotal,
-    standardOccupancy,
-    deluxeOccupied,
-    deluxeTotal,
-    deluxeOccupancy,
-    suiteOccupied,
-    suiteTotal,
-    suiteOccupancy
+    maintenance
   }
+})
+
+// 动态房型分布（取总数最多的前三个）
+const colorPalette = ['primary','secondary','accent','positive','info','warning','deep-orange','teal','indigo','purple','brown','cyan','grey']
+
+const roomTypeDistribution = computed(() => {
+  // 1) 先收集房型清单：以 roomTypes 顺序为主，再补充 rooms 中出现但未在 roomTypes 里的类型
+  const typeList = []
+  const seen = new Set()
+  if (Array.isArray(roomStore.roomTypes)) {
+    roomStore.roomTypes.forEach(rt => {
+      if (rt?.type_code && !seen.has(rt.type_code)) {
+        seen.add(rt.type_code)
+        typeList.push(rt.type_code)
+      }
+    })
+  }
+  roomStore.rooms.forEach(room => {
+    const type = room.type_code
+    if (type && !seen.has(type)) {
+      seen.add(type)
+      typeList.push(type)
+    }
+  })
+
+  // 2) 统计每个房型
+  const statsMap = new Map(typeList.map(t => [t, { type: t, total: 0, occupied: 0 }]))
+  roomStore.rooms.forEach(room => {
+    const type = room.type_code
+    if (!type || !statsMap.has(type)) return
+    const item = statsMap.get(type)
+    item.total += 1
+    if (roomStore.getRoomDisplayStatus(room) === 'occupied') item.occupied += 1
+  })
+
+  // 3) 生成数组，保留原顺序，不再截断
+  return typeList.map(type => {
+    const item = statsMap.get(type)
+    return {
+      ...item,
+      occupancy: item.total > 0 ? item.occupied / item.total : 0,
+      label: viewStore.getRoomTypeName(type)
+    }
+  })
 })
 
 // 备忘录
@@ -447,23 +441,29 @@ const guestColumns = [
 
 // 获取最近入住客人数据
 const recentGuests = computed(() => {
-  // 获取入住中和已退房的订单
+  // 统一以英文状态筛选，展示时再转中文
+  const STATUS = { IN: 'checked-in', OUT: 'checked-out' }
   return orderStore.orders
-    .filter(order => order.status === '已入住' || order.status === '已退房')
+    .filter(order => [STATUS.IN, STATUS.OUT, '已入住', '已退房'].includes(order.status))
+    .map(o => ({
+      ...o,
+      // 兼容中文状态
+      status: o.status === '已入住' ? STATUS.IN : (o.status === '已退房' ? STATUS.OUT : o.status)
+    }))
     .sort((a, b) => {
-      // 按创建时间倒序排列
-      const dateA = a.createTime
-      const dateB = b.createTime
+      // 按创建时间倒序（兼容 create_time/createTime）
+      const dateA = a.createTime || a.create_time
+      const dateB = b.createTime || b.create_time
       return new Date(dateB) - new Date(dateA)
     })
-    .slice(0, 5) // 只取前5条
+    .slice(0, 5)
     .map(order => ({
       id: order.orderNumber,
       name: order.guestName,
       room: order.roomNumber,
       checkIn: viewStore.formatDate(order.checkInDate),
       checkOut: viewStore.formatDate(order.checkOutDate),
-      status: order.status === '已入住' ? '入住中' : '已退房',
+      status: viewStore.getOrderStatusText(order.status) === '已入住' ? '入住中' : '已退房',
       checkInFull: viewStore.formatDate(order.actualCheckInTime || order.checkInDate, true),
       checkOutFull: viewStore.formatDate(order.actualCheckOutTime || order.checkOutDate, true)
     }))
@@ -481,11 +481,10 @@ onMounted(() => {
     房间状态: roomStore.countByStatus
   });
 
-  // 确保房间数据已加载 - 使用当前日期查询
-  if (roomStore.rooms.length === 0) {
-    const today = new Date().toISOString().substring(0, 10);
-    roomStore.fetchAllRooms(today);
-  }
+  // 获取“当前实时状态”而非“指定日期状态”（传日期会把已退房映射成清洁中，造成统计偏高）
+  roomStore.fetchAllRooms();
+  // 同步加载房型映射，确保房型分布显示中文名称
+  roomStore.fetchRoomTypes();
 })
 
 // 跳转到房间状态页面并带上相应的状态筛选参数
