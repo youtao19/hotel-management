@@ -1093,7 +1093,7 @@ async function getShiftTable(date) {
 
 
 /**
- *
+ * 获取备忘录数据
  * @param {date} date - 查询日期
  * @returns {Promise<Array>} 备忘录数据
  */

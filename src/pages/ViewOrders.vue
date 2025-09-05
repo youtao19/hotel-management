@@ -117,7 +117,7 @@
     />
 
 
-    <!-- 更改订单对话框 -->
+    <!-- 修改订单对话框 -->
     <ChangeOrderDialog
       v-model="showChangeOrderDialog"
       :order="currentOrder"
@@ -136,7 +136,7 @@
       @change-room="changeRoom"
     />
 
-    <!-- 账单对话框 -->
+    <!-- 入住对话框 -->
     <CheckIn
       v-model="showCheckInDialog"
       :currentOrder="billOrder"
@@ -177,6 +177,7 @@ import { useRoomStore } from '../stores/roomStore' // 导入房间 store
 import { useViewStore } from '../stores/viewStore' // 导入视图 store
 import { useBillStore } from '../stores/billStore' // 导入账单 store
 import { roomApi } from '../api/index.js' // 导入房间API
+import { billApi } from '../api/index.js' // 导入账单API
 import OrderDetailsDialog from 'src/components/OrderDetailsDialog.vue';
 import ChangeOrderDialog from 'src/components/ChangeOrderDialog.vue';
 import ChangeRoomDialog from 'src/components/ChangeRoomDialog.vue';
@@ -862,103 +863,69 @@ function formatDate(dateStr) {
 // 处理入住成功
 async function handleCheckInCompleted(checkInData) {
   try {
-    if (!billOrder.value || !billOrder.value.orderNumber) {
-      console.error('订单信息无效');
-      $q.notify({ type: 'negative', message: '内部错误：订单信息丢失', position: 'top' });
+    // 1.添加账单
+    const response = await billStore.addBill(checkInData);
+
+    if (!response || !response.success) {
+      console.log('添加账单失败', response);
+      $q.notify({
+        type: 'negative',
+        message: '添加账单失败，入住操作中止',
+        position: 'top',
+        multiLine: true,
+      })
       return;
-    }
-
-    const orderNumber = billOrder.value.orderNumber;
-    const roomNumber = billOrder.value.roomNumber; // Get room number for later use
-    console.log('办理入住完成，订单:', orderNumber, '接收数据:', checkInData);
-
-    // 1. 获取原始订单数据进行比较
-    const originalOrder = await orderStore.getOrderByNumber(orderNumber, true); // Force refresh from backend
-
-    const fieldsToUpdate = {};
-
-    fieldsToUpdate.deposit = parseFloat(checkInData.deposit);
-
-    // 比较房费：原订单JSON格式 vs 表单数字格式
-    console.log('Comparing roomPrice:', {
-      original: originalOrder.roomPrice,
-      new: checkInData.roomPrice,
-      checkInDate: originalOrder.checkInDate
-    });
-
-    let newRoomPrice = {};
-
-    const keys = Object.keys(originalOrder.roomPrice || {});
-    keys.sort();
-
-    if (keys.length === 1) {
-      // 单日订单，直接比较数字
-      newRoomPrice[keys[0]] = parseFloat(checkInData.roomPrice || 0);
     } else {
-      // 多日订单，比较每一天的价格
-      keys.forEach(key => {
-        newRoomPrice[key] = parseFloat(checkInData.roomPrice[key] || 0);
-      });
+      $q.notify({
+        type: 'positive',
+        message: '账单已添加，订单状态修改成功',
+        position: 'top',
+        multiLine: true,
+      })
     }
 
-    console.log('房费发生变化:', {
-      原房费: originalOrder.roomPrice,
-      新房费: newRoomPrice,
-      修改日期: originalOrder.checkInDate
-    });
-
-    fieldsToUpdate.roomPrice = newRoomPrice;
-
-    fieldsToUpdate.paymentMethod = checkInData.paymentMethod;
-
-    // 2.更新订单表
-    await orderStore.updateOrder(orderNumber, fieldsToUpdate);
-
-    // 3. 更新订单状态为“已入住”
-    const updatedOrderFromApi = await orderStore.updateOrderStatusViaApi(orderNumber, 'checked-in');
-
-    if (!updatedOrderFromApi) {
-      $q.notify({ type: 'negative', message: '办理入住失败，API未返回更新后的订单', position: 'top' });
-      return;
-    }
-
-    // 4. 更新房间状态为 "occupied"
-    const room = roomStore.getRoomByNumber(roomNumber);
-    if (room && room.room_id) {
-      const roomUpdateSuccess = await roomStore.updateRoomStatus(room.room_id, 'occupied');
-      if (!roomUpdateSuccess) {
-          $q.notify({
-              type: 'warning',
-              message: '订单已入住，但更新房间状态失败，请检查房间状态！',
-              position: 'top',
-              multiLine: true
-          });
-      }
+    // 2.修改订单状态为以入住
+    const updatedOrderFromApi = await orderStore.updateOrderStatusViaApi(checkInData.order_id, 'checked-in');
+    if (updatedOrderFromApi.status !== 'checked-in') {
+      console.log('修改订单状态失败', updatedOrderFromApi);
+      $q.notify({
+        type: 'warning',
+        message: '账单已添加，订单状态修改失败',
+        position: 'top',
+        multiLine: true,
+      })
     } else {
-        $q.notify({
-            type: 'warning',
-            message: `未找到房间 ${roomNumber}，无法更新其状态。`,
-            position: 'top'
-        });
+      $q.notify({
+        type: 'positive',
+        message: '订单状态更新为已入住',
+        position: 'top'
+      })
     }
 
-    // 5. 刷新房间列表（这会重新计算所有房间的显示状态）
+    // 3. 更新房间状态为 'occupied'
+    const room = roomStore.getRoomByNumber(checkInData.room_number);
+    const updatedRoomFromApi = await roomStore.updateRoomStatus(room.room_id, 'occupied');
+    if (!updatedRoomFromApi) {
+      console.log('更新房间状态失败',updatedRoomFromApi)
+      $q.notify({
+        type: 'error',
+        message: '订单已入住，但更新房间状态为占用失败，请检查房间状态！',
+        position: 'top',
+        multiLine: true,
+      })
+    } else {
+      console.log('房间更新成功')
+    }
+
+    // 4. 刷新订单和房间列表
+    await orderStore.fetchAllOrders();
     await roomStore.fetchAllRooms();
-    await orderStore.fetchAllOrders(); // 刷新订单列表
 
-
-    // 更新当前正在查看的订单详情 (如果适用)
-      if (currentOrder.value && currentOrder.value.orderNumber === order.orderNumber) {
-        const latest = await orderStore.getOrderByNumber(order.orderNumber)
-        if (latest) currentOrder.value = { ...latest } // 从store获取最新数据
-      }
-
-    // 7. 显示成功通知
     $q.notify({
       type: 'positive',
-      message: '入住成功！',
+      message: '入住成功',
       position: 'top'
-    });
+    })
 
   } catch (error) {
     console.error('处理入住成功事件失败:', error);
@@ -973,7 +940,7 @@ async function handleCheckInCompleted(checkInData) {
   }
 }
 
-// 打开续住对话框
+// 5.打开续住对话框
 async function openExtendStayDialog(order) {
   console.log('openExtendStayDialog function called for order:', order.orderNumber);
 
@@ -1189,13 +1156,18 @@ async function handleRefundDeposit(refundData) {
     console.log('处理退押金请求:', refundData)
 
     // 调用 orderStore 的退押金方法
-    await orderStore.refundDeposit(refundData)
+    const refund = await orderStore.refundDeposit(refundData)
+
+    if (!refund) {
+      console.log('退押金失败:', refundData)
+      throw new Error('退押金失败')
+    }
 
     // 更新当前正在查看的订单详情
-    if (currentOrder.value && currentOrder.value.orderNumber === refundData.orderNumber) {
-      const updatedOrder = await orderStore.getOrderByNumber(refundData.orderNumber)
+    if (currentOrder.value && currentOrder.value.orderNumber === refundData.order_id) {
+      const updatedOrder = await orderStore.getOrderByNumber(refundData.order_id);
       if (updatedOrder) {
-        currentOrder.value = updatedOrder
+        currentOrder.value = updatedOrder;
       }
     }
 
@@ -1206,13 +1178,13 @@ async function handleRefundDeposit(refundData) {
     await fetchAllOrders();
     await billStore.fetchAllBills();
 
-  // 重新计算该订单的可退状态
-    const order = await orderStore.getOrderByNumber(refundData.orderNumber);
+    // 重新计算该订单的可退状态
+    const order = await orderStore.getOrderByNumber(refundData.order_id);
     if (order) await computeRefundable(order);
 
     $q.notify({
       type: 'positive',
-      message: `退押金成功！实际退款：¥${refundData.actualRefundAmount}，已自动记录到交接班系统`,
+      message: `退押金成功！实际退款：¥${refundData.change_price}，已自动记录到交接班系统`,
       position: 'top'
     })
 
@@ -1362,10 +1334,10 @@ watch(() => orderStore.orders, (newOrders) => {
 }, { deep: true });
 
 // 监听订单是否修改
-watch(() => currentOrder.value, (newOrder, oldOrder) => {
+watch(() => currentOrder.value, async (newOrder, oldOrder) => {
   if (newOrder && oldOrder && newOrder.orderNumber !== oldOrder.orderNumber) {
     // 订单被修改，重新加载相关数据
-    fetchOrderDetails(newOrder.orderNumber);
+    await orderStore.getOrderByNumber(newOrder.orderNumber);
   }
 });
 

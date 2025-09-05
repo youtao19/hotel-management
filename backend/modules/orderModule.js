@@ -672,138 +672,29 @@ async function refundDeposit(refundData) {
   try {
     console.log('处理退押金请求:', refundData);
 
-    const {
-      orderNumber,
-      refundAmount,
-      deductAmount = 0, // 扣除金额
-      actualRefundAmount, // 实际退款金额
-      method, // 退款方式
-      notes, // 备注
-      operator, // 操作员
-      refundTime // 退款时间
-    } = refundData;
-
-    // 验证必要字段
-    if (!orderNumber || !refundAmount || !actualRefundAmount || !method || !operator) {
-      throw new Error('退押金数据不完整');
-    }
-
     // 获取订单信息
-    const orderQuery = 'SELECT * FROM orders WHERE order_id = $1';
-    const orderResult = await query(orderQuery, [orderNumber]);
+    const order = await getOrderById(refundData.order_id);
 
-    if (orderResult.rows.length === 0) {
-      throw new Error(`订单号 '${orderNumber}' 不存在`);
+    if (!order) {
+      console.log('！！！！获取订单失败');
+      throw new Error(`订单号 '${refundData.order_id}' 不存在`);
     }
-
-    const order = orderResult.rows[0];
 
     // 验证订单状态（只有已退房或已取消的订单才能退押金）
     if (!['checked-out', 'cancelled'].includes(order.status)) {
       throw new Error('只有已退房或已取消的订单才能退押金');
     }
 
-    // 验证押金金额
-    let originalDeposit = parseFloat(order.deposit) || 0; // 原始押金
-    // 如果订单表押金为0，尝试从第一张含押金账单获取（兼容历史/拆分逻辑）
-    if (originalDeposit === 0) {
-      try {
-        const billRes = await query(`SELECT deposit FROM bills WHERE order_id=$1 AND COALESCE(deposit,0)>0 ORDER BY create_time ASC LIMIT 1`, [orderNumber]);
-        if (billRes.rows.length) {
-          const billDeposit = parseFloat(billRes.rows[0].deposit) || 0;
-          if (billDeposit > 0) {
-            originalDeposit = billDeposit;
-            console.log('[refundDeposit] 使用账单押金作为原始押金:', billDeposit);
-          }
-        }
-      } catch (e) {
-        console.warn('[refundDeposit] 获取账单押金失败(忽略):', e.message);
-      }
-    }
-    // 通过账单计算当前已退押金：兼容多种历史结构
-    // 优先从 orders.deposit 获取原始押金，其次尝试从 bills.deposit（如果列存在）
-    let currentRefundedDeposit = 0;
-    try {
-      // 1) 尝试从 bills 表读取 deposit（如果该列存在）
-      const colDep = await query(`SELECT 1 FROM information_schema.columns WHERE table_name='bills' AND column_name='deposit' LIMIT 1`);
-      if (colDep.rows.length) {
-        const depRow = await query(`SELECT deposit FROM bills WHERE order_id=$1 AND COALESCE(deposit,0)>0 ORDER BY create_time ASC LIMIT 1`, [orderNumber]);
-        if (depRow.rows.length && originalDeposit === 0) {
-          const d = parseFloat(depRow.rows[0].deposit) || 0;
-          if (d > 0) originalDeposit = d;
-        }
-      }
+    refundData.change_type = '退押';
+    refundData.change_price = -Math.abs(refundData.change_price || 0); // 确保为负数
 
-      // 2) 计算 legacy refunded（如果 refund_deposit 列存在）和新 change_type='退押' 的退款合计
-      let legacyRefunded = 0;
-      const colRef = await query(`SELECT 1 FROM information_schema.columns WHERE table_name='bills' AND column_name='refund_deposit' LIMIT 1`);
-      if (colRef.rows.length) {
-        const r = await query(`SELECT ABS(COALESCE(MIN(refund_deposit),0)) AS legacy_refunded FROM bills WHERE order_id=$1`, [orderNumber]);
-        legacyRefunded = parseFloat(r.rows[0].legacy_refunded) || 0;
-      }
+    const billRes = await billModule.addBill(refundData)
 
-      const r2 = await query(`SELECT COALESCE(SUM(CASE WHEN change_type='退押' THEN ABS(COALESCE(change_price,0)) ELSE 0 END),0) AS change_refunded FROM bills WHERE order_id=$1`, [orderNumber]);
-      const changeRefunded = parseFloat(r2.rows[0].change_refunded) || 0;
-
-      currentRefundedDeposit = legacyRefunded + changeRefunded;
-    } catch (calcErr) {
-      console.warn('[refundDeposit] 计算已退押金失败(忽略, 按0处理):', calcErr.message);
-    }
-    const availableRefund = originalDeposit - currentRefundedDeposit; // 可退押金
-
-    if (originalDeposit <= 0) {
-      throw new Error('该订单没有可退押金');
+    if (!billRes) {
+      throw new Error('创建账单失败', billRes);
     }
 
-    if (refundAmount > availableRefund) {
-      const err = new Error(`退押金金额不能超过可退金额 ¥${availableRefund}`);
-      err.code = 'REFUND_EXCEED';
-      err.availableRefund = availableRefund;
-      err.originalDeposit = originalDeposit;
-      err.currentRefundedDeposit = currentRefundedDeposit;
-      throw err;
-    }
-
-    // 构建退款记录（用于交接班记录、日志）
-    const refundRecord = {
-      refundTime: refundTime || new Date().toISOString(),
-      refundAmount,
-      deductAmount,
-      actualRefundAmount,
-      method,
-      notes: notes || '',
-      operator
-    };
-
-    console.log('退押金校验通过, 即将应用到账单层:', { orderNumber, originalDeposit, currentRefundedDeposit, actualRefundAmount });
-
-    // 同步更新账单中的退款记录
-    try {
-      const billUpdated = await billModule.applyDepositRefund(orderNumber, actualRefundAmount, method, refundRecord.refundTime);
-      if (billUpdated) {
-        console.log('✅ 已更新账单退款信息 bill_id=', billUpdated.bill_id, ' refund_deposit=', billUpdated.refund_deposit, ' refund_method=', billUpdated.refund_method);
-      }
-    } catch (billErr) {
-      console.error('⚠️ 更新账单退款信息失败(不影响订单退款完成):', billErr.message);
-    }
-
-    // 自动记录到交接班系统（延迟加载避免循环依赖）
-    try {
-      // 使用 setImmediate 延迟执行，避免循环依赖
-      setImmediate(async () => {
-        try {
-          await shiftHandoverModule.recordRefundDepositToHandover(refundData); // 记录退押金到交接班系统
-          console.log('✅ 退押金已自动记录到交接班系统');
-        } catch (handoverError) {
-          console.error('⚠️ 记录退押金到交接班系统失败，但退押金处理成功:', handoverError);
-        }
-      });
-    } catch (handoverError) {
-      console.error('⚠️ 记录退押金到交接班系统失败，但退押金处理成功:', handoverError);
-      // 不抛出错误，因为退押金本身已经成功
-    }
-
-  return order; // 订单本身未修改（押金退款状态由账单体现）
+  return billRes;
 
   } catch (error) {
     console.error('退押金处理失败:', error);

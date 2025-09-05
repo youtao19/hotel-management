@@ -369,9 +369,17 @@ const totalAmount = computed(() => {
 // 处理入住成功
 async function handleCheckInCompleted() {
   const checkInData = {
-    deposit: billData.value.deposit,
-    roomPrice: isMultiDayOrder.value ? editableDailyPrices.value : safeRoomFeeValue.value,
+    order_id: props.currentOrder.orderNumber,
+    room_number: props.currentOrder.roomNumber,
+    guest_name: props.currentOrder.guestName,
+    pay_way: props.currentOrder.paymentMethod,
+    deposit: props.currentOrder.deposit,
+    roomPrice: props.currentOrder.roomPrice,
     paymentMethod: selectedPaymentMethod.value,
+    remarks: billData.value.remarks,
+    change_price: 0,
+    change_type: null,
+    stay_type: props.currentOrder.stayType
   };
   emit('complete_check_in', checkInData);
   emit('update:modelValue', false); // Close the dialog

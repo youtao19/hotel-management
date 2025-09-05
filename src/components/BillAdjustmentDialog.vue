@@ -61,10 +61,7 @@ import { useViewStore } from 'src/stores/viewStore'; // 1. 导入 viewStore
 
 const props = defineProps({
   modelValue: Boolean,
-  orderId: {
-    type: String,
-    required: true
-  }
+  order: Object
 });
 
 const emit = defineEmits(['update:modelValue', 'success']);
@@ -85,7 +82,7 @@ const adjustmentTypes = ['客户赔偿', '服务费', '不满意退款', '其他
 // 3. 从 store 创建计算属性
 const paymentOptions = computed(() => viewStore.paymentMethodOptions.map(opt => opt.label));
 
-// Reset form when dialog opens
+// 重置表单
 watch(() => props.modelValue, (newValue) => {
   if (newValue) {
     adjustment.value = {
@@ -101,14 +98,22 @@ async function handleSubmit() {
   loading.value = true;
   try {
     const payload = {
-      orderId: props.orderId,
-      amount: parseFloat(adjustment.value.amount),
-      type: adjustment.value.type,
-      paymentMethod: adjustment.value.paymentMethod,
+      order_id: props.order.orderNumber,
+      change_price: parseFloat(adjustment.value.amount),
+      change_type: adjustment.value.type,
+      method: adjustment.value.paymentMethod,
       notes: adjustment.value.notes
     };
 
-    await api.post('/bills/adjustment', payload);
+    const billRes = await api.post('/bills/add', payload);
+    console.log('💰金额调整',billRes);
+    if(!billRes){
+      $q.notify({
+        color: 'negative',
+        message: '金额调整失败'
+      })
+      throw new Error('金额调整失败');
+    }
 
     $q.notify({
       color: 'positive',

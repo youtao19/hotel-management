@@ -238,7 +238,7 @@
     <BillAdjustmentDialog
       v-if="currentOrder"
       v-model="showAdjustmentDialog"
-      :order-id="currentOrder.orderNumber"
+      :order="currentOrder"
       @success="handleAdjustmentSuccess"
     />
   </q-dialog>

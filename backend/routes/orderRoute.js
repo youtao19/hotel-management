@@ -251,33 +251,11 @@ router.put('/:orderNumber', authenticationMiddleware, async (req, res) => {
 
 /**
  * 退押金
- * POST /api/orders/:orderNumber/refund-deposit
+ * POST /api/orders/:order_id/refund-deposit
  */
-router.post('/:orderNumber/refund-deposit', [
-  body('refundAmount').isNumeric().withMessage('退押金金额必须是数字'),
-  body('actualRefundAmount').isNumeric().withMessage('实际退款金额必须是数字'),
-  body('method').notEmpty().withMessage('退押金方式不能为空'),
-  body('operator').notEmpty().withMessage('操作员不能为空')
-], async (req, res) => {
+router.post('/:order_id/refund-deposit',  async (req, res) => {
   try {
-    const { orderNumber } = req.params;
-    console.log(`处理订单 ${orderNumber} 的退押金请求`);
-
-    // 验证请求数据
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        message: '请求数据验证失败',
-        errors: errors.array()
-      });
-    }
-
-    const refundData = {
-      orderNumber,
-      ...req.body,
-      refundTime: new Date().toISOString()
-    };
-
+    const refundData = req.body;
     // 调用退押金方法
     const updatedOrder = await orderModule.refundDeposit(refundData);
 
@@ -285,23 +263,16 @@ router.post('/:orderNumber/refund-deposit', [
       message: '退押金处理成功',
       order: updatedOrder,
       refundData: {
-        actualRefundAmount: refundData.actualRefundAmount, // 实际退款金额
+        change_price: refundData.change_price, // 实际退款金额
         method: refundData.method, // 退款方式
         refundTime: refundData.refundTime // 退款时间
       }
     });
-
   } catch (error) {
     console.error('退押金处理失败:', error.message);
     const msg = error.message || '退押金处理失败';
     // 仅将明确的业务校验错误判定为 400，"订单号不存在" 不属于客户端可修复错误
-    const validationIndicators = [
-      '只有已退房或已取消的订单才能退押金',
-      '该订单没有可退押金',
-      '退押金金额不能超过可退金额',
-      '退款累计'
-    ];
-    const isClientError = validationIndicators.some(v => msg.includes(v));
+    const isClientError = msg.includes('退押金金额不能超过可退金额');
     const status = isClientError ? 400 : 500;
     res.status(status).json({
       // 服务端错误统一对外返回固定消息，满足测试期望
@@ -316,10 +287,10 @@ router.post('/:orderNumber/refund-deposit', [
 });
 
 /** 获取订单押金状态（基于账单） */
-router.get('/:orderNumber/deposit-info', async (req, res) => {
+router.get('/:order_id/deposit-info', async (req, res) => {
   try {
-    const { orderNumber } = req.params;
-    const status = await orderModule.getDepositStatus(orderNumber);
+    const { order_id } = req.params;
+    const status = await orderModule.getDepositStatus(order_id);
     res.json({ success: true, data: status });
   } catch (e) {
     res.status(500).json({ success: false, message: '获取押金状态失败', error: e.message });

@@ -281,7 +281,7 @@ export const useOrderStore = defineStore('order', () => {
    * @param {string} newStatus - 新状态 ('pending', 'checked-in', 'checked-out', 'cancelled')
    * @param {object} [options] - 其他选项 (已废弃，保留以兼容现有代码)
    */
-  async function updateOrderStatusViaApi(orderNumber, newStatus, options = {}) {
+  async function updateOrderStatusViaApi(orderNumber, newStatus) {
     try {
       loading.value = true;
       error.value = null;
@@ -550,13 +550,13 @@ export const useOrderStore = defineStore('order', () => {
       console.log('💰 处理退押金请求:', refundData);
 
       // 调用API
-      const response = await orderApi.refundDeposit(refundData.orderNumber, refundData);
+      const response = await orderApi.refundDeposit(refundData.order_id, refundData);
       console.log('✅ 退押金处理成功:', response);
 
       // 成功后刷新押金状态（账单层）
       try {
-        const dep = await orderApi.getDepositInfo(refundData.orderNumber);
-        const orderIndex = orders.value.findIndex(order => order.orderNumber === refundData.orderNumber);
+        const dep = await orderApi.getDepositInfo(refundData.order_id);
+        const orderIndex = orders.value.findIndex(order => order.order_id === refundData.order_id);
         if (orderIndex !== -1 && dep?.data) {
           orders.value[orderIndex].refundedDeposit = dep.data.refunded;
           orders.value[orderIndex].deposit = dep.data.deposit; // 防止历史为0时补齐

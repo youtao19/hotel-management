@@ -255,7 +255,7 @@ watch(() => props.modelValue, async (newVal) => {
   if (newVal && props.order) {
     remoteDepositInfo.value = null
     try {
-      const res = await orderApi.getDepositInfo(props.order.orderNumber)
+      const res = await orderApi.getDepositInfo(props.order.orderNumber || props.order.order_id)
       if (res?.data) remoteDepositInfo.value = res.data
     } catch (e) {
       console.warn('获取押金状态失败(使用本地数据):', e.message)
@@ -330,19 +330,20 @@ async function handleRefundDeposit() {
 
   loading.value = true
 
+  // 计算退押金额
+
   try {
     // 构造退押金数据
     const refundData = {
-      orderNumber: props.order.orderNumber,
-      originalDeposit: props.order.deposit || 0,
-      refundAmount: refundForm.value.amount,
-      deductAmount: refundForm.value.deductAmount || 0,
-      actualRefundAmount: actualRefundAmount.value,
+      order_id: props.order.orderNumber,
+      change_price: actualRefundAmount.value, // 退款金额
       method: refundForm.value.method,
       notes: refundForm.value.notes,
       operator: refundForm.value.operator,
-      refundTime: new Date().toISOString()
+      refundTime: new Date()
     }
+
+    console.log('@@@@@@退押组件',refundData.order_id);
 
     // 发出退押金事件
     emit('refund-deposit', refundData)

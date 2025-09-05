@@ -115,20 +115,11 @@ export const orderApi = {
   // 更新订单（支持多字段）
   updateOrder: (orderId, updatedFields) => api.put(`/orders/${orderId}`, updatedFields),
 
-  // 更新订单房间信息
-  updateOrderRoom: (orderId, roomData) => api.patch(`/orders/${orderId}/room`, roomData),
-
-  // 办理入住
-  checkIn: (orderId, checkInData) => api.patch(`/orders/${orderId}/check-in`, checkInData),
-
-  // 办理退房
-  checkOut: (orderId, checkOutData) => api.patch(`/orders/${orderId}/check-out`, checkOutData),
-
   // 退押金
-  refundDeposit: (orderNumber, refundData) => api.post(`/orders/${orderNumber}/refund-deposit`, refundData),
+  refundDeposit: (order_id, refundData) => api.post(`/orders/${order_id}/refund-deposit`, refundData),
 
   // 获取押金状态
-  getDepositInfo: (orderNumber) => api.get(`/orders/${orderNumber}/deposit-info`),
+  getDepositInfo: (order_id) => api.get(`/orders/${order_id}/deposit-info`),
 }
 
 // 用户相关接口
@@ -146,7 +137,7 @@ export const userApi = {
 // 账单相关接口
 export const billApi = {
   // 创建账单
-  createBill: (billData) => api.post('/bills/new', billData),
+  createBill: (billData) => api.post('/bills/add', billData),
 
   // 获得账单
   getBillByOrderId: (orderId) => api.get(`/bills/${orderId}`),

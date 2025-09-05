@@ -1,9 +1,7 @@
 const express = require('express');
 const router = express.Router();
 router.use(express.json());
-
 const billModule = require('../modules/billModule');
-const authentication = require("../modules/authentication");
 
 // 获取所有账单
 router.get('/', async (req, res) => {
@@ -15,17 +13,15 @@ router.get('/', async (req, res) => {
   }
 });
 
-// 创建一笔手动的账单调整
-router.post('/adjustment', authentication.ensureAuthenticated, billModule.createBillAdjustment);
 
-// 获取单个账单（占位实现）
-router.get('/:id', async (req, res) => {
-  res.status(404).json({ message: '未实现的账单查询' });
-});
-
-// 创建账单（占位实现）
-router.post('/new', async (req, res) => {
-  res.status(201).json({ success: true, message: '账单占位已创建', data: req.body });
+// 添加账单
+router.post('/add', async (req, res) => {
+  try {
+    const newBill = await billModule.addBill(req.body);
+    res.status(201).json({ success: true, data: newBill });
+  } catch (err) {
+    res.status(500).json({ message: '添加账单失败', error: err.message });
+  }
 });
 
 // 根据订单ID获取账单

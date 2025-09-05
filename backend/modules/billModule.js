@@ -2,7 +2,7 @@
 
 const { query } = require('../database/postgreDB/pg');
 
-// 创建账单：初次创建 refund_time 为空，表示尚未发生押金退款
+// 创建账单
 async function createBill(order_id, room_number, guest_name, deposit, refund_deposit, room_fee, total_income, pay_way, remarks) {
     // 计算 stay_date & 业务类型 (休息房 / 客房)
     let stayDate = null;
@@ -207,61 +207,72 @@ async function getAllBills() {
     }
 }
 
+// 添加账单
+async function addBill(billData){
 
-const orderModule = require('./orderModule');
+  const {
+    order_id,
+    change_price,
+    method,
+    notes,
+    refundTime
+  } = billData;
 
-// 创建一笔手动的账单调整（例如赔偿、额外服务费等）
-async function createBillAdjustment(req, res) {
-    try {
-        const { orderId, amount, type, paymentMethod, notes } = req.body;
+  let newbill = null;
+  // 获取订单
+  try {
+    const orderSql = `
+    SELECT order_id, guest_name, room_number, check_in_date, check_out_date, payment_method, room_price, deposit, stay_type
+    FROM orders
+    WHERE order_id = $1
+    `;
+    const orderRes = await query(orderSql, [billData.order_id]);
 
-        // 1. 验证输入
-        if (!orderId || amount === undefined || !type || !paymentMethod) {
-            return res.status(400).json({ message: '缺少必要参数: orderId, amount, type, paymentMethod' });
-        }
-
-        const numericAmount = Number(amount);
-        if (isNaN(numericAmount)) {
-            return res.status(400).json({ message: '金额必须是有效的数字' });
-        }
-
-        // 2. 获取订单信息
-        const order = await orderModule.getOrderById(orderId);
-        if (!order) {
-            return res.status(404).json({ message: `订单号 '${orderId}' 不存在` });
-        }
-        const { room_number, guest_name } = order;
-
-        // 3. 插入新的账单记录
-        const insertSql = `
-            INSERT INTO bills (order_id, room_number, guest_name, pay_way, create_time, change_price, change_type, remarks)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            RETURNING *
-        `;
-
-        const createTime = new Date();
-        const values = [
-            orderId,
-            room_number,
-            guest_name,
-            paymentMethod,
-            createTime,
-            numericAmount, // 正数表示收入，负数表示支出
-            type,
-            notes || null
-        ];
-
-        const result = await query(insertSql, values);
-
-        console.log(`[createBillAdjustment] 成功为订单 ${orderId} 创建一笔调整: ${type} ${numericAmount}`);
-        res.status(201).json(result.rows[0]);
-
-    } catch (error) {
-        console.error('创建账单调整失败:', error);
-        res.status(500).json({ message: '服务器内部错误' });
+    if (!orderRes.rows.length) {
+      throw new Error(`[addBill] 订单不存在: ${billData.order_id}`);
     }
-}
 
+    const o = orderRes.rows[0];
+
+    const insertQuery = `
+      INSERT INTO bills (
+      order_id,
+      room_number,
+      guest_name,
+      pay_way,
+      create_time,
+      remarks,
+      change_price,
+      change_type,
+      room_fee,
+      deposit,
+      stay_type)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9 , $10, $11)
+      RETURNING *
+    `;
+
+    const values = [
+      order_id,
+      o.room_number,
+      o.guest_name,
+      method || o.payment_method,
+      refundTime || new Date(),
+      notes,
+      change_price,
+      billData.change_type, // 从账单表中获取修改类型
+      o.room_price,
+      o.deposit,
+      o.stay_type
+    ];
+
+    const result = await query(insertQuery, values);
+    newbill = result.rows[0];
+  } catch (error) {
+    console.error('添加账单数据库错误:', error);
+    throw error;
+  }
+  return newbill;
+}
 
 module.exports = {
     createBill,
@@ -269,5 +280,5 @@ module.exports = {
     getBillsByOrderId,
     getAllBills,
     applyDepositRefund,
-    createBillAdjustment
+    addBill
 };
