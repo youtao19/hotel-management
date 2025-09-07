@@ -5,7 +5,7 @@
       <div class="row items-center justify-between q-mb-md">
         <div class="text-h4 text-weight-bold">交接班</div>
         <div class="row q-gutter-md">
-          <q-btn @click="test1">测试</q-btn>
+          <q-btn label="测试" color="secondary" @click="test1" />
           <q-btn color="primary" icon="print" label="打印" @click="printHandover" />
           <q-btn color="green" icon="download" label="导出Excel" @click="exportToExcel" />
           <q-btn color="purple" icon="save" label="保存页面" @click="savePageData" :loading="savingAmounts" />
@@ -202,74 +202,6 @@ function calculateTotals() {
   })
 }
 
-// 将后端数据插入到交接表中
-async function insertDataToShiftTable(date) {
-  //拿到后端数据
-  const response = await shiftHandoverStore.fetchShiftTable(date)
-  const records = response.data.records
-
-  for (const record of Object.values(records)) {
-    // 使用 stay_type 字段判断业务类型
-    const isRest = record.stay_type === '休息房'
-
-    if (isRest) {
-      // 休息房收入
-      switch (record.payment_method) {
-        case '现金':
-          paymentData.value.cash.restIncome += record.totalIncome || 0
-          break
-        case '微信':
-          paymentData.value.wechat.restIncome += record.totalIncome || 0
-          break
-        case '微邮付':
-          paymentData.value.digital.restIncome += record.totalIncome || 0
-          break
-        default:
-          paymentData.value.other.restIncome += record.totalIncome || 0
-          break
-      }
-    } else {
-      // 客房收入
-      switch (record.payment_method) {
-        case '现金':
-          paymentData.value.cash.hotelIncome += record.totalIncome || 0
-          break
-        case '微信':
-          paymentData.value.wechat.hotelIncome += record.totalIncome || 0
-          break
-        case '微邮付':
-          paymentData.value.digital.hotelIncome += record.totalIncome || 0
-          break
-        case '其他':
-          paymentData.value.other.hotelIncome += record.totalIncome || 0
-          break
-        default:
-          break
-      }
-    }
-  }
-
-  const refunds = response.data.refunds
-
-  for (const refund of Object.values(refunds)) {
-    switch (refund.payment_method) {
-      case '现金':
-        paymentData.value.cash.hotelDeposit += refund.amount || 0
-        break
-      case '微信':
-        paymentData.value.wechat.hotelDeposit += refund.amount || 0
-        break
-      case '支付宝':
-        paymentData.value.digital.hotelDeposit += refund.amount || 0
-        break
-      case '其他':
-        paymentData.value.other.hotelDeposit += refund.amount || 0
-      default:
-        break
-    }
-  }
-  shiftHandoverStore.updateTableData(paymentData.value)
-}
 
 // 监听支付数据变化
 watch(paymentData, () => {
@@ -644,12 +576,17 @@ onMounted(async () => {
   // 使用统一的数据刷新入口函数
   await refreshAllData()
   console.log('日期变更，已刷新数据', paymentData.value)
-
 })
 
+// 测试按钮：调试点击事件 & 昨日交接款获取
 async function test1() {
-  const content = await billApi.getBillsByOrderId('O202509030275');
-  console.log('测试按钮被点击', typeof(content.data[0]), content.data[0]);
+  console.log('[test1] 按钮点击, 当前日期:', selectedDate.value)
+  try {
+    const res = await shiftHandoverStore.fetchPreviousHandover(selectedDate.value)
+    console.log('[test1] 获取成功 ->', res)
+  } catch (e) {
+    console.error('[test1] 获取失败', e)
+  }
 }
 
 </script>

@@ -1,9 +1,9 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
 import { shiftHandoverApi } from "src/api";
-import def from "ajv/dist/vocabularies/discriminator";
 
 export const useShiftHandoverStore = defineStore("shiftHandover", () => {
+
   let shiftTable_data = ref({
   cash: {
     reserveCash: 320,
@@ -53,7 +53,6 @@ export const useShiftHandoverStore = defineStore("shiftHandover", () => {
   // 获取表格数据（可选传入日期）
   const fetchShiftTable = async (date) => {
     const response = await shiftHandoverApi.getShiftTable(date ? { date } : {});
-    // 仅返回，不要覆写支付表结构，防止后续聚合时报错
     return response;
   };
 
@@ -125,17 +124,29 @@ export const useShiftHandoverStore = defineStore("shiftHandover", () => {
   }
 
   // 重新计算各项合计
-  function recalcTotals() {
-    Object.keys(shiftTable_data.value).forEach(k => {
-      const p = shiftTable_data.value[k]
+  function recalcTotals(target = shiftTable_data.value) {
+    Object.keys(target).forEach(k => {
+      const p = target[k]
       p.total = (Number(p.reserveCash)||0) + (Number(p.hotelIncome)||0) + (Number(p.restIncome)||0) + (Number(p.carRentIncome)||0)
     })
   }
 
-  // 将后端数据插入到交接表中
-  async function insertDataToShiftTable(date) {
+  // 处理选中日期的数据
+  async function handleData(date, prevHandoverReserve) {
     // 重置到初始结构，避免叠加和结构被覆盖
-    shiftTable_data.value = getInitialPaymentData()
+    const obj = getInitialPaymentData()
+
+    // 如果传入了昨日交接款，作为今日的 reserveCash（全部覆盖）
+    if (prevHandoverReserve) {
+      try {
+        if (typeof prevHandoverReserve.cash === 'number')   obj.cash.reserveCash = prevHandoverReserve.cash
+        if (typeof prevHandoverReserve.wechat === 'number') obj.wechat.reserveCash = prevHandoverReserve.wechat
+        if (typeof prevHandoverReserve.digital === 'number')obj.digital.reserveCash = prevHandoverReserve.digital
+        if (typeof prevHandoverReserve.other === 'number')  obj.other.reserveCash = prevHandoverReserve.other
+      } catch (e) {
+        console.warn('应用昨日交接款为今日 reserveCash 失败:', e)
+      }
+    }
 
     // 拿到后端数据
     const response = await fetchShiftTable(date)
@@ -151,16 +162,16 @@ export const useShiftHandoverStore = defineStore("shiftHandover", () => {
       if (isRest){
         switch (method) {
           case '现金':
-            shiftTable_data.value.cash.restIncome += amount
+            obj.cash.restIncome += amount
             break
           case '微信':
-            shiftTable_data.value.wechat.restIncome += amount
+            obj.wechat.restIncome += amount
             break
           case '微邮付':
-            shiftTable_data.value.digital.restIncome += amount
+            obj.digital.restIncome += amount
             break
           case '其他':
-            shiftTable_data.value.other.restIncome += amount
+            obj.other.restIncome += amount
             break
           default:
             break
@@ -169,16 +180,16 @@ export const useShiftHandoverStore = defineStore("shiftHandover", () => {
       }else{// 客房
         switch (method) {
           case '现金':
-            shiftTable_data.value.cash.hotelIncome += amount
+            obj.cash.hotelIncome += amount
             break
           case '微信':
-            shiftTable_data.value.wechat.hotelIncome += amount
+            obj.wechat.hotelIncome += amount
             break
           case '微邮付':
-            shiftTable_data.value.digital.hotelIncome += amount
+            obj.digital.hotelIncome += amount
             break
           case '其他':
-            shiftTable_data.value.other.hotelIncome += amount
+            obj.other.hotelIncome += amount
             break
           default:
             break
@@ -197,16 +208,16 @@ export const useShiftHandoverStore = defineStore("shiftHandover", () => {
         // 休息房退押金
         switch (rMethod) {
           case '现金':
-            shiftTable_data.value.cash.restDeposit += rAmount
+            obj.cash.restDeposit += rAmount
             break
           case '微信':
-            shiftTable_data.value.wechat.restDeposit += rAmount
+            obj.wechat.restDeposit += rAmount
             break
           case '微邮付':
-            shiftTable_data.value.digital.restDeposit += rAmount
+            obj.digital.restDeposit += rAmount
             break
           case '其他':
-            shiftTable_data.value.other.restDeposit += rAmount
+            obj.other.restDeposit += rAmount
             break
           default:
             break
@@ -215,16 +226,16 @@ export const useShiftHandoverStore = defineStore("shiftHandover", () => {
         // 客房退押金
         switch (rMethod) {
           case '现金':
-            shiftTable_data.value.cash.hotelDeposit += rAmount
+            obj.cash.hotelDeposit += rAmount
             break
           case '微信':
-            shiftTable_data.value.wechat.hotelDeposit += rAmount
+            obj.wechat.hotelDeposit += rAmount
             break
           case '微邮付':
-            shiftTable_data.value.digital.hotelDeposit += rAmount
+            obj.digital.hotelDeposit += rAmount
             break
           case '其他':
-            shiftTable_data.value.other.hotelDeposit += rAmount
+            obj.other.hotelDeposit += rAmount
             break
           default:
             break
@@ -232,12 +243,45 @@ export const useShiftHandoverStore = defineStore("shiftHandover", () => {
       }
     }
 
-    // 计算总计
-    recalcTotals()
+  // 计算总计（针对临时对象）
+  recalcTotals(obj)
+    return obj;
+  }
+  // 将后端数据插入到交接表中
+  async function insertDataToShiftTable(date) {
+    // 获取昨日交接款
+    const prev = await fetchPreviousHandover(date)
+    // 处理并更新数据（把昨日交接款作为今日 reserveCash）
+    const newData = await handleData(date, prev)
+    updateTableData(newData)
   }
 
   function updateTableData(newData) {
     shiftTable_data.value = newData;
+  }
+
+  // 获取昨日交接款 = (reserveCash + 收入合计 - 退押金合计 - retainedAmount)
+  async function fetchPreviousHandover(date) {
+    try {
+      const current = new Date(date)
+      const prev = new Date(current.getTime() - 24 * 60 * 60 * 1000)
+      const prevDate = prev.toISOString().split('T')[0]
+      const prevData = await handleData(prevDate)
+      const result = {}
+      // 计算昨日交接款
+      for (const k of Object.keys(prevData)) {
+        const row = prevData[k]
+        const deposits = (Number(row.hotelDeposit)||0) + (Number(row.restDeposit)||0)
+        const handover = (Number(row.total)||0) - deposits - (Number(row.retainedAmount)||0)
+        result[k] = handover
+      }
+      result.cash = prevData.cash.retainedAmount
+
+      return result
+    } catch (e) {
+      console.error('获取昨日交接款失败:', e)
+      return { cash:0, wechat:0, digital:0, other:0 }
+    }
   }
 
   return {
@@ -250,6 +294,7 @@ export const useShiftHandoverStore = defineStore("shiftHandover", () => {
     special_stats_data,
     fetchSpecialStats,
     updateTableData,
-    insertDataToShiftTable
+    insertDataToShiftTable,
+    fetchPreviousHandover
   };
 });

@@ -1179,6 +1179,31 @@ async function getShiftSpecialStats(date) {
   }
 }
 
+/**
+ * 保存备用金
+ * @param {string} date - 日期
+ * @param {number} reserveCash - 备用金金额
+ * @returns {Promise<Object>} 保存结果
+ */
+async function saveReserve(date, reserveCash) {
+  try {
+    const sql = `
+      INSERT INTO shift_handover (shift_date, reserve_cash, updated_at)
+      VALUES ($1, $2, CURRENT_TIMESTAMP)
+      ON CONFLICT (shift_date)
+      DO UPDATE SET
+        reserve_cash = EXCLUDED.reserve_cash,
+        updated_at = CURRENT_TIMESTAMP
+      RETURNING *;
+    `;
+    const result = await query(sql, [date, reserveCash]);
+    return result.rows[0];
+  } catch (error) {
+    console.error('保存备用金失败:', error);
+    throw error;
+  }
+}
+
 module.exports = {
   getReceiptDetails,
   getStatistics,
@@ -1191,5 +1216,6 @@ module.exports = {
   recordRefundDepositToHandover,
   getShiftTable,
   getRemarks,
-  getShiftSpecialStats
+  getShiftSpecialStats,
+  saveReserve
 };

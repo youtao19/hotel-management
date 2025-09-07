@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { saveReserve } from 'backend/modules/shiftHandoverModule'
 
 // 创建axios实例
 const api = axios.create({
@@ -252,6 +253,9 @@ export const shiftHandoverApi = {
 
   // 获取交接班特殊统计（开房数、休息房数、好评邀/得）
   getSpecialStats: (params) => api.get('/shift-handover/special-stats', { params }),
+
+  // 保存备用金
+  saveReserve: (date, amount) => api.post('/shift-handover/save-reserve', { date, amount })
 
 }
 

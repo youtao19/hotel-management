@@ -322,4 +322,24 @@ router.get('/special-stats', async (req, res) => {
   }
 });
 
+// 保存备用金
+router.post('/save-reserve', async (req, res) => {
+  try {
+    const { date, reserveCash } = req.body;
+    const result = await saveReserve(date, reserveCash);
+    res.status(200).json({
+      success: true,
+      message: '备用金保存成功',
+      data: result
+    });
+  } catch (error) {
+    console.error('保存备用金失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '保存备用金失败',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;
