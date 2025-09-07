@@ -87,6 +87,7 @@ const props = defineProps({
   order: Object,
   availableRooms: Array,
   getRoomTypeName: Function,
+  isMultiDayOrder: Boolean
 });
 
 const emit = defineEmits([
@@ -94,8 +95,8 @@ const emit = defineEmits([
   'order-updated'
 ]);
 
-const editableOrder = ref(null);
-const originalRoomNumber = ref(null);
+const editableOrder = ref(null); // 可编辑的订单
+const originalRoomNumber = ref(null);  // 原始房间号
 
 // 监听订单变化
 watch(() => props.order, (newOrder) => {
@@ -142,15 +143,6 @@ const roomOptions = computed(() => {
   });
 });
 
-// 判断是否为多日订单
-const isMultiDayOrder = computed(() => {
-  if (!editableOrder.value) return false;
-  const checkIn = new Date(editableOrder.value.checkInDate);
-  const checkOut = new Date(editableOrder.value.checkOutDate);
-  // 比较日期部分，忽略时间
-  return checkIn.toISOString().split('T')[0] !== checkOut.toISOString().split('T')[0];
-});
-
 // 处理房间选择变化
 function handleRoomChange(newValue) {
   if (!editableOrder.value) return;
@@ -159,7 +151,7 @@ function handleRoomChange(newValue) {
     // 选择新房间时，更新当前房间价格（仅影响当前选择的房间，不影响多日价格）
     // 如果是多日订单，这里不应该直接修改 roomPrice，而是让用户手动调整每日价格
     // 对于单日订单，可以更新 roomPrice
-    if (!isMultiDayOrder.value && editableOrder.value.checkInDate) {
+    if (!props.isMultiDayOrder && editableOrder.value.checkInDate) {
       editableOrder.value.roomPrice[editableOrder.value.checkInDate] = opt.price;
     }
   }
@@ -171,7 +163,7 @@ function submitChange() {
     const isRoomChanged = editableOrder.value.roomNumber !== originalRoomNumber.value;
 
     // 如果是单日订单，将 roomPrice 对象转换回数字
-    if (!isMultiDayOrder.value) {
+    if (!props.isMultiDayOrder.value) {
       const dates = Object.keys(editableOrder.value.roomPrice);
       if (dates.length === 1) {
         editableOrder.value.roomPrice = editableOrder.value.roomPrice[dates[0]];
@@ -183,7 +175,7 @@ function submitChange() {
     }
 
     emit('order-updated', { ...editableOrder.value, isRoomChanged });
-    emit('update:modelValue', false);
+    emit('update:modelValue', false); // 关闭对话框
   }
 }
 </script>

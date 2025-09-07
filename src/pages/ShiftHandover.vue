@@ -209,8 +209,11 @@ async function insertDataToShiftTable(date) {
   const records = response.data.records
 
   for (const record of Object.values(records)) {
-    // 如果是休息房
-    if (record.check_in_date === record.check_out_date){
+    // 使用 stay_type 字段判断业务类型
+    const isRest = record.stay_type === '休息房'
+
+    if (isRest) {
+      // 休息房收入
       switch (record.payment_method) {
         case '现金':
           paymentData.value.cash.restIncome += record.totalIncome || 0
@@ -225,8 +228,8 @@ async function insertDataToShiftTable(date) {
           paymentData.value.other.restIncome += record.totalIncome || 0
           break
       }
-      continue;
-    }else{// 客房
+    } else {
+      // 客房收入
       switch (record.payment_method) {
         case '现金':
           paymentData.value.cash.hotelIncome += record.totalIncome || 0

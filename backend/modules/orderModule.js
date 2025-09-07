@@ -327,6 +327,23 @@ function validateOrderData(orderData) {
     error.code = 'INVALID_DEPOSIT';
     throw error;
   }
+
+  // 6. 验证住宿类型（如果前端传入了该字段）
+  if (orderData.stay_type !== undefined) {
+    const validStayTypes = ['休息房', '客房'];
+    if (!validStayTypes.includes(orderData.stay_type)) {
+      const error = new Error(`无效的住宿类型: ${orderData.stay_type}。有效类型: ${validStayTypes.join(', ')}`);
+      error.code = 'INVALID_STAY_TYPE';
+      throw error;
+    }
+
+    // 检查前端传入的stay_type是否与日期计算结果一致
+    const calculatedStayType = isRestRoom(orderData) ? '休息房' : '客房';
+    if (orderData.stay_type !== calculatedStayType) {
+      console.warn(`⚠️ [validateOrderData] 前端传入的住宿类型 "${orderData.stay_type}" 与根据日期计算的结果 "${calculatedStayType}" 不一致`);
+      // 注意：这里只是警告，不抛出错误，因为我们会以计算结果为准
+    }
+  }
 }
 
 /**
@@ -439,6 +456,15 @@ async function createOrder(orderData) {
       payment_method, room_price, deposit, create_time, remarks
     } = orderData;
 
+    // 6.1. 根据入住退房日期自动设置住宿类型
+    const stay_type = isCurrentOrderRestRoom ? '休息房' : '客房';
+    console.log(`🏠 [createOrder] 自动设置住宿类型: ${stay_type} (基于日期: ${check_in_date} -> ${check_out_date})`);
+
+    // 如果前端传入了stay_type，检查是否与计算结果一致
+    if (orderData.stay_type && orderData.stay_type !== stay_type) {
+      console.warn(`⚠️ [createOrder] 前端传入的住宿类型 "${orderData.stay_type}" 与计算结果 "${stay_type}" 不一致，以计算结果为准`);
+    }
+
     // 7. 处理房间价格数据
     let processedRoomPrice = room_price;
 
@@ -492,9 +518,9 @@ async function createOrder(orderData) {
       INSERT INTO orders (
         order_id, id_source, order_source, guest_name, phone, id_number,
         room_type, room_number, check_in_date, check_out_date, status,
-        payment_method, room_price, deposit, create_time, remarks
+        payment_method, room_price, deposit, create_time, stay_type, remarks
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, $15, $16
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, $15, $16, $17
       )
       RETURNING *;
     `;
@@ -502,7 +528,7 @@ async function createOrder(orderData) {
     const values = [
       order_id, id_source, order_source, guest_name, phone, id_number,
       room_type, room_number, check_in_date, check_out_date, status,
-      payment_method, JSON.stringify(processedRoomPrice), deposit, create_time || new Date(), processedRemarks
+      payment_method, JSON.stringify(processedRoomPrice), deposit, create_time || new Date(), stay_type, processedRemarks
     ];
 
   console.log('🗃️ [createOrder] 即将插入 values:', values.map(v => (typeof v === 'string' && v.length > 120 ? v.slice(0,120)+'…' : v)));
@@ -608,6 +634,28 @@ async function updateOrder(orderNumber, updatedData, changedBy = 'system') {
                             'room_number', 'check_in_date', 'check_out_date',
                             'payment_method', 'room_price', 'deposit', 'remarks'];
 
+    // 检查是否需要重新计算stay_type（如果日期发生变化）
+    let shouldUpdateStayType = false;
+    let newStayType = null;
+
+    if (updatedData.check_in_date !== undefined || updatedData.check_out_date !== undefined) {
+      // 使用新的日期或保持原有日期
+      const newCheckInDate = updatedData.check_in_date || oldOrder.check_in_date;
+      const newCheckOutDate = updatedData.check_out_date || oldOrder.check_out_date;
+
+      const tempOrderData = {
+        check_in_date: newCheckInDate,
+        check_out_date: newCheckOutDate
+      };
+
+      newStayType = isRestRoom(tempOrderData) ? '休息房' : '客房';
+      shouldUpdateStayType = (newStayType !== oldOrder.stay_type);
+
+      if (shouldUpdateStayType) {
+        console.log(`🏠 [updateOrder] 重新计算住宿类型: ${oldOrder.stay_type} -> ${newStayType} (基于日期: ${newCheckInDate} -> ${newCheckOutDate})`);
+      }
+    }
+
     updateableFields.forEach(field => {
       if (updatedData[field] !== undefined) {
         updates.push(`${field} = $${paramIndex}`);
@@ -619,6 +667,17 @@ async function updateOrder(orderNumber, updatedData, changedBy = 'system') {
         paramIndex++;
       }
     });
+
+    // 如果需要更新stay_type，添加到更新列表
+    if (shouldUpdateStayType) {
+      updates.push(`stay_type = $${paramIndex}`);
+      values.push(newStayType);
+      changes.stay_type = {
+        old: oldOrder.stay_type,
+        new: newStayType
+      };
+      paramIndex++;
+    }
 
     // 如果没有要更新的字段，则提前返回
     if (updates.length === 0) {
@@ -637,21 +696,28 @@ async function updateOrder(orderNumber, updatedData, changedBy = 'system') {
     values.push(orderNumber);
     const { rows: [updatedOrder] } = await client.query(updateQuery, values);
 
-    // 记录变更到 order_changes 表
-    const insertChangeQuery = `
-      INSERT INTO order_changes
-      (order_id, changed_by, changes, reason)
-      VALUES ($1, $2, $3, $4)
-    `;
-
-    await client.query(insertChangeQuery, [
-      orderNumber,
-      changedBy,
-      JSON.stringify(changes),
-      updatedData.reason || '订单信息更新'
-    ]);
-
     await client.query('COMMIT');
+
+    // 记录变更到 order_changes 表
+    try {
+      const insertChangeQuery = `
+        INSERT INTO order_changes
+        (order_id, changed_by, changes, reason)
+        VALUES ($1, $2, $3, $4)
+      `;
+
+      await query(insertChangeQuery, [
+        orderNumber,
+        changedBy,
+        JSON.stringify(changes),
+        updatedData.reason || '订单信息更新'
+      ]);
+      console.log(`📝 [updateOrder] 变更记录已保存到 order_changes 表`);
+    } catch (changeLogError) {
+      // 变更记录失败不应该影响订单更新的成功
+      console.warn(`⚠️ [updateOrder] 保存变更记录失败，但订单更新成功:`, changeLogError.message);
+    }
+
     return updatedOrder;
   } catch (error) {
     await client.query('ROLLBACK');

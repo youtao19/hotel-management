@@ -66,12 +66,12 @@ async function getReceiptDetails(type, startDate, endDate) {
   // 以订单为主：根据 orders.room_price 的每日价格，生成 [startDate, endDate] 区间内的逐日收款明细
   // 首日计入押金，其余仅计房费；支付方式取自 orders.payment_method
 
-  // 订单类型条件
+  // 订单类型条件 - 使用 stay_type 字段
   let typeCondition = '1=1';
   if (type === 'hotel') {
-    typeCondition = `(o.check_in_date::date != o.check_out_date::date)`;
+    typeCondition = `o.stay_type = '客房'`;
   } else if (type === 'rest') {
-    typeCondition = `(o.check_in_date::date = o.check_out_date::date)`;
+    typeCondition = `o.stay_type = '休息房'`;
   }
 
   const sql = `
@@ -83,7 +83,8 @@ async function getReceiptDetails(type, startDate, endDate) {
       o.room_price,
       o.deposit,
       o.check_in_date,
-      o.check_out_date
+      o.check_out_date,
+      o.stay_type
     FROM orders o
     WHERE ${typeCondition}
       AND o.status IN ('checked-in', 'checked-out', 'pending')
@@ -123,7 +124,7 @@ async function getReceiptDetails(type, startDate, endDate) {
           check_out_date: o.check_out_date,
           created_at: `${day}T00:00:00`,
           stay_date: day,
-          business_type: (new Date(o.check_in_date).toDateString() !== new Date(o.check_out_date).toDateString()) ? 'hotel' : 'rest'
+          business_type: o.stay_type === '客房' ? 'hotel' : 'rest'
         });
       }
     }
@@ -187,7 +188,7 @@ async function getStatistics(startDate, endDate = null) {
     // 逐日查询入住中的订单，并按“首日+押金，其余仅房费”计入收入
     for (const day of days) {
       const ordSql = `
-        SELECT order_id, check_in_date, check_out_date, room_price, deposit, payment_method
+        SELECT order_id, check_in_date, check_out_date, room_price, deposit, payment_method, stay_type
         FROM orders
         WHERE check_in_date <= $1::date AND $1::date < check_out_date
           AND status IN ('checked-in', 'checked-out', 'pending')
@@ -206,7 +207,7 @@ async function getStatistics(startDate, endDate = null) {
         const deposit = Number(row.deposit || 0);
         const incomeToday = roomFee + (isFirstDay ? deposit : 0);
 
-        const businessType = (new Date(row.check_in_date).toDateString() !== new Date(row.check_out_date).toDateString()) ? 'hotel' : 'rest';
+        const businessType = (row.stay_type === '客房') ? 'hotel' : 'rest';
         const pm = normalizePaymentMethod(row.payment_method || '现金');
         const pmKey = statistics.paymentDetails[pm] ? pm : '其他';
 
@@ -223,12 +224,12 @@ async function getStatistics(startDate, endDate = null) {
       }
     }
 
-    // 退押金：从 bills 的 change 记录统计
+    // 退押金：从 bills 的 change 记录统计 - 使用 stay_type 字段
     const refundSql = `
       SELECT
         SUM(ABS(COALESCE(b.change_price,0))) AS amount,
         o.payment_method,
-        CASE WHEN o.check_in_date::date != o.check_out_date::date THEN 'hotel' ELSE 'rest' END AS business_type
+        CASE WHEN o.stay_type = '客房' THEN 'hotel' ELSE 'rest' END AS business_type
       FROM bills b
       JOIN orders o ON o.order_id = b.order_id
       WHERE b.change_type = '退押' AND b.create_time::date BETWEEN $1::date AND $2::date
@@ -248,10 +249,10 @@ async function getStatistics(startDate, endDate = null) {
       }
     }
 
-    // 房间统计：按“开房数/休息房数”（以 check_in_date 当天计数）
+        // 房间统计：按"开房数/休息房数"（以 check_in_date 当天计数） - 使用 stay_type 字段
     const roomStatsSql = `
       SELECT
-        CASE WHEN (o.check_in_date::date != o.check_out_date::date) THEN 'hotel' ELSE 'rest' END as business_type,
+        CASE WHEN o.stay_type = '客房' THEN 'hotel' ELSE 'rest' END as business_type,
         COUNT(*) as room_count
       FROM orders o
       WHERE o.check_in_date::date BETWEEN $1::date AND $2::date
@@ -991,7 +992,7 @@ async function getShiftTable(date) {
       throw new Error('日期格式应为 YYYY-MM-DD');
     }
 
-    // 查询客房入账
+    // 查询客房入账 - 使用 stay_type 字段
     const incomeSql = `
       SELECT
         order_id,
@@ -999,10 +1000,12 @@ async function getShiftTable(date) {
         deposit,
         room_price,
         payment_method,
+        stay_type,
         (check_in_date::date)::text AS check_in_date,
         (check_out_date::date)::text AS check_out_date
       FROM orders
       WHERE check_in_date::date <= $1::date AND $1::date < check_out_date::date
+        AND stay_type = '客房'
       ORDER BY order_id ASC`;
     const incomeRes = await query(incomeSql, [targetDate]);
 
@@ -1025,6 +1028,7 @@ async function getShiftTable(date) {
         deposit: Number(item.deposit || 0),
         room_price: Number(item.room_price[targetDate] || 0),
         payment_method: item.payment_method || '',
+        stay_type: item.stay_type || '',
         totalIncome: totalIncome,
         check_in_date: item.check_in_date || '',
         check_out_date: item.check_out_date || ''
@@ -1033,7 +1037,7 @@ async function getShiftTable(date) {
       records[item.order_id] = record;
     }
 
-    // 查询休息房入账
+    // 查询休息房入账 - 使用 stay_type 字段
     const restIncomeSql = `
       SELECT
         order_id,
@@ -1041,11 +1045,12 @@ async function getShiftTable(date) {
         deposit,
         room_price,
         payment_method,
+        stay_type,
         (check_in_date::date)::text AS check_in_date,
         (check_out_date::date)::text AS check_out_date
       FROM orders
       WHERE check_in_date::date = $1::date
-      AND check_in_date::date = check_out_date::date
+        AND stay_type = '休息房'
       ORDER BY order_id ASC`;
     const restIncomeRes = await query(restIncomeSql, [targetDate]);
 
@@ -1056,6 +1061,7 @@ async function getShiftTable(date) {
         deposit: Number(item.deposit || 0),
         room_price: Number(item.room_price[targetDate] || 0),
         payment_method: item.payment_method || '',
+        stay_type: item.stay_type || '',
         totalIncome: Number(item.deposit || 0) + Number(item.room_price[targetDate] || 0),
         check_in_date: item.check_in_date || '',
         check_out_date: item.check_out_date || ''
@@ -1064,19 +1070,31 @@ async function getShiftTable(date) {
       records[item.order_id] = record;
     }
 
-    // 查询退款(refund_time)的账单
+    // 查询退押金 - 关联订单表获取stay_type信息
     const refundBillsSql = `
-      SELECT bill_id, change_price, change_type, pay_way
-      FROM bills
-      WHERE create_time::date = $1::date and change_type = '退押'
-      ORDER BY bill_id ASC`;
+      SELECT
+        b.bill_id,
+        b.order_id,
+        b.change_price,
+        b.change_type,
+        b.pay_way,
+        o.stay_type,
+        o.guest_name
+      FROM bills b
+      JOIN orders o ON b.order_id = o.order_id
+      WHERE b.create_time::date = $1::date
+        AND b.change_type = '退押'
+      ORDER BY b.bill_id ASC`;
     const refundBillsRes = await query(refundBillsSql, [targetDate]);
 
     const refunds = refundBillsRes.rows.map(row => ({
       bill_id: row.bill_id,
+      order_id: row.order_id,
       change_price: Number(row.change_price || 0),
       change_type: row.change_type || '',
       pay_way: row.pay_way || '',
+      stay_type: row.stay_type || '',
+      guest_name: row.guest_name || ''
     }));
 
     const result = {
@@ -1120,11 +1138,11 @@ async function getRemarks({ date }) {
 async function getShiftSpecialStats(date) {
   const targetDate = date || new Date().toISOString().split('T')[0]
 
-  // 统计开房/休息房数量：根据订单入住/退房跨天与否分类
+  // 统计开房/休息房数量：使用 stay_type 字段
   const roomCountSql = `
     SELECT
-      SUM(CASE WHEN (o.check_in_date::date <= $1::date and o.check_out_date::date > $1::date) THEN 1 ELSE 0 END) AS open_count,
-      SUM(CASE WHEN (o.check_in_date::date = o.check_out_date::date) THEN 1 ELSE 0 END) AS rest_count
+      SUM(CASE WHEN o.stay_type = '客房' THEN 1 ELSE 0 END) AS open_count,
+      SUM(CASE WHEN o.stay_type = '休息房' THEN 1 ELSE 0 END) AS rest_count
     FROM orders o
     WHERE o.check_in_date::date = $1::date
       AND o.status IN ('checked-in', 'checked-out', 'pending')

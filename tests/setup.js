@@ -12,7 +12,7 @@ afterAll(async () => {
   try {
     await db.query('DELETE FROM bills WHERE order_id LIKE $1', ['TEST_%']);
     await db.query('DELETE FROM orders WHERE order_id LIKE $1', ['TEST_%']);
-    await db.query('DELETE FROM rooms WHERE room_number LIKE $1', ['T%']);
+    await db.query('DELETE FROM rooms WHERE room_number LIKE $1 OR room_number LIKE $2', ['R_%', 'TEST_%']);
     await db.query('DELETE FROM room_types WHERE type_code LIKE $1', ['TEST_%']);
     await db.query('DELETE FROM shift_handover WHERE cashier_name LIKE $1', ['TEST_%']);
   } catch (error) {

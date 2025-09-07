@@ -170,7 +170,7 @@ describe('POST /api/orders/new', () => {
 
   it('创建同一房间不同时间的订单', async () => {
     const roomType = await createTestRoomType();
-    const room = await createTestRoom(roomType.type_code, { room_number: '305' });
+    const room = await createTestRoom(roomType.type_code); // 使用动态生成的房间号
 
     const orderData1 = await createTestOrder({
       room_type: roomType.type_code,
@@ -187,7 +187,7 @@ describe('POST /api/orders/new', () => {
 
     const orderData2 = await createTestOrder({
       room_type: roomType.type_code,
-      room_number: room.room_number,
+      room_number: room.room_number, // 使用相同的房间号
       check_in_date: '2025-06-11',
       check_out_date: '2025-06-12'
     });

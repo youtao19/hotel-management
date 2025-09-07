@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
 import { shiftHandoverApi } from "src/api";
+import def from "ajv/dist/vocabularies/discriminator";
 
 export const useShiftHandoverStore = defineStore("shiftHandover", () => {
   let shiftTable_data = ref({
@@ -141,9 +142,11 @@ export const useShiftHandoverStore = defineStore("shiftHandover", () => {
     const records = response?.data?.records || {}
 
     for (const record of Object.values(records)) {
-      const isRest = String(record.check_in_date) === String(record.check_out_date)
+      // 使用 stay_type 字段判断业务类型，而不是日期比较
+      const isRest = record.stay_type === '休息房'
       const amount = Number(record.totalIncome ?? 0) || (Number(record.deposit || 0) + Number(record.room_price || 0)) || 0
       const method = record.payment_method || '其他'
+
       // 如果是休息房
       if (isRest){
         switch (method) {
@@ -156,8 +159,10 @@ export const useShiftHandoverStore = defineStore("shiftHandover", () => {
           case '微邮付':
             shiftTable_data.value.digital.restIncome += amount
             break
-          default:
+          case '其他':
             shiftTable_data.value.other.restIncome += amount
+            break
+          default:
             break
         }
         continue;
@@ -183,23 +188,47 @@ export const useShiftHandoverStore = defineStore("shiftHandover", () => {
 
     const refunds = response?.data?.refunds || []
     for (const refund of refunds) {
-      const rAmount = Number(refund.change_price || refund.amount || 0)
+      const rAmount = Math.abs(Number(refund.change_price || refund.amount || 0)) // 取绝对值，因为退押金通常是负数
       const rMethod = refund.pay_way || refund.payment_method || '其他'
-      switch (rMethod) {
-        case '现金':
-          shiftTable_data.value.cash.hotelDeposit += rAmount
-          break
-        case '微信':
-          shiftTable_data.value.wechat.hotelDeposit += rAmount
-          break
-        case '支付宝':
-        case '微邮付':
-          shiftTable_data.value.digital.hotelDeposit += rAmount
-          break
-        case '其他':
-        default:
-          shiftTable_data.value.other.hotelDeposit += rAmount
-          break
+      const rStayType = refund.stay_type || '客房' // 默认为客房
+
+      // 根据住宿类型和支付方式分类退押金
+      if (rStayType === '休息房') {
+        // 休息房退押金
+        switch (rMethod) {
+          case '现金':
+            shiftTable_data.value.cash.restDeposit += rAmount
+            break
+          case '微信':
+            shiftTable_data.value.wechat.restDeposit += rAmount
+            break
+          case '微邮付':
+            shiftTable_data.value.digital.restDeposit += rAmount
+            break
+          case '其他':
+            shiftTable_data.value.other.restDeposit += rAmount
+            break
+          default:
+            break
+        }
+      } else {
+        // 客房退押金
+        switch (rMethod) {
+          case '现金':
+            shiftTable_data.value.cash.hotelDeposit += rAmount
+            break
+          case '微信':
+            shiftTable_data.value.wechat.hotelDeposit += rAmount
+            break
+          case '微邮付':
+            shiftTable_data.value.digital.hotelDeposit += rAmount
+            break
+          case '其他':
+            shiftTable_data.value.other.hotelDeposit += rAmount
+            break
+          default:
+            break
+        }
       }
     }
 

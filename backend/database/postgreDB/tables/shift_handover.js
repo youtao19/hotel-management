@@ -13,6 +13,7 @@ const createQuery = `
     shift_date DATE NOT NULL, -- 班次日期
     handover_person VARCHAR(100), -- 交班人
     receive_person VARCHAR(100), -- 接班人
+    reserve_cash jsonb, -- 备用金
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, -- 创建时间
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP -- 更新时间
   );
