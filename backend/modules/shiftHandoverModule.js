@@ -588,164 +588,6 @@ async function getPreviousHandoverData(currentDate) {
   }
 }
 
-/**
- * 导入收款明细到交接班
- * @param {Object} importData - 导入数据
- * @returns {Promise<Object>} 导入结果
- */
-async function importReceiptsToShiftHandover(importData) {
-  try {
-    console.log('📥 开始导入收款明细到交接班:', importData.date)
-    console.log('📊 接收到的完整数据:', JSON.stringify(importData, null, 2))
-
-    const { date, paymentAnalysis, statistics } = importData
-
-    // 验证paymentAnalysis数据
-    if (!paymentAnalysis) {
-      throw new Error('缺少paymentAnalysis数据')
-    }
-
-    console.log('💰 支付分析数据:', JSON.stringify(paymentAnalysis, null, 2))
-    console.log('📈 统计数据:', JSON.stringify(statistics, null, 2))
-
-    // 检查当天是否已有交接班记录
-    const existingQuery = `
-      SELECT id
-      FROM shift_handover
-      WHERE shift_date = $1
-      ORDER BY updated_at DESC
-      LIMIT 1
-    `
-
-    const existingResult = await query(existingQuery, [date])
-
-    let handoverId = null
-    let existingPaymentData = {}
-
-    if (existingResult.rows.length > 0) {
-      // 已有记录，更新现有记录
-      handoverId = existingResult.rows[0].id
-      console.log('✏️ 更新现有交接班记录，ID:', handoverId)
-    } else {
-      // 新建记录
-      console.log('🆕 创建新的交接班记录')
-    }
-
-    // 将收款明细数据转换为交接班格式
-    const updatedPaymentData = {
-      cash: {
-        reserveCash: existingPaymentData.cash?.reserveCash || 320, // 保持现有备用金或默认值
-        hotelIncome: Math.round(paymentAnalysis['现金']?.hotelIncome || 0),
-        restIncome: Math.round(paymentAnalysis['现金']?.restIncome || 0),
-        carRentIncome: existingPaymentData.cash?.carRentIncome || 0,
-        total: 0, // 会在前端重新计算
-        hotelDeposit: Math.round(paymentAnalysis['现金']?.hotelDeposit || 0),
-        restDeposit: Math.round(paymentAnalysis['现金']?.restDeposit || 0),
-        retainedAmount: 320 // 固定值
-      },
-      wechat: {
-        reserveCash: existingPaymentData.wechat?.reserveCash || 0,
-        hotelIncome: Math.round(paymentAnalysis['微信']?.hotelIncome || 0),
-        restIncome: Math.round(paymentAnalysis['微信']?.restIncome || 0),
-        carRentIncome: existingPaymentData.wechat?.carRentIncome || 0,
-        total: 0,
-        hotelDeposit: Math.round(paymentAnalysis['微信']?.hotelDeposit || 0),
-        restDeposit: Math.round(paymentAnalysis['微信']?.restDeposit || 0),
-        retainedAmount: existingPaymentData.wechat?.retainedAmount || 0
-      },
-      digital: {
-        reserveCash: existingPaymentData.digital?.reserveCash || 0,
-        hotelIncome: Math.round(paymentAnalysis['微邮付']?.hotelIncome || 0),
-        restIncome: Math.round(paymentAnalysis['微邮付']?.restIncome || 0),
-        carRentIncome: existingPaymentData.digital?.carRentIncome || 0,
-        total: 0,
-        hotelDeposit: Math.round(paymentAnalysis['微邮付']?.hotelDeposit || 0),
-        restDeposit: Math.round(paymentAnalysis['微邮付']?.restDeposit || 0),
-        retainedAmount: existingPaymentData.digital?.retainedAmount || 0
-      },
-      other: {
-        reserveCash: existingPaymentData.other?.reserveCash || 0,
-        hotelIncome: Math.round((paymentAnalysis['银行卡']?.hotelIncome || 0) + (paymentAnalysis['其他']?.hotelIncome || 0)),
-        restIncome: Math.round((paymentAnalysis['银行卡']?.restIncome || 0) + (paymentAnalysis['其他']?.restIncome || 0)),
-        carRentIncome: existingPaymentData.other?.carRentIncome || 0,
-        total: 0,
-        hotelDeposit: Math.round((paymentAnalysis['银行卡']?.hotelDeposit || 0) + (paymentAnalysis['其他']?.hotelDeposit || 0)),
-        restDeposit: Math.round((paymentAnalysis['银行卡']?.restDeposit || 0) + (paymentAnalysis['其他']?.restDeposit || 0)),
-        retainedAmount: existingPaymentData.other?.retainedAmount || 0
-      }
-    }
-
-    // 计算各支付方式的总计
-    Object.keys(updatedPaymentData).forEach(paymentType => {
-      const payment = updatedPaymentData[paymentType]
-      payment.total = (payment.reserveCash || 0) + (payment.hotelIncome || 0) +
-                     (payment.restIncome || 0) + (payment.carRentIncome || 0)
-    })
-
-    // 更新详细信息
-    const updatedDetails = {
-      paymentData: updatedPaymentData,
-      importInfo: {
-        importDate: new Date().toISOString(),
-        sourceDate: date,
-        sourceType: statistics.receiptType,
-        importedAmounts: paymentAnalysis
-      }
-    }
-
-    if (handoverId) {
-      // 更新现有记录
-      const updateQuery = `
-        UPDATE shift_handover
-        SET updated_at = CURRENT_TIMESTAMP
-        WHERE id = $1
-        RETURNING id
-      `
-
-      const updateResult = await query(updateQuery, [
-        handoverId
-      ])
-
-      console.log('✅ 更新交接班记录成功，ID:', updateResult.rows[0].id)
-      return { id: updateResult.rows[0].id, action: 'updated' }
-    } else {
-      // 创建新记录，需要设置必填字段
-      const insertQuery = `
-        INSERT INTO shift_handover (
-          shift_date,
-          statistics,
-          cashier_name,
-          shift_time,
-          created_at,
-          updated_at
-        )
-        VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        RETURNING id
-      `
-
-      // 为新记录设置必要的默认值
-      const defaultStatistics = {
-        totalRooms: statistics.totalRooms || 0,
-        restRooms: statistics.restRooms || 0,
-        receiptType: statistics.receiptType || 'hotel'
-      }
-
-      const insertResult = await query(insertQuery, [
-        date,                              // shift_date
-        JSON.stringify(defaultStatistics), // statistics
-        '系统导入',                         // cashier_name
-        'auto'                             // shift_time
-      ])
-
-      console.log('✅ 创建交接班记录成功，ID:', insertResult.rows[0].id)
-      return { id: insertResult.rows[0].id, action: 'created' }
-    }
-
-  } catch (error) {
-    console.error('导入收款明细到交接班失败:', error)
-    throw error
-  }
-}
 
 /**
  * 保存页面数据（保存完整的页面数据，包括金额、统计数据等）
@@ -1182,24 +1024,75 @@ async function getShiftSpecialStats(date) {
 /**
  * 保存备用金
  * @param {string} date - 日期
- * @param {number} reserveCash - 备用金金额
+ * @param {object|number} reserveCash - 备用金金额
  * @returns {Promise<Object>} 保存结果
  */
 async function saveReserve(date, reserveCash) {
   try {
-    const sql = `
-      INSERT INTO shift_handover (shift_date, reserve_cash, updated_at)
-      VALUES ($1, $2, CURRENT_TIMESTAMP)
-      ON CONFLICT (shift_date)
-      DO UPDATE SET
+    // 规范化传入的备用金数据
+    let payloadObj;
+    if (typeof reserveCash === 'number') {
+      payloadObj = { cash: reserveCash, wechat: 0, digital: 0, other: 0 };
+    } else if (reserveCash && typeof reserveCash === 'object') {
+      payloadObj = {
+        cash: Number(reserveCash.cash || reserveCash.reserveCash || 0),
+        wechat: Number(reserveCash.wechat || 0),
+        digital: Number(reserveCash.digital || 0),
+        other: Number(reserveCash.other || 0)
+      };
+    } else {
+      payloadObj = { cash: 0, wechat: 0, digital: 0, other: 0 };
+    }
+
+    // 完整的 INSERT ... ON CONFLICT 语句
+    // 插入时为 NOT NULL 列提供默认值或空字符串，ON CONFLICT 时只更新 reserve_cash
+    const sqlQuery = `
+      INSERT INTO shift_handover (shift_date, reserve_cash, updated_at, cashier_name, shift_time)
+      VALUES ($1, $2, CURRENT_TIMESTAMP, '', '')
+      ON CONFLICT (shift_date) DO UPDATE
+      SET
         reserve_cash = EXCLUDED.reserve_cash,
         updated_at = CURRENT_TIMESTAMP
       RETURNING *;
     `;
-    const result = await query(sql, [date, reserveCash]);
+
+    // 准备 SQL 语句的值
+    const values = [
+      date,
+      JSON.stringify(payloadObj)
+    ];
+
+    // 执行查询并返回结果
+    const result = await query(sqlQuery, values);
     return result.rows[0];
   } catch (error) {
     console.error('保存备用金失败:', error);
+    throw error;
+  }
+}
+
+// 获取某日备用金（若不存在返回 null）
+async function getReserveCash(date) {
+  try {
+    const result = await query(`SELECT reserve_cash FROM shift_handover WHERE shift_date = $1 ORDER BY updated_at DESC LIMIT 1`, [date]);
+    if (result.rows.length === 0) {
+      return null; // 没有记录
+    }
+    let reserveData = result.rows[0].reserve_cash;
+    if (!reserveData) return null; // 字段为空
+    // 兼容字符串 / JSONB
+    if (typeof reserveData === 'string') {
+      try { reserveData = JSON.parse(reserveData); } catch (_) { /* ignore */ }
+    }
+    // 统一输出结构
+    return {
+      cash: Number(reserveData.cash || reserveData.reserveCash || 0),
+      wechat: Number(reserveData.wechat || 0),
+      digital: Number(reserveData.digital || 0),
+      other: Number(reserveData.other || 0)
+    };
+  } catch (error) {
+    console.error('获取备用金失败:', error);
     throw error;
   }
 }
@@ -1211,11 +1104,11 @@ module.exports = {
   exportNewHandoverToExcel,
   getPreviousHandoverData,
   getCurrentHandoverData,
-  importReceiptsToShiftHandover,
   saveAmountChanges,
   recordRefundDepositToHandover,
   getShiftTable,
   getRemarks,
   getShiftSpecialStats,
-  saveReserve
+  saveReserve,
+  getReserveCash
 };

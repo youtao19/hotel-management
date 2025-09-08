@@ -10,7 +10,9 @@ const {
   saveAmountChanges,
   getShiftTable,
   getRemarks,
-  getShiftSpecialStats
+  getShiftSpecialStats,
+  saveReserve,
+  getReserveCash
 } = require('../modules/shiftHandoverModule');
 
 /**
@@ -326,11 +328,13 @@ router.get('/special-stats', async (req, res) => {
 router.post('/save-reserve', async (req, res) => {
   try {
     const { date, reserveCash } = req.body;
+    if (!date) return res.status(400).json({ success:false, message:'缺少日期'});
+    if (reserveCash === undefined) return res.status(400).json({ success:false, message:'缺少备用金数值'});
     const result = await saveReserve(date, reserveCash);
     res.status(200).json({
       success: true,
       message: '备用金保存成功',
-      data: result
+      data: { date: result.shift_date, reserve_cash: result.reserve_cash }
     });
   } catch (error) {
     console.error('保存备用金失败:', error);
@@ -339,6 +343,19 @@ router.post('/save-reserve', async (req, res) => {
       message: '保存备用金失败',
       error: error.message
     });
+  }
+});
+
+// 获取备用金
+router.get('/reserve-cash', async (req, res) => {
+  try {
+    const { date } = req.query;
+    if (!date) return res.status(400).json({ success:false, message:'缺少日期'});
+    const data = await getReserveCash(date);
+    res.json({ success:true, data });
+  } catch (error) {
+    console.error('获取备用金失败:', error);
+    res.status(500).json({ success:false, message:error.message });
   }
 });
 

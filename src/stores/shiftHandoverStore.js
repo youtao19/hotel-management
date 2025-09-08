@@ -132,19 +132,29 @@ export const useShiftHandoverStore = defineStore("shiftHandover", () => {
   }
 
   // 处理选中日期的数据
-  async function handleData(date, prevHandoverReserve) {
-    // 重置到初始结构，避免叠加和结构被覆盖
+  async function handleData(date) {
+    try{
+      // 重置到初始结构，避免叠加和结构被覆盖
     const obj = getInitialPaymentData()
 
-    // 如果传入了昨日交接款，作为今日的 reserveCash（全部覆盖）
-    if (prevHandoverReserve) {
-      try {
-        if (typeof prevHandoverReserve.cash === 'number')   obj.cash.reserveCash = prevHandoverReserve.cash
-        if (typeof prevHandoverReserve.wechat === 'number') obj.wechat.reserveCash = prevHandoverReserve.wechat
-        if (typeof prevHandoverReserve.digital === 'number')obj.digital.reserveCash = prevHandoverReserve.digital
-        if (typeof prevHandoverReserve.other === 'number')  obj.other.reserveCash = prevHandoverReserve.other
-      } catch (e) {
-        console.warn('应用昨日交接款为今日 reserveCash 失败:', e)
+    // 从后端拿备用金
+    let reserveFromDb = await shiftHandoverApi.getReserveCash(date)
+    console.log('获取到的备用金:', reserveFromDb)
+    if (reserveFromDb?.success && reserveFromDb.data) {
+      obj.cash.reserveCash = Number(reserveFromDb.data.cash) || 320
+      obj.wechat.reserveCash = Number(reserveFromDb.data.wechat) || 0
+      obj.digital.reserveCash = Number(reserveFromDb.data.digital) || 0
+      obj.other.reserveCash = Number(reserveFromDb.data.other) || 0
+    } else {
+      console.log('未获取到当日备用金，尝试获取前一日交接款')
+      const prevHandover = await fetchPreviousHandover(date)
+      if (prevHandover) {
+        const prevCash = Number(prevHandover.cash)
+        // 仅当昨日交接款为正数时覆盖默认值；否则保留初始化的 320
+        if (!isNaN(prevCash) && prevCash > 0) {
+          obj.cash.reserveCash = prevCash
+        }
+        // 其它方式备用金默认仍为 0，若未来有多支付方式备用金可在此扩展
       }
     }
 
@@ -243,15 +253,38 @@ export const useShiftHandoverStore = defineStore("shiftHandover", () => {
       }
     }
 
-  // 计算总计（针对临时对象）
-  recalcTotals(obj)
+    // 计算总计（针对临时对象）
+    recalcTotals(obj)
     return obj;
+    } catch(e){
+      console.error('处理交接班数据失败:', e)
+    }
+
   }
+
   // 将后端数据插入到交接表中
   async function insertDataToShiftTable(date) {
-    // 获取昨日交接款
-    const prev = await fetchPreviousHandover(date)
-    // 处理并更新数据（把昨日交接款作为今日 reserveCash）
+    // 优先获取数据库已保存备用金
+    let reserveFromDb = null
+    try {
+      const dbRes = await shiftHandoverApi.getReserveCash(date)
+      const data = dbRes?.data || dbRes
+      if (data && typeof data === 'object') {
+        reserveFromDb = {
+          cash: Number(data.cash)||0,
+          wechat: Number(data.wechat)||0,
+          digital: Number(data.digital)||0,
+          other: Number(data.other)||0
+        }
+      }
+    } catch (e) {
+      console.warn('获取数据库备用金失败，使用昨日交接款回退:', e?.message || e)
+    }
+
+    // 回退：获取昨日交接款
+    const prev = reserveFromDb || await fetchPreviousHandover(date)
+
+    // 处理并更新数据（把备用金作为今日 reserveCash）
     const newData = await handleData(date, prev)
     updateTableData(newData)
   }

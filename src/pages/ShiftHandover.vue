@@ -568,6 +568,11 @@ async function loadSpecialStats() {
 
 // 监听日期变更：刷新所有数据
 watch(selectedDate, async () => {
+  // 将备用金插入到数据库
+  const cashAmount = await shiftHandoverStore.fetchPreviousHandover(selectedDate.value)
+  console.log('[watch] 日期变更，获取到的交接款:', cashAmount)
+  await shiftHandoverApi.saveReserve(selectedDate.value, cashAmount)
+
   await refreshAllData()
 })
 
