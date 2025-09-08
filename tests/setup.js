@@ -8,21 +8,20 @@ beforeAll(async () => {
 
 // 全局测试清理
 afterAll(async () => {
+  const tasks = [
+    db.query("DELETE FROM bills WHERE order_id LIKE ANY($1)", [['ORDER_%','TEST_%']]).catch(()=>{}),
+    db.query("DELETE FROM order_changes WHERE order_id LIKE ANY($1)", [['ORDER_%','TEST_%']]).catch(()=>{}),
+    db.query("DELETE FROM orders WHERE order_id LIKE ANY($1)", [['ORDER_%','TEST_%']]).catch(()=>{}),
+    db.query("DELETE FROM rooms WHERE room_number LIKE ANY($1)", [['R_%','TEST_%']]).catch(()=>{}),
+    db.query("DELETE FROM room_types WHERE type_code LIKE ANY($1)", [['T_%','TEST_%']]).catch(()=>{})
+  ];
   try {
-    // 直接删除除 rooms 与 room_types 之外的所有表，避免逐行删除触发外键警告
-    await db.query(`DO $$
-    DECLARE r record;
-    BEGIN
-      FOR r IN (
-        SELECT tablename FROM pg_tables
-        WHERE schemaname = 'public'
-          AND tablename NOT IN ('rooms','room_types')
-      ) LOOP
-        EXECUTE format('DROP TABLE IF EXISTS %I CASCADE', r.tablename);
-      END LOOP;
-    END $$;`);
-  } catch (error) {
-    console.warn('清理测试数据时出现警告:', error.message);
+    await Promise.race([
+      Promise.all(tasks),
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error('测试清理超时')),5000))
+    ]);
+  } catch (e) {
+    console.warn('清理测试数据时出现警告:', e.message);
   }
   await db.closePool();
 });
@@ -30,16 +29,13 @@ afterAll(async () => {
 // 提供给各个测试文件使用的清理函数
 global.cleanupTestData = async () => {
   try {
-    // 按正确的顺序删除数据以避免外键约束违反
-    await db.query('DELETE FROM bills WHERE order_id LIKE $1', ['ORDER_%']);
-    await db.query('DELETE FROM orders WHERE order_id LIKE $1', ['ORDER_%']);
-    await db.query('DELETE FROM shift_handover WHERE cashier_name LIKE $1 OR cashier_name LIKE $2', ['TEST_%', '%test%']);
-
-    // 先删除房间，再删除房型，避免外键约束
-    await db.query('DELETE FROM rooms WHERE room_number LIKE $1 OR room_number LIKE $2', ['R_%', '1%']);
-    await db.query('DELETE FROM room_types WHERE type_code LIKE $1', ['T_%']);
+    await db.query("DELETE FROM bills WHERE order_id LIKE ANY($1)", [['ORDER_%','TEST_%']]);
+    await db.query("DELETE FROM order_changes WHERE order_id LIKE ANY($1)", [['ORDER_%','TEST_%']]).catch(()=>{});
+    await db.query("DELETE FROM orders WHERE order_id LIKE ANY($1)", [['ORDER_%','TEST_%']]);
+    await db.query("DELETE FROM shift_handover WHERE cashier_name LIKE ANY($1)", [['TEST_%']]);
+    await db.query("DELETE FROM rooms WHERE room_number LIKE ANY($1)", [['R_%','TEST_%']]);
+    await db.query("DELETE FROM room_types WHERE type_code LIKE ANY($1)", [['T_%','TEST_%']]);
   } catch (error) {
-    // 忽略外键约束警告，这些是正常的清理过程
     if (!error.message.includes('外键约束')) {
       console.warn('清理测试数据时出现警告:', error.message);
     }

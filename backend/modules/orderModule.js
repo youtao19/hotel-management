@@ -99,13 +99,17 @@ function handleOrderCreationError(error, orderData) {
  * @returns {boolean} 是否为休息房
  */
 function isRestRoom(orderData) {
-  const checkInDate = new Date(orderData.check_in_date);
-  const checkOutDate = new Date(orderData.check_out_date);
-
-  // 比较日期部分，忽略时间
-  const checkInDateStr = checkInDate.toISOString().split('T')[0];
-  const checkOutDateStr = checkOutDate.toISOString().split('T')[0];
-
+  const toLocalYMD = (d) => {
+    if (d == null) return '';
+    if (typeof d === 'string') return d.slice(0,10); // 已经是 'YYYY-MM-DD'
+    const dt = (d instanceof Date) ? d : new Date(d);
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth()+1).padStart(2,'0');
+    const day = String(dt.getDate()).padStart(2,'0');
+    return `${y}-${m}-${day}`;
+  };
+  const checkInDateStr = toLocalYMD(orderData.check_in_date);
+  const checkOutDateStr = toLocalYMD(orderData.check_out_date);
   return checkInDateStr === checkOutDateStr;
 }
 

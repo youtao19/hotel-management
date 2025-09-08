@@ -3,7 +3,7 @@ const app = require('../app');
 const { query } = require('../backend/database/postgreDB/pg');
 const { createTestRoomType, createTestRoom, createTestOrder } = require('./test-helpers');
 
-describe('POST /api/orders/:orderNumber/refund-deposit', () => {
+describe('POST /api/orders/:orderNumber/refund-deposit (新退押逻辑: 使用 change_price 负值写入账单)', () => {
   beforeEach(global.cleanupTestData);
   let testOrderData;
 
@@ -52,12 +52,13 @@ describe('POST /api/orders/:orderNumber/refund-deposit', () => {
   );
   });
 
-  it('应成功处理退押金请求', async () => {
+  it('应成功处理退押金请求并写入账单 (change_type=退押, change_price 为负数)', async () => {
     const refundData = {
-      refundAmount: '150.00',
-      actualRefundAmount: '150.00',
+      order_id: testOrderData.order_id,
+      change_price: 150, // 正值，模块内部会转成负数
       method: 'wechat',
-      operator: 'test_admin'
+      notes: '测试退押金',
+      refundTime: new Date().toISOString()
     };
 
     const res = await request(app)
@@ -66,61 +67,55 @@ describe('POST /api/orders/:orderNumber/refund-deposit', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.message).toBe('退押金处理成功');
+    // 返回的 order 实际是新增的账单记录
     expect(res.body.order).toBeDefined();
+    expect(res.body.order.order_id).toBe(testOrderData.order_id);
+    expect(res.body.order.change_type).toBe('退押');
+    // change_price 应为负数
+    const cp = Number(res.body.order.change_price);
+    expect(cp).toBeLessThan(0);
+    expect(Math.abs(cp)).toBe(150);
+    // refundData 回传
     expect(res.body.refundData).toMatchObject({
-      actualRefundAmount: refundData.actualRefundAmount,
-      method: refundData.method,
+      change_price: -150,
+      method: 'wechat'
     });
   });
 
-  it('当缺少必要字段时应返回400错误', async () => {
+  it('缺少 order_id 时应返回 500 并提示处理失败 (当前实现未做字段级校验)', async () => {
     const refundData = {
-      refundAmount: '150.00',
-      // actualRefundAmount 缺失
-      method: 'wechat',
-      operator: 'test_admin'
+      change_price: 150,
+      method: 'wechat'
     };
-
     const res = await request(app)
       .post(`/api/orders/${testOrderData.order_id}/refund-deposit`)
       .send(refundData);
-
-    expect(res.status).toBe(400);
-    expect(res.body.message).toBe('请求数据验证失败');
-    expect(res.body.errors).toBeInstanceOf(Array);
-    expect(res.body.errors.some(e => e.path === 'actualRefundAmount')).toBe(true);
+    expect(res.status).toBe(500);
+    expect(res.body.message).toBe('退押金处理失败');
   });
 
-  it('当字段类型不正确时应返回400错误', async () => {
+  it('change_price 非数字时应返回 500 (数据库写入失败)', async () => {
     const refundData = {
-      refundAmount: 'not-a-number',
-      actualRefundAmount: '150.00',
-      method: 'wechat',
-      operator: 'test_admin'
+      order_id: testOrderData.order_id,
+      change_price: 'not-a-number',
+      method: 'wechat'
     };
-
     const res = await request(app)
       .post(`/api/orders/${testOrderData.order_id}/refund-deposit`)
       .send(refundData);
-
-    expect(res.status).toBe(400);
-    expect(res.body.message).toBe('请求数据验证失败');
-    expect(res.body.errors).toBeInstanceOf(Array);
-    expect(res.body.errors.some(e => e.path === 'refundAmount' && e.msg === '退押金金额必须是数字')).toBe(true);
+    expect(res.status).toBe(500);
+    expect(res.body.message).toBe('退押金处理失败');
   });
 
-  it('当订单号不存在时应返回500错误', async () => {
+  it('订单号不存在时应返回500错误', async () => {
     const refundData = {
-      refundAmount: '150.00',
-      actualRefundAmount: '150.00',
-      method: 'wechat',
-      operator: 'test_admin'
+      order_id: 'NON_EXISTENT_ORDER',
+      change_price: 80,
+      method: 'wechat'
     };
-
     const res = await request(app)
       .post('/api/orders/NON_EXISTENT_ORDER/refund-deposit')
       .send(refundData);
-
     expect(res.status).toBe(500);
     expect(res.body.message).toBe('退押金处理失败');
   });

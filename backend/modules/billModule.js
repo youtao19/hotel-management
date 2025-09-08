@@ -234,36 +234,44 @@ async function addBill(billData){
 
     const o = orderRes.rows[0];
 
-    const insertQuery = `
-      INSERT INTO bills (
-      order_id,
-      room_number,
-      guest_name,
-      pay_way,
-      create_time,
-      remarks,
-      change_price,
-      change_type,
-      room_fee,
-      deposit,
-      stay_type)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9 , $10, $11)
-      RETURNING *
-    `;
+        // 当前 bills 表结构 (参见 backend/database/postgreDB/tables/bill.js):
+        // bill_id, order_id, room_number, guest_name, room_fee, deposit, change_price, change_type, pay_way, create_time, remarks, stay_type
+        // 这里插入除 bill_id (自增) 之外的其它字段，顺序需与列名一致
+        const insertQuery = `
+            INSERT INTO bills (
+                order_id,
+                room_number,
+                guest_name,
+                room_fee,
+                deposit,
+                change_price,
+                change_type,
+                pay_way,
+                create_time,
+                remarks,
+                stay_type
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+            RETURNING *
+        `;
 
-    const values = [
-      order_id,
-      o.room_number,
-      o.guest_name,
-      method || o.payment_method,
-      refundTime || new Date(),
-      notes,
-      change_price,
-      billData.change_type, // 从账单表中获取修改类型
-      o.room_price,
-      o.deposit,
-      o.stay_type
-    ];
+        const numericChangePrice = Number(change_price);
+        if (isNaN(numericChangePrice)) {
+            throw new Error('[addBill] change_price 必须为数字');
+        }
+
+        const values = [
+        order_id,                // $1 order_id
+        String(o.room_number).slice(0,10), // $2 room_number (bills 表限制 10)
+        o.guest_name,            // $3 guest_name
+        o.room_price,            // $4 room_fee (JSONB)
+        o.deposit,               // $5 deposit
+        numericChangePrice,      // $6 change_price
+        billData.change_type,    // $7 change_type
+        method || o.payment_method, // $8 pay_way
+        refundTime || new Date(),   // $9 create_time
+        notes,                   // $10 remarks
+        o.stay_type              // $11 stay_type
+        ];
 
     const result = await query(insertQuery, values);
     newbill = result.rows[0];
