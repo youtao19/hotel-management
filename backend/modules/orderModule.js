@@ -279,7 +279,8 @@ function validateOrderData(orderData) {
   }
 
   // 5. 验证价格和押金
-  if (orderData.room_price) {
+  // 使用 !== undefined 判断，确保 0 这样的值也进入验证分支
+  if (orderData.room_price !== undefined) {
     if (typeof orderData.room_price === 'object') {
       // JSON格式验证：验证每个日期的价格
       const prices = Object.values(orderData.room_price);
@@ -317,8 +318,9 @@ function validateOrderData(orderData) {
         throw error;
       }
     } else {
-      // 向后兼容：数字格式验证
-      if (parseFloat(orderData.room_price) <= 0) {
+      // 向后兼容：数字格式验证（包括 0 / 负数）
+      const numericPrice = parseFloat(orderData.room_price);
+      if (isNaN(numericPrice) || numericPrice <= 0) {
         const error = new Error('房间价格必须大于0');
         error.code = 'INVALID_PRICE';
         throw error;
