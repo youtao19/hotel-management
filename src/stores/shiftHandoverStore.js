@@ -133,174 +133,86 @@ export const useShiftHandoverStore = defineStore("shiftHandover", () => {
 
   // 处理选中日期的数据
   async function handleData(date) {
-    try{
-      // 重置到初始结构，避免叠加和结构被覆盖
-    const obj = getInitialPaymentData()
+    try {
+      // 重置到初始结构
+      const obj = getInitialPaymentData();
 
-    // 从后端拿备用金
-    let reserveFromDb = await shiftHandoverApi.getReserveCash(date)
-    console.log('获取到的备用金:', reserveFromDb)
-    if (reserveFromDb?.success && reserveFromDb.data) {
-      obj.cash.reserveCash = Number(reserveFromDb.data.cash) || 320
-      obj.wechat.reserveCash = Number(reserveFromDb.data.wechat) || 0
-      obj.digital.reserveCash = Number(reserveFromDb.data.digital) || 0
-      obj.other.reserveCash = Number(reserveFromDb.data.other) || 0
-    } else {
-      console.log('未获取到当日备用金，尝试获取前一日交接款')
-      const prevHandover = await fetchPreviousHandover(date)
-      if (prevHandover) {
-        const prevCash = Number(prevHandover.cash)
-        // 仅当昨日交接款为正数时覆盖默认值；否则保留初始化的 320
-        if (!isNaN(prevCash) && prevCash > 0) {
-          obj.cash.reserveCash = prevCash
-        }
-        // 其它方式备用金默认仍为 0，若未来有多支付方式备用金可在此扩展
+      // 只需要调用一次 API
+      const response = await fetchShiftTable(date);
+      if (!response || !response.data) {
+        console.error('从后端获取交接班数据失败');
+        return getInitialPaymentData(); // 返回初始值避免页面崩溃
       }
-    }
 
-    // 拿到后端数据
-    const response = await fetchShiftTable(date)
-    const records = response?.data?.records || {}
+      const data = response.data;
 
-    for (const record of Object.values(records)) {
-      // 使用 stay_type 字段判断业务类型，而不是日期比较
-      const isRest = record.stay_type === '休息房'
-      const amount = Number(record.totalIncome ?? 0) || (Number(record.deposit || 0) + Number(record.room_price || 0)) || 0
-      const method = record.payment_method || '其他'
-
-      // 如果是休息房
-      if (isRest){
-        switch (method) {
-          case '现金':
-            obj.cash.restIncome += amount
-            break
-          case '微信':
-            obj.wechat.restIncome += amount
-            break
-          case '微邮付':
-            obj.digital.restIncome += amount
-            break
-          case '其他':
-            obj.other.restIncome += amount
-            break
-          default:
-            break
-        }
-        continue;
-      }else{// 客房
-        switch (method) {
-          case '现金':
-            obj.cash.hotelIncome += amount
-            break
-          case '微信':
-            obj.wechat.hotelIncome += amount
-            break
-          case '微邮付':
-            obj.digital.hotelIncome += amount
-            break
-          case '其他':
-            obj.other.hotelIncome += amount
-            break
-          default:
-            break
-        }
+      // 1. 直接从后端获取备用金
+      if (data.reserveCash) {
+        obj.cash.reserveCash = Number(data.reserveCash.cash) || 320;
+        obj.wechat.reserveCash = Number(data.reserveCash.wechat) || 0;
+        obj.digital.reserveCash = Number(data.reserveCash.digital) || 0;
+        obj.other.reserveCash = Number(data.reserveCash.other) || 0;
       }
-    }
 
-    const refunds = response?.data?.refunds || []
-    for (const refund of refunds) {
-      const rAmount = Math.abs(Number(refund.change_price || refund.amount || 0)) // 取绝对值，因为退押金通常是负数
-      const rMethod = refund.pay_way || refund.payment_method || '其他'
-      const rStayType = refund.stay_type || '客房' // 默认为客房
+      // 2. 填充其他收入和支出数据
+      const { hotelIncome, restIncome, carRentIncome, hotelRefund, restRefund } = data;
 
-      // 根据住宿类型和支付方式分类退押金
-      if (rStayType === '休息房') {
-        // 休息房退押金
-        switch (rMethod) {
-          case '现金':
-            obj.cash.restDeposit += rAmount
-            break
-          case '微信':
-            obj.wechat.restDeposit += rAmount
-            break
-          case '微邮付':
-            obj.digital.restDeposit += rAmount
-            break
-          case '其他':
-            obj.other.restDeposit += rAmount
-            break
-          default:
-            break
-        }
-      } else {
-        // 客房退押金
-        switch (rMethod) {
-          case '现金':
-            obj.cash.hotelDeposit += rAmount
-            break
-          case '微信':
-            obj.wechat.hotelDeposit += rAmount
-            break
-          case '微邮付':
-            obj.digital.hotelDeposit += rAmount
-            break
-          case '其他':
-            obj.other.hotelDeposit += rAmount
-            break
-          default:
-            break
-        }
+      if (hotelIncome) {
+        obj.cash.hotelIncome = Number(hotelIncome['现金'] || 0);
+        obj.wechat.hotelIncome = Number(hotelIncome['微信'] || 0);
+        obj.digital.hotelIncome = Number(hotelIncome['微邮付'] || 0);
+        obj.other.hotelIncome = Number(hotelIncome['其他'] || 0);
       }
+
+      if (restIncome) {
+        obj.cash.restIncome = Number(restIncome['现金'] || 0);
+        obj.wechat.restIncome = Number(restIncome['微信'] || 0);
+        obj.digital.restIncome = Number(restIncome['微邮付'] || 0);
+        obj.other.restIncome = Number(restIncome['其他'] || 0);
+      }
+
+      if (carRentIncome) {
+        obj.cash.carRentIncome = Number(carRentIncome['现金'] || 0);
+        obj.wechat.carRentIncome = Number(carRentIncome['微信'] || 0);
+        obj.digital.carRentIncome = Number(carRentIncome['微邮付'] || 0);
+        obj.other.carRentIncome = Number(carRentIncome['其他'] || 0);
+      }
+
+      if (hotelRefund) {
+        obj.cash.hotelDeposit = Number(hotelRefund['现金'] || 0);
+        obj.wechat.hotelDeposit = Number(hotelRefund['微信'] || 0);
+        obj.digital.hotelDeposit = Number(hotelRefund['微邮付'] || 0);
+        obj.other.hotelDeposit = Number(hotelRefund['其他'] || 0);
+      }
+
+      if (restRefund) {
+        obj.cash.restDeposit = Number(restRefund['现金'] || 0);
+        obj.wechat.restDeposit = Number(restRefund['微信'] || 0);
+        obj.digital.restDeposit = Number(restRefund['微邮付'] || 0);
+        obj.other.restDeposit = Number(restRefund['其他'] || 0);
+      }
+
+      // 计算总计
+      recalcTotals(obj);
+
+      return obj;
+    } catch (e) {
+      console.error('处理交接班数据失败:', e);
+      return getInitialPaymentData(); // 出错时返回默认值
     }
-
-    // 其他收入，放在租车收入
-
-    const otherIncomes = response?.data?.otherIncomeTotal || {}
-    obj.cash.carRentIncome += Math.abs(Number(otherIncomes['现金'] || 0))
-    obj.wechat.carRentIncome += Math.abs(Number(otherIncomes['微信'] || 0))
-    obj.digital.carRentIncome += Math.abs(Number(otherIncomes['微邮付'] || 0))
-    obj.other.carRentIncome += Math.abs(Number(otherIncomes['其他'] || 0))
-
-    // 计算总计（针对临时对象）
-    recalcTotals(obj)
-
-    return obj;
-    } catch(e){
-      console.error('处理交接班数据失败:', e)
-    }
-
   }
 
   // 将后端数据插入到交接表中
   async function insertDataToShiftTable(date) {
-    // 优先获取数据库已保存备用金
-    let reserveFromDb = null
-    try {
-      const dbRes = await shiftHandoverApi.getReserveCash(date)
-      const data = dbRes?.data || dbRes
-      if (data && typeof data === 'object') {
-        reserveFromDb = {
-          cash: Number(data.cash)||0,
-          wechat: Number(data.wechat)||0,
-          digital: Number(data.digital)||0,
-          other: Number(data.other)||0
-        }
-      }
-    } catch (e) {
-      console.warn('获取数据库备用金失败，使用昨日交接款回退:', e?.message || e)
-    }
-
-    // 回退：获取昨日交接款
-    const prev = reserveFromDb || await fetchPreviousHandover(date)
-
-    // 处理并更新数据（把备用金作为今日 reserveCash）
-    const newData = await handleData(date, prev)
-    updateTableData(newData)
+    // 现在此函数逻辑已简化，直接调用 handleData 并更新表格
+    const newData = await handleData(date);
+    updateTableData(newData);
   }
 
   function updateTableData(newData) {
     shiftTable_data.value = newData;
   }
+
 
   // 获取昨日交接款 = (reserveCash + 收入合计 - 退押金合计 - retainedAmount)
   async function fetchPreviousHandover(date) {

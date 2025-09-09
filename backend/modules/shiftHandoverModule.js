@@ -825,7 +825,7 @@ async function recordRefundDepositToHandover(refundData) {
  * @param {date} date - 查询日期
  * @returns {Promise<Object>} 交接班表格数据
  */
-async function getShiftTable(date) {
+async function getShiftTable1(date) {
   try {
     // 保留旧签名兼容，允许 data 为对象或字符串日期
     const targetDate = typeof date === 'string' ? date : (date?.date || new Date().toISOString().slice(0,10));
@@ -851,7 +851,7 @@ async function getShiftTable(date) {
       ORDER BY order_id ASC`;
     const incomeRes = await query(incomeSql, [targetDate]);
 
-    let records = {};
+  let records = {};
 
     for (let item of incomeRes.rows) {
       const keys = Object.keys(item.room_price || {}).sort();
@@ -876,7 +876,7 @@ async function getShiftTable(date) {
         check_out_date: item.check_out_date || ''
       }
 
-      records[item.order_id] = record;
+  records[item.order_id] = record;
     }
 
     // 查询休息房入账 - 使用 stay_type 字段
@@ -909,7 +909,7 @@ async function getShiftTable(date) {
         check_out_date: item.check_out_date || ''
       }
 
-      records[item.order_id] = record;
+  records[item.order_id] = record;
     }
 
     // 查询退押金 - 关联订单表获取stay_type信息
@@ -929,7 +929,7 @@ async function getShiftTable(date) {
       ORDER BY b.bill_id ASC`;
     const refundBillsRes = await query(refundBillsSql, [targetDate]);
 
-    const refunds = refundBillsRes.rows.map(row => ({
+  const refunds = refundBillsRes.rows.map(row => ({
       bill_id: row.bill_id,
       order_id: row.order_id,
       change_price: Number(row.change_price || 0),
@@ -954,19 +954,59 @@ async function getShiftTable(date) {
       `;
     const otherIncomeRes = await query(otherIncomeSql, [targetDate]);
 
-    // 按照支付方式分别计算总和
-    let otherIncomeTotal = {};
+  // 按照支付方式分别计算总和
+  let otherIncomeTotal = {};
 
     otherIncomeRes.rows.forEach(row => {
       otherIncomeTotal[row.pay_way] = (otherIncomeTotal[row.pay_way] || 0) + Number(row.change_price || 0);
     });
 
+    // 新结构：构建 5 个对象（客房收入、休息房收入、租车收入、客房退押、休息退押）
+    const initPaywayBuckets = () => ({ '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 });
+    const hotelIncome = initPaywayBuckets();
+    const restIncome = initPaywayBuckets();
+    const carRentIncome = initPaywayBuckets();
+    const hotelRefund = initPaywayBuckets();
+    const restRefund = initPaywayBuckets();
+
+    // 聚合收入（基于 records 中的 stay_type 和 payment_method）
+    for (const rec of Object.values(records)) {
+      const method = rec.payment_method || '其他';
+      const amount = Number(rec.totalIncome || 0) || (Number(rec.deposit || 0) + Number(rec.room_price || 0)) || 0;
+      if (rec.stay_type === '休息房') {
+        restIncome[method] = (restIncome[method] || 0) + amount;
+      } else {
+        hotelIncome[method] = (hotelIncome[method] || 0) + amount;
+      }
+    }
+
+    // 聚合退押（绝对值）
+    for (const r of refunds) {
+      const method = r.pay_way || '其他';
+      const amt = Math.abs(Number(r.change_price || 0));
+      if (r.stay_type === '休息房') {
+        restRefund[method] = (restRefund[method] || 0) + amt;
+      } else {
+        hotelRefund[method] = (hotelRefund[method] || 0) + amt;
+      }
+    }
+
+    // 聚合租车/其他收入（绝对值），来源于 otherIncomeTotal
+    for (const [way, val] of Object.entries(otherIncomeTotal)) {
+      carRentIncome[way || '其他'] = (carRentIncome[way || '其他'] || 0) + Math.abs(Number(val || 0));
+    }
 
     const result = {
       date: targetDate,
       records,
       refunds,
-      otherIncomeTotal
+      otherIncomeTotal,
+      // 新增 5 个对象供前端直接消费
+      hotelIncome,
+      restIncome,
+      carRentIncome,
+      hotelRefund,
+      restRefund
     };
     return result;
   } catch (error) {
@@ -975,6 +1015,175 @@ async function getShiftTable(date) {
   }
 }
 
+async function getShiftTable(date) {
+  try {
+    const targetDate = typeof date === 'string' ? date : (date?.date || new Date().toISOString().slice(0,10));
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(targetDate)) {
+      throw new Error('日期格式应为 YYYY-MM-DD');
+    }
+
+    // --- 新增的备用金处理逻辑 ---
+    const reserveCash = {
+      cash: 320,
+      wechat: 0,
+      digital: 0,
+      other: 0
+    };
+
+    const reserveFromDb = await getReserveCash(targetDate);
+    if (reserveFromDb) {
+      reserveCash.cash = Number(reserveFromDb.cash) || 320;
+      reserveCash.wechat = Number(reserveFromDb.wechat) || 0;
+      reserveCash.digital = Number(reserveFromDb.digital) || 0;
+      reserveCash.other = Number(reserveFromDb.other) || 0;
+    } else {
+      // 获取前一天的日期
+      const prevDate = new Date(targetDate);
+      prevDate.setDate(prevDate.getDate() - 1);
+      const prevDateStr = prevDate.toISOString().split('T')[0];
+
+      // 尝试获取前一天的交接记录
+      const prevHandover = await getPreviousHandoverData(prevDateStr);
+      // The user's logic was to use the previous day's *retained* cash as the next day's reserve. This is correct.
+      // The `paymentData` field in the DB stores the whole table state.
+      if (prevHandover && prevHandover.paymentData && prevHandover.paymentData.cash) {
+        const prevRetainedCash = Number(prevHandover.paymentData.cash.retainedAmount);
+        if (!isNaN(prevRetainedCash) && prevRetainedCash > 0) {
+          reserveCash.cash = prevRetainedCash;
+        }
+      }
+    }
+    // --- 备用金处理逻辑结束 ---
+
+    // 创建5个对象（客房收入、休息房收入、租车收入、客房退押、休息退押）
+    const initPaywayBuckets = () => ({ '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 });
+    const hotelIncome = initPaywayBuckets();
+    const restIncome = initPaywayBuckets();
+    const carRentIncome = initPaywayBuckets();
+    const hotelRefund = initPaywayBuckets();
+    const restRefund = initPaywayBuckets();
+
+    // 查询客房入账 - 使用 stay_type 字段
+    const incomeSql = `
+      SELECT
+        order_id,
+        guest_name,
+        deposit,
+        room_price,
+        payment_method,
+        stay_type,
+        (check_in_date::date)::text AS check_in_date,
+        (check_out_date::date)::text AS check_out_date
+      FROM orders
+      WHERE check_in_date::date <= $1::date AND $1::date < check_out_date::date
+        AND stay_type = '客房'
+      ORDER BY order_id ASC`;
+    const incomeRes = await query(incomeSql, [targetDate]);
+
+    for (let item of incomeRes.rows) {
+      const keys = Object.keys(item.room_price || {}).sort();
+      const isFirstDay = keys.length > 0 && targetDate === keys[0];
+      let totalIncome = 0;
+      if (isFirstDay) {
+        // 如果是第一天，记录押金和房费
+        totalIncome += Number(item.deposit || 0) + Number(item.room_price[targetDate] || 0);
+      }else{
+        totalIncome += Number(item.room_price[targetDate] || 0);
+      }
+
+      const method = item.payment_method || '其他';
+      hotelIncome[method] = (hotelIncome[method] || 0) + totalIncome;
+    }
+
+    // 查询休息房入账 - 使用 stay_type 字段
+    const restIncomeSql = `
+      SELECT
+        order_id,
+        guest_name,
+        deposit,
+        room_price,
+        payment_method,
+        stay_type,
+        (check_in_date::date)::text AS check_in_date,
+        (check_out_date::date)::text AS check_out_date
+      FROM orders
+      WHERE check_in_date::date = $1::date
+        AND stay_type = '休息房'
+      ORDER BY order_id ASC`;
+    const restIncomeRes = await query(restIncomeSql, [targetDate]);
+
+    for (let item of restIncomeRes.rows) {
+      const totalIncome = Number(item.deposit || 0) + Number(item.room_price[targetDate] || 0);
+      const method = item.payment_method || '其他';
+      restIncome[method] = (restIncome[method] || 0) + totalIncome;
+    }
+
+    // 查询退押金 - 关联订单表获取stay_type信息
+    const refundBillsSql = `
+      SELECT
+        b.bill_id,
+        b.order_id,
+        b.change_price,
+        b.change_type,
+        b.pay_way,
+        o.stay_type,
+        o.guest_name
+      FROM bills b
+      JOIN orders o ON b.order_id = o.order_id
+      WHERE b.create_time::date = $1::date
+        AND (b.change_type = '退押' OR b.change_type = '退款')
+      ORDER BY b.bill_id ASC`;
+    const refundBillsRes = await query(refundBillsSql, [targetDate]);
+
+    for (let row of refundBillsRes.rows) {
+      const method = row.pay_way || '其他';
+      const amt = Math.abs(Number(row.change_price || 0));
+      if (row.stay_type === '休息房') {
+        restRefund[method] = (restRefund[method] || 0) + amt;
+      } else {
+        hotelRefund[method] = (hotelRefund[method] || 0) + amt;
+      }
+    }
+
+    // 查询租车/其他收入
+    const otherIncomeSql = `
+      SELECT
+        bill_id,
+        order_id,
+        pay_way,
+        change_price,
+        change_type
+      FROM bills
+      WHERE create_time::date = $1::date
+        AND change_type = '补收'
+      ORDER BY bill_id ASC
+      `;
+    const otherIncomeRes = await query(otherIncomeSql, [targetDate]);
+
+    // 按照支付方式分别计算总和
+    for (let row of otherIncomeRes.rows) {
+      const method = row.pay_way || '其他';
+      carRentIncome[method] = (carRentIncome[method] || 0) + Math.abs(Number(row.change_price || 0));
+    }
+
+    const result = {
+      date: targetDate,
+      // 新增 5 个对象供前端直接消费
+      hotelIncome,
+      restIncome,
+      carRentIncome,
+      hotelRefund,
+      restRefund,
+      reserveCash
+    };
+    return result;
+
+  } catch (error) {
+    console.error('获取交接班表格数据失败:', error);
+    throw error;
+  }
+}
 
 /**
  * 获取备忘录数据
