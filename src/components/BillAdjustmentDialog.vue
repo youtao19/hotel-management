@@ -77,7 +77,7 @@ const adjustment = ref({
   notes: ''
 });
 
-const adjustmentTypes = ['客户赔偿', '服务费', '不满意退款', '其他'];
+const adjustmentTypes = ['补收', '退款'];
 
 // 3. 从 store 创建计算属性
 const paymentOptions = computed(() => viewStore.paymentMethodOptions.map(opt => opt.label));

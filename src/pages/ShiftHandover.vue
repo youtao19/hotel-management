@@ -30,7 +30,7 @@
         <!-- 支付表格 -->
         <ShiftHandoverPaymentTable
           :payment-data="paymentData"
-          :read-only="false"
+          :read-only="true"
         />
 
         <!-- 备忘录 -->
@@ -194,6 +194,7 @@ const paymentData = ref({
     retainedAmount: 0
   }
 })
+
 // 计算各项合计
 function calculateTotals() {
   Object.keys(paymentData.value).forEach(paymentType => {

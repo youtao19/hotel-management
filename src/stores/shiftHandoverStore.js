@@ -253,8 +253,17 @@ export const useShiftHandoverStore = defineStore("shiftHandover", () => {
       }
     }
 
+    // 其他收入，放在租车收入
+
+    const otherIncomes = response?.data?.otherIncomeTotal || {}
+    obj.cash.carRentIncome += Math.abs(Number(otherIncomes['现金'] || 0))
+    obj.wechat.carRentIncome += Math.abs(Number(otherIncomes['微信'] || 0))
+    obj.digital.carRentIncome += Math.abs(Number(otherIncomes['微邮付'] || 0))
+    obj.other.carRentIncome += Math.abs(Number(otherIncomes['其他'] || 0))
+
     // 计算总计（针对临时对象）
     recalcTotals(obj)
+
     return obj;
     } catch(e){
       console.error('处理交接班数据失败:', e)

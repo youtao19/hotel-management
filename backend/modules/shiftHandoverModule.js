@@ -925,7 +925,7 @@ async function getShiftTable(date) {
       FROM bills b
       JOIN orders o ON b.order_id = o.order_id
       WHERE b.create_time::date = $1::date
-        AND b.change_type = '退押'
+        AND (b.change_type = '退押' OR b.change_type = '退款')
       ORDER BY b.bill_id ASC`;
     const refundBillsRes = await query(refundBillsSql, [targetDate]);
 
@@ -939,10 +939,34 @@ async function getShiftTable(date) {
       guest_name: row.guest_name || ''
     }));
 
+    const otherIncomeSql = `
+      SELECT
+        bill_id,
+        order_id,
+        pay_way,
+        change_price,
+        change_type,
+        stay_type
+      FROM bills
+      WHERE create_time::date = $1::date
+        AND change_type = '补收'
+      ORDER BY bill_id ASC
+      `;
+    const otherIncomeRes = await query(otherIncomeSql, [targetDate]);
+
+    // 按照支付方式分别计算总和
+    let otherIncomeTotal = {};
+
+    otherIncomeRes.rows.forEach(row => {
+      otherIncomeTotal[row.pay_way] = (otherIncomeTotal[row.pay_way] || 0) + Number(row.change_price || 0);
+    });
+
+
     const result = {
       date: targetDate,
       records,
-      refunds
+      refunds,
+      otherIncomeTotal
     };
     return result;
   } catch (error) {
