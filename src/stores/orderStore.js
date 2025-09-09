@@ -611,7 +611,7 @@ export const useOrderStore = defineStore('order', () => {
     updateOrderStatusViaApi,
     updateOrderCheckOutLocally,
     updateOrderRoom,
-  updateOrder,
+    updateOrder,
     getOrderByNumber,
     getActiveOrderByRoomNumber,
     formatOrderDate,

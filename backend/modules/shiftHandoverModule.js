@@ -820,11 +820,7 @@ async function recordRefundDepositToHandover(refundData) {
   }
 }
 
-/**
- * 获取表格数据
- * @param {date} date - 查询日期
- * @returns {Promise<Object>} 交接班表格数据
- */
+
 async function getShiftTable1(date) {
   try {
     // 保留旧签名兼容，允许 data 为对象或字符串日期
@@ -1015,6 +1011,11 @@ async function getShiftTable1(date) {
   }
 }
 
+/**
+ * 获取表格数据
+ * @param {date} date - 查询日期
+ * @returns {Promise<Object>} 交接班表格数据
+ */
 async function getShiftTable(date) {
   try {
     const targetDate = typeof date === 'string' ? date : (date?.date || new Date().toISOString().slice(0,10));
