@@ -561,7 +561,7 @@ const filterType = ref(null)    // 房间类型筛选，初始为null表示不�
 const filterStatus = ref(null)  // 房间状态筛选，初始为null表示不筛选
 
 // 日期选择相关的响应式数据
-const selectedDate = ref(new Date().toISOString().substring(0, 10)) // 当前选择的查询日期，默认为今天
+const selectedDate = ref(null) // 当前选择的查询日期；为空表示不按日期过滤，展示当前活跃状态
 
 // 添加简约界面相关的响应式数据
 const selectedRoomType = ref(null)  // 当前选中的房型
@@ -673,7 +673,7 @@ onMounted(async () => {
 
         // 检查URL中是否有查询日期参数
     const urlQueryDate = route.query.queryDate
-    if (urlQueryDate) {
+  if (urlQueryDate) {
       // 验证日期格式
       const dateRegex = /^\d{4}-\d{2}-\d{2}$/
       if (dateRegex.test(urlQueryDate)) {
@@ -682,13 +682,13 @@ onMounted(async () => {
         await loadRoomDataForDate(urlQueryDate)
       } else {
         console.warn('URL中的日期格式无效:', urlQueryDate)
-        // 如果日期格式无效，按当前日期加载
-        await loadRoomDataForDate(selectedDate.value)
+        // 如果日期格式无效，不按日期过滤，加载当前活跃状态
+        await roomStore.fetchAllRooms()
       }
     } else {
-      // 按当前日期加载房间数据
-      console.log('开始加载当前日期的房间数据:', selectedDate.value)
-      await loadRoomDataForDate(selectedDate.value)
+      // 未选择日期：加载当前活跃状态（包含待入住/已入住）
+      console.log('未选择日期，加载当前活跃状态房间数据')
+      await roomStore.fetchAllRooms()
     }
 
     console.log('房间状态页面初始化完成')
@@ -738,9 +738,10 @@ watch(() => route.query, (newQuery) => {
   }
 
   // 处理查询日期参数
-  if (newQuery.queryDate && newQuery.queryDate !== selectedDate.value) {
-    selectedDate.value = newQuery.queryDate
-    loadRoomDataForDate(newQuery.queryDate)
+  if (typeof newQuery.queryDate !== 'undefined' && newQuery.queryDate !== selectedDate.value) {
+    const qd = newQuery.queryDate || null
+    selectedDate.value = qd
+    loadRoomDataForDate(qd)
   }
 }, { immediate: true, deep: true })  // immediate确保组件初始化时立即执行一次，deep确保深度监听对象变化
 
@@ -1110,7 +1111,7 @@ function resetFilters() {
   // 重置所有筛选条件
   filterType.value = null;
   filterStatus.value = null;
-  selectedDate.value = new Date().toISOString().substring(0, 10); // 重置为今天
+  selectedDate.value = null; // 清空日期筛选
 
   // 更新URL，清除所有筛选参数
   router.replace({
@@ -1118,17 +1119,16 @@ function resetFilters() {
     query: {}
   });
 
-  // 重新加载今天的数据
-  loadRoomDataForDate(selectedDate.value);
+  // 重新加载当前活跃状态
+  roomStore.fetchAllRooms();
 }
 
 /**
  * 清除选中日期
  */
 async function clearSelectedDate() {
-  const today = new Date().toISOString().substring(0, 10); // 重置为今天
-  selectedDate.value = today;
-  await loadRoomDataForDate(today); // 重新加载今天的数据
+  selectedDate.value = null;
+  await roomStore.fetchAllRooms(); // 加载当前活跃状态
 }
 
 /**
@@ -1163,7 +1163,7 @@ const resetAllFilters = async () => {
   selectedRoomType.value = null
   filterType.value = null
   filterStatus.value = null
-  selectedDate.value = new Date().toISOString().substring(0, 10) // 重置为今天
+  selectedDate.value = null // 清空日期筛选
 
   // 更新URL，清除所有筛选参数
   router.replace({
@@ -1171,8 +1171,8 @@ const resetAllFilters = async () => {
     query: {}
   })
 
-  // 重新加载当前日期的房间数据
-  await loadRoomDataForDate(selectedDate.value)
+  // 重新加载当前活跃状态的房间数据
+  await roomStore.fetchAllRooms()
 
   $q.notify({
     type: 'positive',
@@ -1536,6 +1536,15 @@ async function loadRoomDataForDate(date) {
   try {
     console.log('加载日期房间数据:', date)
 
+    // 当未提供日期或清空时，加载当前活跃状态
+    if (!date) {
+      // 清除URL中的queryDate
+      router.replace({ path: route.path, query: { ...route.query, queryDate: undefined } })
+      await roomStore.fetchAllRooms()
+      console.log('已加载当前活跃状态房间数据')
+      return
+    }
+
     // 更新URL参数，设置查询日期
     router.replace({
       path: route.path,
@@ -1545,7 +1554,7 @@ async function loadRoomDataForDate(date) {
       }
     })
 
-    await roomStore.fetchAllRooms(date)
+  await roomStore.fetchAllRooms(date)
 
     console.log(`已加载 ${date} 的房间数据，共 ${roomStore.rooms.length} 个房间`)
 

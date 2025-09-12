@@ -21,14 +21,14 @@
               <td class="bill-label">押金</td>
               <td>
                 <q-input v-model="billData.deposit" type="number" dense outlined class="bill-input"
-                  style="max-width: 120px;" />
+                  style="max-width: 120px;" readonly/>
               </td>
             </tr>
             <tr v-if="!isMultiDayOrder">
               <td class="bill-label">房费</td>
               <td>
                 <q-input v-model="safeRoomFeeValue" type="number" dense outlined class="bill-input"
-                  style="max-width: 120px;" @update:model-value="updateRoomFee" />
+                  style="max-width: 120px;" @update:model-value="updateRoomFee" readonly />
                 <div class="text-caption text-blue-8 q-mt-xs">
                   单日房费
                 </div>
@@ -51,6 +51,7 @@
                       type="number"
                       dense
                       outlined
+                      readonly
                       class="bill-input"
                       style="max-width: 100px;"
                       @update:model-value="updateDailyPrice(date, $event)"
@@ -75,6 +76,7 @@
                   outlined
                   emit-value
                   map-options
+                  readonly
                   class="bill-input"
                   style="max-width: 150px;"
                 />

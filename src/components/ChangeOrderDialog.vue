@@ -107,16 +107,14 @@ watch(() => props.order, (newOrder) => {
     clonedOrder.checkInDate = clonedOrder.checkInDate ? clonedOrder.checkInDate.split('T')[0] : '';
     clonedOrder.checkOutDate = clonedOrder.checkOutDate ? clonedOrder.checkOutDate.split('T')[0] : '';
 
-    // 如果 roomPrice 是数字，转换为对象格式以便统一处理
+    // 统一：将 roomPrice 转为对象结构，键为入住/各日，值为价格
     if (typeof clonedOrder.roomPrice === 'number') {
-      const price = clonedOrder.roomPrice;
+      const price = Number(clonedOrder.roomPrice) || 0;
       clonedOrder.roomPrice = {};
-      // 对于单日订单，将价格赋给入住日期
       if (clonedOrder.checkInDate) {
         clonedOrder.roomPrice[clonedOrder.checkInDate] = price;
       }
     } else if (typeof clonedOrder.roomPrice !== 'object' || clonedOrder.roomPrice === null) {
-      // 如果 roomPrice 既不是数字也不是对象，则初始化为空对象
       clonedOrder.roomPrice = {};
     }
 
@@ -162,16 +160,13 @@ function submitChange() {
   if (editableOrder.value) {
     const isRoomChanged = editableOrder.value.roomNumber !== originalRoomNumber.value;
 
-    // 如果是单日订单，将 roomPrice 对象转换回数字
-    if (!props.isMultiDayOrder.value) {
-      const dates = Object.keys(editableOrder.value.roomPrice);
-      if (dates.length === 1) {
-        editableOrder.value.roomPrice = editableOrder.value.roomPrice[dates[0]];
-      } else {
-        // 如果单日订单的 roomPrice 对象有多个日期，这可能是个错误，或者需要更复杂的逻辑
-        // 这里简单地取第一个日期的价格，或者根据业务逻辑处理
-        editableOrder.value.roomPrice = dates.length > 0 ? editableOrder.value.roomPrice[dates[0]] : 0;
-      }
+    // 修复：始终以对象形式提交 roomPrice，保持 { 'YYYY-MM-DD': 价格 } 结构
+    // 注意：props.isMultiDayOrder 是布尔值，不应访问 .value
+    if (!props.isMultiDayOrder) {
+      // 单日订单：确保以入住日期为唯一键的对象结构提交
+      const inDate = editableOrder.value.checkInDate;
+      const price = Number(editableOrder.value.roomPrice?.[inDate] || 0);
+      editableOrder.value.roomPrice = inDate ? { [inDate]: price } : {};
     }
 
     emit('order-updated', { ...editableOrder.value, isRoomChanged });
