@@ -115,6 +115,10 @@ export const orderApi = {
   // 更新订单（支持多字段）
   updateOrder: (orderId, updatedFields) => api.put(`/orders/${orderId}`, updatedFields),
 
+  // 更新订单和相关账单（联合事务）
+  updateOrderWithBills: (orderId, orderData, billUpdates, changedBy = 'system') =>
+    api.put(`/orders/${orderId}/with-bills`, { orderData, billUpdates, changedBy }),
+
   // 退押金
   refundDeposit: (order_id, refundData) => api.post(`/orders/${order_id}/refund-deposit`, refundData),
 
@@ -150,6 +154,15 @@ export const billApi = {
 
   // 获取所有账单
   getAllBills: () => api.get('/bills'),
+
+  // 获取订单账单详情
+  getOrderBillDetails: (orderId) => api.get(`/bills/order/${orderId}/details`),
+
+  // 更新账单
+  updateBill: (billId, updateData) => api.put(`/bills/${billId}`, updateData),
+
+  // 根据订单号和日期更新账单
+  updateBillByOrderAndDate: (orderId, stayDate, updateData) => api.put(`/bills/order/${orderId}/date/${stayDate}`, updateData),
 
   // 邀请客户好评
   inviteReview: (orderId) => api.post(`/bills/${orderId}/invite-review`),
@@ -258,7 +271,7 @@ export const shiftHandoverApi = {
 
   // 保存备用金
   saveReserve: (date, reserveCash) => api.post('/shift-handover/save-reserve', { date, reserveCash }),
-  
+
   // 获取某日已保存的备用金（若后端实现）
   getReserveCash: (date) => api.get('/shift-handover/reserve-cash', { params: { date } })
 

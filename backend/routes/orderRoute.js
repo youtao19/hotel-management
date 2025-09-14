@@ -252,6 +252,23 @@ router.put('/:orderNumber', authenticationMiddleware, async (req, res) => {
 });
 
 /**
+ * 更新订单和相关账单（联合事务）
+ * PUT /api/orders/:orderNumber/with-bills
+ */
+router.put('/:orderNumber/with-bills', authenticationMiddleware, async (req, res) => {
+    const { orderNumber } = req.params;
+    const { orderData, billUpdates, changedBy } = req.body;
+
+    try {
+        const result = await orderModule.updateOrderWithBills(orderNumber, orderData, billUpdates, changedBy);
+        res.json(result);
+    } catch (error) {
+        console.error(`联合更新订单 ${orderNumber} 失败:`, error);
+        res.status(500).json({ success: false, message: '联合更新失败', error: error.message });
+    }
+});
+
+/**
  * 退押金
  * POST /api/orders/:order_id/refund-deposit
  */

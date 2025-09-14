@@ -371,7 +371,7 @@ export const useOrderStore = defineStore('order', () => {
         checkOutDate: 'check_out_date',
         status: 'status',
         paymentMethod: 'payment_method',
-        roomPrice: 'total_price',
+        total_price: 'total_price',  // 直接映射 total_price
         deposit: 'deposit',
         remarks: 'remarks'
       };
@@ -379,13 +379,11 @@ export const useOrderStore = defineStore('order', () => {
 
       Object.keys(map).forEach(k => {
         if (payload[k] !== undefined) {
-          if (k === 'roomPrice' && typeof payload[k] === 'object') {
-            body[map[k]] = JSON.stringify(payload[k]);
-          } else {
-            body[map[k]] = payload[k];
-          }
+          body[map[k]] = payload[k];
         }
       });
+
+      // roomPrice 不映射到数据库字段，它只用于前端显示
 
       const dateKeys = ['check_in_date', 'check_out_date'];
       dateKeys.forEach(k => {

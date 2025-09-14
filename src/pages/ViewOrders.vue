@@ -123,7 +123,6 @@
       :order="currentOrder"
       :availableRooms="changeOrderRooms"
       :getRoomTypeName="getRoomTypeName"
-      :isMultiDayOrder="checkIfMultiDayOrder(currentOrder)"
       @order-updated="handleOrderUpdated"
     />
 
@@ -1290,19 +1289,6 @@ async function handleOrderUpdated(updatedOrderData) {
       dismiss();
     }
   }
-}
-
-// 检查是否为多日订单
-function checkIfMultiDayOrder(order) {
-  if (!order || !order.roomPrice) return false;
-
-  // 如果roomPrice是对象格式且包含多个日期
-  if (typeof order.roomPrice === 'object') {
-    const priceDates = Object.keys(order.roomPrice);
-    return priceDates.length > 1;
-  }
-
-  return false;
 }
 
 onMounted(async () => {

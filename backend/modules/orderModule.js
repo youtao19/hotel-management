@@ -664,7 +664,7 @@ async function updateOrder(orderNumber, updatedData, changedBy = 'system') {
 
     updateableFields.forEach(field => {
       if (updatedData[field] !== undefined) {
-        updates.push(`${field} = ${paramIndex}`);
+        updates.push(`${field} = $${paramIndex}`);
         values.push(updatedData[field]);
         changes[field] = {
           old: oldOrder[field],
@@ -676,7 +676,7 @@ async function updateOrder(orderNumber, updatedData, changedBy = 'system') {
 
     // 如果需要更新stay_type，添加到更新列表
     if (shouldUpdateStayType) {
-      updates.push(`stay_type = ${paramIndex}`);
+      updates.push(`stay_type = $${paramIndex}`);
       values.push(newStayType);
       changes.stay_type = {
         old: oldOrder.stay_type,
@@ -695,7 +695,7 @@ async function updateOrder(orderNumber, updatedData, changedBy = 'system') {
     const updateQuery = `
       UPDATE ${tableName}
       SET ${updates.join(', ')}
-      WHERE order_id = ${paramIndex}
+      WHERE order_id = $${paramIndex}
       RETURNING *
     `;
 
@@ -928,5 +928,149 @@ const table = {
   validatePriceDateRange,
   checkInOrder
 };
+
+/**
+ * 更新订单和相关账单（联合事务）
+ * @param {string} orderNumber - 订单号
+ * @param {Object} updatedData - 更新数据
+ * @param {Object} billUpdates - 账单更新数据 { "2025-09-12": { room_fee: 300 }, "2025-09-13": { room_fee: 350 } }
+ * @param {string} changedBy - 修改人
+ * @returns {Promise<Object>} 更新结果
+ */
+async function updateOrderWithBills(orderNumber, updatedData, billUpdates = {}, changedBy = 'system') {
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+
+    // 获取原始订单数据
+    const { rows: [oldOrder] } = await client.query(
+      `SELECT * FROM ${tableName} WHERE order_id = $1`,
+      [orderNumber]
+    );
+
+    if (!oldOrder) {
+      throw new Error(`订单 ${orderNumber} 不存在`);
+    }
+
+    // 1. 更新账单表
+    const billUpdateResults = [];
+    for (const [stayDate, billData] of Object.entries(billUpdates)) {
+      if (billData && Object.keys(billData).length > 0) {
+        console.log(`📝 [updateOrderWithBills] 更新日期 ${stayDate} 的账单:`, billData);
+
+        const updateFields = [];
+        const values = [];
+        let paramIndex = 1;
+
+        // 可更新的账单字段
+        const allowedBillFields = ['room_fee', 'deposit', 'refund_deposit', 'total_income', 'pay_way', 'remarks'];
+
+        allowedBillFields.forEach(field => {
+          if (billData[field] !== undefined) {
+            updateFields.push(`${field} = $${paramIndex}`);
+            values.push(billData[field]);
+            paramIndex++;
+          }
+        });
+
+        if (updateFields.length > 0) {
+          const billUpdateQuery = `
+            UPDATE bills
+            SET ${updateFields.join(', ')}
+            WHERE order_id = $${paramIndex} AND DATE(stay_date) = DATE($${paramIndex + 1})
+            RETURNING *
+          `;
+          values.push(orderNumber, stayDate);
+
+          const billResult = await client.query(billUpdateQuery, values);
+          billUpdateResults.push({
+            date: stayDate,
+            updated: billResult.rows.length > 0,
+            data: billResult.rows[0] || null
+          });
+
+          if (billResult.rows.length === 0) {
+            console.warn(`⚠️ [updateOrderWithBills] 未找到订单 ${orderNumber} 日期 ${stayDate} 的账单记录`);
+          } else {
+            console.log(`✅ [updateOrderWithBills] 成功更新日期 ${stayDate} 的账单`);
+          }
+        }
+      }
+    }
+
+    // 2. 更新订单表
+    let updatedOrder = oldOrder;
+    if (updatedData && Object.keys(updatedData).length > 0) {
+      const updates = [];
+      const orderValues = [];
+      const changes = {}; // 记录变更
+      let paramIndex = 1;
+
+      // 处理可更新字段
+      const updateableFields = ['guest_name', 'phone', 'id_number', 'room_type',
+                              'room_number', 'check_in_date', 'check_out_date',
+                              'payment_method', 'total_price', 'deposit', 'remarks'];
+
+      updateableFields.forEach(field => {
+        if (updatedData[field] !== undefined) {
+          updates.push(`${field} = $${paramIndex}`);
+          orderValues.push(updatedData[field]);
+          changes[field] = {
+            old: oldOrder[field],
+            new: updatedData[field]
+          };
+          paramIndex++;
+        }
+      });
+
+      if (updates.length > 0) {
+        // 更新订单表
+        const updateQuery = `
+          UPDATE ${tableName}
+          SET ${updates.join(', ')}
+          WHERE order_id = $${paramIndex}
+          RETURNING *
+        `;
+        orderValues.push(orderNumber);
+
+        const { rows: [orderResult] } = await client.query(updateQuery, orderValues);
+        updatedOrder = orderResult;
+
+        console.log(`📝 [updateOrderWithBills] 订单更新成功:`, changes);
+
+        // 记录变更到 order_changes 表
+        try {
+          const { query } = require('../database/postgreDB/pg');
+          await query(
+            `INSERT INTO order_changes (order_id, changed_by, changes, reason) VALUES ($1, $2, $3, $4)`,
+            [orderNumber, changedBy, JSON.stringify(changes), updatedData.reason || '订单和账单联合更新']
+          );
+          console.log(`📝 [updateOrderWithBills] 变更记录已保存到 order_changes 表`);
+        } catch (changeLogError) {
+          console.warn(`⚠️ [updateOrderWithBills] 保存变更记录失败，但订单更新成功:`, changeLogError.message);
+        }
+      }
+    }
+
+    await client.query('COMMIT');
+
+    return {
+      success: true,
+      order: updatedOrder,
+      billUpdates: billUpdateResults,
+      message: '订单和账单更新成功'
+    };
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error(`❌ [updateOrderWithBills] 更新订单 ${orderNumber} 和账单失败:`, error);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+// 添加新函数到导出对象
+table.updateOrderWithBills = updateOrderWithBills;
 
 module.exports = table;

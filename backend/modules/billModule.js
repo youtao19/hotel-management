@@ -299,11 +299,126 @@ async function addBill(billData){
   return newbill;
 }
 
+// 获取订单的账单详情（按日期分组，仅限'订单账单'类型）
+async function getOrderBillDetails(order_id) {
+    try {
+        const sqlQuery = `
+            SELECT
+                stay_date,
+                room_fee,
+                deposit,
+                change_price,
+                change_type,
+                pay_way,
+                create_time,
+                remarks
+            FROM bills
+            WHERE order_id = $1 AND change_type = '订单账单'
+            ORDER BY stay_date ASC
+        `;
+        const result = await query(sqlQuery, [order_id]);
+        return result.rows;
+    } catch (error) {
+        console.error('获取订单账单详情数据库错误:', error);
+        throw error;
+    }
+}
+
+// 更新账单
+async function updateBill(billId, updateData) {
+    try {
+        const updateFields = [];
+        const values = [];
+        let paramIndex = 1;
+
+        // 可更新的字段
+        const allowedFields = ['room_fee', 'deposit', 'refund_deposit', 'total_income', 'pay_way', 'remarks'];
+
+        allowedFields.forEach(field => {
+            if (updateData[field] !== undefined) {
+                updateFields.push(`${field} = $${paramIndex}`);
+                values.push(updateData[field]);
+                paramIndex++;
+            }
+        });
+
+        if (updateFields.length === 0) {
+            throw new Error('没有要更新的字段');
+        }
+
+        const updateQuery = `
+            UPDATE bills
+            SET ${updateFields.join(', ')}
+            WHERE bill_id = $${paramIndex}
+            RETURNING *
+        `;
+        values.push(billId);
+
+        const result = await query(updateQuery, values);
+
+        if (result.rows.length === 0) {
+            throw new Error(`账单 ${billId} 不存在`);
+        }
+
+        return result.rows[0];
+    } catch (error) {
+        console.error('更新账单失败:', error);
+        throw error;
+    }
+}
+
+// 根据订单号和日期更新账单
+async function updateBillByOrderAndDate(orderNumber, stayDate, updateData) {
+    try {
+        const updateFields = [];
+        const values = [];
+        let paramIndex = 1;
+
+        // 可更新的字段
+        const allowedFields = ['room_fee', 'deposit', 'refund_deposit', 'total_income', 'pay_way', 'remarks'];
+
+        allowedFields.forEach(field => {
+            if (updateData[field] !== undefined) {
+                updateFields.push(`${field} = $${paramIndex}`);
+                values.push(updateData[field]);
+                paramIndex++;
+            }
+        });
+
+        if (updateFields.length === 0) {
+            throw new Error('没有要更新的字段');
+        }
+
+        const updateQuery = `
+            UPDATE bills
+            SET ${updateFields.join(', ')}
+            WHERE order_id = $${paramIndex} AND DATE(stay_date) = DATE($${paramIndex + 1})
+            RETURNING *
+        `;
+        values.push(orderNumber, stayDate);
+
+        const result = await query(updateQuery, values);
+
+        if (result.rows.length === 0) {
+            console.warn(`未找到订单 ${orderNumber} 日期 ${stayDate} 的账单记录`);
+            return null;
+        }
+
+        return result.rows[0];
+    } catch (error) {
+        console.error('根据订单号和日期更新账单失败:', error);
+        throw error;
+    }
+}
+
 module.exports = {
     createBill,
     getBillByOrderId,
     getBillsByOrderId,
     getAllBills,
     applyDepositRefund,
-    addBill
+    addBill,
+    getOrderBillDetails,
+    updateBill,
+    updateBillByOrderAndDate
 };

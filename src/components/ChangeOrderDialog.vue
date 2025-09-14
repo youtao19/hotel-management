@@ -24,7 +24,7 @@
           />
           <div class="q-mt-md">
             <div class="text-subtitle1">房费明细</div>
-            <div v-if="isMultiDayOrder">
+            <div v-if="Object.keys(editableOrder.roomPrice || {}).length > 0">
               <div v-for="(price, date) in editableOrder.roomPrice" :key="date" class="row q-col-gutter-sm q-mb-sm">
                 <div class="col-6">
                   <q-input
@@ -40,14 +40,8 @@
                 </div>
               </div>
             </div>
-            <div v-else>
-              <q-input
-                label="总房费"
-                v-model.number="editableOrder.roomPrice[editableOrder.checkInDate]"
-                type="number"
-                filled
-                dense
-              />
+             <div v-else>
+                <p class="text-grey-7 q-pa-sm">未找到房费记录，请手动添加或检查订单。</p>
             </div>
           </div>
           <q-input v-model.number="editableOrder.deposit" label="押金" type="number" dense class="q-mb-md" />
@@ -58,6 +52,7 @@
             dense
             class="q-mb-md"
             stack-label
+            readonly
           />
           <q-input
             v-model="editableOrder.checkOutDate"
@@ -66,6 +61,7 @@
             dense
             class="q-mb-md"
             stack-label
+            readonly
           />
           <q-input v-model="editableOrder.remarks" label="备注" type="textarea" dense autogrow />
         </q-form>
@@ -81,13 +77,27 @@
 
 <script setup>
 import { ref, watch, computed } from 'vue';
+import { useQuasar } from 'quasar';
+import { billApi, orderApi } from '../api';
+
+const $q = useQuasar();
+
+// 通用日期格式化函数，避免时区问题
+function formatDateFromDB(dateString) {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  const formattedDate = date.getFullYear() + '-' +
+         String(date.getMonth() + 1).padStart(2, '0') + '-' +
+         String(date.getDate()).padStart(2, '0');
+  console.log(`🕐 日期转换: ${dateString} -> ${formattedDate} (UTC: ${date.toISOString()}, Local: ${date.toLocaleDateString()})`);
+  return formattedDate;
+}
 
 const props = defineProps({
   modelValue: Boolean,
   order: Object,
   availableRooms: Array,
-  getRoomTypeName: Function,
-  isMultiDayOrder: Boolean
+  getRoomTypeName: Function
 });
 
 const emit = defineEmits([
@@ -95,38 +105,65 @@ const emit = defineEmits([
   'order-updated'
 ]);
 
-const editableOrder = ref(null); // 可编辑的订单
-const originalRoomNumber = ref(null);  // 原始房间号
+const editableOrder = ref(null);
+const originalRoomNumber = ref(null);
+const loading = ref(false);
+const billData = ref([]);
 
-// 监听订单变化
-watch(() => props.order, (newOrder) => {
-  if (newOrder) {
+watch(() => props.order, async (newOrder) => {
+  if (newOrder && newOrder.orderNumber) {
     const clonedOrder = JSON.parse(JSON.stringify(newOrder));
 
-    // 确保 checkInDate 和 checkOutDate 是 YYYY-MM-DD 格式
     clonedOrder.checkInDate = clonedOrder.checkInDate ? clonedOrder.checkInDate.split('T')[0] : '';
     clonedOrder.checkOutDate = clonedOrder.checkOutDate ? clonedOrder.checkOutDate.split('T')[0] : '';
 
-    // 统一：将 roomPrice 转为对象结构，键为入住/各日，值为价格
-    if (typeof clonedOrder.roomPrice === 'number') {
-      const price = Number(clonedOrder.roomPrice) || 0;
-      clonedOrder.roomPrice = {};
-      if (clonedOrder.checkInDate) {
-        clonedOrder.roomPrice[clonedOrder.checkInDate] = price;
-      }
-    } else if (typeof clonedOrder.roomPrice !== 'object' || clonedOrder.roomPrice === null) {
-      clonedOrder.roomPrice = {};
+    // Initialize roomPrice from order's total_price as a fallback
+    const price = Number(clonedOrder.total_price) || 0;
+    clonedOrder.roomPrice = {};
+    if (clonedOrder.checkInDate) {
+      clonedOrder.roomPrice[clonedOrder.checkInDate] = price;
     }
 
     editableOrder.value = clonedOrder;
     originalRoomNumber.value = newOrder.roomNumber;
+
+    // Fetch bill details to overwrite the initial roomPrice
+    try {
+      const response = await billApi.getOrderBillDetails(newOrder.orderNumber);
+      if (response.success && response.data.length > 0) {
+        billData.value = response.data; // 存储账单数据
+        const newRoomPrice = {};
+        let totalDeposit = 0;
+        response.data.forEach(bill => {
+          // 使用通用日期格式化函数
+          const stayDate = formatDateFromDB(bill.stay_date);
+          if (stayDate) {
+            newRoomPrice[stayDate] = Number(bill.room_fee) || 0;
+            console.log(`📅 账单日期处理: ${bill.stay_date} -> ${stayDate}, 房费: ${bill.room_fee}`);
+          }
+          totalDeposit += Number(bill.deposit) || 0;
+        });
+
+        if (editableOrder.value) {
+          editableOrder.value.roomPrice = newRoomPrice;
+          editableOrder.value.deposit = totalDeposit;
+        }
+      } else {
+        billData.value = []; // 没有账单数据
+      }
+    } catch (error) {
+      console.error('获取账单详情错误:', error);
+      billData.value = []; // 错误时清空账单数据
+      $q.notify({ type: 'negative', message: '获取账单详情时发生错误' });
+    }
+
   } else {
     editableOrder.value = null;
     originalRoomNumber.value = null;
+    billData.value = [];
   }
 }, { immediate: true, deep: true });
 
-// 监听房间变化
 const roomOptions = computed(() => {
   if (!props.availableRooms) return [];
   return props.availableRooms.map(room => {
@@ -141,36 +178,122 @@ const roomOptions = computed(() => {
   });
 });
 
-// 处理房间选择变化
 function handleRoomChange(newValue) {
-  if (!editableOrder.value) return;
-  const opt = roomOptions.value.find(o => o.value === newValue);
-  if (opt) {
-    // 选择新房间时，更新当前房间价格（仅影响当前选择的房间，不影响多日价格）
-    // 如果是多日订单，这里不应该直接修改 roomPrice，而是让用户手动调整每日价格
-    // 对于单日订单，可以更新 roomPrice
-    if (!props.isMultiDayOrder && editableOrder.value.checkInDate) {
-      editableOrder.value.roomPrice[editableOrder.value.checkInDate] = opt.price;
-    }
-  }
+  // When room changes, let user manually update the price.
+  // No automatic price change to avoid unexpected behavior.
 }
 
-// 处理提交
-function submitChange() {
-  if (editableOrder.value) {
+async function submitChange() {
+  if (!editableOrder.value) return;
+
+  loading.value = true;
+  try {
     const isRoomChanged = editableOrder.value.roomNumber !== originalRoomNumber.value;
 
-    // 修复：始终以对象形式提交 roomPrice，保持 { 'YYYY-MM-DD': 价格 } 结构
-    // 注意：props.isMultiDayOrder 是布尔值，不应访问 .value
-    if (!props.isMultiDayOrder) {
-      // 单日订单：确保以入住日期为唯一键的对象结构提交
-      const inDate = editableOrder.value.checkInDate;
-      const price = Number(editableOrder.value.roomPrice?.[inDate] || 0);
-      editableOrder.value.roomPrice = inDate ? { [inDate]: price } : {};
+    // 计算总房费
+    const totalPrice = Object.values(editableOrder.value.roomPrice || {}).reduce((sum, price) => sum + Number(price || 0), 0);
+
+    // 准备订单更新数据
+    const orderData = {
+      guest_name: editableOrder.value.guestName,
+      phone: editableOrder.value.phone,
+      id_number: editableOrder.value.idNumber,
+      room_number: editableOrder.value.roomNumber,
+      remarks: editableOrder.value.remarks,
+      deposit: editableOrder.value.deposit,
+      total_price: totalPrice
+    };
+
+    // 准备账单更新数据
+    const billUpdates = {};
+
+    // 获取原始账单数据，用于比较变化
+    const originalBillsByDate = {};
+    billData.value.forEach(bill => {
+      // 使用通用日期格式化函数
+      const date = formatDateFromDB(bill.stay_date);
+      if (date) {
+        originalBillsByDate[date] = bill;
+      }
+    });
+
+    // 检查每个日期的房费是否有变化
+    Object.keys(editableOrder.value.roomPrice || {}).forEach(date => {
+      const newRoomFee = parseFloat(editableOrder.value.roomPrice[date]) || 0;
+      const originalBill = originalBillsByDate[date];
+
+      if (originalBill) {
+        const originalRoomFee = parseFloat(originalBill.room_fee) || 0;
+        if (Math.abs(newRoomFee - originalRoomFee) > 0.01) { // 避免浮点数精度问题
+          billUpdates[date] = { room_fee: newRoomFee };
+          console.log(`📝 检测到${date}房费变化: ${originalRoomFee} -> ${newRoomFee}`);
+        }
+      } else {
+        console.warn(`⚠️ 未找到日期 ${date} 的原始账单数据`);
+      }
+    });
+
+    // 检查押金是否有变化
+    const originalDepositBill = billData.value.find(bill => {
+      const changeType = bill.change_type;
+      const isOrderBill = changeType === '订单账单' || changeType === null || changeType === '';
+      return isOrderBill && bill.deposit !== null && bill.deposit !== undefined && parseFloat(bill.deposit) > 0;
+    });
+
+    if (originalDepositBill) {
+      const originalDeposit = parseFloat(originalDepositBill.deposit) || 0;
+      const newDeposit = parseFloat(editableOrder.value.deposit) || 0;
+
+      if (Math.abs(newDeposit - originalDeposit) > 0.01) {
+        // 使用通用日期格式化函数
+        const billDate = formatDateFromDB(originalDepositBill.stay_date);
+        if (billDate) {
+          if (!billUpdates[billDate]) {
+            billUpdates[billDate] = {};
+          }
+          billUpdates[billDate].deposit = newDeposit;
+          console.log(`📝 检测到押金变化: ${originalDeposit} -> ${newDeposit}`);
+        }
+      }
     }
 
-    emit('order-updated', { ...editableOrder.value, isRoomChanged });
-    emit('update:modelValue', false); // 关闭对话框
+    console.log('📤 发送联合更新请求:', {
+      orderNumber: editableOrder.value.orderNumber,
+      orderData,
+      billUpdates,
+      isRoomChanged
+    });
+
+    // 调用联合更新API
+    const response = await orderApi.updateOrderWithBills(
+      editableOrder.value.orderNumber,
+      orderData,
+      billUpdates,
+      'user'
+    );
+
+    console.log('✅ 联合更新成功:', response);
+
+    // 发出更新事件，通知父组件
+    const updateEventData = {
+      orderNumber: editableOrder.value.orderNumber,
+      guestName: editableOrder.value.guestName,
+      phone: editableOrder.value.phone,
+      idNumber: editableOrder.value.idNumber,
+      roomNumber: editableOrder.value.roomNumber,
+      remarks: editableOrder.value.remarks,
+      isRoomChanged,
+      billsUpdated: Object.keys(billUpdates).length > 0
+    };
+
+    emit('order-updated', updateEventData);
+    emit('update:modelValue', false);
+
+  } catch (error) {
+    console.error('💥 联合更新订单失败:', error);
+    // 这里可以添加错误提示
+  } finally {
+    loading.value = false;
   }
 }
 </script>
