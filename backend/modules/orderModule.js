@@ -664,7 +664,7 @@ async function updateOrder(orderNumber, updatedData, changedBy = 'system') {
 
     updateableFields.forEach(field => {
       if (updatedData[field] !== undefined) {
-        updates.push(`${field} = $${paramIndex}`);
+        updates.push(`${field} = ${paramIndex}`);
         values.push(updatedData[field]);
         changes[field] = {
           old: oldOrder[field],
@@ -676,7 +676,7 @@ async function updateOrder(orderNumber, updatedData, changedBy = 'system') {
 
     // 如果需要更新stay_type，添加到更新列表
     if (shouldUpdateStayType) {
-      updates.push(`stay_type = $${paramIndex}`);
+      updates.push(`stay_type = ${paramIndex}`);
       values.push(newStayType);
       changes.stay_type = {
         old: oldOrder.stay_type,
@@ -695,7 +695,7 @@ async function updateOrder(orderNumber, updatedData, changedBy = 'system') {
     const updateQuery = `
       UPDATE ${tableName}
       SET ${updates.join(', ')}
-      WHERE order_id = $${paramIndex}
+      WHERE order_id = ${paramIndex}
       RETURNING *
     `;
 
@@ -813,6 +813,105 @@ async function getDepositStatus(orderId) {
   }
 }
 
+/**
+ * 办理入住：创建每日账单并更新订单状态
+ * @param {string} orderId - 订单ID
+ * @returns {Promise<Object>} - 包含创建的账单和更新后的订单
+ */
+async function checkInOrder(orderId) {
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+
+    // 1. 获取订单信息
+    const orderResult = await client.query('SELECT * FROM orders WHERE order_id = $1', [orderId]);
+    const order = orderResult.rows[0];
+
+    if (!order) {
+      const err = new Error(`订单 (ID: ${orderId}) 未找到`);
+      err.statusCode = 404;
+      err.code = 'ORDER_NOT_FOUND';
+      throw err;
+    }
+
+    // 2. 检查订单状态
+    if (order.status !== 'pending') {
+      const err = new Error(`订单状态为 '${order.status}'，无法办理入住`);
+      err.statusCode = 400;
+      err.code = 'INVALID_STATUS_FOR_CHECK_IN';
+      throw err;
+    }
+
+    // 3. 计算平均每日房价
+    const checkInDate = new Date(order.check_in_date);
+    const checkOutDate = new Date(order.check_out_date);
+    const nights = Math.ceil((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (nights <= 0) {
+        // 对于休息房等当天退房的情况，按1晚计算
+        const err = new Error('入住天数必须大于0');
+        err.statusCode = 400;
+        err.code = 'INVALID_NIGHTS';
+        throw err;
+    }
+
+    const total_price = parseFloat(order.total_price);
+    const averageDailyRate = total_price / nights;
+
+    // 4. 生成每日账单
+    const createdBills = [];
+    for (let i = 0; i < nights; i++) {
+      const billDate = new Date(checkInDate);
+      billDate.setDate(billDate.getDate() + i);
+
+      const bill = {
+        order_id: order.order_id,
+        room_number: order.room_number,
+        guest_name: order.guest_name,
+        room_fee: averageDailyRate.toFixed(2),
+        pay_way: order.payment_method, // 从订单获取
+        create_time: new Date(),
+        remarks: '订单账单', // 按文档要求修改
+        stay_type: order.stay_type,
+        stay_date: billDate.toISOString().split('T')[0],
+        deposit: i === 0 ? order.deposit : 0,
+        change_price: 0,
+        change_type: null,
+      };
+
+      const insertBillQuery = `
+        INSERT INTO bills (order_id, room_number, guest_name, room_fee, pay_way, create_time, remarks, stay_type, stay_date, deposit, change_price, change_type)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        RETURNING *;
+      `;
+      const billValues = Object.values(bill);
+      const newBillResult = await client.query(insertBillQuery, billValues);
+      createdBills.push(newBillResult.rows[0]);
+    }
+
+    // 5. 更新订单状态
+    const updateOrderQuery = `UPDATE orders SET status = 'checked-in' WHERE order_id = $1 RETURNING *;`;
+    const updatedOrderResult = await client.query(updateOrderQuery, [orderId]);
+    const updatedOrder = updatedOrderResult.rows[0];
+
+    await client.query('COMMIT');
+
+    return { createdBills, updatedOrder };
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error(`办理入住事务失败 (订单ID: ${orderId}):`, error);
+    // 传递已有的 statusCode 和 code，否则抛出通用错误
+    if (!error.statusCode) {
+        error.statusCode = 500;
+        error.message = '办理入住时发生服务器内部错误';
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 const table = {
   checkTableExists,
   createOrder,
@@ -825,7 +924,7 @@ const table = {
   isRestRoom,
   calculateTotalPrice,
   validatePriceDateRange,
-  updateOrder
+  checkInOrder
 };
 
 module.exports = table;

@@ -120,6 +120,9 @@ export const orderApi = {
 
   // 获取押金状态
   getDepositInfo: (order_id) => api.get(`/orders/${order_id}/deposit-info`),
+
+  // 办理入住
+  checkIn: (orderId) => api.post(`/orders/${orderId}/check-in`),
 }
 
 // 用户相关接口

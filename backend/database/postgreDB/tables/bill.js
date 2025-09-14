@@ -15,6 +15,7 @@ const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
     create_time TIMESTAMP NOT NULL, -- 创建时间
     remarks TEXT, -- 备注
     stay_type TEXT, -- 入住类型
+    stay_date DATE, -- 入住日期
     FOREIGN KEY (order_id) REFERENCES orders(order_id) -- 订单号外键
 )`;
 

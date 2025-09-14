@@ -1,3 +1,4 @@
+
 const express = require('express');
 const router = express.Router();
 // 保险：为该路由挂载 JSON 解析（即使全局已启用）
@@ -295,6 +296,24 @@ router.get('/:order_id/deposit-info', async (req, res) => {
     res.json({ success: true, data: status });
   } catch (e) {
     res.status(500).json({ success: false, message: '获取押金状态失败', error: e.message });
+  }
+});
+
+/**
+ * 办理入住
+ * POST /api/orders/:orderId/check-in
+ */
+router.post('/:orderId/check-in', async (req, res) => {
+  const { orderId } = req.params;
+  try {
+    const result = await orderModule.checkInOrder(orderId);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message,
+      code: error.code || 'CHECK_IN_ERROR'
+    });
   }
 });
 

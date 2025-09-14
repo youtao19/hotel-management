@@ -241,7 +241,7 @@ async function addBill(billData){
     const o = orderRes.rows[0];
 
         // 当前 bills 表结构 (参见 backend/database/postgreDB/tables/bill.js):
-        // bill_id, order_id, room_number, guest_name, room_fee, deposit, change_price, change_type, pay_way, create_time, remarks, stay_type
+        // bill_id, order_id, room_number, guest_name, room_fee, deposit, change_price, change_type, pay_way, create_time, remarks, stay_type, stay_date
         // 这里插入除 bill_id (自增) 之外的其它字段，顺序需与列名一致
         const insertQuery = `
             INSERT INTO bills (
@@ -255,8 +255,9 @@ async function addBill(billData){
                 pay_way,
                 create_time,
                 remarks,
-                stay_type
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+                stay_type,
+                stay_date
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
             RETURNING *
         `;
 
@@ -265,18 +266,28 @@ async function addBill(billData){
             throw new Error('[addBill] change_price 必须为数字');
         }
 
+        // 当退押金或金额调整时，room_fee和deposit设置为null
+        const isRefundDeposit = billData.change_type === '退押';
+        const isAdjustment = ['补收', '退款'].includes(billData.change_type);
+        const shouldNullifyFeeAndDeposit = isRefundDeposit || isAdjustment;
+
+        // 处理日期字段，确保正确格式
+        const createTimeDate = refundTime ? (typeof refundTime === 'string' ? new Date(refundTime) : refundTime) : new Date();
+        const stayDateString = createTimeDate.toISOString().split('T')[0];
+
         const values = [
         order_id,                // $1 order_id
         String(o.room_number).slice(0,10), // $2 room_number (bills 表限制 10)
         o.guest_name,            // $3 guest_name
-        o.total_price,           // $4 room_fee (总价格)
-        o.deposit,               // $5 deposit
+        shouldNullifyFeeAndDeposit ? null : o.total_price,    // $4 room_fee (退押或金额调整时为null)
+        shouldNullifyFeeAndDeposit ? null : o.deposit,        // $5 deposit (退押或金额调整时为null)
         numericChangePrice,      // $6 change_price
         billData.change_type,    // $7 change_type
         method || o.payment_method, // $8 pay_way
-        refundTime || new Date(),   // $9 create_time
+        createTimeDate,          // $9 create_time
         notes,                   // $10 remarks
-        o.stay_type              // $11 stay_type
+        o.stay_type,             // $11 stay_type
+        stayDateString           // $12 stay_date
         ];
 
     const result = await query(insertQuery, values);

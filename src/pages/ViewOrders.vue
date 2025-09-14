@@ -340,7 +340,9 @@ const showOrderDetails = ref(false)
 const currentOrder = ref(null)
 const showChangeRoomDialog = ref(false)
 const showChangeOrderDialog = ref(false)
-const changeOrderRooms = ref([]) // 修复：添加缺少的右括号
+const changeOrderRooms = ref([]) 
+const showCheckInDialog = ref(false)
+const billOrder = ref(null)
 
 // 在 script 部分添加相关变量和方法
 const availableRoomOptions = ref([]); // 用于存储从API获取的可用房间选项
@@ -399,8 +401,7 @@ async function cancelOrder(order) {
   }
 }
 
-const showCheckInDialog = ref(false)
-const billOrder = ref(null)
+
 
 // 续住相关变量
 const showExtendStayDialog = ref(false)
@@ -598,17 +599,26 @@ async function checkInOrder(order) {
 
 // 执行入住操作
 async function performCheckIn(order) {
-
   loadingOrders.value = true;
   try {
-    console.log('办理入住:', order.orderNumber, '房间:', order.roomNumber);
+    console.log('执行自动化入住流程:', order.orderNumber);
 
-    showCheckInDialog.value = true;
-    billOrder.value = { ...order }; // 传递订单数据到账单组件
+    // 调用 store 中的 checkIn action
+    await orderStore.checkIn(order.orderNumber);
+
+    // 刷新订单和房间列表
+    await orderStore.fetchAllOrders();
+    await roomStore.fetchAllRooms();
+
+    $q.notify({
+      type: 'positive',
+      message: '办理入住成功，每日账单已自动创建',
+      position: 'top'
+    });
 
   } catch (error) {
     console.error('办理入住操作失败:', error);
-    const errorMessage = error.response?.data?.message || error.message || '未知错误';
+    const errorMessage = error.message || '未知错误';
     $q.notify({
       type: 'negative',
       message: `办理入住失败: ${errorMessage}`,
@@ -1339,15 +1349,11 @@ watch(() => currentOrder.value, async (newOrder, oldOrder) => {
     // 订单被修改，重新加载相关数据
     await orderStore.getOrderByNumber(newOrder.orderNumber);
   }
-});
+}, { deep: true });
 
 </script>
 
 <style scoped>
-.view-orders {
-  max-width: 1200px;
-  margin: 0 auto;
-}
 .view-orders {
   max-width: 1200px;
   margin: 0 auto;
