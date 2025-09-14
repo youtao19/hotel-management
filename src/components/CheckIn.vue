@@ -166,7 +166,7 @@ function calculateRoomFeeDisplay(roomPrice) {
 
 // 初始化可编辑的每日价格数据
 function initializeEditablePrices() {
-  const roomPriceData = props.currentOrder?.roomPrice || props.currentOrder?.room_price;
+  const roomPriceData = props.currentOrder?.roomPrice || props.currentOrder?.total_price;
   if (roomPriceData && typeof roomPriceData === 'object') {
     // 深拷贝价格数据，避免直接修改 props
     return { ...roomPriceData };
@@ -177,7 +177,7 @@ function initializeEditablePrices() {
 const editableDailyPrices = ref(initializeEditablePrices());
 
 // 初始化账单数据
-const initialRoomPriceData = props.currentOrder?.roomPrice || props.currentOrder?.room_price;
+const initialRoomPriceData = props.currentOrder?.roomPrice || props.currentOrder?.total_price;
 const initialRoomFee = calculateRoomFeeDisplay(initialRoomPriceData);
 const safeInitialRoomFee = typeof initialRoomFee === 'number' ? initialRoomFee : parseFloat(initialRoomFee) || 0;
 
@@ -199,7 +199,7 @@ console.log('💰 房费初始化：', safeInitialRoomFee, typeof safeInitialRoo
 watch(() => props.currentOrder, (newOrder) => {
   if (newOrder) {
     // 更新可编辑的每日价格
-    const roomPriceData = newOrder.roomPrice || newOrder.room_price;
+    const roomPriceData = newOrder.roomPrice || newOrder.total_price;
     if (roomPriceData && typeof roomPriceData === 'object') {
       editableDailyPrices.value = { ...roomPriceData };
     }
@@ -249,7 +249,7 @@ function updateDailyPrice(date, newPrice) {
 
 // 判断是否为多日订单
 const isMultiDayOrder = computed(() => {
-  const roomPriceData = props.currentOrder?.roomPrice || props.currentOrder?.room_price;
+  const roomPriceData = props.currentOrder?.roomPrice || props.currentOrder?.total_price;
   if (!roomPriceData) return false;
 
   if (typeof roomPriceData === 'object') {
@@ -262,7 +262,7 @@ const isMultiDayOrder = computed(() => {
 
 // 房间价格详情（用于显示多日订单的每日价格）
 const roomPriceDetails = computed(() => {
-  const roomPriceData = props.currentOrder?.roomPrice || props.currentOrder?.room_price;
+  const roomPriceData = props.currentOrder?.roomPrice || props.currentOrder?.total_price;
   if (!roomPriceData || typeof roomPriceData !== 'object') {
     return null;
   }
@@ -307,7 +307,7 @@ const safeRoomFeeValue = computed({
     // 如果是对象（JSONB格式），重新计算
     if (typeof value === 'object' && value !== null) {
       console.log('⚠️ 计算属性中发现对象格式房费，重新计算：', value);
-      const roomPriceData = props.currentOrder?.roomPrice || props.currentOrder?.room_price;
+      const roomPriceData = props.currentOrder?.roomPrice || props.currentOrder?.total_price;
       const calculatedFee = calculateRoomFeeDisplay(roomPriceData);
       console.log('🔄 重新计算的房费：', calculatedFee);
 

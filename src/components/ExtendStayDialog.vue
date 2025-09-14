@@ -225,7 +225,7 @@
           filled
           bg-color="blue-1"
                   :rules="singlePriceRules"
-                  hint="此价格将写入新订单 room_price（单日）"
+                  hint="此价格将写入新订单 total_price（单日）"
                 >
                   <template #prepend>
                     <q-icon name="attach_money" color="primary" />

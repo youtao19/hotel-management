@@ -15,15 +15,14 @@ const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
     check_out_date DATE NOT NULL, -- 离店日期
     status VARCHAR(20) NOT NULL, -- 订单状态
     payment_method VARCHAR(20), -- 支付方式
-    room_price JSONB NOT NULL, -- 房间价格(JSON格式: {"YYYY-MM-DD": 价格} 或 数字)
+    total_price NUMERIC(10, 2), -- 房间价格
     deposit DECIMAL(10,2), -- 押金
     create_time TIMESTAMP NOT NULL, -- 创建时间
     stay_type TEXT, -- 住宿类型
     remarks TEXT, -- 备注
     FOREIGN KEY (room_type) REFERENCES room_types(type_code),
     FOREIGN KEY (room_number) REFERENCES rooms(room_number),
-    CONSTRAINT unique_order_constraint UNIQUE (guest_name, check_in_date, check_out_date, room_type),
-    CONSTRAINT chk_room_price_json CHECK (jsonb_typeof(room_price) IN ('object','number','string'))
+    CONSTRAINT unique_order_constraint UNIQUE (guest_name, check_in_date, check_out_date, room_type)
 )`;
 
 
@@ -33,7 +32,6 @@ const createIndexQueryStrings = [
     `CREATE INDEX IF NOT EXISTS idx_orders_status ON ${tableName}(status)`,
     `CREATE INDEX IF NOT EXISTS idx_orders_check_dates ON ${tableName}(check_in_date, check_out_date)`,
   `CREATE INDEX IF NOT EXISTS idx_orders_create_time ON ${tableName}(create_time DESC)`,
-  `CREATE INDEX IF NOT EXISTS idx_orders_room_price_gin ON ${tableName} USING GIN (room_price)`,
   // 仅对展示中的订单做唯一约束，避免历史版本冲突
   `CREATE UNIQUE INDEX IF NOT EXISTS uniq_orders_active ON ${tableName} (guest_name, check_in_date, check_out_date, room_type)`
 ];

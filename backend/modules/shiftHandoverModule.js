@@ -63,7 +63,7 @@ function normalizePaymentMethod(paymentMethod) {
  * @returns {Promise<Array>} 收款明细列表
  */
 async function getReceiptDetails(type, startDate, endDate) {
-  // 以订单为主：根据 orders.room_price 的每日价格，生成 [startDate, endDate] 区间内的逐日收款明细
+  // 以订单为主：根据 orders.total_price 的每日价格，生成 [startDate, endDate] 区间内的逐日收款明细
   // 首日计入押金，其余仅计房费；支付方式取自 orders.payment_method
 
   // 订单类型条件 - 使用 stay_type 字段
@@ -80,7 +80,7 @@ async function getReceiptDetails(type, startDate, endDate) {
       o.room_number,
       o.guest_name,
       o.payment_method,
-      o.room_price,
+      o.total_price,
       o.deposit,
       o.check_in_date,
       o.check_out_date,
@@ -100,30 +100,46 @@ async function getReceiptDetails(type, startDate, endDate) {
 
     const rows = [];
     for (const o of result.rows) {
-      let rp = o.room_price;
-      if (typeof rp === 'string') {
-        try { rp = JSON.parse(rp || '{}'); } catch { rp = {}; }
-      }
-      const keys = Object.keys(rp || {}).sort();
-      const firstDay = keys[0];
-      for (const day of keys) {
-        if (!inRange(day)) continue;
-        const roomFee = Number(rp[day] || 0);
-        const deposit = (day === firstDay) ? Number(o.deposit || 0) : 0;
-        const total = roomFee + deposit;
+      // 现在 total_price 是数值类型，需要按天分摊
+      const totalRoomPrice = Number(o.total_price || 0);
+      const checkIn = new Date(o.check_in_date);
+      const checkOut = new Date(o.check_out_date);
+
+      // 计算住宿天数
+      const daysDiff = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
+      const isRestRoom = daysDiff === 0; // 同日入住退房为休息房
+      const stayDays = isRestRoom ? 1 : daysDiff;
+
+      // 平均分摊每日房费
+      const dailyRoomFee = totalRoomPrice / stayDays;
+
+      // 生成每日记录
+      for (let i = 0; i < stayDays; i++) {
+        const currentDate = new Date(checkIn);
+        if (!isRestRoom) {
+          currentDate.setDate(checkIn.getDate() + i);
+        }
+        const dayStr = currentDate.toISOString().split('T')[0];
+
+        if (!inRange(dayStr)) continue;
+
+        // 押金只在第一天计入
+        const deposit = (i === 0) ? Number(o.deposit || 0) : 0;
+        const total = dailyRoomFee + deposit;
+
         rows.push({
-          id: `${o.order_id}-${day}`,
+          id: `${o.order_id}-${dayStr}`,
           order_number: o.order_id,
           room_number: o.room_number,
           guest_name: o.guest_name,
-          room_fee: roomFee,
+          room_fee: dailyRoomFee,
           deposit: deposit,
           payment_method: normalizePaymentMethod(o.payment_method || '现金'),
           total_amount: total,
           check_in_date: o.check_in_date,
           check_out_date: o.check_out_date,
-          created_at: `${day}T00:00:00`,
-          stay_date: day,
+          created_at: `${dayStr}T00:00:00`,
+          stay_date: dayStr,
           business_type: o.stay_type === '客房' ? 'hotel' : 'rest'
         });
       }
@@ -145,7 +161,7 @@ async function getReceiptDetails(type, startDate, endDate) {
  * @returns {Promise<Object>} 统计数据
  */
 async function getStatistics(startDate, endDate = null) {
-  // 以天为单位统计收入：从 orders.room_price 逐日聚合；退押金从 bills(change_type='退押') 汇总
+  // 以天为单位统计收入：从 orders.total_price 逐日聚合；退押金从 bills(change_type='退押') 汇总
   const finalEndDate = endDate || startDate;
 
   // 辅助：生成日期数组
@@ -188,7 +204,7 @@ async function getStatistics(startDate, endDate = null) {
     // 逐日查询入住中的订单，并按“首日+押金，其余仅房费”计入收入
     for (const day of days) {
       const ordSql = `
-        SELECT order_id, check_in_date, check_out_date, room_price, deposit, payment_method, stay_type
+        SELECT order_id, check_in_date, check_out_date, total_price, deposit, payment_method, stay_type
         FROM orders
         WHERE check_in_date <= $1::date AND $1::date < check_out_date
           AND status IN ('checked-in', 'checked-out', 'pending')
@@ -196,14 +212,14 @@ async function getStatistics(startDate, endDate = null) {
       const ordRes = await query(ordSql, [day]);
 
       for (const row of ordRes.rows) {
-        // 解析 room_price JSON
-        let rp = row.room_price;
-        if (typeof rp === 'string') {
-          try { rp = JSON.parse(rp || '{}'); } catch { rp = {}; }
+        // 解析 total_price JSON
+        let tp = row.total_price;
+        if (typeof tp === 'string') {
+          try { tp = JSON.parse(tp || '{}'); } catch { tp = {}; }
         }
-        const keys = Object.keys(rp || {}).sort();
+        const keys = Object.keys(tp || {}).sort();
         const isFirstDay = keys.length > 0 && day === keys[0];
-        const roomFee = Number(rp?.[day] || 0);
+        const roomFee = Number(tp?.[day] || 0);
         const deposit = Number(row.deposit || 0);
         const incomeToday = roomFee + (isFirstDay ? deposit : 0);
 
@@ -850,21 +866,21 @@ async function getShiftTable1(date) {
   let records = {};
 
     for (let item of incomeRes.rows) {
-      const keys = Object.keys(item.room_price || {}).sort();
+      const keys = Object.keys(item.total_price || {}).sort();
       const isFirstDay = keys.length > 0 && targetDate === keys[0];
       let totalIncome = 0;
       if (isFirstDay) {
         // 如果是第一天，记录押金和房费
-        totalIncome += Number(item.deposit || 0) + Number(item.room_price[targetDate] || 0);
+        totalIncome += Number(item.deposit || 0) + Number(item.total_price[targetDate] || 0);
       }else{
-        totalIncome += Number(item.room_price[targetDate] || 0);
+        totalIncome += Number(item.total_price[targetDate] || 0);
       }
 
       const record = {
         order_id: item.order_id,
         guest_name: item.guest_name || '',
         deposit: Number(item.deposit || 0),
-        room_price: Number(item.room_price[targetDate] || 0),
+        room_price: Number(item.total_price[targetDate] || 0),
         payment_method: item.payment_method || '',
         stay_type: item.stay_type || '',
         totalIncome: totalIncome,
@@ -897,10 +913,10 @@ async function getShiftTable1(date) {
         order_id: item.order_id,
         guest_name: item.guest_name || '',
         deposit: Number(item.deposit || 0),
-        room_price: Number(item.room_price[targetDate] || 0),
+        room_price: Number(item.total_price[targetDate] || 0),
         payment_method: item.payment_method || '',
         stay_type: item.stay_type || '',
-        totalIncome: Number(item.deposit || 0) + Number(item.room_price[targetDate] || 0),
+        totalIncome: Number(item.deposit || 0) + Number(item.total_price[targetDate] || 0),
         check_in_date: item.check_in_date || '',
         check_out_date: item.check_out_date || ''
       }

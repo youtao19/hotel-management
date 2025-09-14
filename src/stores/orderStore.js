@@ -47,7 +47,7 @@ export const useOrderStore = defineStore('order', () => {
         checkOutDate: formatOrderDate(order.check_out_date),
         status: order.status,
         paymentMethod: order.payment_method,
-        roomPrice: order.room_price,
+        roomPrice: order.total_price,
         deposit: order.deposit,
         refundedDeposit: order.refunded_deposit || 0,
         refundRecords: [],
@@ -183,7 +183,7 @@ export const useOrderStore = defineStore('order', () => {
         check_out_date: checkOutDateISO,                  // 从 checkOutDate 映射
         status: statusValue,
         payment_method: viewStore.normalizePaymentMethodForDB(typeof order.paymentMethod === 'object' ? order.paymentMethod.value?.toString() : order.paymentMethod?.toString()),
-        room_price: order.roomPrice,     // 支持数字或JSON格式的价格数据
+        total_price: order.roomPrice,     // 支持数字或JSON格式的价格数据
         deposit: parseFloat(order.deposit) || 0,          // 确保是数字
         remarks: order.remarks?.toString() || '',
         order_source: order.source?.toString() || 'front_desk',  // 从 source 映射，确保是字符串
@@ -193,13 +193,13 @@ export const useOrderStore = defineStore('order', () => {
 
 
       // 验证必填字段
-      const requiredFields = ['order_id', 'guest_name', 'id_number', 'room_type', 'room_number', 'check_in_date', 'check_out_date', 'room_price'];
+      const requiredFields = ['order_id', 'guest_name', 'id_number', 'room_type', 'room_number', 'check_in_date', 'check_out_date', 'total_price'];
 
       const missingFields = requiredFields.filter(field => {
         const value = orderData[field];
 
-        // room_price 特殊处理：可以是数字或对象
-        if (field === 'room_price') {
+        // total_price 特殊处理：可以是数字或对象
+        if (field === 'total_price') {
           if (typeof value === 'number') {
             return value <= 0;
           } else if (typeof value === 'object' && value !== null) {
@@ -247,7 +247,7 @@ export const useOrderStore = defineStore('order', () => {
         checkOutDate: newOrderFromApi.check_out_date,
         status: newOrderFromApi.status,
         paymentMethod: newOrderFromApi.payment_method,
-        roomPrice: newOrderFromApi.room_price,
+        roomPrice: newOrderFromApi.total_price,
         deposit: newOrderFromApi.deposit,
         createTime: newOrderFromApi.create_time,
         remarks: newOrderFromApi.remarks,
@@ -383,7 +383,7 @@ export const useOrderStore = defineStore('order', () => {
           checkOutDate: formatOrderDate(orderData.check_out_date),
           status: orderData.status,
           paymentMethod: orderData.payment_method,
-          roomPrice: orderData.room_price,
+          roomPrice: orderData.total_price,
           deposit: orderData.deposit,
           refundedDeposit: orderData.refunded_deposit || 0,
           refundRecords: [],
@@ -432,7 +432,7 @@ export const useOrderStore = defineStore('order', () => {
         checkOutDate: 'check_out_date',
         status: 'status',
         paymentMethod: 'payment_method',
-        roomPrice: 'room_price',
+        roomPrice: 'total_price',
         deposit: 'deposit',
         remarks: 'remarks'
       };
@@ -477,7 +477,7 @@ export const useOrderStore = defineStore('order', () => {
           checkInDate: updated.check_in_date ? formatOrderDate(updated.check_in_date) : orders.value[idx].checkInDate,
           checkOutDate: updated.check_out_date ? formatOrderDate(updated.check_out_date) : orders.value[idx].checkOutDate,
           paymentMethod: updated.payment_method ?? orders.value[idx].paymentMethod,
-          roomPrice: updated.room_price ?? orders.value[idx].roomPrice,
+          roomPrice: updated.total_price ?? orders.value[idx].roomPrice,
           deposit: updated.deposit ?? orders.value[idx].deposit,
           remarks: updated.remarks ?? orders.value[idx].remarks,
         };

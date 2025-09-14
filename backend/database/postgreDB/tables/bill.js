@@ -7,7 +7,7 @@ const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
     order_id VARCHAR(50) NOT NULL, -- 订单号
     room_number VARCHAR(10) NOT NULL, -- 房间号
     guest_name VARCHAR(50), -- 客人姓名
-    room_fee JSONB, -- 房间价格
+    room_fee NUMERIC(10,2), -- 房间价格
     deposit NUMERIC(10,2) DEFAULT 0, -- 押金
     change_price NUMERIC(10,2) DEFAULT 0, -- 改价金额
     change_type TEXT, -- 改价类型

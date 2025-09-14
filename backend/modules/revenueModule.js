@@ -17,15 +17,16 @@ function normalizePaymentMethod(method) {
     return '其他';
 }
 
-function parseRoomPrice(json) {
-    if (!json) return {};
-    if (typeof json === 'object') return json;
-    try { return JSON.parse(json); } catch { return {}; }
-}
+// 这些函数不再需要，因为 total_price 现在是数值类型
+// function parseTotalPrice(json) {
+//     if (!json) return {};
+//     if (typeof json === 'object') return json;
+//     try { return JSON.parse(json); } catch { return {}; }
+// }
 
-function sumRoomPrice(roomPriceObj) {
-    return Object.values(roomPriceObj || {}).reduce((acc, v) => acc + (Number(v) || 0), 0);
-}
+// function sumTotalPrice(totalPriceObj) {
+//     return Object.values(totalPriceObj || {}).reduce((acc, v) => acc + (Number(v) || 0), 0);
+// }
 
 async function hasColumn(table, column) {
     const res = await query(
@@ -98,7 +99,7 @@ async function getDailyRevenue(startDate, endDate) {
     try {
         // 拉取区间内的订单
         const ordSql = `
-            SELECT order_id, check_in_date, room_price, deposit, payment_method
+            SELECT order_id, check_in_date, total_price, deposit, payment_method
             FROM orders
             WHERE DATE(check_in_date) BETWEEN $1 AND $2
         `;
@@ -113,8 +114,7 @@ async function getDailyRevenue(startDate, endDate) {
         for (const o of ordRes.rows) {
             const day = (typeof o.check_in_date === 'string') ? o.check_in_date : (o.check_in_date?.toISOString?.().split('T')[0] || '');
             if (!day) continue;
-            const rp = parseRoomPrice(o.room_price);
-            const roomFee = sumRoomPrice(rp);
+            const roomFee = Number(o.total_price || 0); // total_price 现在是数值类型
             const deposit = Number(o.deposit || 0);
             const total = roomFee + deposit;
             const method = payMap.get(o.order_id) || normalizePaymentMethod(o.payment_method);
@@ -180,7 +180,7 @@ async function getDailyRevenue(startDate, endDate) {
  */
 async function getWeeklyRevenue(startDate, endDate) {
     try {
-        const ordSql = `SELECT order_id, check_in_date, room_price, deposit, payment_method FROM orders WHERE DATE(check_in_date) BETWEEN $1 AND $2`;
+        const ordSql = `SELECT order_id, check_in_date, total_price, deposit, payment_method FROM orders WHERE DATE(check_in_date) BETWEEN $1 AND $2`;
         const [ordRes, payMap] = await Promise.all([
             query(ordSql, [startDate, endDate]),
             getPayWayMapByOrder(startDate, endDate)
@@ -195,7 +195,7 @@ async function getWeeklyRevenue(startDate, endDate) {
             const weekEnd = new Date(weekStart); weekEnd.setUTCDate(weekStart.getUTCDate() + 6);
             const wkKey = weekStart.toISOString().split('T')[0];
 
-            const rp = parseRoomPrice(o.room_price); const roomFee = sumRoomPrice(rp); const deposit = Number(o.deposit || 0); const total = roomFee + deposit;
+            const roomFee = Number(o.total_price || 0); const deposit = Number(o.deposit || 0); const total = roomFee + deposit;
             const method = payMap.get(o.order_id) || normalizePaymentMethod(o.payment_method);
 
             if (!weekAgg.has(wkKey)) {
@@ -245,7 +245,7 @@ async function getWeeklyRevenue(startDate, endDate) {
  */
 async function getMonthlyRevenue(startDate, endDate) {
     try {
-        const ordSql = `SELECT order_id, check_in_date, room_price, deposit, payment_method FROM orders WHERE DATE(check_in_date) BETWEEN $1 AND $2`;
+        const ordSql = `SELECT order_id, check_in_date, total_price, deposit, payment_method FROM orders WHERE DATE(check_in_date) BETWEEN $1 AND $2`;
         const [ordRes, payMap] = await Promise.all([
             query(ordSql, [startDate, endDate]),
             getPayWayMapByOrder(startDate, endDate)
@@ -254,7 +254,7 @@ async function getMonthlyRevenue(startDate, endDate) {
         for (const o of ordRes.rows) {
             const d = new Date(o.check_in_date);
             const key = `${d.getUTCFullYear()}-${(d.getUTCMonth()+1).toString().padStart(2,'0')}-01`;
-            const rp = parseRoomPrice(o.room_price); const roomFee = sumRoomPrice(rp); const deposit = Number(o.deposit || 0); const total = roomFee + deposit;
+            const roomFee = Number(o.total_price || 0); const deposit = Number(o.deposit || 0); const total = roomFee + deposit;
             const method = payMap.get(o.order_id) || normalizePaymentMethod(o.payment_method);
             if (!monthAgg.has(key)) {
                 monthAgg.set(key, {
@@ -301,7 +301,7 @@ async function getMonthlyRevenue(startDate, endDate) {
  */
 async function getRevenueOverview(startDate, endDate) {
     try {
-        const ordSql = `SELECT order_id, room_price, deposit, payment_method FROM orders WHERE DATE(check_in_date) BETWEEN $1 AND $2`;
+        const ordSql = `SELECT order_id, total_price, deposit, payment_method FROM orders WHERE DATE(check_in_date) BETWEEN $1 AND $2`;
             const [ordRes, payMap, refundRes] = await Promise.all([
             query(ordSql, [startDate, endDate]),
             getPayWayMapByOrder(startDate, endDate),
@@ -330,7 +330,7 @@ async function getRevenueOverview(startDate, endDate) {
         };
 
         for (const o of ordRes.rows) {
-            const rp = parseRoomPrice(o.room_price); const roomFee = sumRoomPrice(rp); const deposit = Number(o.deposit || 0); const total = roomFee + deposit;
+            const roomFee = Number(o.total_price || 0); const deposit = Number(o.deposit || 0); const total = roomFee + deposit;
             const method = payMap.get(o.order_id) || normalizePaymentMethod(o.payment_method);
             overview.total_orders += 1;
             overview.total_revenue += total;
@@ -362,7 +362,7 @@ async function getRevenueOverview(startDate, endDate) {
 async function getRoomTypeRevenue(startDate, endDate) {
     try {
         const ordSql = `
-            SELECT o.order_id, o.room_type, o.room_price, o.deposit, rt.type_name
+            SELECT o.order_id, o.room_type, o.total_price, o.deposit, rt.type_name
             FROM orders o
             LEFT JOIN room_types rt ON o.room_type = rt.type_code
             WHERE DATE(o.check_in_date) BETWEEN $1 AND $2
@@ -383,7 +383,7 @@ async function getRoomTypeRevenue(startDate, endDate) {
 
         const typeAgg = new Map();
         for (const o of ordRes.rows) {
-            const rp = parseRoomPrice(o.room_price); const roomFee = sumRoomPrice(rp); const deposit = Number(o.deposit || 0); const total = roomFee + deposit;
+            const roomFee = Number(o.total_price || 0); const deposit = Number(o.deposit || 0); const total = roomFee + deposit;
             const key = o.room_type;
             if (!typeAgg.has(key)) {
                 typeAgg.set(key, { room_type: key, type_name: o.type_name, order_count: 0, total_revenue: 0, avg_revenue_per_order: 0, total_room_fee: 0, total_deposit_refund: 0 });

@@ -9,12 +9,12 @@ async function createBill(order_id, room_number, guest_name, deposit, refund_dep
     let finalRemarks = remarks || '';
     let orderRes = null;
     try {
-        orderRes = await query(`SELECT room_price, check_in_date, check_out_date FROM orders WHERE order_id=$1`, [order_id]);
+        orderRes = await query(`SELECT total_price, check_in_date, check_out_date FROM orders WHERE order_id=$1`, [order_id]);
         if (orderRes.rows.length) {
             const o = orderRes.rows[0];
-            // 计算 stay_date: room_price JSON 最早 key -> 否则用 check_in_date
-            if (o.room_price && typeof o.room_price === 'object') {
-                const keys = Object.keys(o.room_price || {}).sort();
+            // 计算 stay_date: total_price JSON 最早 key -> 否则用 check_in_date
+            if (o.total_price && typeof o.total_price === 'object') {
+                const keys = Object.keys(o.total_price || {}).sort();
                 if (keys.length) stayDate = keys[0];
             }
             if (!stayDate) stayDate = o.check_in_date; // fallback
@@ -31,10 +31,16 @@ async function createBill(order_id, room_number, guest_name, deposit, refund_dep
     }
 
     try {
-        // 如果订单是多日订单，按用户要求不在 bills 表插入押金/房费记录，而是更新 orders 表中的押金
-        // 识别多日订单：room_price 为对象且包含多个日期键
+        // 现在 total_price 是数值类型，无法通过它判断是否为多日订单
+        // 改为通过日期差来判断多日订单
         const ordRow = orderRes.rows.length ? orderRes.rows[0] : null;
-        const isMultiDay = ordRow && ordRow.room_price && typeof ordRow.room_price === 'object' && Object.keys(ordRow.room_price || {}).length > 1;
+        let isMultiDay = false;
+        if (ordRow && ordRow.check_in_date && ordRow.check_out_date) {
+            const checkIn = new Date(ordRow.check_in_date);
+            const checkOut = new Date(ordRow.check_out_date);
+            const daysDiff = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
+            isMultiDay = daysDiff > 1; // 住宿超过1天视为多日订单
+        }
 
         if (isMultiDay) {
             // 仅更新 orders 表的押金（如果传了押金）并返回更新后的订单信息（不在 bills 中插入行）
@@ -222,7 +228,7 @@ async function addBill(billData){
   // 获取订单
   try {
     const orderSql = `
-    SELECT order_id, guest_name, room_number, check_in_date, check_out_date, payment_method, room_price, deposit, stay_type
+    SELECT order_id, guest_name, room_number, check_in_date, check_out_date, payment_method, total_price, deposit, stay_type
     FROM orders
     WHERE order_id = $1
     `;
@@ -263,7 +269,7 @@ async function addBill(billData){
         order_id,                // $1 order_id
         String(o.room_number).slice(0,10), // $2 room_number (bills 表限制 10)
         o.guest_name,            // $3 guest_name
-        o.room_price,            // $4 room_fee (JSONB)
+        o.total_price,           // $4 room_fee (总价格)
         o.deposit,               // $5 deposit
         numericChangePrice,      // $6 change_price
         billData.change_type,    // $7 change_type
