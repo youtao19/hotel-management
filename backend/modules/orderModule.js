@@ -871,13 +871,15 @@ async function checkInOrder(orderId) {
         room_fee: averageDailyRate.toFixed(2),
         pay_way: order.payment_method, // 从订单获取
         create_time: new Date(),
-        remarks: '订单账单', // 按文档要求修改
+        remarks: '办理入住创建', // 说明备注
         stay_type: order.stay_type,
-        stay_date: billDate.toISOString().split('T')[0],
+        stay_date: billDate.toISOString().split('T')[0], // 确保使用 ISO 格式日期
         deposit: i === 0 ? order.deposit : 0,
         change_price: 0,
-        change_type: null,
+        change_type: '订单账单', // 标识这是订单的正常账单
       };
+
+      console.log(`创建账单 ${i + 1}: 订单入住日期=${order.check_in_date}, 计算账单日期=${billDate.toISOString()}, 存储日期=${bill.stay_date}`);
 
       const insertBillQuery = `
         INSERT INTO bills (order_id, room_number, guest_name, room_fee, pay_way, create_time, remarks, stay_type, stay_date, deposit, change_price, change_type)

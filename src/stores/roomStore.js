@@ -275,7 +275,6 @@ export const useRoomStore = defineStore('room', () => {
       } else {
         displayStatus = ROOM_STATES.AVAILABLE
       }
-      console.log(`房间 ${room.room_number} 在 ${queryDate} 无订单，状态: ${displayStatus}`)
     }
 
     return {

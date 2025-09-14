@@ -35,4 +35,43 @@ router.get('/order/:orderId', async (req, res) => {
   }
 });
 
+// 获取订单账单详情（按日期分组）
+router.get('/order/:orderId/details', async (req, res) => {
+  const { orderId } = req.params;
+  try {
+    const billDetails = await billModule.getOrderBillDetails(orderId);
+    res.json({ success: true, data: billDetails });
+  } catch (err) {
+    res.status(500).json({ message: '获取订单账单详情失败', error: err.message });
+  }
+});
+
+// 更新账单信息
+router.put('/:billId', async (req, res) => {
+  const { billId } = req.params;
+  try {
+    const updatedBill = await billModule.updateBill(billId, req.body);
+    if (!updatedBill) {
+      return res.status(404).json({ message: '账单不存在' });
+    }
+    res.json({ success: true, data: updatedBill });
+  } catch (err) {
+    res.status(500).json({ message: '更新账单失败', error: err.message });
+  }
+});
+
+// 按订单ID和日期更新账单
+router.put('/order/:orderId/date/:stayDate', async (req, res) => {
+  const { orderId, stayDate } = req.params;
+  try {
+    const updatedBills = await billModule.updateBillByOrderAndDate(orderId, stayDate, req.body);
+    if (!updatedBills || updatedBills.length === 0) {
+      return res.status(404).json({ message: '指定日期的账单不存在' });
+    }
+    res.json({ success: true, data: updatedBills });
+  } catch (err) {
+    res.status(500).json({ message: '更新账单失败', error: err.message });
+  }
+});
+
 module.exports = router;
