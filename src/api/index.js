@@ -230,50 +230,30 @@ export const revenueApi = {
 
 // 交接班相关接口
 export const shiftHandoverApi = {
-  // 获取收款明细
-  getReceiptDetails: (params) => api.get('/shift-handover/receipts', { params }),
-
-  // 获取统计数据
-  getStatistics: (params) => api.get('/shift-handover/statistics', { params }),
-
-  // 获取前一天的交接班记录
-  getPreviousHandoverData: (params) => api.get('/shift-handover/previous-handover', { params }),
-
-  // 获取当天的交接班记录
-  getCurrentHandover: (date) => {
-    const params = { date };
-    return api.get('/shift-handover/current-handover', { params });
-  },
 
   // 导出Excel
   exportHandover: (handoverData) => api.post('/shift-handover/export', handoverData, { responseType: 'blob' }),
 
-  // 导出新版Excel
-  exportNewHandover: (handoverData) => api.post('/shift-handover/export-new', handoverData, { responseType: 'blob' }),
-
-  // 导入收款明细到交接班
-  importReceiptsToShiftHandover: (importData) => api.post('/shift-handover/import-receipts', importData),
-
-  // 保存金额修改
-  saveAmountChanges: (amountData) => api.post('/shift-handover/save-amounts', amountData),
-
   // 获取交接班表格
-  getShiftTable: (params) => api.get('/shift-handover/table', { params }),
+  getShiftTable: (params) => api.get('/handover/table', { params }),
 
   // 获取备忘录
-  getRemarks: (params) => api.get('/shift-handover/remarks', { params }),
+  getRemarks: (params) => api.get('/handover/remarks', { params }),
 
   // 获取统计信息
-  getStatistics: (params) => api.get('/shift-handover/statistics', { params }),
+  getStatistics: (params) => api.get('/handover/statistics', { params }),
 
   // 获取交接班特殊统计（开房数、休息房数、好评邀/得）
-  getSpecialStats: (params) => api.get('/shift-handover/special-stats', { params }),
-
-  // 保存备用金
-  saveReserve: (date, reserveCash) => api.post('/shift-handover/save-reserve', { date, reserveCash }),
+  getSpecialStats: (params) => api.get('/handover/special-stats', { params }),
 
   // 获取某日已保存的备用金（若后端实现）
-  getReserveCash: (date) => api.get('/shift-handover/reserve-cash', { params: { date } })
+  getReserveCash: (date) => api.get('/handover/reserve-cash', { params: { date } }),
+
+  // 获取已有交接班日期（可访问日期）
+  getAvailableDates: () => api.get('/handover/available-dates'),
+
+  // 开始交接班（首日默认、避免重复创建）
+  startHandover: (date) => api.post('/handover/start', { date })
 
 }
 

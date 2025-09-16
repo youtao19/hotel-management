@@ -59,7 +59,7 @@ const roomRoute = require("./backend/routes/roomRoute");
 const roomTypeRoute = require("./backend/routes/roomTypeRoute");
 const billRoute = require("./backend/routes/billRoute");
 const reviewRoute = require("./backend/routes/reviewRoute");
-const shiftHandoverRoute = require("./backend/routes/shiftHandoverRoute");
+const HandoverRoute = require("./backend/routes/handoverRoute");
 const revenueRoute = require("./backend/routes/revenueRoute");
 
 app.use("/api/user", userRoute);
@@ -69,7 +69,7 @@ app.use("/api/rooms", roomRoute);
 app.use("/api/room-types", roomTypeRoute);
 app.use("/api/bills", billRoute);
 app.use("/api/reviews", reviewRoute);
-app.use("/api/shift-handover", shiftHandoverRoute);
+app.use("/api/handover", HandoverRoute);
 app.use("/api/revenue", revenueRoute);
 app.get("/api/hup", (req, res) => res.status(200).json({ ok: true }));
 

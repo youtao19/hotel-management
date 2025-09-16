@@ -28,13 +28,13 @@ alwaysApply: true
 ## 数据库信息
 host : localhost
 port : 5432
-user : postgres
+user : peach
 password : 1219
 
 
-开发环境为Windows
+开发环境为macos
 
-代码修改完成后不用启动服务器，我自己会启动。
+
 
 
 

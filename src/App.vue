@@ -10,7 +10,7 @@
           <q-btn flat to="/CreateOrder" label="创建订单" />
           <q-btn flat to="/RoomStatus" label="房间状态" />
           <q-btn flat to="/ViewOrders" label="查看订单" />
-          <q-btn flat to="/shift-handover" label="交接班" />
+          <q-btn flat to="/ShiftHandover" label="交接班" />
         </div>
       </q-toolbar>
     </q-header>

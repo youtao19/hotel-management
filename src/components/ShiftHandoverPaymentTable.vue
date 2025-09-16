@@ -22,106 +22,106 @@
         <tr class="payment-row cash-row">
           <td class="payment-label">现金</td>
           <td class="editable-cell">
-            <q-input :model-value="normalizedPaymentData.cash.reserveCash" dense borderless class="table-input" readonly />
+            <q-input :model-value="paymentData.reserve[payWay.cash]" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="normalizedPaymentData.cash.hotelIncome" dense borderless class="table-input" readonly />
+            <q-input :model-value="paymentData.hotelIncome[payWay.cash]" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="normalizedPaymentData.cash.restIncome" dense borderless class="table-input" readonly />
+            <q-input :model-value="paymentData.restIncome[payWay.cash]" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="normalizedPaymentData.cash.carRentIncome" dense borderless class="table-input" readonly />
+            <q-input :model-value="paymentData.carRentIncome[payWay.cash]" dense borderless class="table-input" readonly />
           </td>
-          <td class="total-cell">{{ normalizedPaymentData.cash.total.toFixed(0) }}</td>
+          <td class="total-cell">{{ paymentData.totalIncome[payWay.cash].toFixed(0) }}</td>
           <td class="editable-cell">
-            <q-input :model-value="normalizedPaymentData.cash.hotelDeposit" dense borderless class="table-input" readonly />
-          </td>
-          <td class="editable-cell">
-            <q-input :model-value="normalizedPaymentData.cash.restDeposit" dense borderless class="table-input" readonly />
+            <q-input :model-value="paymentData.hotelDeposit[payWay.cash]" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="normalizedPaymentData.cash.retainedAmount" dense borderless class="table-input" readonly />
+            <q-input :model-value="paymentData.restDeposit[payWay.cash]" dense borderless class="table-input" readonly />
           </td>
-          <td class="auto-calculate">{{ (normalizedPaymentData.cash.total - normalizedPaymentData.cash.hotelDeposit - normalizedPaymentData.cash.restDeposit - normalizedPaymentData.cash.retainedAmount).toFixed(0) }}</td>
+          <td class="editable-cell">
+            <q-input :model-value="paymentData.retainedAmount[payWay.cash]" dense borderless class="table-input" readonly />
+          </td>
+          <td class="auto-calculate">{{ paymentData.handoverAmount[payWay.cash].toFixed(0) }}</td>
         </tr>
         <tr class="payment-row wechat-row">
           <td class="payment-label">微信</td>
           <td class="editable-cell">
-            <q-input :model-value="normalizedPaymentData.wechat.reserveCash" dense borderless class="table-input" readonly />
+            <q-input :model-value="paymentData.reserve[payWay.wechat]" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="normalizedPaymentData.wechat.hotelIncome" dense borderless class="table-input" readonly />
+            <q-input :model-value="paymentData.hotelIncome[payWay.wechat]" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="normalizedPaymentData.wechat.restIncome" dense borderless class="table-input" readonly />
+            <q-input :model-value="paymentData.restIncome[payWay.wechat]" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="normalizedPaymentData.wechat.carRentIncome" dense borderless class="table-input" readonly />
+            <q-input :model-value="paymentData.carRentIncome[payWay.wechat]" dense borderless class="table-input" readonly />
           </td>
-          <td class="total-cell">{{ normalizedPaymentData.wechat.total.toFixed(0) }}</td>
+          <td class="total-cell">{{ paymentData.totalIncome[payWay.wechat].toFixed(0) }}</td>
           <td class="editable-cell">
-            <q-input :model-value="normalizedPaymentData.wechat.hotelDeposit" dense borderless class="table-input" readonly />
-          </td>
-          <td class="editable-cell">
-            <q-input :model-value="normalizedPaymentData.wechat.restDeposit" dense borderless class="table-input" readonly />
+            <q-input :model-value="paymentData.hotelDeposit[payWay.wechat]" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="normalizedPaymentData.wechat.retainedAmount" dense borderless class="table-input" readonly />
+            <q-input :model-value="paymentData.restDeposit[payWay.wechat]" dense borderless class="table-input" readonly />
           </td>
-          <td class="auto-calculate">{{ (normalizedPaymentData.wechat.total - normalizedPaymentData.wechat.hotelDeposit - normalizedPaymentData.wechat.restDeposit - normalizedPaymentData.wechat.retainedAmount).toFixed(0) }}</td>
+          <td class="editable-cell">
+            <q-input :model-value="paymentData.retainedAmount[payWay.wechat]" dense borderless class="table-input" readonly />
+          </td>
+          <td class="auto-calculate">{{ paymentData.handoverAmount[payWay.wechat].toFixed(0) }}</td>
         </tr>
         <tr class="payment-row digital-row">
           <td class="payment-label">微邮付</td>
           <td class="editable-cell">
-            <q-input :model-value="normalizedPaymentData.digital.reserveCash" dense borderless class="table-input" readonly />
+            <q-input :model-value="paymentData.reserve[payWay.digital]" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="normalizedPaymentData.digital.hotelIncome" dense borderless class="table-input" readonly />
+            <q-input :model-value="paymentData.hotelIncome[payWay.digital]" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="normalizedPaymentData.digital.restIncome" dense borderless class="table-input" readonly />
+            <q-input :model-value="paymentData.restIncome[payWay.digital]" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="normalizedPaymentData.digital.carRentIncome" dense borderless class="table-input" readonly />
+            <q-input :model-value="paymentData.carRentIncome[payWay.digital]" dense borderless class="table-input" readonly />
           </td>
-          <td class="total-cell">{{ normalizedPaymentData.digital.total.toFixed(0) }}</td>
+              <td class="total-cell">{{ paymentData.totalIncome[payWay.digital].toFixed(0) }}</td>
           <td class="editable-cell">
-            <q-input :model-value="normalizedPaymentData.digital.hotelDeposit" dense borderless class="table-input" readonly />
-          </td>
-          <td class="editable-cell">
-            <q-input :model-value="normalizedPaymentData.digital.restDeposit" dense borderless class="table-input" readonly />
+            <q-input :model-value="paymentData.hotelDeposit[payWay.digital]" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="normalizedPaymentData.digital.retainedAmount" dense borderless class="table-input" readonly />
+            <q-input :model-value="paymentData.restDeposit[payWay.digital]" dense borderless class="table-input" readonly />
           </td>
-          <td class="auto-calculate">{{ (normalizedPaymentData.digital.total - normalizedPaymentData.digital.hotelDeposit - normalizedPaymentData.digital.restDeposit - normalizedPaymentData.digital.retainedAmount).toFixed(0) }}</td>
+          <td class="editable-cell">
+            <q-input :model-value="paymentData.retainedAmount[payWay.digital]" dense borderless class="table-input" readonly />
+          </td>
+          <td class="auto-calculate">{{ paymentData.handoverAmount[payWay.digital].toFixed(0) }}</td>
         </tr>
         <tr class="payment-row other-row">
           <td class="payment-label">其他方式</td>
           <td class="editable-cell">
-            <q-input :model-value="normalizedPaymentData.other.reserveCash" dense borderless class="table-input" readonly />
+            <q-input :model-value="paymentData.reserve[payWay.other]" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="normalizedPaymentData.other.hotelIncome" dense borderless class="table-input" readonly />
+            <q-input :model-value="paymentData.hotelIncome[payWay.other]" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="normalizedPaymentData.other.restIncome" dense borderless class="table-input" readonly />
+            <q-input :model-value="paymentData.restIncome[payWay.other]" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="normalizedPaymentData.other.carRentIncome" dense borderless class="table-input" readonly />
+            <q-input :model-value="paymentData.carRentIncome[payWay.other]" dense borderless class="table-input" readonly />
           </td>
-          <td class="total-cell">{{ normalizedPaymentData.other.total.toFixed(0) }}</td>
+          <td class="total-cell">{{ paymentData.totalIncome[payWay.other].toFixed(0) }}</td>
           <td class="editable-cell">
-            <q-input :model-value="normalizedPaymentData.other.hotelDeposit" dense borderless class="table-input" readonly />
-          </td>
-          <td class="editable-cell">
-            <q-input :model-value="normalizedPaymentData.other.restDeposit" dense borderless class="table-input" readonly />
+            <q-input :model-value="paymentData.hotelDeposit[payWay.other]" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="normalizedPaymentData.other.retainedAmount" dense borderless class="table-input" readonly />
+              <q-input :model-value="paymentData.restDeposit[payWay.other]" dense borderless class="table-input" readonly />
           </td>
-          <td class="auto-calculate">{{ (normalizedPaymentData.other.total - normalizedPaymentData.other.hotelDeposit - normalizedPaymentData.other.restDeposit - normalizedPaymentData.other.retainedAmount).toFixed(0) }}</td>
+          <td class="editable-cell">
+            <q-input :model-value="paymentData.retainedAmount[payWay.other]" dense borderless class="table-input" readonly />
+          </td>
+          <td class="auto-calculate">{{ paymentData.handoverAmount[payWay.other].toFixed(0) }}</td>
         </tr>
       </tbody>
     </table>
@@ -129,46 +129,52 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
-
+import { defineProps, computed } from 'vue'
 const props = defineProps({
   paymentData: { type: Object, required: true },
   readOnly: { type: Boolean, default: false }
 })
 
-// 规范化支付数据：兼容中文键和英文字段
-function normalizePaymentData(src) {
-  const safeNum = (v) => Number(v ?? 0) || 0
-  const getRow = (obj) => ({
-    reserveCash: safeNum(obj?.reserveCash ?? obj?.['备用金']),
-    hotelIncome: safeNum(obj?.hotelIncome ?? obj?.['客房收入'] ?? obj?.['收入1']),
-    restIncome: safeNum(obj?.restIncome ?? obj?.['休息房收入'] ?? obj?.['收入2']),
-    carRentIncome: safeNum(obj?.carRentIncome ?? obj?.['租车收入'] ?? obj?.['收入3']),
-    total: safeNum(obj?.total ?? obj?.['合计']),
-    hotelDeposit: safeNum(obj?.hotelDeposit ?? obj?.['客房退押']),
-    restDeposit: safeNum(obj?.restDeposit ?? obj?.['休息退押']),
-    retainedAmount: safeNum(obj?.retainedAmount ?? obj?.['留存款'])
-  })
-  const s = src || {}
-  const mapKey = (eKey, ...cKeys) => s?.[eKey] ?? cKeys.reduce((acc, k) => acc ?? s?.[k], undefined)
-  const cash = getRow(mapKey('cash', '现金'))
-  const wechat = getRow(mapKey('wechat', '微信'))
-  const digital = getRow(mapKey('digital', '微邮付', '支付宝', '数字支付'))
-  const other = getRow(mapKey('other', '其他', '其他方式'))
-  // 若 total 未提供，则按四项收入计算
-  const recalcTotal = (r) => ({ ...r, total: safeNum(r.reserveCash) + safeNum(r.hotelIncome) + safeNum(r.restIncome) + safeNum(r.carRentIncome) })
+const payWay = { cash: '现金', wechat: '微信', digital: '微邮付', other: '其他' }
+
+function createEmptyBuckets() {
+  return { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
+}
+
+function createEmptyPaymentData() {
   return {
-    cash: recalcTotal(cash),
-    wechat: recalcTotal(wechat),
-    digital: recalcTotal(digital),
-    other: recalcTotal(other)
+    reserve: createEmptyBuckets(),
+    hotelIncome: createEmptyBuckets(),
+    restIncome: createEmptyBuckets(),
+    carRentIncome: createEmptyBuckets(),
+    totalIncome: createEmptyBuckets(),
+    hotelDeposit: createEmptyBuckets(),
+    restDeposit: createEmptyBuckets(),
+    retainedAmount: createEmptyBuckets(),
+    handoverAmount: createEmptyBuckets()
   }
 }
 
-const normalizedPaymentData = computed(() => normalizePaymentData(props.paymentData))
+const paymentData = computed(() => {
+  const pd = props.paymentData || {}
+  const empty = createEmptyPaymentData()
+  return {
+    reserve: pd.reserve || empty.reserve,
+    hotelIncome: pd.hotelIncome || empty.hotelIncome,
+    restIncome: pd.restIncome || empty.restIncome,
+    carRentIncome: pd.carRentIncome || empty.carRentIncome,
+    totalIncome: pd.totalIncome || empty.totalIncome,
+    hotelDeposit: pd.hotelDeposit || empty.hotelDeposit,
+    restDeposit: pd.restDeposit || empty.restDeposit,
+    retainedAmount: pd.retainedAmount || empty.retainedAmount,
+    handoverAmount: pd.handoverAmount || empty.handoverAmount
+  }
+})
+
 </script>
 
 <style scoped>
+
 .shift-table-wrapper {
   margin-bottom: 20px;
 }

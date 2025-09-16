@@ -77,7 +77,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch, computed } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { date } from 'quasar'
 import { useQuasar } from 'quasar'
 import { shiftHandoverApi } from '../api/index.js'
@@ -85,24 +85,8 @@ import ShiftHandoverPaymentTable from '../components/ShiftHandoverPaymentTable.v
 import ShiftHandoverMemoList from '../components/ShiftHandoverMemoList.vue'
 import ShiftHandoverSpecialStats from '../components/ShiftHandoverSpecialStats.vue'
 import { useShiftHandoverStore } from 'src/stores/shiftHandoverStore.js'
-import { billApi } from '../api/index.js'
 
 const $q = useQuasar()
-
-// 深合并工具函数
-function deepMerge(target, source) {
-  const output = { ...target };
-  if (target && typeof target === 'object' && source && typeof source === 'object') {
-    Object.keys(source).forEach(key => {
-      if (source[key] && typeof source[key] === 'object' && key in target) {
-        output[key] = deepMerge(target[key], source[key]);
-      } else {
-        output[key] = source[key];
-      }
-    });
-  }
-  return output;
-}
 
 // 安全封装：避免在 Loading 插件未启用时抛错
 const loadingShow = (opts) => {
@@ -122,105 +106,14 @@ const savingAmounts = ref(false) // 保存金额状态
 const goodReview = ref('邀1得1')
 const shiftHandoverStore = useShiftHandoverStore()
 
+const paymentData = ref({}) // 交接班支付数据
+
 // 备忘录列表相关
 const newTaskTitle = ref('')
 const taskList = ref([])
 
 // 页面状态
-const isLoading = ref(false)
 const hasChanges = ref(false) // 用于追踪数据是否有变更
-
-// 计算属性：获取总收入
-const totalIncome = computed(() => {
-  let total = 0
-  Object.keys(paymentData.value).forEach(key => {
-    const row = paymentData.value[key]
-    total += (row.hotelIncome || 0) + (row.restIncome || 0) + (row.carRentIncome || 0)
-  })
-  return total
-})
-
-// 计算属性：获取总退押金
-const totalDeposit = computed(() => {
-  let total = 0
-  Object.keys(paymentData.value).forEach(key => {
-    const row = paymentData.value[key]
-    total += (row.hotelDeposit || 0) + (row.restDeposit || 0)
-  })
-  return total
-})
-
-
-// 支付方式数据结构
-const paymentData = ref({
-  cash: {
-    reserveCash: 320,
-    hotelIncome: 0,
-    restIncome: 0,
-    carRentIncome: 0,
-    total: 0,
-    hotelDeposit: 0,
-    restDeposit: 0,
-    retainedAmount: 320
-  },
-  wechat: {
-    reserveCash: 0,
-    hotelIncome: 0,
-    restIncome: 0,
-    carRentIncome: 0,
-    total: 0,
-    hotelDeposit: 0,
-    restDeposit: 0,
-    retainedAmount: 0
-  },
-  digital: {
-    reserveCash: 0,
-    hotelIncome: 0,
-    restIncome: 0,
-    carRentIncome: 0,
-    total: 0,
-    hotelDeposit: 0,
-    restDeposit: 0,
-    retainedAmount: 0
-  },
-  other: {
-    reserveCash: 0,
-    hotelIncome: 0,
-    restIncome: 0,
-    carRentIncome: 0,
-    total: 0,
-    hotelDeposit: 0,
-    restDeposit: 0,
-    retainedAmount: 0
-  }
-})
-
-// 计算各项合计
-function calculateTotals() {
-  Object.keys(paymentData.value).forEach(paymentType => {
-    const payment = paymentData.value[paymentType]
-    payment.total = (payment.reserveCash || 0) + (payment.hotelIncome || 0) + (payment.restIncome || 0) + (payment.carRentIncome || 0)
-  })
-}
-
-
-// 监听支付数据变化
-watch(paymentData, () => {
-  calculateTotals()
-  hasChanges.value = true // 标记数据已变更
-}, { deep: true })
-
-// 加载交接表数据
-async function loadShiftTableData() {
-  try {
-  const data = shiftHandoverStore.shiftTable_data?.value ?? shiftHandoverStore.shiftTable_data
-  // 深拷贝到本地，避免直接引用 store 导致联动副作用
-  paymentData.value = JSON.parse(JSON.stringify(data))
-  } catch (error) {
-    console.error('加载交接表格失败:', error)
-    throw error
-  }
-}
 
 // 特殊统计
 const totalRooms = ref(29)
@@ -442,8 +335,7 @@ watch(taskList, () => {
 // 监听其他关键数据变化
 watch([cashierName, notes, totalRooms, restRooms, vipCards, goodReview], () => {
   hasChanges.value = true // 标记数据已变更
-})
-
+});
 
 
 // 刷新所有数据的统一入口函数
@@ -451,81 +343,11 @@ async function refreshAllData() {
   try {
     loadingShow({ message: '加载数据中...' });
 
-    // 1. 获取前一天的备用金
-    const current = new Date(selectedDate.value);
-    const previous = new Date(current);
-    previous.setDate(current.getDate() - 1);
-    const previousDateStr = date.formatDate(previous, 'YYYY-MM-DD');
-
-    let reserveCashData = {};
-    try {
-      const previousHandover = await shiftHandoverApi.getCurrentHandover(previousDateStr);
-      if (previousHandover && previousHandover.paymentData) {
-        reserveCashData = {
-          wechat: previousHandover.paymentData.wechat?.retainedAmount || 0,
-          digital: previousHandover.paymentData.digital?.retainedAmount || 0,
-          other: previousHandover.paymentData.other?.retainedAmount || 0,
-        };
-        console.log(`成功获取 ${previousDateStr} 的交接款作为备用金:`, reserveCashData);
-      }
-    } catch (e) {
-      console.warn(`获取前一天 (${previousDateStr}) 的备用金失败:`, e);
-    }
-
-    // 定义默认的支付数据结构
-    const defaultPaymentData = {
-      cash: { reserveCash: 320, hotelIncome: 0, restIncome: 0, carRentIncome: 0, total: 0, hotelDeposit: 0, restDeposit: 0, retainedAmount: 320 },
-      wechat: { reserveCash: 0, hotelIncome: 0, restIncome: 0, carRentIncome: 0, total: 0, hotelDeposit: 0, restDeposit: 0, retainedAmount: 0 },
-      digital: { reserveCash: 0, hotelIncome: 0, restIncome: 0, carRentIncome: 0, total: 0, hotelDeposit: 0, restDeposit: 0, retainedAmount: 0 },
-      other: { reserveCash: 0, hotelIncome: 0, restIncome: 0, carRentIncome: 0, total: 0, hotelDeposit: 0, restDeposit: 0, retainedAmount: 0 }
-    };
-
-    // 2. 获取当天的记录（如果有）
-    let handoverRecord = null;
-    try {
-      handoverRecord = await shiftHandoverApi.getCurrentHandover(selectedDate.value);
-    } catch (e) {
-      console.warn('未找到当天记录或获取失败:', e);
-    }
-
-    // 3. 根据获取到的记录填充页面数据
-    if (handoverRecord) {
-      handoverPerson.value = handoverRecord.handover_person || '';
-      receivePerson.value = handoverRecord.receive_person || '';
-      cashierName.value = handoverRecord.cashier_name || '';
-      notes.value = handoverRecord.remarks || '';
-      taskList.value = handoverRecord.task_list || [];
-      // 使用深合并，确保 paymentData 结构完整
-      paymentData.value = deepMerge(defaultPaymentData, handoverRecord.paymentData || {});
-      totalRooms.value = handoverRecord.statistics?.totalRooms || 0;
-      restRooms.value = handoverRecord.statistics?.restRooms || 0;
-      vipCards.value = handoverRecord.statistics?.vipCards || 0;
-      goodReview.value = handoverRecord.statistics?.goodReview || '邀1得1';
-    } else {
-      handoverPerson.value = '';
-      receivePerson.value = '';
-      cashierName.value = '张';
-      notes.value = '';
-      taskList.value = [];
-      paymentData.value = defaultPaymentData;
-    }
-
-    // 4. 将获取到的备用金填充到支付数据中 (在加载当天数据之后，确保覆盖)
-    paymentData.value.wechat.reserveCash = reserveCashData.wechat || 0;
-    paymentData.value.digital.reserveCash = reserveCashData.digital || 0;
-    paymentData.value.other.reserveCash = reserveCashData.other || 0;
-
-    // 确保合计正确计算
-    calculateTotals();
+    // 加载表格数据
+    await loadPaymentData();
 
     // 加载特殊统计 (确保 specialStats 总是最新的)
     await loadSpecialStats();
-
-    // 先根据选中日期汇总交接表数据到 store
-    await shiftHandoverStore.insertDataToShiftTable(selectedDate.value);
-
-    // 加载交接表数据
-    await loadShiftTableData();
 
     // 加载订单备注到备忘录
     await loadRemarksIntoMemo();
@@ -565,15 +387,21 @@ async function loadSpecialStats() {
   }
 }
 
+// 加载表格数据
+async function loadPaymentData() {
+  try {
+    const res = await shiftHandoverStore.fetchShiftTable(selectedDate.value)
+    const data = res?.data || res || {}
+    paymentData.value = data
+  } catch (error) {
+    console.error('加载支付数据失败:', error)
+    throw error
+  }
+}
 
 
 // 监听日期变更：刷新所有数据
 watch(selectedDate, async () => {
-  // 将备用金插入到数据库
-  const cashAmount = await shiftHandoverStore.fetchPreviousHandover(selectedDate.value)
-  console.log('[watch] 日期变更，获取到的交接款:', cashAmount)
-  await shiftHandoverApi.saveReserve(selectedDate.value, cashAmount)
-
   await refreshAllData()
 })
 
@@ -586,12 +414,12 @@ onMounted(async () => {
 
 // 测试按钮：调试点击事件 & 昨日交接款获取
 async function test1() {
-  console.log('[test1] 按钮点击, 当前日期:', selectedDate.value)
-  try {
-    const res = await shiftHandoverStore.fetchPreviousHandover(selectedDate.value)
-    console.log('[test1] 获取成功 ->', res)
-  } catch (e) {
-    console.error('[test1] 获取失败', e)
+  console.log('表格数据测试')
+  try{
+    const res = await shiftHandoverStore.fetchShiftTable(selectedDate.value)
+    console.log('表格数据测试', res)
+  } catch (error) {
+    console.error('表格数据测试失败:', error)
   }
 }
 

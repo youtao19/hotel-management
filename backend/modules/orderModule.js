@@ -1,5 +1,4 @@
 const { query, getClient } = require('../database/postgreDB/pg');
-const shiftHandoverModule = require('./shiftHandoverModule');
 const billModule = require('./billModule');
 
 const tableName = "orders";
