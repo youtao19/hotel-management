@@ -8,6 +8,7 @@
           <q-btn label="测试" color="secondary" @click="test1" />
           <q-btn color="primary" icon="print" label="打印" @click="printHandover" />
           <q-btn color="green" icon="download" label="导出Excel" @click="exportToExcel" />
+          <q-btn color="blue" icon="start" label="开始交接班" @click="startHandover" />
           <q-btn color="purple" icon="save" label="保存页面" @click="savePageData" :loading="savingAmounts" />
         </div>
       </div>
@@ -411,6 +412,14 @@ onMounted(async () => {
   await refreshAllData()
   console.log('日期变更，已刷新数据', paymentData.value)
 })
+
+// 开始交接班
+async function startHandover() {
+  const res = await shiftHandoverStore.startHandover(selectedDate.value)
+  console.log('开始交接班', res)
+}
+
+
 
 // 测试按钮：调试点击事件 & 昨日交接款获取
 async function test1() {
