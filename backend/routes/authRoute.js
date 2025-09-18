@@ -119,7 +119,7 @@ router.post("/signup", async (req, res, next) => {
                     name,
                     email
                 });
-            }            
+            }
         }
     } catch (e) {
         console.error(`some error occured ${e}`);
@@ -300,7 +300,7 @@ router.post("/email-verify", async (req, res) => {
             if (!email) {
                 return res.status(setup.errorCode.CODE_INVALID).json();
             } else {
-                //update email verify info 
+                //update email verify info
                 const updateEmailVerifyQuery = {
                     text: `UPDATE ${account.tableName} SET email_verified=$1 WHERE email=$2`,
                     values: [true, email]
@@ -414,7 +414,7 @@ router.post("/reset-pw", async (req, res, next) => {
             } else {
                 //hash the new pw
                 const hash = await bcrypt.hash(pw, saltRounds);
-                //reset password for that email 
+                //reset password for that email
                 const updatePWQuery = {
                     text: `UPDATE ${account.tableName} SET pw=$1 WHERE email=$2`,
                     values: [hash, email]

@@ -1,7 +1,7 @@
 "use strict";
 const { RateLimiterRedis } = require('rate-limiter-flexible');
 const redisDB = require("../database/redis/redis");
-const setup = require("../../appSettings/setup");
+const setup = require("../appSettings/setup");
 const maxWrongAttemptsByIPperDay = setup.maxWrongAttemptsByIPperDay;
 const maxConsecutiveFailsByUsernameAndIP = setup.maxConsecutiveFailsByUsernameAndIP;
 
