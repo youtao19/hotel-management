@@ -1,5 +1,5 @@
 "use strict";
-const setup = require("../../appSettings/setup.js")
+const setup = require("../appSettings/setup.js")
 const nodemailer = require("nodemailer");
 
 let emailTransport = nodemailer.createTransport({

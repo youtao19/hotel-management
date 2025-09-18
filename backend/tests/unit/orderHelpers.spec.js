@@ -1,5 +1,5 @@
 // 订单相关纯函数/校验逻辑单元测试
-const orderModule = require('../../backend/modules/orderModule');
+const orderModule = require('../../modules/orderModule');
 
 describe('orderModule 单元函数测试', () => {
   describe('isRestRoom', () => {
