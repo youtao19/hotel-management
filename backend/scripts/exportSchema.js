@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { query, closePool } = require('../backend/database/postgreDB/pg');
+const { query, closePool } = require('../database/postgreDB/pg');
 
 // 需要导出的表（如果不指定则自动发现）
 const predefinedTables = [
