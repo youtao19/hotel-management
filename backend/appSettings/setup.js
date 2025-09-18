@@ -1,5 +1,23 @@
-// 加载环境变量
-require('dotenv').config({ path: './dev.env' });
+// 加载环境变量（兼容 monorepo 后的路径）
+const fs = require('fs');
+const path = require('path');
+const dotenv = require('dotenv');
+
+const candidateEnvPaths = [
+  // 仓库根目录
+  path.resolve(__dirname, '../../dev.env'),
+  // backend 工作目录
+  path.resolve(__dirname, '../dev.env'),
+  // 进程工作目录
+  path.resolve(process.cwd(), 'dev.env'),
+];
+
+for (const p of candidateEnvPaths) {
+  if (fs.existsSync(p)) {
+    dotenv.config({ path: p });
+    break;
+  }
+}
 
 //check if there is any missing env
 const env = [
