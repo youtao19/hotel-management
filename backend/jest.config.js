@@ -6,8 +6,8 @@ module.exports = {
   testTimeout: 30000, // 增加测试超时时间到30秒
   forceExit: true, // 强制退出，避免挂起
   collectCoverageFrom: [
-    'backend/modules/**/*.js',
-    '!backend/modules/**/index.js'
+    'modules/**/*.js',
+    '!modules/**/index.js'
   ],
   coverageThreshold: {
     global: {

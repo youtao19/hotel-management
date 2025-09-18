@@ -1,1 +1,48 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - ./dev.env
+    environment:
+      - NODE_ENV=production
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+    networks:
+      - appnet
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=production
+    ports:
+      - "9000:9000"
+    depends_on:
+      - backend
+    networks:
+      - appnet
+
+  postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=peach
+      - POSTGRES_PASSWORD=1219
+      - POSTGRES_DB=hotel_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - appnet
+
+volumes:
+  pgdata:
+
+networks:
+  appnet:
 

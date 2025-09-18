@@ -2,7 +2,7 @@
 const http = require("http");
 const app = require("./app");
 const setup = require("./appSettings/setup");
-const posgreDB = require("./backend/database/postgreDB/pg");
+const posgreDB = require("./database/postgreDB/pg");
 
 const webServer = http.createServer(app);
 

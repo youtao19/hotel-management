@@ -4,8 +4,8 @@ const express = require("express");
 const path = require("path");
 const session = require("express-session");
 const setup = require("./appSettings/setup");
-const posgreDB = require("./backend/database/postgreDB/pg");
-const authtication = require("./backend/modules/authentication");
+const posgreDB = require("./database/postgreDB/pg");
+const authtication = require("./modules/authentication");
 
 let app = express();
 
@@ -52,15 +52,15 @@ if (setup.env === "dev") {
 }
 
 // 引入并挂载路由
-const userRoute = require("./backend/routes/userRoute");
-const authRoute = require("./backend/routes/authRoute");
-const orderRoute = require("./backend/routes/orderRoute");
-const roomRoute = require("./backend/routes/roomRoute");
-const roomTypeRoute = require("./backend/routes/roomTypeRoute");
-const billRoute = require("./backend/routes/billRoute");
-const reviewRoute = require("./backend/routes/reviewRoute");
-const HandoverRoute = require("./backend/routes/handoverRoute");
-const revenueRoute = require("./backend/routes/revenueRoute");
+const userRoute = require("./routes/userRoute");
+const authRoute = require("./routes/authRoute");
+const orderRoute = require("./routes/orderRoute");
+const roomRoute = require("./routes/roomRoute");
+const roomTypeRoute = require("./routes/roomTypeRoute");
+const billRoute = require("./routes/billRoute");
+const reviewRoute = require("./routes/reviewRoute");
+const HandoverRoute = require("./routes/handoverRoute");
+const revenueRoute = require("./routes/revenueRoute");
 
 app.use("/api/user", userRoute);
 app.use("/api/auth", authRoute);
