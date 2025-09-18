@@ -1,0 +1,51 @@
+{
+  "name": "hotel-backend",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "cross-env NODE_ENV=dev nodemon server.js",
+    "start": "node server.js",
+    "test": "cross-env NODE_ENV=test jest",
+    "test:watch": "cross-env NODE_ENV=test jest --watch",
+    "test:shift-handover": "cross-env NODE_ENV=test node tests/runShiftHandoverTests.js",
+    "test:shift-handover-unit": "cross-env NODE_ENV=test jest tests/shiftHandoverModule.test.js",
+    "test:shift-handover-api": "cross-env NODE_ENV=test jest tests/shiftHandover.test.js",
+    "test:shift-handover-integration": "cross-env NODE_ENV=test jest tests/shiftHandoverIntegration.test.js",
+    "test:shift-handover-performance": "cross-env NODE_ENV=test jest tests/shiftHandoverPerformance.test.js",
+    "export-schema": "node scripts/exportSchema.js",
+    "export-structure": "node scripts/exportStructure.js",
+    "export-all": "node scripts/exportAll.js",
+    "db:backup": "node scripts/exportAll.js",
+    "db:init": "node -e \"require('./backend/database/postgreDB/pg').initializeHotelDB()\"",
+    "db:migrate": "node backend/database/postgreDB/migrations/run-migrations.js",
+    "migrate:shift-handover": "node scripts/migrateShiftHandover.js",
+    "remove-html-snapshot": "node scripts/removeHtmlSnapshotFields.js",
+    "fix-pay-way-field": "node scripts/fixPayWayFieldLength.js"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "bcrypt": "^5.1.1",
+    "connect-history-api-fallback": "^2.0.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "express-session": "^1.18.1",
+    "express-validator": "^7.2.1",
+    "ioredis": "^5.6.1",
+    "nodemailer": "^7.0.3",
+    "pg": "^8.16.0",
+    "postgres-mcp": "^1.0.4",
+    "rate-limiter-flexible": "^7.1.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "bcryptjs": "^3.0.2",
+    "cross-env": "^7.0.3",
+    "dotenv-cli": "^8.0.0",
+    "jest": "^29.7.0",
+    "nodemon": "^3.1.10",
+    "supertest": "^7.1.1"
+  }
+}
+
+
