@@ -1,6 +1,6 @@
 const request = require('supertest');
 const app = require('../app');
-const { query } = require('../backend/database/postgreDB/pg');
+const { query } = require('../database/postgreDB/pg');
 const { createTestRoomType, createTestRoom, createTestOrder } = require('./test-helpers');
 
 describe('Room Routes Tests', () => {

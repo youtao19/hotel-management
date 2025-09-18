@@ -2,7 +2,7 @@
 const request = require('supertest');
 const app = require('../../app');
 const { createTestRoomType, createTestRoom, createTestOrder } = require('../test-helpers');
-const { query } = require('../../backend/database/postgreDB/pg');
+const { query } = require('../../database/postgreDB/pg');
 
 describe('创建4单并完成入住/退房/退押后校验收入统计', () => {
 	beforeEach(global.cleanupTestData);

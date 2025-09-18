@@ -1,7 +1,7 @@
 // 订单 -> 账单 -> 退押金 集成流程（精简）
 const request = require('supertest');
 const app = require('../../app');
-const { query } = require('../../backend/database/postgreDB/pg');
+const { query } = require('../../database/postgreDB/pg');
 const { createTestRoomType, createTestRoom, createTestOrder } = require('../test-helpers');
 
 describe('订单到退押金集成流程', () => {

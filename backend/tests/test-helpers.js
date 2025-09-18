@@ -1,4 +1,4 @@
-const { query } = require('../backend/database/postgreDB/pg');
+const { query } = require('../database/postgreDB/pg');
 const request = require('supertest');
 const app = require('../app');
 

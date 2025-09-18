@@ -1,6 +1,6 @@
 const request = require('supertest');
 const app = require('../app');
-const { query } = require('../backend/database/postgreDB/pg');
+const { query } = require('../database/postgreDB/pg');
 const { createTestRoomType, createTestRoom, createTestOrder } = require('./test-helpers');
 
 describe('POST /api/orders/:orderNumber/refund-deposit (新退押逻辑: 使用 change_price 负值写入账单)', () => {

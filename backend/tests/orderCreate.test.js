@@ -1,6 +1,6 @@
 const request = require('supertest');
-const { query } = require('../backend/database/postgreDB/pg');
-const { migrateTestDatabase } = require('../backend/database/postgreDB/migrations/test_migration');
+const { query } = require('../database/postgreDB/pg');
+const { migrateTestDatabase } = require('../database/postgreDB/migrations/test_migration');
 const app = require('../app');
 const { createTestRoomType, createTestRoom, createTestOrder, generatePriceData } = require('./test-helpers');
 

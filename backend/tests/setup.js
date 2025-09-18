@@ -1,4 +1,4 @@
-const db = require('../backend/database/postgreDB/pg');
+const db = require('../database/postgreDB/pg');
 
 // 全局测试设置
 beforeAll(async () => {

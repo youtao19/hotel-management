@@ -1,7 +1,7 @@
 // 退押金扩展场景：部分退款 / 重复退款 / 超额退款
 const request = require('supertest');
 const app = require('../../app');
-const { query } = require('../../backend/database/postgreDB/pg');
+const { query } = require('../../database/postgreDB/pg');
 const { createTestRoomType, createTestRoom, createTestOrder } = require('../test-helpers');
 
 async function insertOrder(o){

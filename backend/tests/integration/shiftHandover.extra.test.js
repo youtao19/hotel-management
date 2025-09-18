@@ -2,7 +2,7 @@
 const request = require('supertest');
 const app = require('../../app');
 const { createTestRoomType, createTestRoom, createTestOrder, generatePriceData } = require('../test-helpers');
-const { query } = require('../../backend/database/postgreDB/pg');
+const { query } = require('../../database/postgreDB/pg');
 
 describe('交接班 - 支付方式/休息房/多日订单 场景', () => {
   beforeEach(global.cleanupTestData);
