@@ -11,7 +11,7 @@ const predefinedTables = [
   'rooms',
   'orders',
   'bills',
-  'shift_handover', // 新增交接班表
+  'handover',
 ];
 
 // 自动发现所有表
