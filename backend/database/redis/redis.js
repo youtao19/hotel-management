@@ -1,5 +1,5 @@
 const Redis = require("ioredis");
-const setup = require("../../../appSettings/setup");
+const setup = require("../../appSettings/setup");
 let db = {};
 const redis = {
     getClient: () => {

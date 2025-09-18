@@ -1,6 +1,6 @@
 "use strict";
 const { Pool } = require("pg");
-const setup = require("../../../appSettings/setup");
+const setup = require("../../appSettings/setup");
 const fs = require('fs');
 const path = require('path');
 const { getConfig } = require('./dbConfig');
