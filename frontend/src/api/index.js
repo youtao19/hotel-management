@@ -101,7 +101,10 @@ export const roomApi = {
 // 订单相关接口
 export const orderApi = {
   // 获取所有订单
-  getAllOrders: () => api.get('/orders'),
+  getAllOrders: () => {
+    const cacheBuster = `_=${Date.now()}`
+    return api.get(`/orders?${cacheBuster}`)
+  },
 
   // 根据ID获取订单
   getOrderById: (orderId) => api.get(`/orders/${orderId}`),

@@ -339,7 +339,7 @@ const showOrderDetails = ref(false)
 const currentOrder = ref(null)
 const showChangeRoomDialog = ref(false)
 const showChangeOrderDialog = ref(false)
-const changeOrderRooms = ref([]) 
+const changeOrderRooms = ref([])
 const showCheckInDialog = ref(false)
 const billOrder = ref(null)
 
@@ -603,11 +603,19 @@ async function performCheckIn(order) {
     console.log('执行自动化入住流程:', order.orderNumber);
 
     // 调用 store 中的 checkIn action
-    await orderStore.checkIn(order.orderNumber);
+      await orderStore.checkIn(order.orderNumber);
 
-    // 刷新订单和房间列表
-    await orderStore.fetchAllOrders();
-    await roomStore.fetchAllRooms();
+      // 立即结束表格loading，避免后续刷新阻塞界面
+      loadingOrders.value = false;
+
+      // 刷新订单与房间列表都放到后台执行，避免阻塞表格loading
+      orderStore.fetchAllOrders().catch(err => {
+        console.warn('后台刷新订单列表失败:', err?.message || err);
+      });
+
+      roomStore.fetchAllRooms().catch(err => {
+        console.warn('后台刷新房间列表失败:', err?.message || err);
+      });
 
     $q.notify({
       type: 'positive',
@@ -625,6 +633,7 @@ async function performCheckIn(order) {
       multiLine: true
     });
   } finally {
+    // 双保险：确保loading关闭
     loadingOrders.value = false;
   }
 }

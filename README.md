@@ -35,21 +35,21 @@
 
 ## 2. 系统架构
 
-本应用采用单体仓库（monorepo）结构，同时包含前端与后端代码。
+本应用采用单体仓库（monorepo）结构，使用 npm workspaces 管理前后端两个子包。
 
-*   **前端 (`src/` & `frontend/`):** 一个 Quasar 单页应用 (SPA)。
+*   **前端 (`frontend/`):** 一个 Quasar 单页应用 (SPA)。
+    *   代码目录：`frontend/src/`（pages, components, stores/Pinia, router 等）
     *   开发服务器运行于 `9000` 端口。
-    *   所有 API 请求 (`/api/*`) 都被代理到运行于 `3000` 端口的后端服务器。
-    *   代码按页面 (pages)、组件 (components)、状态管理 (stores/Pinia) 和路由 (router) 进行组织。
+    *   所有 API 请求 (`/api/*`) 代理到本地后端 `http://localhost:3000`。
 
 *   **后端 (`backend/`):** 一个 Node.js/Express.js 应用。
     *   服务器运行于 `3000` 端口。
     *   通过 `/api` 前缀暴露 RESTful API。
-    *   代码按路由 (routes)、模块 (modules/业务逻辑) 和数据库访问层进行组织。
+    *   代码组织：`backend/routes/`、`backend/modules/`、`backend/database/`、`backend/appSettings/`。
 
 *   **数据库 (`backend/database/`):**
     *   使用 PostgreSQL 作为主要的关系型数据库。
-    *   数据库结构迁移通过 `backend/database/postgreDB/migrations/` 目录下的脚本进行管理。
+    *   表定义位于 `backend/database/postgreDB/tables/`。
     *   Redis 用于缓存或会话存储。
 
 ## 3. 核心功能
@@ -83,16 +83,66 @@
 
 ## 4. 如何开始
 
-1.  **安装依赖:**
+1.  **安装依赖（workspaces）:**
     ```bash
     npm install
     ```
-2.  **运行开发服务器:**
+2.  **本地开发（同时启动前后端）:**
     ```bash
-    npm start
+    npm run dev
     ```
-    此命令会同时启动后端服务器（端口 3000）和前端 Quasar 开发服务器（端口 9000）。
+    - 前端：`http://localhost:9000`
+    - 后端健康检查：`http://localhost:3000/api/hup`
 
-3.  **数据库:**
-    *   本应用需要一个 PostgreSQL 数据库。
-    *   可以使用 `npm run db:init` 和 `npm run db:migrate` 命令分别进行数据库的初始化和迁移。
+3.  **分别启动：**
+    ```bash
+    # 启动后端（watch 模式）
+    npm --workspace backend run dev
+
+    # 启动前端（quasar dev）
+    npm --workspace frontend run dev
+    ```
+
+4.  **数据库管理（在根目录透传到 backend）：**
+    ```bash
+    npm run db:init         # 初始化数据库与表（调用 backend/database/postgreDB/pg.js）
+    npm run export-structure
+    npm run export-all
+    ```
+
+5.  **生产运行（仅后端）：**
+    ```bash
+    npm start               # 等价于 npm --workspace backend run start
+    ```
+
+6.  **容器化（Docker Compose）：**
+    ```bash
+    docker compose up -d --build   # 启动 postgres、backend、frontend（开发示例）
+    docker compose logs -f backend
+    ```
+
+## 5. 目录总览（简）
+
+```
+hotel-management-system/
+├── frontend/
+│   ├── src/
+│   ├── quasar.config.js
+│   └── package.json
+├── backend/
+│   ├── appSettings/
+│   ├── database/
+│   │   ├── postgreDB/
+│   │   │   ├── tables/
+│   │   │   └── pg.js
+│   │   └── redis/
+│   ├── modules/
+│   ├── routes/
+│   ├── scripts/
+│   ├── tests/
+│   ├── server.js
+│   └── package.json
+├── compose.yaml
+├── dev.env
+└── package.json              # workspaces 根配置
+```
