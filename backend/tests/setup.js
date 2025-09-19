@@ -8,18 +8,13 @@ beforeAll(async () => {
 
 // 全局测试清理
 afterAll(async () => {
-  const tasks = [
-    db.query("DELETE FROM bills WHERE order_id LIKE ANY($1)", [['ORDER_%','TEST_%']]).catch(()=>{}),
-    db.query("DELETE FROM order_changes WHERE order_id LIKE ANY($1)", [['ORDER_%','TEST_%']]).catch(()=>{}),
-    db.query("DELETE FROM orders WHERE order_id LIKE ANY($1)", [['ORDER_%','TEST_%']]).catch(()=>{}),
-    db.query("DELETE FROM rooms WHERE room_number LIKE ANY($1)", [['R_%','TEST_%']]).catch(()=>{}),
-    db.query("DELETE FROM room_types WHERE type_code LIKE ANY($1)", [['T_%','TEST_%']]).catch(()=>{})
-  ];
   try {
-    await Promise.race([
-      Promise.all(tasks),
-      new Promise((_,rej)=>setTimeout(()=>rej(new Error('测试清理超时')),5000))
-    ]);
+    // 按依赖顺序删除测试表
+    await db.query('DROP TABLE IF EXISTS bills CASCADE;');
+    await db.query('DROP TABLE IF EXISTS order_changes CASCADE;');
+    await db.query('DROP TABLE IF EXISTS review_invitations CASCADE;');
+    await db.query('DROP TABLE IF EXISTS orders CASCADE;');
+    await db.query('DROP TABLE IF EXISTS handover CASCADE;');
   } catch (e) {
     console.warn('清理测试数据时出现警告:', e.message);
   }

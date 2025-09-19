@@ -354,7 +354,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onActivated } from 'vue'
 import { useQuasar } from 'quasar'
 import { useRoomStore } from '../stores/roomStore'
 import { useViewStore } from '../stores/viewStore'
@@ -756,9 +756,10 @@ async function refreshData() {
 }
 
 // 组件挂载时初始化
-onMounted(async () => {
-  await refreshData()
-})
+onMounted(refreshData)
+
+// 组件被缓存后再次激活时也刷新数据
+onActivated(refreshData)
 </script>
 
 <style scoped>

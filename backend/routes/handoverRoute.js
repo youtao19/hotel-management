@@ -60,13 +60,9 @@ router.get('/available-dates', async (_req, res) => {
 
 // 开始交接班（首日默认，已存在则不重复创建）
 router.post('/start', async (req, res) => {
-  try {
-    const { date } = req.body || {};
-    if (!date) return res.status(400).json({ success: false, message: '缺少日期' });
-    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-    if (!dateRegex.test(date)) return res.status(400).json({ success: false, message: '无效的日期格式，应为 YYYY-MM-DD' });
-    const result = await startHandover(date);
-    res.json({ success: true, data: result });
+  try{
+    const result = await startHandover(req.body)
+    res.json({ success: true, data: result })
   } catch (error) {
     console.error('开始交接班失败:', error);
     res.status(500).json({ success: false, message: error.message });

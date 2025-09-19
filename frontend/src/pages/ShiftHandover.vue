@@ -392,8 +392,7 @@ async function loadSpecialStats() {
 async function loadPaymentData() {
   try {
     const res = await shiftHandoverStore.fetchShiftTable(selectedDate.value)
-    const data = res?.data || res || {}
-    paymentData.value = data
+    paymentData.value = res.data
   } catch (error) {
     console.error('加载支付数据失败:', error)
     throw error
@@ -415,8 +414,31 @@ onMounted(async () => {
 
 // 开始交接班
 async function startHandover() {
-  const res = await shiftHandoverStore.startHandover(selectedDate.value)
-  console.log('开始交接班', res)
+  try{
+    loadingShow({ message: '开始交接班中...' });
+
+    const handoverData = {
+      date: selectedDate.value,
+      handoverPerson: handoverPerson.value,
+      receivePerson: receivePerson.value,
+      cashierName: cashierName.value,
+      notes: notes.value,
+      taskList: taskList.value,
+      paymentData: paymentData.value,
+      vipCard: vipCards.value,
+    }
+    const payload = JSON.parse(JSON.stringify(handoverData))
+    console.log('开始交接班数据', payload)
+
+
+
+    const res = await shiftHandoverStore.startHandover(handoverData)
+    console.log('开始交接班', res)
+  } catch (error) {
+    console.error('开始交接班失败:', error)
+  } finally {
+    loadingHide();
+  }
 }
 
 

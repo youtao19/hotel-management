@@ -1,5 +1,27 @@
 const { query } = require('../database/postgreDB/pg');
 
+// 运行时探测 handover.task_list 列类型（JSONB 或 TEXT[]），并缓存结果
+let handoverTaskListIsJsonb = null;
+async function ensureHandoverTaskListType() {
+  if (handoverTaskListIsJsonb !== null) return handoverTaskListIsJsonb;
+  try {
+    const res = await query(
+      `SELECT data_type, udt_name
+       FROM information_schema.columns
+       WHERE table_name = 'handover' AND column_name = 'task_list'
+       LIMIT 1`
+    );
+    const row = res.rows?.[0];
+    // information_schema 对 text[] 通常为 data_type = 'ARRAY'，udt_name = '_text'
+    // 对 jsonb 为 data_type = 'jsonb'
+    handoverTaskListIsJsonb = row?.data_type === 'jsonb';
+  } catch (e) {
+    // 若查询失败，默认按 JSONB 处理（与最新表结构一致）
+    handoverTaskListIsJsonb = true;
+  }
+  return handoverTaskListIsJsonb;
+}
+
 
 /**
  * 获取表格数据
@@ -247,39 +269,153 @@ async function getAvailableDates() {
  * @param {string} date YYYY-MM-DD
  * @returns {Promise<{created:boolean,id?:number,date:string}>}
  */
-async function startHandover(date) {
-  // 校验日期
-  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-  if (!date || !dateRegex.test(date)) {
-    throw new Error('无效的日期格式，应为 YYYY-MM-DD');
+async function startHandover(handoverData) {
+  // 最佳实践：在生产环境中，以下所有数据库操作应包裹在一个事务中
+  // (BEGIN -> COMMIT/ROLLBACK) 来确保数据原子性。
+  try {
+    await query('BEGIN');
+    const {
+      date,
+      handoverPerson,
+      receivePerson,
+      notes,
+      taskList,
+      paymentData, // 新的数据结构：一个包含所有财务分类的对象
+      vipCard
+    } = handoverData;
+
+    // 确定交接日期，使用前一天的日期
+    const t = new Date(date)
+    if (isNaN(t.getTime())) {
+      console.error('交接日期错误:', date, '使用当前日期:', new Date().toISOString().split('T')[0]);
+      throw new Error('交接日期错误');
+    }
+    t.setDate(t.getDate() - 1)
+    const handoverDate = t.toISOString().split('T')[0]
+
+    // 支付方式文本到数据库代码的映射
+    const pay_way_mapping = {
+      '现金': 1,
+      '微信': 2,
+      '微邮付': 3,
+      '其他': 4,
+    };
+
+    // 定义要遍历的支付方式
+    const paymentMethods = ['现金', '微信', '微邮付', '其他'];
+
+    // 任务列表（作为 JSONB 保存，保留结构，最少包含字符串 title）
+    const taskListJsonArray = Array.isArray(taskList)
+      ? taskList.map(item => {
+          if (typeof item === 'string') return { title: item };
+          if (item && typeof item === 'object') {
+            // 统一字段：title / task -> title, completed/done -> completed
+            const title = (item.title || item.task || '').toString();
+            const completed = Boolean(
+              item.completed !== undefined ? item.completed : item.done
+            );
+            const id = item.id ?? null;
+            const time = item.time ?? null;
+            return { id, title, completed, time };
+          }
+          return { title: String(item) };
+        })
+      : [];
+
+    // 为每种支付方式创建一个插入数据库的Promise
+    const isJsonb = await ensureHandoverTaskListType();
+    const insertPromises = paymentMethods.map(method => {
+      const sql = `
+        INSERT INTO handover (
+          date, handover_person, takeover_person, vip_card, payment_type,
+          reserve_cash, room_income, rest_income, rent_income, total_income,
+          room_refund, rest_refund, retained, handover, task_list, remarks
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, ${isJsonb ? '$15::jsonb' : '$15'}, $16)
+        RETURNING *;
+      `;
+
+      // 从 paymentData 对象中为当前支付方式提取数据
+      const values = [
+        handoverDate,
+        handoverPerson || '',
+        receivePerson || '',
+        vipCard || 0,
+        pay_way_mapping[method],
+        paymentData.reserve[method] || 0,
+        paymentData.hotelIncome[method] || 0,
+        paymentData.restIncome[method] || 0,
+        paymentData.carRentIncome[method] || 0,
+        paymentData.totalIncome[method] || 0,
+        paymentData.hotelDeposit[method] || 0, // 对应数据库的 room_refund
+        paymentData.restDeposit[method] || 0,  // 对应数据库的 rest_refund
+        paymentData.retainedAmount[method] || 0,
+        paymentData.handoverAmount[method] || 0,
+        isJsonb ? JSON.stringify(taskListJsonArray) : taskListJsonArray.map(t => t.title || ''),
+        notes,
+      ];
+
+      // 假设 'query' 是一个可用的数据库查询函数
+      return query(sql, values).then(result => result.rows[0]);
+    });
+
+
+    // 并发执行所有插入操作
+    try{
+      const insertedRows = await Promise.all(insertPromises);
+      console.log(`成功插入 ${insertedRows.length} 条交接班记录。`);
+    } catch (error) {
+      console.error('插入交接班记录失败:', error);
+      throw error;
+    }
+
+
+    // 创建新的空的交接记录（次日，每种支付方式各一条，金额置零）
+    const nextDate = new Date().toISOString().split('T')[0]
+    const emptyInsertSql = `
+      INSERT INTO handover (
+        date, handover_person, takeover_person, vip_card, payment_type,
+        reserve_cash, room_income, rest_income, rent_income, total_income,
+        room_refund, rest_refund, retained, handover, task_list, remarks
+      )
+      VALUES ($1,$2,$3,$4,$5, 0,0,0,0,0, 0,0,0,0, ${isJsonb ? '$6::jsonb' : '$6'}, $7)
+      RETURNING id;
+    `
+    const emptyTaskList = isJsonb ? JSON.stringify([]) : []
+    const emptyRemarks = null
+    const emptyPromises = paymentMethods.map(method =>
+      query(emptyInsertSql, [
+        nextDate,
+        '',   // handover_person 非空以满足 NOT NULL
+        '',   // takeover_person 非空以满足 NOT NULL
+        0,    // vip_card
+        pay_way_mapping[method],
+        emptyTaskList,
+        emptyRemarks
+      ])
+    )
+    try {
+      await Promise.all(emptyPromises)
+      console.log('创建新的空的交接记录成功')
+    } catch (error) {
+      console.error('创建新的空的交接记录失败:', error)
+      throw error
+    }
+
+    await query('COMMIT');
+
+    return { created: true, date: handoverDate };
+
+  } catch (error) {
+    await query('ROLLBACK');
+    console.error('交接班失败:', error);
+    // 在实际的事务处理中，这里应该执行 ROLLBACK
+    throw error;
+  } finally{
+    // no-op
   }
-
-  // 是否已存在
-  const existRes = await query(`SELECT id FROM shift_handover WHERE shift_date = $1 LIMIT 1`, [date]);
-  if (existRes.rows.length > 0) {
-    return { created: false, id: existRes.rows[0].id, date };
-  }
-
-  // 默认备用金（首日或无来源时）
-  const defaultReserve = { cash: 320, wechat: 0, digital: 0, other: 0 };
-
-  // 插入占位记录（满足非空约束）
-  const insertSql = `
-    INSERT INTO shift_handover (shift_date, task_list, statistics, cashier_name, shift_time, reserve_cash)
-    VALUES ($1, $2, $3, $4, $5, $6)
-    RETURNING id
-  `;
-  const values = [
-    date,
-    JSON.stringify([]),
-    JSON.stringify({}),
-    '',
-    '',
-    JSON.stringify(defaultReserve)
-  ];
-  const ins = await query(insertSql, values);
-  return { created: true, id: ins.rows[0].id, date };
 }
+
 
 // 获取某日备用金（若不存在返回 null）
 async function getReserveCash(date) {

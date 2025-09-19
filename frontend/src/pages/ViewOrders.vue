@@ -169,7 +169,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onActivated } from 'vue'
 import { date, useQuasar } from 'quasar'
 import { useOrderStore } from '../stores/orderStore' // 导入订单 store
 import { useRoomStore } from '../stores/roomStore' // 导入房间 store
@@ -600,27 +600,12 @@ async function checkInOrder(order) {
 async function performCheckIn(order) {
   loadingOrders.value = true;
   try {
-    console.log('执行自动化入住流程:', order.orderNumber);
-
-    // 调用 store 中的 checkIn action
-      await orderStore.checkIn(order.orderNumber);
-
-      // 立即结束表格loading，避免后续刷新阻塞界面
-      loadingOrders.value = false;
-
-      // 刷新订单与房间列表都放到后台执行，避免阻塞表格loading
-      orderStore.fetchAllOrders().catch(err => {
-        console.warn('后台刷新订单列表失败:', err?.message || err);
-      });
-
-      roomStore.fetchAllRooms().catch(err => {
-        console.warn('后台刷新房间列表失败:', err?.message || err);
-      });
+    // 1. 等待核心入住操作完成
+    await orderStore.checkIn(order.orderNumber);
 
     $q.notify({
       type: 'positive',
-      message: '办理入住成功，每日账单已自动创建',
-      position: 'top'
+      message: '办理入住成功'
     });
 
   } catch (error) {
@@ -633,9 +618,15 @@ async function performCheckIn(order) {
       multiLine: true
     });
   } finally {
-    // 双保险：确保loading关闭
+    // 2. 无论成功失败，都先解除UI锁定
     loadingOrders.value = false;
   }
+
+  // 3. 在UI响应后，于后台触发房间列表的刷新，确保房间管理页面数据能更新
+  //    这样做即使变慢也不会阻塞当前页面
+  roomStore.fetchAllRooms().catch(err => {
+    console.error("后台刷新房间列表失败，但这不应阻塞UI:", err);
+  });
 }
 
 // 从详情页办理入住
@@ -1300,7 +1291,8 @@ async function handleOrderUpdated(updatedOrderData) {
   }
 }
 
-onMounted(async () => {
+// 提取数据加载逻辑以便复用
+async function loadInitialData() {
   try {
     await fetchAllOrders()
     // 加载账单数据以支持退押按钮显示逻辑
@@ -1321,7 +1313,11 @@ onMounted(async () => {
   } catch (error) {
     console.error('初始化数据失败:', error)
   }
-})
+}
+
+onMounted(loadInitialData)
+
+onActivated(loadInitialData)
 
 // 监听订单退押状态变化
 watch(() => orderStore.orders, (newOrders) => {

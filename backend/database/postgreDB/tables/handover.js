@@ -20,7 +20,7 @@ const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
   retained NUMERIC(10,2) DEFAULT 0,     -- 留存款
   handover NUMERIC(10,2) DEFAULT 0,     -- 交接款
 
-  task_list TEXT[] DEFAULT '{}',        -- 备忘录数组（每条是一项）
+  task_list JSONB DEFAULT '[]'::jsonb,  -- 备忘录（JSON数组，更灵活）
   remarks TEXT                          -- 备注信息
 )`;
 
