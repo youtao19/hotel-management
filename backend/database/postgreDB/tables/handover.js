@@ -21,7 +21,8 @@ const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
   handover NUMERIC(10,2) DEFAULT 0,     -- 交接款
 
   task_list JSONB DEFAULT '[]'::jsonb,  -- 备忘录（JSON数组，更灵活）
-  remarks TEXT                          -- 备注信息
+  remarks TEXT,                          -- 备注信息
+  UNIQUE(date, payment_type)            -- 保证同一天的支付方式不重复
 )`;
 
 const dropQuery = `DROP TABLE IF EXISTS ${tableName}`;

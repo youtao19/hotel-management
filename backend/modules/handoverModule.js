@@ -1,27 +1,4 @@
-const { query } = require('../database/postgreDB/pg');
-
-// 运行时探测 handover.task_list 列类型（JSONB 或 TEXT[]），并缓存结果
-let handoverTaskListIsJsonb = null;
-async function ensureHandoverTaskListType() {
-  if (handoverTaskListIsJsonb !== null) return handoverTaskListIsJsonb;
-  try {
-    const res = await query(
-      `SELECT data_type, udt_name
-       FROM information_schema.columns
-       WHERE table_name = 'handover' AND column_name = 'task_list'
-       LIMIT 1`
-    );
-    const row = res.rows?.[0];
-    // information_schema 对 text[] 通常为 data_type = 'ARRAY'，udt_name = '_text'
-    // 对 jsonb 为 data_type = 'jsonb'
-    handoverTaskListIsJsonb = row?.data_type === 'jsonb';
-  } catch (e) {
-    // 若查询失败，默认按 JSONB 处理（与最新表结构一致）
-    handoverTaskListIsJsonb = true;
-  }
-  return handoverTaskListIsJsonb;
-}
-
+const { query, getClient } = require('../database/postgreDB/pg');
 
 /**
  * 获取表格数据
@@ -36,7 +13,7 @@ async function getShiftTable(date) {
     previousDate.setDate(dateObj.getDate() - 1)
     const previousDateStr = previousDate.toISOString().split('T')[0]
 
-    // 创建五个对象
+    // 创建对象
     const initPaywayBuckets = () => ({
       '现金': 0,
       '微信': 0,
@@ -56,17 +33,10 @@ async function getShiftTable(date) {
     let retainedAmount = initPaywayBuckets() // 留存款
     let handoverAmount = initPaywayBuckets() // 交接款
 
-    const reserveSql = `
-      SELECT date, handover, payment_type
-      FROM handover
-      WHERE date = $1::date
-      order by id asc
-    `;
-    // 获取备用金数据
-    const reserveRes = await query(reserveSql, [previousDateStr])
-    for (const row of reserveRes.rows) {
-      const { handover, payment_type } = row
-      reserve[pay_ways[payment_type]] += Number(handover)
+    // 使用备用金函数：某日备用金 = 前一日各支付方式交接款
+    const reserveFromPrev = await getReserveCash(date)
+    if (reserveFromPrev) {
+      reserve = { ...reserve, ...reserveFromPrev }
     }
 
     const billSql = `
@@ -77,7 +47,7 @@ async function getShiftTable(date) {
     `;
 
     // 获取账单数据
-    const billRes = await query(billSql, [date])
+    const billRes = await query(billSql, [previousDateStr])
 
     for (const row of billRes.rows) {
       const { pay_way, change_price, change_type, deposit, stay_type, room_fee } = row
@@ -257,9 +227,29 @@ async function getRemarks({ date }) {
  * @returns {Promise<string[]>}
  */
 async function getAvailableDates() {
-  const sql = `SELECT (shift_date::date)::text AS date FROM shift_handover ORDER BY shift_date ASC`;
+  const sql = `
+    SELECT DISTINCT (date::date)::text AS date
+    FROM handover
+    WHERE payment_type IN (1,2,3,4)
+    ORDER BY date ASC
+  `;
   const result = await query(sql);
   return result.rows.map(r => r.date);
+}
+
+/**
+ *
+ * @param {*} dateStr
+ * @returns
+ */
+function getPreviousDateString(dateStr) {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const d = new Date(year, month - 1, day); // 本地时区
+  d.setDate(d.getDate() - 1);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
 }
 
 /**
@@ -270,28 +260,36 @@ async function getAvailableDates() {
  * @returns {Promise<{created:boolean,id?:number,date:string}>}
  */
 async function startHandover(handoverData) {
-  // 最佳实践：在生产环境中，以下所有数据库操作应包裹在一个事务中
-  // (BEGIN -> COMMIT/ROLLBACK) 来确保数据原子性。
+  // 使用单一客户端执行一个真正的事务，避免连接池下 BEGIN/COMMIT 分散到不同连接
+  const client = await getClient();
   try {
-    await query('BEGIN');
+    console.log('开始交接班操作，接收到数据:', JSON.stringify(handoverData, null, 2));
+
+    await client.query('BEGIN');
+
     const {
       date,
       handoverPerson,
       receivePerson,
       notes,
-      taskList,
       paymentData, // 新的数据结构：一个包含所有财务分类的对象
       vipCard
     } = handoverData;
 
-    // 确定交接日期，使用前一天的日期
-    const t = new Date(date)
-    if (isNaN(t.getTime())) {
-      console.error('交接日期错误:', date, '使用当前日期:', new Date().toISOString().split('T')[0]);
-      throw new Error('交接日期错误');
+    // 数据验证
+    if (!date) {
+      throw new Error('交接班日期不能为空');
     }
-    t.setDate(t.getDate() - 1)
-    const handoverDate = t.toISOString().split('T')[0]
+
+    if (!paymentData || typeof paymentData !== 'object') {
+      throw new Error('支付数据格式不正确');
+    }
+
+    console.log('支付数据结构:', Object.keys(paymentData));
+
+    // 确定交接日期，使用前一天的日期
+    const handoverDate = getPreviousDateString(date);
+    console.log('交接日期:', handoverDate, '（基于选择日期:', date, '）');
 
     // 支付方式文本到数据库代码的映射
     const pay_way_mapping = {
@@ -301,144 +299,256 @@ async function startHandover(handoverData) {
       '其他': 4,
     };
 
-    // 定义要遍历的支付方式
+    // 定义要遍历的支付方式（顺序执行，确保事务内串行提交，避免客户端并发查询）
     const paymentMethods = ['现金', '微信', '微邮付', '其他'];
 
-    // 任务列表（作为 JSONB 保存，保留结构，最少包含字符串 title）
-    const taskListJsonArray = Array.isArray(taskList)
-      ? taskList.map(item => {
-          if (typeof item === 'string') return { title: item };
-          if (item && typeof item === 'object') {
-            // 统一字段：title / task -> title, completed/done -> completed
-            const title = (item.title || item.task || '').toString();
-            const completed = Boolean(
-              item.completed !== undefined ? item.completed : item.done
-            );
-            const id = item.id ?? null;
-            const time = item.time ?? null;
-            return { id, title, completed, time };
-          }
-          return { title: String(item) };
-        })
-      : [];
+    for (const method of paymentMethods) {
+      console.log(`处理支付方式: ${method}`);
 
-    // 为每种支付方式创建一个插入数据库的Promise
-    const isJsonb = await ensureHandoverTaskListType();
-    const insertPromises = paymentMethods.map(method => {
+      // 验证 paymentData 是否包含所需的子对象
+      const requiredFields = ['reserve', 'hotelIncome', 'restIncome', 'carRentIncome',
+                             'totalIncome', 'hotelDeposit', 'restDeposit', 'retainedAmount', 'handoverAmount'];
+
+      for (const field of requiredFields) {
+        if (!paymentData[field] || typeof paymentData[field] !== 'object') {
+          throw new Error(`支付数据中缺少或格式错误的字段: ${field}`);
+        }
+      }
+
       const sql = `
         INSERT INTO handover (
           date, handover_person, takeover_person, vip_card, payment_type,
           reserve_cash, room_income, rest_income, rent_income, total_income,
-          room_refund, rest_refund, retained, handover, task_list, remarks
+          room_refund, rest_refund, retained, handover, remarks
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, ${isJsonb ? '$15::jsonb' : '$15'}, $16)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        ON CONFLICT (date, payment_type) DO UPDATE SET
+          handover_person = EXCLUDED.handover_person,
+          takeover_person = EXCLUDED.takeover_person,
+          vip_card = EXCLUDED.vip_card,
+          reserve_cash = EXCLUDED.reserve_cash,
+          room_income = EXCLUDED.room_income,
+          rest_income = EXCLUDED.rest_income,
+          rent_income = EXCLUDED.rent_income,
+          total_income = EXCLUDED.total_income,
+          room_refund = EXCLUDED.room_refund,
+          rest_refund = EXCLUDED.rest_refund,
+          retained = EXCLUDED.retained,
+          handover = EXCLUDED.handover,
+          remarks = EXCLUDED.remarks
         RETURNING *;
       `;
 
-      // 从 paymentData 对象中为当前支付方式提取数据
+      // 从 paymentData 对象中为当前支付方式提取数据，添加安全默认值
       const values = [
         handoverDate,
         handoverPerson || '',
         receivePerson || '',
-        vipCard || 0,
+        Number(vipCard) || 0,
         pay_way_mapping[method],
-        paymentData.reserve[method] || 0,
-        paymentData.hotelIncome[method] || 0,
-        paymentData.restIncome[method] || 0,
-        paymentData.carRentIncome[method] || 0,
-        paymentData.totalIncome[method] || 0,
-        paymentData.hotelDeposit[method] || 0, // 对应数据库的 room_refund
-        paymentData.restDeposit[method] || 0,  // 对应数据库的 rest_refund
-        paymentData.retainedAmount[method] || 0,
-        paymentData.handoverAmount[method] || 0,
-        isJsonb ? JSON.stringify(taskListJsonArray) : taskListJsonArray.map(t => t.title || ''),
-        notes,
+        Number(paymentData.reserve[method]) || 0,
+        Number(paymentData.hotelIncome[method]) || 0,
+        Number(paymentData.restIncome[method]) || 0,
+        Number(paymentData.carRentIncome[method]) || 0,
+        Number(paymentData.totalIncome[method]) || 0,
+        Number(paymentData.hotelDeposit[method]) || 0, // 对应数据库的 room_refund
+        Number(paymentData.restDeposit[method]) || 0,  // 对应数据库的 rest_refund
+        Number(paymentData.retainedAmount[method]) || 0,
+        Number(paymentData.handoverAmount[method]) || 0,
+        notes || null,
       ];
 
-      // 假设 'query' 是一个可用的数据库查询函数
-      return query(sql, values).then(result => result.rows[0]);
-    });
+      console.log(`${method} 的插入数据:`, values);
 
-
-    // 并发执行所有插入操作
-    try{
-      const insertedRows = await Promise.all(insertPromises);
-      console.log(`成功插入 ${insertedRows.length} 条交接班记录。`);
-    } catch (error) {
-      console.error('插入交接班记录失败:', error);
-      throw error;
+      const result = await client.query(sql, values);
+      console.log(`${method} 插入/更新成功，ID:`, result.rows[0]?.id);
     }
 
+    // 创建新的空的交接记录（次日，只有一条，payment_type=0）
+    const nextDateObj = new Date(handoverDate);
+    nextDateObj.setDate(nextDateObj.getDate() + 1);
+    const nextDate = nextDateObj.toISOString().split('T')[0];
 
-    // 创建新的空的交接记录（次日，每种支付方式各一条，金额置零）
-    const nextDate = new Date().toISOString().split('T')[0]
+    console.log('准备创建次日空记录，日期:', nextDate);
+
     const emptyInsertSql = `
       INSERT INTO handover (
         date, handover_person, takeover_person, vip_card, payment_type,
         reserve_cash, room_income, rest_income, rent_income, total_income,
         room_refund, rest_refund, retained, handover, task_list, remarks
       )
-      VALUES ($1,$2,$3,$4,$5, 0,0,0,0,0, 0,0,0,0, ${isJsonb ? '$6::jsonb' : '$6'}, $7)
-      RETURNING id;
-    `
-    const emptyTaskList = isJsonb ? JSON.stringify([]) : []
-    const emptyRemarks = null
-    const emptyPromises = paymentMethods.map(method =>
-      query(emptyInsertSql, [
-        nextDate,
-        '',   // handover_person 非空以满足 NOT NULL
-        '',   // takeover_person 非空以满足 NOT NULL
-        0,    // vip_card
-        pay_way_mapping[method],
-        emptyTaskList,
-        emptyRemarks
-      ])
-    )
-    try {
-      await Promise.all(emptyPromises)
-      console.log('创建新的空的交接记录成功')
-    } catch (error) {
-      console.error('创建新的空的交接记录失败:', error)
-      throw error
-    }
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      ON CONFLICT (date, payment_type) DO NOTHING;
+    `;
 
-    await query('COMMIT');
+    // 为所有16个参数准备值
+    const emptyValues = [
+      nextDate, // $1: date
+      '',       // $2: handover_person
+      '',       // $3: takeover_person
+      0,        // $4: vip_card
+      0,        // $5: payment_type=0, 代表空记录
+      0,        // $6: reserve_cash
+      0,        // $7: room_income
+      0,        // $8: rest_income
+      0,        // $9: rent_income
+      0,        // $10: total_income
+      0,        // $11: room_refund
+      0,        // $12: rest_refund
+      0,        // $13: retained
+      0,        // $14: handover
+      '[]',     // $15: task_list
+      null      // $16: remarks
+    ];
 
-    return { created: true, date: handoverDate };
+    // 只插入一条空记录（payment_type = 0）
+    const emptyResult = await client.query(emptyInsertSql, emptyValues);
+    console.log('次日空记录创建结果:', emptyResult.rowCount > 0 ? '成功' : '已存在，跳过');
+
+    await client.query('COMMIT');
+    console.log('交接班事务提交成功');
+
+    return {
+      success: true,
+      created: true,
+      date: handoverDate,
+      message: '交接班数据保存成功'
+    };
 
   } catch (error) {
-    await query('ROLLBACK');
-    console.error('交接班失败:', error);
-    // 在实际的事务处理中，这里应该执行 ROLLBACK
-    throw error;
+    try {
+      await client.query('ROLLBACK');
+      console.log('事务已回滚');
+    } catch(rollbackError) {
+      console.error('回滚失败:', rollbackError);
+    }
+
+    console.error('交接班操作失败:', {
+      message: error.message,
+      stack: error.stack,
+      inputData: JSON.stringify(handoverData, null, 2)
+    });
+
+    // 抛出更具体的错误信息
+    if (error.code === '23505') { // 唯一约束违反
+      throw new Error('该日期的交接班记录已存在');
+    } else if (error.code === '23502') { // 非空约束违反
+      throw new Error('缺少必填字段');
+    } else if (error.code === '22P02') { // 数据类型错误
+      throw new Error('数据格式错误');
+    } else {
+      throw new Error(`交接班操作失败: ${error.message}`);
+    }
   } finally{
-    // no-op
+    client.release();
+    console.log('数据库连接已释放');
   }
 }
 
-
 // 获取某日备用金（若不存在返回 null）
+// 规则：某日备用金 = 前一日各支付方式的交接款 handover 之和
 async function getReserveCash(date) {
   try {
-    const result = await query(`SELECT reserve_cash FROM shift_handover WHERE shift_date = $1 ORDER BY updated_at DESC LIMIT 1`, [date]);
+    const previousDate = getPreviousDateString(date);
+
+    const payWayMap = { 1: '现金', 2: '微信', 3: '微邮付', 4: '其他' };
+    const buckets = { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 };
+
+    const sql = `
+      SELECT payment_type, COALESCE(SUM(handover), 0) AS amount
+      FROM handover
+      WHERE date = $1::date
+        AND payment_type IN (1,2,3,4)
+      GROUP BY payment_type
+      ORDER BY payment_type
+    `;
+    const result = await query(sql, [previousDate]);
+
     if (result.rows.length === 0) {
       return null; // 没有记录
     }
-    let reserveData = result.rows[0].reserve_cash;
-    if (!reserveData) return null; // 字段为空
-    // 兼容字符串 / JSONB
-    if (typeof reserveData === 'string') {
-      try { reserveData = JSON.parse(reserveData); } catch (_) { /* ignore */ }
+
+    for (const row of result.rows) {
+      const name = payWayMap[row.payment_type];
+      if (name) {
+        buckets[name] = Number(row.amount || 0);
+      }
     }
-    // 统一输出结构
-    return {
-      cash: Number(reserveData.cash || reserveData.reserveCash || 0),
-      wechat: Number(reserveData.wechat || 0),
-      digital: Number(reserveData.digital || 0),
-      other: Number(reserveData.other || 0)
-    };
+
+    return buckets;
   } catch (error) {
     console.error('获取备用金失败:', error);
+    throw error;
+  }
+}
+
+/**
+ * 从 handover 表读取指定日期的聚合数据（按支付方式），用于页面直接展示
+ * 若该日期无真实支付类型记录（1/2/3/4），返回 null
+ * 返回结构与 getShiftTable 一致的 paymentData 结构
+ */
+async function getHandoverAggregatedByDate(date) {
+  try {
+    const payWayMap = { 1: '现金', 2: '微信', 3: '微邮付', 4: '其他' };
+    const initBuckets = () => ({ '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 });
+
+    let reserve = initBuckets();
+    let hotelIncome = initBuckets();
+    let restIncome = initBuckets();
+    let carRentIncome = initBuckets();
+    let totalIncome = initBuckets();
+    let hotelDeposit = initBuckets();
+    let restDeposit = initBuckets();
+    let retainedAmount = initBuckets();
+    let handoverAmount = initBuckets();
+
+    const sql = `
+      SELECT payment_type,
+             COALESCE(SUM(reserve_cash), 0) AS reserve_cash,
+             COALESCE(SUM(room_income), 0)   AS room_income,
+             COALESCE(SUM(rest_income), 0)   AS rest_income,
+             COALESCE(SUM(rent_income), 0)   AS rent_income,
+             COALESCE(SUM(total_income), 0)  AS total_income,
+             COALESCE(SUM(room_refund), 0)   AS room_refund,
+             COALESCE(SUM(rest_refund), 0)   AS rest_refund,
+             COALESCE(SUM(retained), 0)      AS retained,
+             COALESCE(SUM(handover), 0)      AS handover
+      FROM handover
+      WHERE date = $1::date AND payment_type IN (1,2,3,4)
+      GROUP BY payment_type
+      ORDER BY payment_type
+    `;
+    const result = await query(sql, [date]);
+
+    if (result.rows.length === 0) return null;
+
+    for (const row of result.rows) {
+      const name = payWayMap[row.payment_type];
+      if (!name) continue;
+      reserve[name]        = Number(row.reserve_cash || 0);
+      hotelIncome[name]    = Number(row.room_income || 0);
+      restIncome[name]     = Number(row.rest_income || 0);
+      carRentIncome[name]  = Number(row.rent_income || 0);
+      totalIncome[name]    = Number(row.total_income || 0);
+      hotelDeposit[name]   = Number(row.room_refund || 0);
+      restDeposit[name]    = Number(row.rest_refund || 0);
+      retainedAmount[name] = Number(row.retained || 0);
+      handoverAmount[name] = Number(row.handover || 0);
+    }
+
+    return {
+      reserve,
+      hotelIncome,
+      restIncome,
+      carRentIncome,
+      totalIncome,
+      hotelDeposit,
+      restDeposit,
+      retainedAmount,
+      handoverAmount
+    };
+  } catch (error) {
+    console.error('读取交接班聚合数据失败:', error);
     throw error;
   }
 }
@@ -499,5 +609,6 @@ module.exports = {
   getAvailableDates,
   startHandover,
   getReserveCash,
-  getShiftSpecialStats
+  getShiftSpecialStats,
+  getHandoverAggregatedByDate
 };

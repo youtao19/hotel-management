@@ -5,7 +5,8 @@
       <div class="row items-center justify-between q-mb-md">
         <div class="text-h4 text-weight-bold">交接班</div>
         <div class="row q-gutter-md">
-          <q-btn label="测试" color="secondary" @click="test1" />
+          <q-btn label="测试数据" color="secondary" @click="testDataStructure" />
+          <q-btn label="使用计算结果" color="orange" @click="loadComputedPaymentData" />
           <q-btn color="primary" icon="print" label="打印" @click="printHandover" />
           <q-btn color="green" icon="download" label="导出Excel" @click="exportToExcel" />
           <q-btn color="blue" icon="start" label="开始交接班" @click="startHandover" />
@@ -179,6 +180,18 @@ async function savePageData() {
   } finally {
     savingAmounts.value = false;
     loadingHide();
+  }
+}
+
+// 计算前一天日期（YYYY-MM-DD）
+function getPrevDateStr(ymd) {
+  try {
+    if (!ymd) return ''
+    const d = new Date(ymd)
+    d.setDate(d.getDate() - 1)
+    return date.formatDate(d, 'YYYY-MM-DD')
+  } catch (_) {
+    return ''
   }
 }
 
@@ -391,11 +404,37 @@ async function loadSpecialStats() {
 // 加载表格数据
 async function loadPaymentData() {
   try {
+    // 读取“所选日期的前一天”的已保存交接班数据
+    const prevDateStr = getPrevDateStr(selectedDate.value)
+    const saved = await shiftHandoverApi.getSavedHandover({ date: prevDateStr })
+    const savedData = saved?.data
+    if (savedData && Object.keys(savedData).length > 0) {
+      paymentData.value = savedData
+      return
+    }
+
+    // 若无已保存数据，则回退到计算接口（计算逻辑本身也是针对前一天）
     const res = await shiftHandoverStore.fetchShiftTable(selectedDate.value)
     paymentData.value = res.data
   } catch (error) {
     console.error('加载支付数据失败:', error)
     throw error
+  }
+}
+
+// 直接调用计算接口并显示数据
+async function loadComputedPaymentData() {
+  try {
+    loadingShow({ message: '加载计算结果...' })
+    const res = await shiftHandoverStore.fetchShiftTable(selectedDate.value)
+    const data = res?.data || res
+    paymentData.value = data
+    $q.notify({ type: 'positive', message: '已显示计算结果' })
+  } catch (error) {
+    console.error('加载计算结果失败:', error)
+    $q.notify({ type: 'negative', message: '加载计算结果失败' })
+  } finally {
+    loadingHide()
   }
 }
 
@@ -414,28 +453,62 @@ onMounted(async () => {
 
 // 开始交接班
 async function startHandover() {
-  try{
+  try {
+    // 数据验证
+    if (!selectedDate.value) {
+      throw new Error('请选择交接班日期')
+    }
+
+    if (!paymentData.value || Object.keys(paymentData.value).length === 0) {
+      throw new Error('支付数据为空，请先加载数据')
+    }
+
     loadingShow({ message: '开始交接班中...' });
 
     const handoverData = {
       date: selectedDate.value,
-      handoverPerson: handoverPerson.value,
-      receivePerson: receivePerson.value,
-      cashierName: cashierName.value,
-      notes: notes.value,
-      taskList: taskList.value,
-      paymentData: paymentData.value,
-      vipCard: vipCards.value,
+      handoverPerson: handoverPerson.value || '',
+      receivePerson: receivePerson.value || '',
+      cashierName: cashierName.value || '',
+      notes: notes.value || '',
+      paymentData: JSON.parse(JSON.stringify(paymentData.value)),
+      vipCard: vipCards.value || 0,
     }
-    const payload = JSON.parse(JSON.stringify(handoverData))
-    console.log('开始交接班数据', payload)
 
-
+    console.log('开始交接班数据', handoverData)
 
     const res = await shiftHandoverStore.startHandover(handoverData)
-    console.log('开始交接班', res)
+    console.log('开始交接班成功:', res)
+
+    // 开始交接班成功后，立即刷新已保存的数据，避免用户首次刷新读不到
+    await loadPaymentData()
+
+    $q.notify({
+      type: 'positive',
+      message: '交接班成功！',
+      caption: '数据已保存到数据库',
+      position: 'top',
+      timeout: 3000
+    })
   } catch (error) {
     console.error('开始交接班失败:', error)
+
+    let errorMessage = '开始交接班失败'
+    let errorCaption = '请检查数据后重试'
+
+    if (error.response?.data?.message) {
+      errorCaption = error.response.data.message
+    } else if (error.message) {
+      errorCaption = error.message
+    }
+
+    $q.notify({
+      type: 'negative',
+      message: errorMessage,
+      caption: errorCaption,
+      position: 'top',
+      timeout: 5000
+    })
   } finally {
     loadingHide();
   }
@@ -443,14 +516,50 @@ async function startHandover() {
 
 
 
-// 测试按钮：调试点击事件 & 昨日交接款获取
-async function test1() {
-  console.log('表格数据测试')
-  try{
-    const res = await shiftHandoverStore.fetchShiftTable(selectedDate.value)
-    console.log('表格数据测试', res)
+// 测试数据结构是否正确
+async function testDataStructure() {
+  try {
+    loadingShow({ message: '测试数据结构中...' })
+
+    const testData = {
+      date: selectedDate.value,
+      paymentData: paymentData.value
+    }
+
+    console.log('发送测试数据:', testData)
+
+    const response = await shiftHandoverApi.testData(testData)
+    console.log('测试结果:', response)
+
+    if (response.success) {
+      $q.notify({
+        type: 'positive',
+        message: '数据结构测试通过！',
+        caption: '所有必需字段都存在',
+        position: 'top',
+        timeout: 3000
+      })
+    } else {
+      $q.notify({
+        type: 'negative',
+        message: '数据结构测试失败',
+        caption: response.message,
+        position: 'top',
+        timeout: 5000
+      })
+    }
+
   } catch (error) {
-    console.error('表格数据测试失败:', error)
+    console.error('数据结构测试失败:', error)
+    $q.notify({
+      type: 'negative',
+      message: '数据结构测试失败',
+      caption: error.message || '网络错误',
+      position: 'top',
+      timeout: 5000
+    })
+  } finally {
+    loadingHide()
   }
 }
 

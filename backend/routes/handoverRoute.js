@@ -7,6 +7,7 @@ const {
   getShiftSpecialStats,
   getAvailableDates,
   startHandover,
+  getHandoverAggregatedByDate
 } = require('../modules/handoverModule');
 
 
@@ -58,14 +59,122 @@ router.get('/available-dates', async (_req, res) => {
   }
 });
 
+// 按日期读取已保存的交接班聚合数据（若不存在返回空）
+router.get('/by-date', async (req, res) => {
+  try {
+    const { date } = req.query;
+    const data = await getHandoverAggregatedByDate(date);
+    res.json({ success: true, data: data || null });
+  } catch (error) {
+    console.error('按日期读取交接班失败:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // 开始交接班（首日默认，已存在则不重复创建）
 router.post('/start', async (req, res) => {
-  try{
-    const result = await startHandover(req.body)
-    res.json({ success: true, data: result })
+  try {
+    console.log('收到开始交接班请求:', {
+      body: JSON.stringify(req.body, null, 2),
+      timestamp: new Date().toISOString()
+    });
+
+    // 基本数据验证
+    if (!req.body || Object.keys(req.body).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: '请求数据为空'
+      });
+    }
+
+    const { date, paymentData } = req.body;
+
+    if (!date) {
+      return res.status(400).json({
+        success: false,
+        message: '缺少必需的日期参数'
+      });
+    }
+
+    if (!paymentData) {
+      return res.status(400).json({
+        success: false,
+        message: '缺少支付数据'
+      });
+    }
+
+    const result = await startHandover(req.body);
+
+    console.log('交接班操作成功完成:', result);
+
+    res.json({
+      success: true,
+      data: result,
+      message: result.message || '交接班成功'
+    });
+
   } catch (error) {
-    console.error('开始交接班失败:', error);
-    res.status(500).json({ success: false, message: error.message });
+    console.error('开始交接班失败:', {
+      message: error.message,
+      stack: error.stack,
+      requestBody: JSON.stringify(req.body, null, 2)
+    });
+
+    // 根据错误类型返回不同的HTTP状态码
+    let statusCode = 500;
+    if (error.message.includes('格式不正确') || error.message.includes('缺少')) {
+      statusCode = 400; // 客户端错误
+    } else if (error.message.includes('已存在')) {
+      statusCode = 409; // 冲突
+    }
+
+    res.status(statusCode).json({
+      success: false,
+      message: error.message || '服务器内部错误',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// 添加测试接口来验证数据结构
+router.post('/test-data', async (req, res) => {
+  try {
+    console.log('测试接口收到数据:', JSON.stringify(req.body, null, 2));
+
+    const { paymentData } = req.body;
+
+    if (!paymentData) {
+      return res.json({
+        success: false,
+        message: '没有接收到paymentData'
+      });
+    }
+
+    const requiredFields = ['reserve', 'hotelIncome', 'restIncome', 'carRentIncome',
+                           'totalIncome', 'hotelDeposit', 'restDeposit', 'retainedAmount', 'handoverAmount'];
+
+    const fieldCheck = {};
+    for (const field of requiredFields) {
+      fieldCheck[field] = {
+        exists: !!paymentData[field],
+        type: typeof paymentData[field],
+        keys: paymentData[field] ? Object.keys(paymentData[field]) : []
+      };
+    }
+
+    res.json({
+      success: true,
+      message: '数据结构检查完成',
+      fieldCheck,
+      paymentMethods: ['现金', '微信', '微邮付', '其他']
+    });
+
+  } catch (error) {
+    console.error('测试接口错误:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
   }
 });
 

@@ -240,6 +240,9 @@ export const shiftHandoverApi = {
   // 获取交接班表格
   getShiftTable: (params) => api.get('/handover/table', { params }),
 
+  // 按日期读取已保存的交接班聚合数据
+  getSavedHandover: (params) => api.get('/handover/by-date', { params }),
+
   // 获取备忘录
   getRemarks: (params) => api.get('/handover/remarks', { params }),
 
@@ -256,7 +259,10 @@ export const shiftHandoverApi = {
   getAvailableDates: () => api.get('/handover/available-dates'),
 
   // 开始交接班（首日默认、避免重复创建）
-  startHandover: (date) => api.post('/handover/start', { date })
+  startHandover: (handoverData) => api.post('/handover/start', handoverData),
+
+  // 测试数据结构
+  testData: (testData) => api.post('/handover/test-data', testData)
 
 }
 

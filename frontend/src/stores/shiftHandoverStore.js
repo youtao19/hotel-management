@@ -35,6 +35,12 @@ export const useShiftHandoverStore = defineStore("shiftHandover", () => {
     return response
   }
 
+  // 开始交接班
+  const startHandover = async (handoverData) => {
+    const response = await shiftHandoverApi.startHandover(handoverData)
+    return response
+  }
+
 
   return {
     shiftTable_data,
@@ -44,6 +50,7 @@ export const useShiftHandoverStore = defineStore("shiftHandover", () => {
     statistics_data,
     fetchStatistics,
     special_stats_data,
-    fetchSpecialStats
+    fetchSpecialStats,
+    startHandover
   };
 });
