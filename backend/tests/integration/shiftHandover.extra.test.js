@@ -5,7 +5,9 @@ const { createTestRoomType, createTestRoom, createTestOrder, generatePriceData }
 const { query } = require('../../database/postgreDB/pg');
 
 describe('交接班 - 支付方式/休息房/多日订单 场景', () => {
-  beforeEach(global.cleanupTestData);
+  beforeEach(async () => {
+    await global.cleanupTestData();
+  });
 
   // 帮助函数：汇总对象数值
   const sumObj = (obj) => Object.values(obj || {}).reduce((a, v) => a + (Number(v) || 0), 0);
@@ -50,16 +52,16 @@ describe('交接班 - 支付方式/休息房/多日订单 场景', () => {
       await query(`UPDATE orders SET stay_type='客房' WHERE order_id=$1`, [o.order_id]);
     }
 
-    const res = await request(app).get('/api/shift-handover/table').query({ date: todayStr });
+    const res = await request(app).get('/api/handover/handover-table').query({ date: todayStr });
     expect(res.status).toBe(200);
     expect(res.body && res.body.success).toBe(true);
     const data = res.body.data || {};
 
     // 校验各支付方式下的客房收入（首日=押金+房费）
-    expect((data.hotelIncome || {})['cash']).toBeCloseTo(200 + 100, 2);
-    expect((data.hotelIncome || {})['wechat']).toBeCloseTo(200 + 110, 2);
-    expect((data.hotelIncome || {})['alipay']).toBeCloseTo(200 + 120, 2);
-    expect((data.hotelIncome || {})['platform']).toBeCloseTo(200 + 130, 2);
+    expect((data.hotelIncome || {})['现金']).toBeCloseTo(200 + 100, 2);
+    expect((data.hotelIncome || {})['微信']).toBeCloseTo(200 + 110, 2);
+    expect((data.hotelIncome || {})['微邮付']).toBeCloseTo(200 + 120, 2);
+    expect((data.hotelIncome || {})['其他']).toBeCloseTo(200 + 130, 2);
 
     // 校验总和=各支付方式之和
     const totalIncome = sumObj(data.hotelIncome) + sumObj(data.restIncome) + sumObj(data.carRentIncome);
@@ -107,15 +109,15 @@ describe('交接班 - 支付方式/休息房/多日订单 场景', () => {
       await query(`UPDATE orders SET stay_type='休息房' WHERE order_id=$1`, [o.order_id]);
     }
 
-    const res = await request(app).get('/api/shift-handover/table').query({ date: todayStr });
+    const res = await request(app).get('/api/handover/handover-table').query({ date: todayStr });
     expect(res.status).toBe(200);
     expect(res.body && res.body.success).toBe(true);
     const data = res.body.data || {};
 
     // 校验各支付方式
-    expect((data.restIncome || {})['cash']).toBeCloseTo(50 + 40, 2);
-    expect((data.restIncome || {})['wechat']).toBeCloseTo(60 + 50, 2);
-    expect((data.restIncome || {})['alipay']).toBeCloseTo(70 + 0, 2);
+    expect((data.restIncome || {})['现金']).toBeCloseTo(50 + 40, 2);
+    expect((data.restIncome || {})['微信']).toBeCloseTo(60 + 50, 2);
+    expect((data.restIncome || {})['微邮付']).toBeCloseTo(70 + 0, 2);
 
     // 酒店收入应为0（仅创建了休息房）
     expect(sumObj(data.hotelIncome)).toBeCloseTo(0, 2);
@@ -153,22 +155,22 @@ describe('交接班 - 支付方式/休息房/多日订单 场景', () => {
     await query(`UPDATE orders SET stay_type='客房' WHERE order_id=$1`, [order.order_id]);
 
     // d0: 押金+房费
-    let r0 = await request(app).get('/api/shift-handover/table').query({ date: d0 });
+    let r0 = await request(app).get('/api/handover/handover-table').query({ date: d0 });
     expect(r0.status).toBe(200);
     const data0 = r0.body.data || {};
-    expect((data0.hotelIncome || {})['cash']).toBeCloseTo(200 + 100, 2);
+    expect((data0.hotelIncome || {})['现金']).toBeCloseTo(200 + 100, 2);
 
     // d1: 仅房费110
-    let r1 = await request(app).get('/api/shift-handover/table').query({ date: d1 });
+    let r1 = await request(app).get('/api/handover/handover-table').query({ date: d1 });
     expect(r1.status).toBe(200);
     const data1 = r1.body.data || {};
-    expect((data1.hotelIncome || {})['cash']).toBeCloseTo(110, 2);
+    expect((data1.hotelIncome || {})['现金']).toBeCloseTo(110, 2);
 
     // d2: 仅房费120
-    let r2 = await request(app).get('/api/shift-handover/table').query({ date: d2 });
+    let r2 = await request(app).get('/api/handover/handover-table').query({ date: d2 });
     expect(r2.status).toBe(200);
     const data2 = r2.body.data || {};
-    expect((data2.hotelIncome || {})['cash']).toBeCloseTo(120, 2);
+    expect((data2.hotelIncome || {})['现金']).toBeCloseTo(120, 2);
 
     // 退押在退房日(d3)
     const refundTimeLocal = `${d3}T12:00:00`;
@@ -177,11 +179,11 @@ describe('交接班 - 支付方式/休息房/多日订单 场景', () => {
       .send({ order_id: order.order_id, change_price: 150, method: 'cash', refundTime: refundTimeLocal });
     expect(refundRes.status).toBe(200);
 
-    let r3 = await request(app).get('/api/shift-handover/table').query({ date: d3 });
+    let r3 = await request(app).get('/api/handover/handover-table').query({ date: d3 });
     expect(r3.status).toBe(200);
     const data3 = r3.body.data || {};
     // d3 不再计入住收入（date < check_out_date），仅应统计退押
     expect(sumObj(data3.hotelIncome)).toBeCloseTo(0, 2);
-    expect((data3.hotelRefund || {})['cash']).toBeCloseTo(150, 2);
+    expect((data3.hotelRefund || {})['现金']).toBeCloseTo(150, 2);
   });
 });

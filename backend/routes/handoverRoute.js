@@ -7,11 +7,12 @@ const {
   getShiftSpecialStats,
   getAvailableDates,
   startHandover,
-  getHandoverAggregatedByDate
+  saveAmountChanges,
+  getHandoverTableData
 } = require('../modules/handoverModule');
 
 
-// 获取交接班表格数据
+// 获取交接班表格数据（计算版本）
 router.get('/table', async (req, res) => {
   const { date } = req.query;
   try {
@@ -20,6 +21,28 @@ router.get('/table', async (req, res) => {
   } catch (error) {
     console.error('Error fetching shift table data:', error);
     res.status(500).json({ success: false, message: '服务器错误' });
+  }
+});
+
+// 获取交接班表格数据（从handover表查询）
+router.get('/handover-table', async (req, res) => {
+  const { date } = req.query;
+  try {
+    if (!date) {
+      return res.status(400).json({
+        success: false,
+        message: '缺少必需的日期参数'
+      });
+    }
+
+    const tableData = await getHandoverTableData(date);
+    res.json({ success: true, data: tableData });
+  } catch (error) {
+    console.error('Error fetching handover table data:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || '获取交接班数据失败'
+    });
   }
 });
 
@@ -49,7 +72,7 @@ router.get('/special-stats', async (req, res) => {
 });
 
 // 获取已有交接班日期列表（可访问日期）
-router.get('/available-dates', async (_req, res) => {
+router.get('/dates', async (_req, res) => {
   try {
     const dates = await getAvailableDates();
     res.json({ success: true, data: dates });
@@ -59,17 +82,6 @@ router.get('/available-dates', async (_req, res) => {
   }
 });
 
-// 按日期读取已保存的交接班聚合数据（若不存在返回空）
-router.get('/by-date', async (req, res) => {
-  try {
-    const { date } = req.query;
-    const data = await getHandoverAggregatedByDate(date);
-    res.json({ success: true, data: data || null });
-  } catch (error) {
-    console.error('按日期读取交接班失败:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
 
 // 开始交接班（首日默认，已存在则不重复创建）
 router.post('/start', async (req, res) => {
@@ -136,47 +148,56 @@ router.post('/start', async (req, res) => {
   }
 });
 
-// 添加测试接口来验证数据结构
-router.post('/test-data', async (req, res) => {
+// 保存页面数据（保存完整的页面数据，包括金额、统计数据等）
+router.post('/save-amounts', async (req, res) => {
   try {
-    console.log('测试接口收到数据:', JSON.stringify(req.body, null, 2));
+    console.log('收到保存页面数据请求:', {
+      body: JSON.stringify(req.body, null, 2),
+      timestamp: new Date().toISOString()
+    });
 
-    const { paymentData } = req.body;
-
-    if (!paymentData) {
-      return res.json({
+    // 基本数据验证
+    if (!req.body || Object.keys(req.body).length === 0) {
+      return res.status(400).json({
         success: false,
-        message: '没有接收到paymentData'
+        message: '请求数据为空'
       });
     }
 
-    const requiredFields = ['reserve', 'hotelIncome', 'restIncome', 'carRentIncome',
-                           'totalIncome', 'hotelDeposit', 'restDeposit', 'retainedAmount', 'handoverAmount'];
+    const { date } = req.body;
 
-    const fieldCheck = {};
-    for (const field of requiredFields) {
-      fieldCheck[field] = {
-        exists: !!paymentData[field],
-        type: typeof paymentData[field],
-        keys: paymentData[field] ? Object.keys(paymentData[field]) : []
-      };
+    if (!date) {
+      return res.status(400).json({
+        success: false,
+        message: '缺少必需的日期参数'
+      });
     }
+
+    const result = await saveAmountChanges(req.body);
+
+    console.log('页面数据保存成功:', result);
 
     res.json({
       success: true,
-      message: '数据结构检查完成',
-      fieldCheck,
-      paymentMethods: ['现金', '微信', '微邮付', '其他']
+      data: result,
+      message: '页面数据保存成功'
     });
 
   } catch (error) {
-    console.error('测试接口错误:', error);
+    console.error('保存页面数据失败:', {
+      message: error.message,
+      stack: error.stack,
+      requestBody: JSON.stringify(req.body, null, 2)
+    });
+
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message || '保存失败',
+      timestamp: new Date().toISOString()
     });
   }
 });
+
 
 
 

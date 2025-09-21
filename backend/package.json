@@ -7,20 +7,12 @@
     "start": "node server.js",
     "test": "cross-env NODE_ENV=test jest",
     "test:watch": "cross-env NODE_ENV=test jest --watch",
-    "test:shift-handover": "cross-env NODE_ENV=test node tests/runShiftHandoverTests.js",
-    "test:shift-handover-unit": "cross-env NODE_ENV=test jest tests/shiftHandoverModule.test.js",
-    "test:shift-handover-api": "cross-env NODE_ENV=test jest tests/shiftHandover.test.js",
-    "test:shift-handover-integration": "cross-env NODE_ENV=test jest tests/shiftHandoverIntegration.test.js",
-    "test:shift-handover-performance": "cross-env NODE_ENV=test jest tests/shiftHandoverPerformance.test.js",
     "export-schema": "node scripts/exportSchema.js",
     "export-structure": "node scripts/exportStructure.js",
     "export-all": "node scripts/exportAll.js",
     "db:backup": "node scripts/exportAll.js",
     "db:init": "node -e \"require('./database/postgreDB/pg').initializeHotelDB()\"",
-    "db:migrate": "node database/postgreDB/migrations/run-migrations.js",
-    "migrate:shift-handover": "node scripts/migrateShiftHandover.js",
-    "remove-html-snapshot": "node scripts/removeHtmlSnapshotFields.js",
-    "fix-pay-way-field": "node scripts/fixPayWayFieldLength.js"
+    "db:migrate": "node database/postgreDB/migrations/run-migrations.js"
   },
   "dependencies": {
     "ajv": "^8.17.1",
@@ -47,5 +39,3 @@
     "supertest": "^7.1.1"
   }
 }
-
-

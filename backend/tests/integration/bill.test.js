@@ -5,7 +5,9 @@ const { createTestRoomType, createTestRoom, createTestOrder } = require('../test
 const { query } = require('../../database/postgreDB/pg');
 
 describe('创建4单并完成入住/退房/退押后校验收入统计', () => {
-	beforeEach(global.cleanupTestData);
+	beforeEach(async () => {
+  await global.cleanupTestData();
+});
 
 	it('10%的订单应正确计算总收入与总退押', async () => {
 		// 1) 基础准备：房型+4个房间
@@ -118,7 +120,7 @@ describe('创建4单并完成入住/退房/退押后校验收入统计', () => {
 
 			// 4) 汇总校验：改用交接班表 API
 			const tableRes = await request(app)
-				.get(`/api/shift-handover/table`)
+				.get(`/api/handover/handover-table`)
 				.query({ date: todayStr });
 			expect(tableRes.status).toBe(200);
 			expect(tableRes.body && tableRes.body.success).toBe(true);
@@ -198,7 +200,7 @@ describe('创建4单并完成入住/退房/退押后校验收入统计', () => {
 
 		// 交接班表汇总
 		const tableRes = await request(app)
-			.get(`/api/shift-handover/table`)
+			.get(`/api/handover/handover-table`)
 			.query({ date: todayStr });
 		expect(tableRes.status).toBe(200);
 		expect(tableRes.body && tableRes.body.success).toBe(true);
@@ -209,7 +211,7 @@ describe('创建4单并完成入住/退房/退押后校验收入统计', () => {
 		const totalRefund = sumObj(data.hotelRefund) + sumObj(data.restRefund);
 
 		// 期望总收入：sum((180+i*10)+200) for i in 0..11
-		const expectedIncome = orders.reduce((acc, o) => acc + Number(o.deposit) + Number(o.room_price[todayStr] || 0), 0);
+		const expectedIncome = orders.reduce((acc, o) => acc + Number(o.deposit) + Number(o.total_price || 0), 0);
 		const expectedRefund = refundPlan.reduce((a, b) => a + b, 0);
 
 		expect(totalIncome).toBeCloseTo(expectedIncome, 2);
@@ -266,7 +268,7 @@ describe('创建4单并完成入住/退房/退押后校验收入统计', () => {
 
     // 交接班统计：设置 stay_type 并汇总
     for (const o of orders) await query(`UPDATE orders SET stay_type='客房' WHERE order_id=$1`, [o.order_id]);
-    const tableRes = await request(app).get(`/api/shift-handover/table`).query({ date: todayStr });
+    const tableRes = await request(app).get(`/api/handover/handover-table`).query({ date: todayStr });
     expect(tableRes.status).toBe(200);
     expect(tableRes.body && tableRes.body.success).toBe(true);
     const data = tableRes.body.data || {};
@@ -274,7 +276,7 @@ describe('创建4单并完成入住/退房/退押后校验收入统计', () => {
     const totalIncome = sumObj(data.hotelIncome) + sumObj(data.restIncome) + sumObj(data.carRentIncome);
     const totalRefund = sumObj(data.hotelRefund) + sumObj(data.restRefund);
 
-    const expectedIncome = orders.reduce((acc, o) => acc + Number(o.deposit) + Number(o.room_price[todayStr] || 0), 0);
+	const expectedIncome = orders.reduce((acc, o) => acc + Number(o.deposit) + Number(o.total_price || 0), 0);
     const expectedRefund = refundPlan.reduce((a, b) => a + b, 0);
     expect(totalIncome).toBeCloseTo(expectedIncome, 2);
     expect(totalRefund).toBeCloseTo(expectedRefund, 2);
@@ -330,7 +332,7 @@ describe('创建4单并完成入住/退房/退押后校验收入统计', () => {
 
     // 交接班统计：设置 stay_type 并汇总
     for (const o of orders) await query(`UPDATE orders SET stay_type='客房' WHERE order_id=$1`, [o.order_id]);
-    const tableRes = await request(app).get(`/api/shift-handover/table`).query({ date: todayStr });
+    const tableRes = await request(app).get(`/api/handover/handover-table`).query({ date: todayStr });
     expect(tableRes.status).toBe(200);
     expect(tableRes.body && tableRes.body.success).toBe(true);
     const data = tableRes.body.data || {};
@@ -338,7 +340,7 @@ describe('创建4单并完成入住/退房/退押后校验收入统计', () => {
     const totalIncome = sumObj(data.hotelIncome) + sumObj(data.restIncome) + sumObj(data.carRentIncome);
     const totalRefund = sumObj(data.hotelRefund) + sumObj(data.restRefund);
 
-    const expectedIncome = orders.reduce((acc, o) => acc + Number(o.deposit) + Number(o.room_price[todayStr] || 0), 0);
+	const expectedIncome = orders.reduce((acc, o) => acc + Number(o.deposit) + Number(o.total_price || 0), 0);
     const expectedRefund = refundPlan.reduce((a, b) => a + b, 0);
     expect(totalIncome).toBeCloseTo(expectedIncome, 2);
     expect(totalRefund).toBeCloseTo(expectedRefund, 2);
@@ -347,7 +349,9 @@ describe('创建4单并完成入住/退房/退押后校验收入统计', () => {
 });
 
 describe('综合：多日多单每日统计与合并校验', () => {
-	beforeEach(global.cleanupTestData);
+	beforeEach(async () => {
+  await global.cleanupTestData();
+});
 
 	it('创建5个多日订单，逐日计算收入与退款，并验证合并总额', async () => {
 		const pad = (n) => String(n).padStart(2, '0');
@@ -467,7 +471,7 @@ describe('综合：多日多单每日统计与合并校验', () => {
 		let accIncome = 0;
 		let accRefund = 0;
 		for (const day of [d0, d1, d2, d3]) {
-			const resp = await request(app).get('/api/shift-handover/table').query({ date: day });
+			const resp = await request(app).get('/api/handover/handover-table').query({ date: day });
 			expect(resp.status).toBe(200);
 			expect(resp.body && resp.body.success).toBe(true);
 			const data = resp.body.data || {};

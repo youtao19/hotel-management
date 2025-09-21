@@ -5,7 +5,6 @@
       <div class="row items-center justify-between q-mb-md">
         <div class="text-h4 text-weight-bold">交接班</div>
         <div class="row q-gutter-md">
-          <q-btn label="测试数据" color="secondary" @click="testDataStructure" />
           <q-btn label="使用计算结果" color="orange" @click="loadComputedPaymentData" />
           <q-btn color="primary" icon="print" label="打印" @click="printHandover" />
           <q-btn color="green" icon="download" label="导出Excel" @click="exportToExcel" />
@@ -109,6 +108,7 @@ const goodReview = ref('邀1得1')
 const shiftHandoverStore = useShiftHandoverStore()
 
 const paymentData = ref({}) // 交接班支付数据
+const isRefreshing = ref(false) // 防止重入标志
 
 // 备忘录列表相关
 const newTaskTitle = ref('')
@@ -284,8 +284,10 @@ function updateTaskStatus(taskId, completed) {
 // 从后端加载备注并填充到备忘录
 async function loadRemarksIntoMemo() {
   try {
+    console.log('调用 fetchRemarks API...')
     // 调用 Pinia 的 action 获取指定日期的备注，并使用其返回值
     const res = await shiftHandoverStore.fetchRemarks(selectedDate.value)
+    console.log('fetchRemarks API 返回:', res)
 
     // 兼容不同返回结构
     let list = []
@@ -324,9 +326,11 @@ async function loadRemarksIntoMemo() {
       const existingTaskIds = new Set(taskList.value.map(task => task.id));
       const newRemarks = formatted.filter(remark => !existingTaskIds.has(remark.id));
       taskList.value = [...taskList.value, ...newRemarks];
+      console.log('备忘录数据处理完成，共', newRemarks.length, '条新备注')
     } else {
       // If list.length is 0, do not clear taskList.value, as it might contain admin-added tasks.
       // taskList.value = []
+      console.log('备忘录数据为空，保持现有任务列表')
     }
   } catch (e) {
     console.error('加载备忘录失败:', e)
@@ -352,20 +356,17 @@ watch([cashierName, notes, totalRooms, restRooms, vipCards, goodReview], () => {
 });
 
 
-// 刷新所有数据的统一入口函数
+// 刷新所有数据（带loading状态）
 async function refreshAllData() {
+  if (isRefreshing.value) {
+    console.log('正在刷新中，跳过重复调用')
+    return
+  }
+
   try {
+    isRefreshing.value = true
     loadingShow({ message: '加载数据中...' });
-
-    // 加载表格数据
-    await loadPaymentData();
-
-    // 加载特殊统计 (确保 specialStats 总是最新的)
-    await loadSpecialStats();
-
-    // 加载订单备注到备忘录
-    await loadRemarksIntoMemo();
-
+    await refreshAllDataInternal();
   } catch (error) {
     console.error('刷新数据失败:', error);
     $q.notify({
@@ -375,14 +376,35 @@ async function refreshAllData() {
       timeout: 3000
     });
   } finally {
+    isRefreshing.value = false
     loadingHide();
   }
+}
+
+// 内部刷新数据（不带loading状态）
+async function refreshAllDataInternal() {
+  console.log('开始加载特殊统计...')
+  // 加载特殊统计 (确保 specialStats 总是最新的)
+  await loadSpecialStats();
+  console.log('特殊统计加载完成')
+
+  console.log('开始加载备忘录...')
+  // 加载订单备注到备忘录
+  await loadRemarksIntoMemo();
+  console.log('备忘录加载完成')
+
+  console.log('开始加载支付数据...')
+  // 加载支付数据
+  await loadPaymentDataInternal()
+  console.log('支付数据加载完成')
 }
 
 // 加载特殊统计数据
 async function loadSpecialStats() {
   try {
+    console.log('调用 fetchSpecialStats API...')
     const res = await shiftHandoverStore.fetchSpecialStats(selectedDate.value)
+    console.log('fetchSpecialStats API 返回:', res)
     const data = res?.data || res
 
     if (data) {
@@ -394,6 +416,7 @@ async function loadSpecialStats() {
       totalRooms.value = Number(openCount) || 0
       restRooms.value = Number(restCount) || 0
       goodReview.value = `邀${invited}得${positive}`
+      console.log('特殊统计数据设置完成')
     }
   } catch (error) {
     console.error('加载特殊统计失败:', error)
@@ -401,34 +424,12 @@ async function loadSpecialStats() {
   }
 }
 
-// 加载表格数据
-async function loadPaymentData() {
-  try {
-    // 读取“所选日期的前一天”的已保存交接班数据
-    const prevDateStr = getPrevDateStr(selectedDate.value)
-    const saved = await shiftHandoverApi.getSavedHandover({ date: prevDateStr })
-    const savedData = saved?.data
-    if (savedData && Object.keys(savedData).length > 0) {
-      paymentData.value = savedData
-      return
-    }
-
-    // 若无已保存数据，则回退到计算接口（计算逻辑本身也是针对前一天）
-    const res = await shiftHandoverStore.fetchShiftTable(selectedDate.value)
-    paymentData.value = res.data
-  } catch (error) {
-    console.error('加载支付数据失败:', error)
-    throw error
-  }
-}
 
 // 直接调用计算接口并显示数据
 async function loadComputedPaymentData() {
   try {
     loadingShow({ message: '加载计算结果...' })
-    const res = await shiftHandoverStore.fetchShiftTable(selectedDate.value)
-    const data = res?.data || res
-    paymentData.value = data
+    await loadComputedPaymentDataInternal()
     $q.notify({ type: 'positive', message: '已显示计算结果' })
   } catch (error) {
     console.error('加载计算结果失败:', error)
@@ -438,16 +439,58 @@ async function loadComputedPaymentData() {
   }
 }
 
+async function loadComputedPaymentDataInternal() {
+  const res = await shiftHandoverStore.fetchShiftTable(selectedDate.value)
+  const data = res?.data || res
+  paymentData.value = data
+}
+
+async function loadPaymentData() {
+  try {
+    loadingShow({ message: '加载支付数据...' })
+    await loadPaymentDataInternal()
+  } catch (error) {
+    console.error('加载支付数据失败:', error)
+    $q.notify({ type: 'negative', message: '加载支付数据失败' })
+  } finally {
+    loadingHide()
+  }
+}
+
+async function loadPaymentDataInternal() {
+  console.log('获取可用日期列表...')
+  const datesResponse = await shiftHandoverStore.fetchAvailableDates()
+  const dates = datesResponse.success ? datesResponse.data : []
+  console.log('可用日期:', dates, '当前日期:', selectedDate.value)
+
+  if (selectedDate.value && dates.includes(selectedDate.value.toString())) {
+    console.log('使用已保存的交接班数据')
+    const response = await shiftHandoverStore.fetchHandoverTableData(selectedDate.value)
+    if (response.success) {
+      paymentData.value = response.data
+      console.log('加载交接班数据完成')
+    } else {
+      throw new Error(response.message || '获取交接班数据失败')
+    }
+  } else {
+    console.log('使用计算结果')
+    await loadComputedPaymentDataInternal()
+    console.log('加载计算结果完成')
+  }
+}
 
 // 监听日期变更：刷新所有数据
 watch(selectedDate, async () => {
-  await refreshAllData()
+  if (!isRefreshing.value) {
+    await refreshAllData()
+  }
 })
 
 // 组件挂载时初始化
 onMounted(async () => {
   // 使用统一的数据刷新入口函数
   await refreshAllData()
+  // await loadPaymentData()
   console.log('日期变更，已刷新数据', paymentData.value)
 })
 
@@ -480,9 +523,6 @@ async function startHandover() {
     const res = await shiftHandoverStore.startHandover(handoverData)
     console.log('开始交接班成功:', res)
 
-    // 开始交接班成功后，立即刷新已保存的数据，避免用户首次刷新读不到
-    await loadPaymentData()
-
     $q.notify({
       type: 'positive',
       message: '交接班成功！',
@@ -490,6 +530,11 @@ async function startHandover() {
       position: 'top',
       timeout: 3000
     })
+
+    console.log('开始刷新数据...')
+    await refreshAllDataInternal()
+    console.log('数据刷新完成')
+
   } catch (error) {
     console.error('开始交接班失败:', error)
 
@@ -511,55 +556,6 @@ async function startHandover() {
     })
   } finally {
     loadingHide();
-  }
-}
-
-
-
-// 测试数据结构是否正确
-async function testDataStructure() {
-  try {
-    loadingShow({ message: '测试数据结构中...' })
-
-    const testData = {
-      date: selectedDate.value,
-      paymentData: paymentData.value
-    }
-
-    console.log('发送测试数据:', testData)
-
-    const response = await shiftHandoverApi.testData(testData)
-    console.log('测试结果:', response)
-
-    if (response.success) {
-      $q.notify({
-        type: 'positive',
-        message: '数据结构测试通过！',
-        caption: '所有必需字段都存在',
-        position: 'top',
-        timeout: 3000
-      })
-    } else {
-      $q.notify({
-        type: 'negative',
-        message: '数据结构测试失败',
-        caption: response.message,
-        position: 'top',
-        timeout: 5000
-      })
-    }
-
-  } catch (error) {
-    console.error('数据结构测试失败:', error)
-    $q.notify({
-      type: 'negative',
-      message: '数据结构测试失败',
-      caption: error.message || '网络错误',
-      position: 'top',
-      timeout: 5000
-    })
-  } finally {
-    loadingHide()
   }
 }
 

@@ -141,13 +141,32 @@ async function createTestOrder(overrides = {}, options = { insert: false }) {
     throw new Error('创建订单需要 room_type 和 room_number');
   }
 
+  // Handle room_price to total_price conversion
+  if (overrides.room_price !== undefined) {
+    if (typeof overrides.room_price === 'object' && overrides.room_price !== null) {
+      // If room_price is an object (date-price mapping), convert to total_price object format
+      orderData.total_price = overrides.room_price;
+    } else {
+      // If room_price is a number, use it directly
+      orderData.total_price = overrides.room_price;
+    }
+    delete orderData.room_price; // Remove room_price as it's not a valid field for the API
+  }
+
   // Auto-generate price if not provided
-  if (!orderData.room_price) {
-      orderData.room_price = generatePriceData(orderData.check_in_date, orderData.check_out_date, 250.00);
+  if (orderData.total_price === undefined) {
+    const priceData = generatePriceData(orderData.check_in_date, orderData.check_out_date, 250.00);
+    orderData.total_price = Object.values(priceData).reduce((sum, price) => sum + price, 0);
   }
 
   // 如果 options.insert 为 true，则直接将订单插入测试数据库（用于依赖 DB 状态的测试）
   if (options && options.insert) {
+    // 对于数据库插入，需要将 total_price 对象转换为数字
+    let dbTotalPrice = orderData.total_price;
+    if (typeof dbTotalPrice === 'object' && dbTotalPrice !== null) {
+      dbTotalPrice = Object.values(dbTotalPrice).reduce((sum, price) => sum + price, 0);
+    }
+
     const values = [
       orderData.order_id,
       orderData.id_source,
@@ -161,7 +180,7 @@ async function createTestOrder(overrides = {}, options = { insert: false }) {
       orderData.check_out_date,
       orderData.status,
       orderData.payment_method,
-      JSON.stringify(orderData.room_price),
+      dbTotalPrice,
       orderData.deposit,
       new Date(),
       orderData.remarks
@@ -171,8 +190,8 @@ async function createTestOrder(overrides = {}, options = { insert: false }) {
       `INSERT INTO orders (
          order_id, id_source, order_source, guest_name, phone, id_number,
          room_type, room_number, check_in_date, check_out_date, status,
-         payment_method, room_price, deposit, create_time, remarks
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14,$15,$16)`,
+         payment_method, total_price, deposit, create_time, remarks
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
       values
     );
   }

@@ -7,7 +7,9 @@ const { createTestRoomType, createTestRoom, createTestOrder, generatePriceData }
 describe('POST /api/orders/new', () => {
   beforeAll(async () => {});
 
-  beforeEach(global.cleanupTestData);
+  beforeEach(async () => {
+    await global.cleanupTestData();
+  });
 
   it('应成功创建一个新订单', async () => {
     const roomType = await createTestRoomType();

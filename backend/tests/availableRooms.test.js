@@ -4,7 +4,9 @@ const { query } = require('../database/postgreDB/pg');
 const { createTestRoomType, createTestRoom, createTestOrder } = require('./test-helpers');
 
 describe('GET /api/rooms/available', () => {
-  beforeEach(global.cleanupTestData);
+  beforeEach(async () => {
+    await global.cleanupTestData();
+  });
 
   let roomTypeStandard, roomTypeAvailable, roomTypeSuite;
   let room102, room103, room104, room202, room304;
@@ -31,7 +33,7 @@ describe('GET /api/rooms/available', () => {
       check_in_date: '2025-06-02',
       check_out_date: '2025-06-03',
       status: 'pending',
-      room_price: { '2025-06-02': 200.00 },
+      total_price: 200.00,
   }, { insert: true });
 
   order002 = await createTestOrder({

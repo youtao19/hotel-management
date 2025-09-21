@@ -4,7 +4,9 @@ const { query } = require('../database/postgreDB/pg');
 const { createTestRoomType, createTestRoom } = require('./test-helpers');
 
 describe('Room Type Routes Tests', () => {
-  beforeEach(global.cleanupTestData);
+  beforeEach(async () => {
+    await global.cleanupTestData();
+  });
 
   describe('GET /api/room-types', () => {
     it('应该成功获取所有房型', async () => {

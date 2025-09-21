@@ -5,13 +5,21 @@ const { query } = require('../../database/postgreDB/pg');
 const { createTestRoomType, createTestRoom, createTestOrder } = require('../test-helpers');
 
 async function insertOrder(o){
-  await query(`INSERT INTO orders (order_id, id_source, order_source, guest_name, phone, id_number, room_type, room_number, check_in_date, check_out_date, status, payment_method, room_price, deposit, create_time, remarks, stay_type) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14,$15,$16,$17)` , [
-    o.order_id,o.id_source,o.order_source,o.guest_name,o.phone,o.id_number,o.room_type,o.room_number,o.check_in_date,o.check_out_date,o.status,o.payment_method,JSON.stringify(o.room_price),o.deposit,new Date(),o.remarks,'客房'
+  // 将 total_price 对象转换为数字
+  let dbTotalPrice = o.total_price;
+  if (typeof dbTotalPrice === 'object' && dbTotalPrice !== null) {
+    dbTotalPrice = Object.values(dbTotalPrice).reduce((sum, price) => sum + price, 0);
+  }
+
+  await query(`INSERT INTO orders (order_id, id_source, order_source, guest_name, phone, id_number, room_type, room_number, check_in_date, check_out_date, status, payment_method, total_price, deposit, create_time, remarks, stay_type) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)` , [
+    o.order_id,o.id_source,o.order_source,o.guest_name,o.phone,o.id_number,o.room_type,o.room_number,o.check_in_date,o.check_out_date,o.status,o.payment_method,dbTotalPrice,o.deposit,new Date(),o.remarks,'客房'
   ]);
 }
 
 describe('退押金扩展场景', () => {
-  beforeEach(global.cleanupTestData);
+  beforeEach(async () => {
+    await global.cleanupTestData();
+  });
 
   test('部分退款后剩余可退金额正确', async () => {
     const rt = await createTestRoomType();

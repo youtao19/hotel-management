@@ -237,11 +237,11 @@ export const shiftHandoverApi = {
   // 导出Excel
   exportHandover: (handoverData) => api.post('/shift-handover/export', handoverData, { responseType: 'blob' }),
 
-  // 获取交接班表格
+  // 获取交接班表格（计算版本）
   getShiftTable: (params) => api.get('/handover/table', { params }),
 
-  // 按日期读取已保存的交接班聚合数据
-  getSavedHandover: (params) => api.get('/handover/by-date', { params }),
+  // 获取交接班表格数据（从handover表查询）
+  getHandoverTableData: (params) => api.get('/handover/handover-table', { params }),
 
   // 获取备忘录
   getRemarks: (params) => api.get('/handover/remarks', { params }),
@@ -256,13 +256,13 @@ export const shiftHandoverApi = {
   getReserveCash: (date) => api.get('/handover/reserve-cash', { params: { date } }),
 
   // 获取已有交接班日期（可访问日期）
-  getAvailableDates: () => api.get('/handover/available-dates'),
+  getAvailableDates: () => api.get('/handover/dates'),
 
   // 开始交接班（首日默认、避免重复创建）
   startHandover: (handoverData) => api.post('/handover/start', handoverData),
 
-  // 测试数据结构
-  testData: (testData) => api.post('/handover/test-data', testData)
+  // 保存页面数据（保存完整的页面数据，包括金额、统计数据等）
+  saveAmountChanges: (amountData) => api.post('/handover/save-amounts', amountData)
 
 }
 

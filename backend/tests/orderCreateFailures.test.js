@@ -4,7 +4,9 @@ const { createTestRoomType, createTestRoom, createTestOrder } = require('./test-
 
 // 专注覆盖尚未测试的失败分支
 describe('POST /api/orders/new 失败分支补充', () => {
-  beforeEach(global.cleanupTestData);
+  beforeEach(async () => {
+    await global.cleanupTestData();
+  });
 
   test('无效手机号格式', async () => {
     const rt = await createTestRoomType();
@@ -42,10 +44,10 @@ describe('POST /api/orders/new 失败分支补充', () => {
     const rt = await createTestRoomType();
     const room = await createTestRoom(rt.type_code);
     const base = await createTestOrder({ room_type: rt.type_code, room_number: room.room_number });
-    const order = { ...base, room_price: 0 }; // 数字 0
+    const order = { ...base, total_price: 0 }; // 直接设置总价格为0
     const res = await request(app).post('/api/orders/new').send(order);
     expect(res.status).toBe(400);
-    expect(res.body.message).toContain('房间价格必须大于0');
+    expect(res.body.message).toContain('总价格必须大于0');
   });
 
   test('房间已被预订（日期区间重叠）', async () => {
