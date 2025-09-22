@@ -65,8 +65,9 @@
               @update:notes="v => notes = v"
               @update:total-rooms="v => totalRooms = v"
               @update:rest-rooms="v => restRooms = v"
-              @update:vip-cards="v => vipCards = v"
+              @update:vip-cards="v => vipCards = Number(v) || 0"
               @update:good-review="v => goodReview = v"
+              @save-vip-cards="handleVipCardSave"
             />
           </div>
         </div>
@@ -120,7 +121,57 @@ const hasChanges = ref(false) // 用于追踪数据是否有变更
 // 特殊统计
 const totalRooms = ref(29)
 const restRooms = ref(3)
-const vipCards = ref(6)
+const vipCards = ref(Number(6))
+
+// VipCard回车键自动保存函数
+async function handleVipCardSave(value) {
+  try {
+    console.log('VipCard回车键触发自动保存，值:', value)
+
+    if (!selectedDate.value) {
+      $q.notify({
+        type: 'negative',
+        message: '请先选择日期',
+        position: 'top',
+        timeout: 2000
+      })
+      return
+    }
+
+    // 更新本地vipCards值
+    vipCards.value = Number(value) || 0
+
+    // 调用保存API，只保存vipCard
+    const saveData = {
+      date: selectedDate.value,
+      vipCards: vipCards.value,
+      taskList: taskList.value || []
+    }
+
+    const response = await shiftHandoverApi.saveAmountChanges(saveData)
+
+    if (response.success) {
+      $q.notify({
+        type: 'positive',
+        message: `大美卡已自动保存: ${vipCards.value}`,
+        position: 'top',
+        timeout: 2000
+      })
+      console.log('VipCard自动保存成功:', response)
+    } else {
+      throw new Error(response.message || '保存失败')
+    }
+
+  } catch (error) {
+    console.error('VipCard自动保存失败:', error)
+    $q.notify({
+      type: 'negative',
+      message: `保存失败: ${error.message}`,
+      position: 'top',
+      timeout: 3000
+    })
+  }
+}
 
 // 保存页面数据（保存所有页面数据，包括金额、统计数据等）
 async function savePageData() {
@@ -244,7 +295,7 @@ async function exportToExcel() {
 }
 
 // 备忘录管理方法
-function addNewTask() {
+async function addNewTask() {
   if (!newTaskTitle.value.trim()) return
 
   const newTask = {
@@ -254,8 +305,39 @@ function addNewTask() {
     completed: false
   }
 
+  // 添加到本地列表
   taskList.value.push(newTask)
+  const memoContent = newTaskTitle.value.trim()
   newTaskTitle.value = ''
+
+  // 自动保存到交接班表（支付方式1）
+  try {
+    const saveResult = await shiftHandoverApi.saveAdminMemo({
+      date: selectedDate.value,
+      memo: memoContent
+    })
+
+    if (saveResult.success) {
+      $q.notify({
+        type: 'positive',
+        message: '备忘录已自动保存到交接班表',
+        position: 'top',
+        timeout: 2000
+      })
+      console.log('备忘录自动保存成功:', saveResult)
+    } else {
+      throw new Error(saveResult.message || '保存失败')
+    }
+  } catch (error) {
+    console.error('自动保存备忘录失败:', error)
+    $q.notify({
+      type: 'warning',
+      message: '备忘录添加成功，但自动保存失败',
+      caption: error.message || '请手动保存页面数据',
+      position: 'top',
+      timeout: 3000
+    })
+  }
 }
 
 // 删除备忘录
@@ -284,54 +366,81 @@ function updateTaskStatus(taskId, completed) {
 // 从后端加载备注并填充到备忘录
 async function loadRemarksIntoMemo() {
   try {
+    console.log('开始加载备忘录数据...')
+
+    // 1. 加载订单备注
     console.log('调用 fetchRemarks API...')
-    // 调用 Pinia 的 action 获取指定日期的备注，并使用其返回值
-    const res = await shiftHandoverStore.fetchRemarks(selectedDate.value)
-    console.log('fetchRemarks API 返回:', res)
+    const remarksRes = await shiftHandoverStore.fetchRemarks(selectedDate.value)
+    console.log('fetchRemarks API 返回:', remarksRes)
 
-    // 兼容不同返回结构
-    let list = []
-    if (Array.isArray(res)) list = res
-    else if (Array.isArray(res?.data)) list = res.data
-    else if (Array.isArray(res?.data?.data)) list = res.data.data
-    else if (Array.isArray(res?.rows)) list = res.rows
-    else if (Array.isArray(res?.data?.rows)) list = res.data.rows
-    else if (Array.isArray(res?.list)) list = res.list
-    else if (Array.isArray(res?.data?.list)) list = res.data.list
+    // 2. 加载管理员备忘录
+    console.log('调用 getAdminMemos API...')
+    const adminMemosRes = await shiftHandoverApi.getAdminMemos({ date: selectedDate.value })
+    console.log('getAdminMemos API 返回:', adminMemosRes)
 
-    if (list.length) {
-      // 转成备忘录任务，格式：房间号：（），备注：（）
-      const formatted = list.map((r, idx) => {
-        const room = r?.room_number || '未知房间'
-        const remarkText = r?.remarks || '无备注'
-        const rawTime = r?.time || r?.created_at || r?.create_time || r?.createdAt || r?.updatedAt
-        const timeStr = rawTime
-          ? new Date(rawTime).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-          : new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+    // 处理订单备注
+    let orderRemarks = []
+    if (Array.isArray(remarksRes)) orderRemarks = remarksRes
+    else if (Array.isArray(remarksRes?.data)) orderRemarks = remarksRes.data
+    else if (Array.isArray(remarksRes?.data?.data)) orderRemarks = remarksRes.data.data
+    else if (Array.isArray(remarksRes?.rows)) orderRemarks = remarksRes.rows
+    else if (Array.isArray(remarksRes?.data?.rows)) orderRemarks = remarksRes.data.rows
+    else if (Array.isArray(remarksRes?.list)) orderRemarks = remarksRes.list
+    else if (Array.isArray(remarksRes?.data?.list)) orderRemarks = remarksRes.data.list
 
-        return {
-          id: `order-${r.order_id}-${r.remarks ? r.remarks.replace(/\s/g, '_') : 'no_remark'}-${idx}`, // More stable ID
-          title: `房间号：${room}，备注：${remarkText}`,
-          time: timeStr,
-          completed: false,
-          // 保存原始数据，便于后续处理
-          raw: r
-        }
-      })
-
-      // 覆盖显示为后端当天结果
-      // taskList.value = formatted
-      // 合并订单备注到现有备忘录列表
-      // 过滤掉可能重复的项，例如基于id
-      const existingTaskIds = new Set(taskList.value.map(task => task.id));
-      const newRemarks = formatted.filter(remark => !existingTaskIds.has(remark.id));
-      taskList.value = [...taskList.value, ...newRemarks];
-      console.log('备忘录数据处理完成，共', newRemarks.length, '条新备注')
-    } else {
-      // If list.length is 0, do not clear taskList.value, as it might contain admin-added tasks.
-      // taskList.value = []
-      console.log('备忘录数据为空，保持现有任务列表')
+    // 处理管理员备忘录
+    let adminMemos = []
+    if (Array.isArray(adminMemosRes?.data)) {
+      adminMemos = adminMemosRes.data
+    } else if (Array.isArray(adminMemosRes)) {
+      adminMemos = adminMemosRes
     }
+
+    // 格式化订单备注
+    const formattedOrderRemarks = orderRemarks.map((r, idx) => {
+      const room = r?.room_number || '未知房间'
+      const remarkText = r?.remarks || '无备注'
+      const rawTime = r?.time || r?.created_at || r?.create_time || r?.createdAt || r?.updatedAt
+      const timeStr = rawTime
+        ? new Date(rawTime).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+        : new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+
+      return {
+        id: `order-${r.order_id}-${r.remarks ? r.remarks.replace(/\s/g, '_') : 'no_remark'}-${idx}`,
+        title: `房间号：${room}，备注：${remarkText}`,
+        time: timeStr,
+        completed: false,
+        type: 'order', // 标识为订单备注
+        raw: r
+      }
+    })
+
+    // 格式化管理员备忘录（保持原有格式）
+    const formattedAdminMemos = adminMemos.map((memo) => ({
+      id: memo.id,
+      title: memo.title,
+      time: memo.time,
+      completed: memo.completed,
+      type: 'admin' // 标识为管理员备忘录
+    }))
+
+    // 合并所有备忘录，先显示管理员备忘录，再显示订单备注
+    const allMemos = [...formattedAdminMemos, ...formattedOrderRemarks]
+
+    // 过滤掉可能重复的项
+    const existingTaskIds = new Set(taskList.value.map(task => task.id));
+    const newMemos = allMemos.filter(memo => !existingTaskIds.has(memo.id));
+
+    // 如果是首次加载或者没有现有任务，则直接设置
+    if (taskList.value.length === 0) {
+      taskList.value = allMemos
+      console.log('首次加载备忘录，共', allMemos.length, '条（管理员:', formattedAdminMemos.length, '条，订单:', formattedOrderRemarks.length, '条）')
+    } else {
+      // 否则只添加新的备忘录
+      taskList.value = [...taskList.value, ...newMemos]
+      console.log('增量加载备忘录，新增', newMemos.length, '条')
+    }
+
   } catch (e) {
     console.error('加载备忘录失败:', e)
     $q.notify({
@@ -362,7 +471,6 @@ async function refreshAllData() {
     console.log('正在刷新中，跳过重复调用')
     return
   }
-
   try {
     isRefreshing.value = true
     loadingShow({ message: '加载数据中...' });
@@ -443,6 +551,20 @@ async function loadComputedPaymentDataInternal() {
   const res = await shiftHandoverStore.fetchShiftTable(selectedDate.value)
   const data = res?.data || res
   paymentData.value = data
+
+  // 即使使用计算数据，也尝试加载已保存的vipCard数据
+  try {
+    console.log('尝试加载已保存的vipCard数据...')
+    const handoverResponse = await shiftHandoverStore.fetchHandoverTableData(selectedDate.value)
+    if (handoverResponse.success && handoverResponse.data && typeof handoverResponse.data.vipCards !== 'undefined') {
+      vipCards.value = Number(handoverResponse.data.vipCards) || 0
+      console.log('从保存的数据中加载vipCards:', vipCards.value)
+    } else {
+      console.log('没有找到已保存的vipCard数据，使用默认值')
+    }
+  } catch (error) {
+    console.warn('加载vipCard数据失败，使用默认值:', error)
+  }
 }
 
 async function loadPaymentData() {
@@ -468,12 +590,19 @@ async function loadPaymentDataInternal() {
     const response = await shiftHandoverStore.fetchHandoverTableData(selectedDate.value)
     if (response.success) {
       paymentData.value = response.data
+
+      // 处理vipCards数据
+      if (response.data && typeof response.data.vipCards !== 'undefined') {
+        vipCards.value = Number(response.data.vipCards) || 0
+        console.log('从交接班数据中加载vipCards:', vipCards.value)
+      }
+
       console.log('加载交接班数据完成')
     } else {
       throw new Error(response.message || '获取交接班数据失败')
     }
   } else {
-    console.log('使用计算结果')
+    console.log('!!!!!使用计算结果')
     await loadComputedPaymentDataInternal()
     console.log('加载计算结果完成')
   }

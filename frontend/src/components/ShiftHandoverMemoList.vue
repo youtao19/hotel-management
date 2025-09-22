@@ -6,7 +6,11 @@
     </div>
     <div class="task-management-content">
       <div class="task-list-horizontal">
-        <div v-for="(task, index) in taskList" :key="task.id" class="task-card" :class="{ 'task-completed': task.completed }">
+        <div v-for="(task, index) in taskList" :key="task.id" class="task-card" :class="{
+          'task-completed': task.completed,
+          'admin-memo': task.type === 'admin',
+          'order-memo': task.type === 'order'
+        }">
           <q-checkbox
             v-model="task.completed"
             class="task-checkbox"
@@ -14,7 +18,23 @@
             @update:model-value="updateTaskStatus(task.id, $event)"
           />
           <div class="task-content" @click="onEditTask(index)">
-            <div class="task-title" :class="{ 'completed': task.completed }">{{ task.title }}</div>
+            <div class="task-title" :class="{ 'completed': task.completed }">
+              <q-icon
+                v-if="task.type === 'admin'"
+                name="admin_panel_settings"
+                size="16px"
+                class="q-mr-xs text-orange-6"
+                title="管理员备忘录"
+              />
+              <q-icon
+                v-else-if="task.type === 'order'"
+                name="room_service"
+                size="16px"
+                class="q-mr-xs text-blue-6"
+                title="订单备注"
+              />
+              {{ task.title }}
+            </div>
             <div class="task-time" v-if="task.time">
               <q-icon name="schedule" size="14px" class="q-mr-xs" />
               {{ task.time }}
@@ -183,6 +203,28 @@ function onEditTask(index) {
 
 .task-card:hover .task-delete {
   opacity: 1;
+}
+
+/* 管理员备忘录样式 */
+.admin-memo {
+  background: #fff3e0 !important;
+  border-color: #ff9800 !important;
+}
+
+.admin-memo:hover {
+  background: #ffe0b2 !important;
+  border-color: #f57c00 !important;
+}
+
+/* 订单备注样式 */
+.order-memo {
+  background: #e3f2fd !important;
+  border-color: #2196f3 !important;
+}
+
+.order-memo:hover {
+  background: #bbdefb !important;
+  border-color: #1976d2 !important;
 }
 
 .add-task-card {

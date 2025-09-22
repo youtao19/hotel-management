@@ -262,7 +262,13 @@ export const shiftHandoverApi = {
   startHandover: (handoverData) => api.post('/handover/start', handoverData),
 
   // 保存页面数据（保存完整的页面数据，包括金额、统计数据等）
-  saveAmountChanges: (amountData) => api.post('/handover/save-amounts', amountData)
+  saveAmountChanges: (amountData) => api.post('/handover/save-amounts', amountData),
+
+  // 保存管理员备忘录到交接班表
+  saveAdminMemo: (memoData) => api.post('/handover/save-admin-memo', memoData),
+
+  // 获取交接班表中的管理员备忘录
+  getAdminMemos: (params) => api.get('/handover/admin-memos', { params })
 
 }
 

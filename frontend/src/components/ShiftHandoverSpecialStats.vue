@@ -19,7 +19,15 @@
         <tr>
           <td class="stats-label">大美卡</td>
           <td colspan="2" class="stats-number">
-            <q-input v-model.number="localVipCards" dense borderless class="text-center" placeholder="0" :readonly="readOnly" />
+            <q-input
+              v-model.number="localVipCards"
+              dense
+              borderless
+              class="text-center"
+              placeholder="0"
+              :readonly="readOnly"
+              @keydown.enter="handleVipCardSave"
+            />
           </td>
           <td class="stats-label">休息房</td>
           <td colspan="2" class="stats-number">
@@ -41,7 +49,7 @@ import { ref, watch } from 'vue'
 const props = defineProps({
   totalRooms: { type: Number, required: true },
   restRooms: { type: Number, required: true },
-  vipCards: { type: Number, required: true },
+  vipCards: { type: [Number, String], default: 0 }, // 允许Number或String类型
   cashierName: { type: String, required: true },
   notes: { type: String, default: '' },
   goodReview: { type: String, default: '邀1得1' },
@@ -55,21 +63,22 @@ const emit = defineEmits([
   'update:total-rooms',
   'update:rest-rooms',
   'update:vip-cards',
-  'update:good-review'
+  'update:good-review',
+  'save-vip-cards' // 新增：VipCard保存事件
 ])
 
 const localCashierName = ref(props.cashierName)
 const localNotes = ref(props.notes)
 const localTotalRooms = ref(props.totalRooms)
 const localRestRooms = ref(props.restRooms)
-const localVipCards = ref(props.vipCards)
+const localVipCards = ref(Number(props.vipCards) || 0)
 const localGoodReview = ref(props.goodReview)
 
 watch(() => props.cashierName, v => { localCashierName.value = v })
 watch(() => props.notes, v => { localNotes.value = v })
 watch(() => props.totalRooms, v => { localTotalRooms.value = v })
 watch(() => props.restRooms, v => { localRestRooms.value = v })
-watch(() => props.vipCards, v => { localVipCards.value = v })
+watch(() => props.vipCards, v => { localVipCards.value = Number(v) || 0 })
 watch(() => props.goodReview, v => { localGoodReview.value = v })
 
 watch(localCashierName, v => emit('update:cashier-name', v))
@@ -78,6 +87,14 @@ watch(localTotalRooms, v => emit('update:total-rooms', v))
 watch(localRestRooms, v => emit('update:rest-rooms', v))
 watch(localVipCards, v => emit('update:vip-cards', v))
 watch(localGoodReview, v => emit('update:good-review', v))
+
+// VipCard回车键保存处理函数
+const handleVipCardSave = () => {
+  if (!props.readOnly) {
+    console.log('VipCard回车键触发保存，当前值:', localVipCards.value)
+    emit('save-vip-cards', localVipCards.value)
+  }
+}
 </script>
 
 <style scoped>

@@ -8,7 +8,9 @@ const {
   getAvailableDates,
   startHandover,
   saveAmountChanges,
-  getHandoverTableData
+  getHandoverTableData,
+  saveAdminMemoToHandover,
+  getAdminMemosFromHandover
 } = require('../modules/handoverModule');
 
 
@@ -185,6 +187,90 @@ router.post('/save-amounts', async (req, res) => {
 
   } catch (error) {
     console.error('保存页面数据失败:', {
+      message: error.message,
+      stack: error.stack,
+      requestBody: JSON.stringify(req.body, null, 2)
+    });
+
+    res.status(500).json({
+      success: false,
+      message: error.message || '保存失败',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// 获取交接班表中的管理员备忘录
+router.get('/admin-memos', async (req, res) => {
+  try {
+    const { date } = req.query;
+
+    if (!date) {
+      return res.status(400).json({
+        success: false,
+        message: '缺少必需的日期参数'
+      });
+    }
+
+    const memos = await getAdminMemosFromHandover(date);
+    res.json({
+      success: true,
+      data: memos,
+      message: '获取管理员备忘录成功'
+    });
+  } catch (error) {
+    console.error('获取管理员备忘录失败:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || '获取管理员备忘录失败'
+    });
+  }
+});
+
+// 保存管理员备忘录到交接班表
+router.post('/save-admin-memo', async (req, res) => {
+  try {
+    console.log('收到保存管理员备忘录请求:', {
+      body: JSON.stringify(req.body, null, 2),
+      timestamp: new Date().toISOString()
+    });
+
+    // 基本数据验证
+    if (!req.body || Object.keys(req.body).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: '请求数据为空'
+      });
+    }
+
+    const { date, memo } = req.body;
+
+    if (!date) {
+      return res.status(400).json({
+        success: false,
+        message: '缺少必需的日期参数'
+      });
+    }
+
+    if (!memo || !memo.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: '备忘录内容不能为空'
+      });
+    }
+
+    const result = await saveAdminMemoToHandover({ date, memo: memo.trim() });
+
+    console.log('管理员备忘录保存成功:', result);
+
+    res.json({
+      success: true,
+      data: result.data,
+      message: result.message || '管理员备忘录保存成功'
+    });
+
+  } catch (error) {
+    console.error('保存管理员备忘录失败:', {
       message: error.message,
       stack: error.stack,
       requestBody: JSON.stringify(req.body, null, 2)
