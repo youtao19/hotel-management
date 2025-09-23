@@ -61,6 +61,7 @@ const billRoute = require("./routes/billRoute");
 const reviewRoute = require("./routes/reviewRoute");
 const HandoverRoute = require("./routes/handoverRoute");
 const revenueRoute = require("./routes/revenueRoute");
+const revenueStatisticsRoute = require("./routes/revenueStatisticsRoute");
 
 app.use("/api/user", userRoute);
 app.use("/api/auth", authRoute);
@@ -71,6 +72,7 @@ app.use("/api/bills", billRoute);
 app.use("/api/reviews", reviewRoute);
 app.use("/api/handover", HandoverRoute);
 app.use("/api/revenue", revenueRoute);
+app.use("/api/revenue-statistics", revenueStatisticsRoute);
 app.get("/api/hup", (req, res) => res.status(200).json({ ok: true }));
 
 app.all("/", function (req, res) {

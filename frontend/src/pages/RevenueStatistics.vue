@@ -1020,14 +1020,19 @@ const fetchReceiptDetails = async (customStartDate = null, customEndDate = null)
       }
     }
 
-    const data = await api.get('/shift-handover/receipts', {
+    const response = await api.get('/revenue-statistics/receipts', {
       params: {
         type: receiptType.value,
         startDate: startDate,
         endDate: endDate
       }
     })
-    receiptDetails.value = data.map(item => {
+
+    if (!response.success) {
+      throw new Error(response.message || '获取收款明细失败')
+    }
+
+    receiptDetails.value = response.data.map(item => {
       const raw = item.stay_date
       let stayDateDisplay = ''
       if (raw) {
