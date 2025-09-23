@@ -8,45 +8,88 @@
           <q-btn label="使用计算结果" color="orange" @click="loadComputedPaymentData" />
           <q-btn color="primary" icon="print" label="打印" @click="printHandover" />
           <q-btn color="green" icon="download" label="导出Excel" @click="exportToExcel" />
-          <q-btn color="blue" icon="start" label="完成交接并创建新班次" @click="completeAndCreateNext" :loading="completingHandover" />
+          <q-btn color="blue" icon="start" label="完成交接并创建新班次" @click="completeAndCreateNext" :loading="completingHandover">
+            <q-tooltip>
+              完成当前交接班并创建新班次（需要填写交班人和接班人）
+            </q-tooltip>
+          </q-btn>
           <q-btn color="purple" icon="save" label="保存页面" @click="savePageData" :loading="savingAmounts" />
         </div>
       </div>
 
       <!-- 现有日期选择器区域 -->
       <div class="existing-dates-section q-mb-md">
-        <h6 class="text-h6 q-mb-md text-grey-8">
-          <q-icon name="calendar_today" class="q-mr-sm" />
-          查看现有交接班记录
-        </h6>
 
         <!-- 日期和人员信息 -->
         <div class="row q-col-gutter-md q-mb-md">
           <div class="col-md-4">
             <q-select
               v-model="selectedDate"
-              :options="availableDates"
-              label="查询日期（包含任何交接班记录的日期）"
+              :options="filteredAvailableDates"
+              label="查询日期"
               filled
               emit-value
               map-options
               :loading="availableDates.length === 0"
               :disable="availableDates.length === 0"
+              input-debounce="0"
+              @filter="filterFn"
+              behavior="menu"
+              max-height="300px"
+              virtual-scroll-slice-size="30"
+              options-selected-class="text-deep-orange"
             >
               <template v-slot:no-option>
                 <q-item>
                   <q-item-section class="text-grey">
-                    暂无可用日期
+                    <div class="text-center">
+                      <q-icon name="search_off" size="2em" class="q-mb-sm" />
+                      <div>没有匹配的日期</div>
+                    </div>
                   </q-item-section>
                 </q-item>
+              </template>
+
+              <template v-slot:option="scope">
+                <q-item
+                  v-bind="scope.itemProps"
+                  :class="scope.selected ? 'bg-blue-1' : ''"
+                >
+                  <q-item-section>
+                    <q-item-label>
+                      <q-icon name="event" class="q-mr-sm" color="primary" />
+                      {{ scope.opt.label }}
+                    </q-item-label>
+                  </q-item-section>
+                  <q-item-section side v-if="scope.selected">
+                    <q-icon name="check" color="primary" />
+                  </q-item-section>
+                </q-item>
+              </template>
+
+              <template v-slot:selected-item="scope">
+                <div class="row items-center">
+                  <q-icon name="event" class="q-mr-sm" color="primary" />
+                  {{ scope.opt.label }}
+                </div>
               </template>
             </q-select>
           </div>
           <div class="col-md-4">
-            <q-input v-model="handoverPerson" label="交班人" filled />
+            <q-input
+              v-model="handoverPerson"
+              label="交班人"
+              filled
+              :rules="[val => !!val && val.trim() !== '' || '请输入交班人姓名']"
+            />
           </div>
           <div class="col-md-4">
-            <q-input v-model="receivePerson" label="接班人" filled />
+            <q-input
+              v-model="receivePerson"
+              label="接班人"
+              filled
+              :rules="[val => !!val && val.trim() !== '' || '请输入接班人姓名']"
+            />
           </div>
         </div>
       </div>
@@ -125,6 +168,8 @@ const loadingHide = () => {
 
 // 基础数据
 const selectedDate = ref('') // 选中的日期 - 初始为空，等待加载可用日期后设置
+const availableDates = ref([]) // 可用日期列表
+const filteredAvailableDates = ref([]) // 过滤后的可用日期列表
 const newDate = ref(date.formatDate(new Date(), 'YYYY-MM-DD')) // 新建交接班的日期，默认为今天
 const todayDate = date.formatDate(new Date(), 'YYYY-MM-DD') // 今天日期，用于限制最小选择日期
 const creatingNewHandover = ref(false) // 正在创建新交接班的状态
@@ -139,7 +184,6 @@ const shiftHandoverStore = useShiftHandoverStore()
 
 const paymentData = ref({}) // 交接班支付数据
 const isRefreshing = ref(false) // 防止重入标志
-const availableDates = ref([]) // 可用日期列表
 
 // 备忘录列表相关
 const newTaskTitle = ref('')
@@ -277,6 +321,27 @@ async function completeAndCreateNext() {
       return
     }
 
+    // 验证交班人和接班人
+    if (!handoverPerson.value || handoverPerson.value.trim() === '') {
+      $q.notify({
+        type: 'negative',
+        message: '请输入交班人姓名',
+        position: 'top',
+        timeout: 3000
+      })
+      return
+    }
+
+    if (!receivePerson.value || receivePerson.value.trim() === '') {
+      $q.notify({
+        type: 'negative',
+        message: '请输入接班人姓名',
+        position: 'top',
+        timeout: 3000
+      })
+      return
+    }
+
     completingHandover.value = true
 
     // 第一步：保存当前交接班数据
@@ -296,6 +361,10 @@ async function completeAndCreateNext() {
     }
 
     console.log('保存当前交接班数据:', currentHandoverData)
+    console.log('前端人员信息检查:', {
+      handoverPerson: handoverPerson.value,
+      receivePerson: receivePerson.value
+    })
     const saveResult = await shiftHandoverStore.startHandover(currentHandoverData)
 
     if (!saveResult.success) {
@@ -341,7 +410,7 @@ async function completeAndCreateNext() {
             timeout: 3000
           })
           selectedDate.value = newDateValue
-          await loadShiftHandoverData()
+          await refreshAllData()
           return
         }
 
@@ -378,7 +447,7 @@ async function completeAndCreateNext() {
               color: 'white',
               handler: () => {
                 selectedDate.value = newDateValue
-                loadShiftHandoverData()
+                refreshAllData()
               }
             }
           ]
@@ -389,7 +458,7 @@ async function completeAndCreateNext() {
 
         // 自动切换到新日期
         selectedDate.value = newDateValue
-        await loadShiftHandoverData()
+        await refreshAllData()
 
       } catch (error) {
         console.error('创建新交接班记录失败:', error)
@@ -718,7 +787,6 @@ async function loadRemarksIntoMemo() {
 }
 
 
-
 // 监听备忘录变化
 watch(taskList, () => {
   hasChanges.value = true // 标记数据已变更
@@ -754,6 +822,31 @@ async function refreshAllData() {
   }
 }
 
+// 获取今天的日期（YYYY-MM-DD 格式）
+function getTodayDate() {
+  const today = new Date()
+  const year = today.getFullYear()
+  const month = String(today.getMonth() + 1).padStart(2, '0')
+  const day = String(today.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+// 日期选择器过滤函数（支持虚拟滚动）
+function filterFn(val, update) {
+  update(() => {
+    if (val === '') {
+      // 显示所有日期，利用虚拟滚动处理性能
+      filteredAvailableDates.value = availableDates.value
+    } else {
+      // 搜索时显示所有匹配的记录
+      const needle = val.toLowerCase()
+      filteredAvailableDates.value = availableDates.value.filter(v =>
+        v.label.toLowerCase().indexOf(needle) > -1
+      )
+    }
+  })
+}
+
 // 加载可用日期列表（使用宽松模式）
 async function loadAvailableDates() {
   try {
@@ -761,21 +854,36 @@ async function loadAvailableDates() {
     const response = await shiftHandoverStore.fetchAvailableDatesFlexible()
     const dates = response.success ? response.data : []
 
+    // 对日期进行排序，最新的日期在上面
+    const sortedDates = dates.sort((a, b) => new Date(b) - new Date(a))
+
     // 将日期格式化为选择器选项
-    availableDates.value = dates.map(date => ({
-      label: date,
+    availableDates.value = sortedDates.map(date => ({
+      label: `${date}`,
       value: date
     }))
 
+    // 初始化过滤列表，默认只显示前5个日期（最新的5个）
+    filteredAvailableDates.value = availableDates.value.slice(0, 5)
+
     console.log('可用日期列表加载完成（宽松模式）:', availableDates.value)
 
-    // 如果当前选中的日期不在可用日期列表中，选择第一个可用日期
-    if (dates.length > 0 && !dates.includes(selectedDate.value)) {
-      selectedDate.value = dates[0]
-      console.log('当前日期不可用，已切换到:', selectedDate.value)
+    // 获取今天的日期
+    const todayDate = getTodayDate()
+    console.log('今天的日期:', todayDate)
+
+    // 默认选择今天的日期（如果存在），否则选择最新日期
+    if (sortedDates.length > 0) {
+      if (sortedDates.includes(todayDate)) {
+        selectedDate.value = todayDate
+        console.log('已选择今天的日期:', selectedDate.value)
+      } else if (!sortedDates.includes(selectedDate.value)) {
+        selectedDate.value = sortedDates[0]
+        console.log('今天无记录，已切换到最新日期:', selectedDate.value)
+      }
     }
 
-    return dates
+    return sortedDates
   } catch (error) {
     console.error('加载可用日期列表失败（宽松模式）:', error)
     $q.notify({
@@ -901,6 +1009,16 @@ async function loadPaymentDataInternal() {
         console.log('从交接班数据中加载vipCards:', vipCards.value)
       }
 
+      // 处理人员信息
+      if (response.data) {
+        handoverPerson.value = response.data.handoverPerson || ''
+        receivePerson.value = response.data.takeoverPerson || ''
+        console.log('从交接班数据中加载人员信息:', {
+          handoverPerson: handoverPerson.value,
+          receivePerson: receivePerson.value
+        })
+      }
+
       console.log('加载交接班数据完成')
     } else {
       throw new Error(response.message || '获取交接班数据失败')
@@ -935,6 +1053,27 @@ async function startHandover() {
     // 数据验证
     if (!selectedDate.value) {
       throw new Error('请选择交接班日期')
+    }
+
+    // 验证交班人和接班人
+    if (!handoverPerson.value || handoverPerson.value.trim() === '') {
+      $q.notify({
+        type: 'negative',
+        message: '请输入交班人姓名',
+        position: 'top',
+        timeout: 3000
+      })
+      return
+    }
+
+    if (!receivePerson.value || receivePerson.value.trim() === '') {
+      $q.notify({
+        type: 'negative',
+        message: '请输入接班人姓名',
+        position: 'top',
+        timeout: 3000
+      })
+      return
     }
 
     if (!paymentData.value || Object.keys(paymentData.value).length === 0) {

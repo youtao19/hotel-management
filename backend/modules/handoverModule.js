@@ -326,6 +326,10 @@ async function startHandover(handoverData) {
     } = handoverData;
 
     console.log('交接班数据处理模式:', saveMode ? '保存用户数据' : '计算数据');
+    console.log('接收到的人员信息:', {
+      handoverPerson,
+      receivePerson
+    });
 
     let payData;
     let handoverDate;
@@ -444,23 +448,30 @@ async function startHandover(handoverData) {
 
       // 从 payData 对象中为当前支付方式提取数据
       const values = [
-        handoverDate,
-        handoverPerson || '',
-        receivePerson || '',
-        specialStats?.vipCards || vipCard || 0,
-        pay_way_mapping[method],
-        payData.reserve[method] || 0,
-        payData.hotelIncome[method] || 0,
-        payData.restIncome[method] || 0,
-        payData.carRentIncome[method] || 0,
-        payData.totalIncome[method] || 0,
-        payData.hotelDeposit[method] || 0, // 对应数据库的 room_refund
-        payData.restDeposit[method] || 0,  // 对应数据库的 rest_refund
-        payData.retainedAmount[method] || 0,
-        payData.handoverAmount[method] || 0,
-        JSON.stringify(taskList || []), // 任务列表
-        JSON.stringify(memoList || [])  // 备忘录列表
+        handoverDate,                                    // $1: date
+        handoverPerson || '',                           // $2: handover_person
+        receivePerson || '',                            // $3: takeover_person
+        specialStats?.vipCards || vipCard || 0,        // $4: vip_card
+        pay_way_mapping[method],                       // $5: payment_type
+        payData.reserve[method] || 0,                  // $6: reserve_cash
+        payData.hotelIncome[method] || 0,              // $7: room_income
+        payData.restIncome[method] || 0,               // $8: rest_income
+        payData.carRentIncome[method] || 0,            // $9: rent_income
+        payData.totalIncome[method] || 0,              // $10: total_income
+        payData.hotelDeposit[method] || 0,             // $11: room_refund
+        payData.restDeposit[method] || 0,              // $12: rest_refund
+        payData.retainedAmount[method] || 0,           // $13: retained
+        payData.handoverAmount[method] || 0,           // $14: handover
+        JSON.stringify(taskList || []),                // $15: task_list
+        JSON.stringify(memoList || [])                 // $16: remarks
       ];
+
+      console.log('保存人员信息:', {
+        method,
+        handoverPerson: handoverPerson || '',
+        receivePerson: receivePerson || '',
+        payment_type: pay_way_mapping[method]
+      });
 
       console.log('准备插入/更新:', {
         method,
@@ -672,7 +683,9 @@ async function getHandoverTableData(date) {
         rest_refund,
         retained,
         handover,
-        vip_card
+        vip_card,
+        handover_person,
+        takeover_person
       FROM handover
       WHERE date = $1::date
         AND payment_type IN (1, 2, 3, 4)
@@ -687,28 +700,36 @@ async function getHandoverTableData(date) {
       return await getShiftTable(date);
     }
 
-    // 获取vipCards数据（只从支付方式1-现金记录中获取）
+    // 获取vipCards数据和人员信息（只从支付方式1-现金记录中获取）
     let vipCards = 0;
+    let handoverPerson = '';
+    let takeoverPerson = '';
 
     // 首先尝试从查询结果中找到支付方式1的记录
     const cashRecord = result.rows.find(row => row.payment_type === 1);
     if (cashRecord) {
       vipCards = Number(cashRecord.vip_card) || 0;
+      handoverPerson = cashRecord.handover_person || '';
+      takeoverPerson = cashRecord.takeover_person || '';
     } else {
       // 如果查询结果中没有支付方式1的记录，单独查询一次
       try {
         const vipCardQuery = `
-          SELECT vip_card FROM handover
+          SELECT vip_card, handover_person, takeover_person FROM handover
           WHERE date = $1::date AND payment_type = 1
           LIMIT 1
         `;
         const vipCardResult = await query(vipCardQuery, [date]);
         if (vipCardResult.rows.length > 0) {
           vipCards = Number(vipCardResult.rows[0].vip_card) || 0;
+          handoverPerson = vipCardResult.rows[0].handover_person || '';
+          takeoverPerson = vipCardResult.rows[0].takeover_person || '';
         }
       } catch (error) {
-        console.warn('查询vipCard失败，使用默认值0:', error);
+        console.warn('查询vipCard和人员信息失败，使用默认值:', error);
         vipCards = 0;
+        handoverPerson = '';
+        takeoverPerson = '';
       }
     }
 
@@ -741,7 +762,9 @@ async function getHandoverTableData(date) {
       restRefund: restDeposit,   // 添加别名以兼容测试
       retainedAmount,
       handoverAmount,
-      vipCards // 添加vipCards数据
+      vipCards, // 添加vipCards数据
+      handoverPerson, // 添加交班人信息
+      takeoverPerson  // 添加接班人信息
     };
 
   } catch (error) {

@@ -4,7 +4,7 @@
       <h1 class="text-h4 q-mb-md">查看订单</h1>
     <div class="search-section q-mb-md">
       <div class="row q-col-gutter-md">
-        <div class="col-md-6 col-xs-12">
+        <div class="col-md-4 col-xs-12">
           <q-input v-model="searchQuery" label="搜索订单" filled clearable @keyup.enter="searchOrders">
             <template v-slot:append>
               <q-icon name="search" class="cursor-pointer" @click="searchOrders" />
@@ -14,9 +14,27 @@
             </template>
           </q-input>
         </div>
-        <div class="col-md-4 col-xs-12">
+        <div class="col-md-3 col-xs-12">
           <q-select v-model="filterStatus" :options="statusOptions" label="订单状态" filled clearable emit-value map-options
             @update:model-value="searchOrders" />
+        </div>
+        <div class="col-md-3 col-xs-12">
+          <q-input v-model="filterDate" label="筛选日期" filled clearable @update:model-value="searchOrders">
+            <template v-slot:append>
+              <q-icon name="event" class="cursor-pointer">
+                <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+                  <q-date v-model="filterDate" @update:model-value="onDateSelected">
+                    <div class="row items-center justify-end">
+                      <q-btn v-close-popup label="确定" color="primary" flat />
+                    </div>
+                  </q-date>
+                </q-popup-proxy>
+              </q-icon>
+            </template>
+            <template v-slot:hint>
+              选择入住或离店日期进行筛选
+            </template>
+          </q-input>
         </div>
         <div class="col-md-2 col-xs-12">
           <q-btn color="primary" label="搜索" class="full-width" @click="searchOrders" />
@@ -196,6 +214,7 @@ const $q = useQuasar() // 初始化 $q 对象
 // 搜索和过滤
 const searchQuery = ref('')
 const filterStatus = ref(null)
+const filterDate = ref(null) // 新增：日期筛选
 const loadingOrders = ref(false)
 const fetchError = ref(null) // 新增：用于显示获取订单数据的错误
 
@@ -298,8 +317,26 @@ const filteredOrders = computed(() => {
     result = result.filter(order => order.status === filterStatus.value)
   }
 
+  // 根据日期筛选（匹配入住或离店日期）
+  if (filterDate.value) {
+    result = result.filter(order => {
+      // 格式化日期为 YYYY-MM-DD 格式进行比较
+      const filterDateStr = filterDate.value
+      const checkInDateStr = order.checkInDate ? formatDate(order.checkInDate) : ''
+      const checkOutDateStr = order.checkOutDate ? formatDate(order.checkOutDate) : ''
+
+      return checkInDateStr === filterDateStr || checkOutDateStr === filterDateStr
+    })
+  }
+
   return result
 })
+
+// 日期选择处理函数
+function onDateSelected(date) {
+  filterDate.value = date
+  searchOrders()
+}
 
 // 获取所有订单数据 - 增强错误处理
 async function fetchAllOrders() {
@@ -549,7 +586,7 @@ function checkoutOrderFromDetails() {
 
 // 搜索订单
 function searchOrders() {
-  console.log('搜索订单:', searchQuery.value, filterStatus.value);
+  console.log('搜索订单:', searchQuery.value, filterStatus.value, filterDate.value);
 
   // 设置加载状态
   loadingOrders.value = true;
