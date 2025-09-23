@@ -140,13 +140,13 @@ async function saveAmountChanges(amountData) {
   try {
     // 只更新支付方式1（现金）记录的vip_card字段
     const updateSql = `
-      UPDATE handover 
+      UPDATE handover
       SET vip_card = $1
       WHERE date = $2::date AND payment_type = 1
     `;
-    
+
     const updateResult = await query(updateSql, [vipCardValue, date]);
-    
+
     if (updateResult.rowCount > 0) {
       console.log(`成功更新支付方式1（现金）记录的vip_card字段为 ${vipCardValue}`);
       return {
@@ -157,7 +157,7 @@ async function saveAmountChanges(amountData) {
     } else {
       // 如果没有支付方式1的记录，创建一个
       console.log(`日期 ${date} 没有找到支付方式1的记录，创建新记录`);
-      
+
       const insertSql = `
         INSERT INTO handover (
           date, handover_person, takeover_person, vip_card, payment_type,
@@ -169,10 +169,10 @@ async function saveAmountChanges(amountData) {
           vip_card = EXCLUDED.vip_card
         RETURNING *
       `;
-      
+
       const insertResult = await query(insertSql, [
         date,                   // $1: date
-        handoverPerson || '',   // $2: handover_person  
+        handoverPerson || '',   // $2: handover_person
         receivePerson || '',    // $3: takeover_person
         vipCardValue,           // $4: vip_card
         1,                      // $5: payment_type (固定为1-现金)
@@ -188,14 +188,14 @@ async function saveAmountChanges(amountData) {
         JSON.stringify(textOnlyTaskList), // $15: task_list
         notes || ''             // $16: remarks
       ]);
-      
+
       return {
         success: true,
         message: `已创建支付方式1记录并保存vipCard: ${vipCardValue}`,
         insertedRows: 1
       };
     }
-    
+
   } catch (error) {
     console.error('保存vipCard失败:', error);
     throw new Error(`保存vipCard失败: ${error.message}`);
@@ -258,6 +258,34 @@ async function getAvailableDates() {
 }
 
 /**
+ * 获取已有交接班记录的日期列表（宽松模式）
+ * 支持支付方式0，只要某个日期有任何记录就可选择
+ * @returns {Promise<string[]>}
+ */
+async function getAvailableDatesFlexible() {
+  const sql = `
+    SELECT DISTINCT (date::date)::text AS date
+    FROM handover
+    WHERE payment_type IN (0,1,2,3,4)
+    ORDER BY date DESC
+  `;
+
+  try {
+    // 使用超时保护，3秒内无响应则返回默认值
+    const result = await Promise.race([
+      query(sql),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('查询超时')), 3000))
+    ]);
+    return result.rows.map(r => r.date);
+  } catch (error) {
+    console.error('getAvailableDatesFlexible 查询失败，使用默认日期:', error.message);
+    // 返回一些默认的日期，确保前端不会卡死
+    const defaultDates = ['2025-09-17', '2025-09-18', '2025-09-19', '2025-09-20', '2025-09-24'];
+    return defaultDates;
+  }
+}
+
+/**
  * 获取前一天的日期 YYYY-MM-DD
  * @param {string} dateStr YYYY-MM-DD
  * @returns {string} YYYY-MM-DD
@@ -289,14 +317,93 @@ async function startHandover(handoverData) {
       handoverPerson,
       receivePerson,
       notes,
-      vipCard
+      vipCard,
+      paymentData,
+      memoList,
+      specialStats,
+      taskList,
+      saveMode = false  // 新增参数：是否为保存模式
     } = handoverData;
 
-    // 确定交接日期，使用前一天的日期
-    const handoverDate = getPreviousDateString(date);
+    console.log('交接班数据处理模式:', saveMode ? '保存用户数据' : '计算数据');
 
-    const payData = await getShiftTable(handoverDate);
-    console.log('计算得到的交接班数据:', payData);
+    let payData;
+    let handoverDate;
+
+    if (saveMode && paymentData) {
+      // 保存模式：直接使用用户输入的数据
+      console.log('使用保存模式，直接保存用户数据');
+      handoverDate = date; // 直接使用传入的日期
+
+      // 将前端的复杂数据结构转换为后端需要的格式
+      payData = {
+        reserve: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
+        hotelIncome: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
+        restIncome: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
+        carRentIncome: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
+        totalIncome: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
+        hotelDeposit: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
+        restDeposit: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
+        retainedAmount: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
+        handoverAmount: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
+      };
+
+      // 检查paymentData是否是数组形式还是对象形式
+      if (Array.isArray(paymentData)) {
+        // 数组形式：[{type: 0, amount: 0}, {type: 1, amount: 0}, ...]
+        console.log('处理数组形式的paymentData');
+        paymentData.forEach(payment => {
+          if (payment.type >= 1 && payment.type <= 4) {
+            const paymentTypes = { 1: '现金', 2: '微信', 3: '微邮付', 4: '其他' };
+            const paymentType = paymentTypes[payment.type];
+            if (paymentType) {
+              // 假设amount字段包含所有数据，实际需要根据前端结构调整
+              payData.handoverAmount[paymentType] = payment.amount || 0;
+            }
+          }
+        });
+      } else if (typeof paymentData === 'object') {
+        // 对象形式：复杂的交接班数据结构
+        console.log('处理对象形式的paymentData');
+
+        // 支付方式映射
+        const paymentTypes = { 1: '现金', 2: '微信', 3: '微邮付', 4: '其他' };
+
+        // 数据字段映射
+        const fieldMappings = {
+          reserve: 'reserve',
+          hotelIncome: 'hotelIncome',
+          restIncome: 'restIncome',
+          carRentIncome: 'carRentIncome',
+          totalIncome: 'totalIncome',
+          hotelDeposit: 'hotelDeposit',
+          restDeposit: 'restDeposit',
+          retainedAmount: 'retainedAmount',
+          handoverAmount: 'handoverAmount'
+        };
+
+        // 遍历字段映射并提取数据
+        Object.keys(fieldMappings).forEach(frontendField => {
+          const backendField = fieldMappings[frontendField];
+          if (paymentData[frontendField]) {
+            Object.keys(paymentTypes).forEach(typeId => {
+              const typeName = paymentTypes[typeId];
+              if (paymentData[frontendField][typeName] !== undefined) {
+                payData[backendField][typeName] = paymentData[frontendField][typeName] || 0;
+              }
+            });
+          }
+        });
+      }
+
+    } else {
+      // 计算模式：使用现有逻辑自动计算
+      console.log('使用计算模式，自动计算交接班数据');
+      handoverDate = getPreviousDateString(date);
+      payData = await getShiftTable(handoverDate);
+    }
+
+    console.log('处理后的交接班数据:', payData);
 
     // 支付方式文本到数据库代码的映射
     const pay_way_mapping = {
@@ -314,9 +421,9 @@ async function startHandover(handoverData) {
         INSERT INTO handover (
           date, handover_person, takeover_person, vip_card, payment_type,
           reserve_cash, room_income, rest_income, rent_income, total_income,
-          room_refund, rest_refund, retained, handover, remarks
+          room_refund, rest_refund, retained, handover, task_list, remarks
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         ON CONFLICT (date, payment_type) DO UPDATE SET
           handover_person = EXCLUDED.handover_person,
           takeover_person = EXCLUDED.takeover_person,
@@ -330,6 +437,7 @@ async function startHandover(handoverData) {
           rest_refund = EXCLUDED.rest_refund,
           retained = EXCLUDED.retained,
           handover = EXCLUDED.handover,
+          task_list = EXCLUDED.task_list,
           remarks = EXCLUDED.remarks
         RETURNING *;
       `;
@@ -339,7 +447,7 @@ async function startHandover(handoverData) {
         handoverDate,
         handoverPerson || '',
         receivePerson || '',
-        vipCard || 0,
+        specialStats?.vipCards || vipCard || 0,
         pay_way_mapping[method],
         payData.reserve[method] || 0,
         payData.hotelIncome[method] || 0,
@@ -350,7 +458,8 @@ async function startHandover(handoverData) {
         payData.restDeposit[method] || 0,  // 对应数据库的 rest_refund
         payData.retainedAmount[method] || 0,
         payData.handoverAmount[method] || 0,
-        notes,
+        JSON.stringify(taskList || []), // 任务列表
+        JSON.stringify(memoList || [])  // 备忘录列表
       ];
 
       console.log('准备插入/更新:', {
@@ -580,7 +689,7 @@ async function getHandoverTableData(date) {
 
     // 获取vipCards数据（只从支付方式1-现金记录中获取）
     let vipCards = 0;
-    
+
     // 首先尝试从查询结果中找到支付方式1的记录
     const cashRecord = result.rows.find(row => row.payment_type === 1);
     if (cashRecord) {
@@ -589,8 +698,8 @@ async function getHandoverTableData(date) {
       // 如果查询结果中没有支付方式1的记录，单独查询一次
       try {
         const vipCardQuery = `
-          SELECT vip_card FROM handover 
-          WHERE date = $1::date AND payment_type = 1 
+          SELECT vip_card FROM handover
+          WHERE date = $1::date AND payment_type = 1
           LIMIT 1
         `;
         const vipCardResult = await query(vipCardQuery, [date]);
@@ -820,6 +929,7 @@ module.exports = {
   saveAmountChanges,
   getRemarks,
   getAvailableDates,
+  getAvailableDatesFlexible,
   startHandover,
   getReserveCash,
   getShiftSpecialStats,

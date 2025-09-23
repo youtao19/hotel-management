@@ -258,6 +258,9 @@ export const shiftHandoverApi = {
   // 获取已有交接班日期（可访问日期）
   getAvailableDates: () => api.get('/handover/dates'),
 
+  // 获取已有交接班日期（宽松模式：支持支付方式0，只要有记录就可选择）
+  getAvailableDatesFlexible: () => api.get('/handover/dates-flexible'),
+
   // 开始交接班（首日默认、避免重复创建）
   startHandover: (handoverData) => api.post('/handover/start', handoverData),
 

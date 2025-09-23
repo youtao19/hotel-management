@@ -6,6 +6,7 @@ const {
   getRemarks,
   getShiftSpecialStats,
   getAvailableDates,
+  getAvailableDatesFlexible,
   startHandover,
   saveAmountChanges,
   getHandoverTableData,
@@ -80,6 +81,17 @@ router.get('/dates', async (_req, res) => {
     res.json({ success: true, data: dates });
   } catch (error) {
     console.error('获取可访问日期失败:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 获取已有交接班日期列表（宽松模式：支持支付方式0，只要有记录就可选择）
+router.get('/dates-flexible', async (_req, res) => {
+  try {
+    const dates = await getAvailableDatesFlexible();
+    res.json({ success: true, data: dates });
+  } catch (error) {
+    console.error('获取可访问日期失败（宽松模式）:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });

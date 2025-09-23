@@ -47,6 +47,12 @@ export const useShiftHandoverStore = defineStore("shiftHandover", () => {
     return response
   }
 
+  // 获取已有交接班日期（宽松模式）
+  const fetchAvailableDatesFlexible = async () => {
+    const response = await shiftHandoverApi.getAvailableDatesFlexible()
+    return response
+  }
+
   // 获取交接班表格数据（从handover表查询）
   const fetchHandoverTableData = async (date) => {
     if (!date) {
@@ -68,6 +74,7 @@ export const useShiftHandoverStore = defineStore("shiftHandover", () => {
     fetchSpecialStats,
     startHandover,
     fetchAvailableDates,
+    fetchAvailableDatesFlexible,
     fetchHandoverTableData
   };
 });

@@ -8,21 +8,46 @@
           <q-btn label="使用计算结果" color="orange" @click="loadComputedPaymentData" />
           <q-btn color="primary" icon="print" label="打印" @click="printHandover" />
           <q-btn color="green" icon="download" label="导出Excel" @click="exportToExcel" />
-          <q-btn color="blue" icon="start" label="开始交接班" @click="startHandover" />
+          <q-btn color="blue" icon="start" label="完成交接并创建新班次" @click="completeAndCreateNext" :loading="completingHandover" />
           <q-btn color="purple" icon="save" label="保存页面" @click="savePageData" :loading="savingAmounts" />
         </div>
       </div>
 
-      <!-- 日期和人员信息 -->
-      <div class="row q-col-gutter-md q-mb-md">
-        <div class="col-md-4">
-          <q-input v-model="selectedDate" type="date" label="查询日期" filled />
-        </div>
-        <div class="col-md-4">
-          <q-input v-model="handoverPerson" label="交班人" filled />
-        </div>
-        <div class="col-md-4">
-          <q-input v-model="receivePerson" label="接班人" filled />
+      <!-- 现有日期选择器区域 -->
+      <div class="existing-dates-section q-mb-md">
+        <h6 class="text-h6 q-mb-md text-grey-8">
+          <q-icon name="calendar_today" class="q-mr-sm" />
+          查看现有交接班记录
+        </h6>
+
+        <!-- 日期和人员信息 -->
+        <div class="row q-col-gutter-md q-mb-md">
+          <div class="col-md-4">
+            <q-select
+              v-model="selectedDate"
+              :options="availableDates"
+              label="查询日期（包含任何交接班记录的日期）"
+              filled
+              emit-value
+              map-options
+              :loading="availableDates.length === 0"
+              :disable="availableDates.length === 0"
+            >
+              <template v-slot:no-option>
+                <q-item>
+                  <q-item-section class="text-grey">
+                    暂无可用日期
+                  </q-item-section>
+                </q-item>
+              </template>
+            </q-select>
+          </div>
+          <div class="col-md-4">
+            <q-input v-model="handoverPerson" label="交班人" filled />
+          </div>
+          <div class="col-md-4">
+            <q-input v-model="receivePerson" label="接班人" filled />
+          </div>
         </div>
       </div>
 
@@ -99,7 +124,11 @@ const loadingHide = () => {
 }
 
 // 基础数据
-const selectedDate = ref(date.formatDate(new Date(), 'YYYY-MM-DD')) // 选中的日期
+const selectedDate = ref('') // 选中的日期 - 初始为空，等待加载可用日期后设置
+const newDate = ref(date.formatDate(new Date(), 'YYYY-MM-DD')) // 新建交接班的日期，默认为今天
+const todayDate = date.formatDate(new Date(), 'YYYY-MM-DD') // 今天日期，用于限制最小选择日期
+const creatingNewHandover = ref(false) // 正在创建新交接班的状态
+const completingHandover = ref(false) // 正在完成交接班并创建新班次的状态
 const handoverPerson = ref('') // 交班人
 const receivePerson = ref('') // 接班人
 const cashierName = ref('张') // 收银员姓名
@@ -110,6 +139,7 @@ const shiftHandoverStore = useShiftHandoverStore()
 
 const paymentData = ref({}) // 交接班支付数据
 const isRefreshing = ref(false) // 防止重入标志
+const availableDates = ref([]) // 可用日期列表
 
 // 备忘录列表相关
 const newTaskTitle = ref('')
@@ -231,6 +261,241 @@ async function savePageData() {
   } finally {
     savingAmounts.value = false;
     loadingHide();
+  }
+}
+
+// 完成当前交接班并创建新班次
+async function completeAndCreateNext() {
+  try {
+    if (!selectedDate.value) {
+      $q.notify({
+        type: 'negative',
+        message: '请先选择要完成的交接班日期',
+        position: 'top',
+        timeout: 3000
+      })
+      return
+    }
+
+    completingHandover.value = true
+
+    // 第一步：保存当前交接班数据
+    const currentHandoverData = {
+      date: selectedDate.value,
+      handoverPerson: handoverPerson.value || '前班',
+      receivePerson: receivePerson.value || '当班',
+      paymentData: paymentData.value,
+      memoList: taskList.value || [], // 修正：使用taskList而不是memoList
+      specialStats: {
+        totalRooms: totalRooms.value,
+        restRooms: restRooms.value,
+        vipCards: vipCards.value
+      },
+      taskList: taskList.value || [],
+      saveMode: true  // 启用保存模式
+    }
+
+    console.log('保存当前交接班数据:', currentHandoverData)
+    const saveResult = await shiftHandoverStore.startHandover(currentHandoverData)
+
+    if (!saveResult.success) {
+      throw new Error(saveResult.message || '保存当前交接班数据失败')
+    }
+
+    $q.notify({
+      type: 'positive',
+      message: '当前交接班数据保存成功！',
+      position: 'top',
+      timeout: 2000
+    })
+
+    // 第二步：询问用户要创建的新日期
+    $q.dialog({
+      title: '创建新交接班',
+      message: '当前交接班已保存。请选择要创建的新交接班日期：',
+      prompt: {
+        model: date.formatDate(date.addToDate(new Date(selectedDate.value), { days: 1 }), 'YYYY-MM-DD'),
+        type: 'date'
+      },
+      cancel: true,
+      persistent: true
+    }).onOk(async (newDateValue) => {
+      try {
+        // 验证新日期
+        if (!newDateValue) {
+          $q.notify({
+            type: 'negative',
+            message: '请选择有效的日期',
+            position: 'top',
+            timeout: 3000
+          })
+          return
+        }
+
+        // 检查新日期是否已经存在
+        if (availableDates.value.some(dateOption => dateOption.value === newDateValue)) {
+          $q.notify({
+            type: 'warning',
+            message: `日期 ${newDateValue} 的交接班记录已存在，将直接切换到该日期`,
+            position: 'top',
+            timeout: 3000
+          })
+          selectedDate.value = newDateValue
+          await loadShiftHandoverData()
+          return
+        }
+
+        // 创建新交接班记录
+        const newHandoverData = {
+          date: newDateValue,
+          handoverPerson: receivePerson.value || '当班',
+          receivePerson: '',
+          paymentData: [
+            { type: 0, amount: 0 },
+            { type: 1, amount: 0 },
+            { type: 2, amount: 0 },
+            { type: 3, amount: 0 },
+            { type: 4, amount: 0 }
+          ],
+          saveMode: false  // 创建新记录使用计算模式
+        }
+
+        console.log('创建新交接班记录:', newHandoverData)
+        const createResult = await shiftHandoverStore.startHandover(newHandoverData)
+
+        if (!createResult.success) {
+          throw new Error(createResult.message || '创建新交接班记录失败')
+        }
+
+        $q.notify({
+          type: 'positive',
+          message: `新交接班记录创建成功！日期: ${newDateValue}`,
+          position: 'top',
+          timeout: 3000,
+          actions: [
+            {
+              label: '查看',
+              color: 'white',
+              handler: () => {
+                selectedDate.value = newDateValue
+                loadShiftHandoverData()
+              }
+            }
+          ]
+        })
+
+        // 刷新可用日期列表
+        await loadAvailableDates()
+
+        // 自动切换到新日期
+        selectedDate.value = newDateValue
+        await loadShiftHandoverData()
+
+      } catch (error) {
+        console.error('创建新交接班记录失败:', error)
+        $q.notify({
+          type: 'negative',
+          message: `创建新交接班记录失败: ${error.message}`,
+          position: 'top',
+          timeout: 5000
+        })
+      }
+    }).onCancel(() => {
+      $q.notify({
+        type: 'info',
+        message: '用户取消创建新交接班',
+        position: 'top',
+        timeout: 2000
+      })
+    })
+
+  } catch (error) {
+    console.error('完成交接班流程失败:', error)
+    $q.notify({
+      type: 'negative',
+      message: `操作失败: ${error.message}`,
+      position: 'top',
+      timeout: 5000
+    })
+  } finally {
+    completingHandover.value = false
+  }
+}
+
+// 创建新交接班
+async function createNewHandover() {
+  try {
+    // 验证新日期
+    if (!newDate.value) {
+      $q.notify({
+        type: 'negative',
+        message: '请选择要创建交接班的日期',
+        position: 'top',
+        timeout: 3000
+      })
+      return
+    }
+
+    // 检查日期是否已存在
+    if (availableDates.value.some(dateOption => dateOption.value === newDate.value)) {
+      $q.notify({
+        type: 'warning',
+        message: '该日期已有交接班记录',
+        caption: '请直接从日期选择器中选择',
+        position: 'top',
+        timeout: 3000
+      })
+      return
+    }
+
+    creatingNewHandover.value = true
+    loadingShow({ message: '正在创建新交接班记录...' })
+
+    // 调用开始交接班API来创建记录
+    const handoverData = {
+      date: newDate.value,
+      handoverPerson: handoverPerson.value || '',
+      receivePerson: receivePerson.value || '',
+      notes: notes.value || '',
+      vipCard: 0
+    }
+
+    const result = await shiftHandoverStore.startHandover(handoverData)
+
+    if (result.created) {
+      $q.notify({
+        type: 'positive',
+        message: '新交接班记录创建成功！',
+        caption: `日期: ${newDate.value}`,
+        position: 'top',
+        timeout: 3000
+      })
+
+      // 重新加载可用日期列表
+      await loadAvailableDates()
+
+      // 切换到新创建的日期
+      selectedDate.value = newDate.value
+
+      // 清空新日期输入
+      newDate.value = date.formatDate(new Date(), 'YYYY-MM-DD')
+
+      // 刷新所有数据
+      await refreshAllDataInternal()
+    }
+
+  } catch (error) {
+    console.error('创建新交接班失败:', error)
+    $q.notify({
+      type: 'negative',
+      message: '创建新交接班失败',
+      caption: error.message || '请稍后重试',
+      position: 'top',
+      timeout: 5000
+    })
+  } finally {
+    creatingNewHandover.value = false
+    loadingHide()
   }
 }
 
@@ -489,8 +754,47 @@ async function refreshAllData() {
   }
 }
 
+// 加载可用日期列表（使用宽松模式）
+async function loadAvailableDates() {
+  try {
+    console.log('开始加载可用日期列表（宽松模式）...')
+    const response = await shiftHandoverStore.fetchAvailableDatesFlexible()
+    const dates = response.success ? response.data : []
+
+    // 将日期格式化为选择器选项
+    availableDates.value = dates.map(date => ({
+      label: date,
+      value: date
+    }))
+
+    console.log('可用日期列表加载完成（宽松模式）:', availableDates.value)
+
+    // 如果当前选中的日期不在可用日期列表中，选择第一个可用日期
+    if (dates.length > 0 && !dates.includes(selectedDate.value)) {
+      selectedDate.value = dates[0]
+      console.log('当前日期不可用，已切换到:', selectedDate.value)
+    }
+
+    return dates
+  } catch (error) {
+    console.error('加载可用日期列表失败（宽松模式）:', error)
+    $q.notify({
+      type: 'negative',
+      message: '加载可用日期失败',
+      caption: error.message,
+      timeout: 3000
+    })
+    return []
+  }
+}
+
 // 内部刷新数据（不带loading状态）
 async function refreshAllDataInternal() {
+  console.log('开始加载可用日期列表（宽松模式）...')
+  // 首先加载可用日期列表（宽松模式）
+  await loadAvailableDates();
+  console.log('可用日期列表加载完成（宽松模式）')
+
   console.log('开始加载特殊统计...')
   // 加载特殊统计 (确保 specialStats 总是最新的)
   await loadSpecialStats();
@@ -609,8 +913,10 @@ async function loadPaymentDataInternal() {
 }
 
 // 监听日期变更：刷新所有数据
-watch(selectedDate, async () => {
-  if (!isRefreshing.value) {
+watch(selectedDate, async (newDate, oldDate) => {
+  // 只有当日期真正改变且不为空时才刷新数据
+  if (newDate && newDate !== oldDate && !isRefreshing.value) {
+    console.log('日期变更:', oldDate, '->', newDate)
     await refreshAllData()
   }
 })
