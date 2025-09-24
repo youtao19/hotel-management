@@ -54,6 +54,7 @@ if (setup.env === "dev") {
 // 引入并挂载路由
 const userRoute = require("./routes/userRoute");
 const authRoute = require("./routes/authRoute");
+const debugAuthRoute = require("./routes/debugAuthRoute");
 const orderRoute = require("./routes/orderRoute");
 const roomRoute = require("./routes/roomRoute");
 const roomTypeRoute = require("./routes/roomTypeRoute");
@@ -65,6 +66,7 @@ const revenueStatisticsRoute = require("./routes/revenueStatisticsRoute");
 
 app.use("/api/user", userRoute);
 app.use("/api/auth", authRoute);
+app.use("/api/debug", debugAuthRoute);
 app.use("/api/orders", orderRoute);
 app.use("/api/rooms", roomRoute);
 app.use("/api/room-types", roomTypeRoute);

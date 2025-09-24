@@ -71,6 +71,11 @@
           <div class="text-center q-mt-md">
             <q-btn flat dense color="primary" label="还没有账户？立即注册" @click="goToRegister" />
           </div>
+
+          <!-- 重新发送验证邮件 -->
+          <div v-if="showResendVerificationLink" class="text-center q-mt-md">
+            <q-btn flat dense color="secondary" label="重新发送验证邮件" @click="resendVerificationEmail" />
+          </div>
         </q-form>
 
         <!-- 底部版权信息 -->
@@ -101,12 +106,14 @@ const username = ref('') // 存储用户邮箱
 const password = ref('')
 const rememberMe = ref(false)
 const isPwd = ref(true)
+const showResendVerificationLink = ref(false)
 
 /**
  * 表单提交处理函数
  */
 async function onSubmit() { // 将函数改为异步
   try {
+    showResendVerificationLink.value = false;
     console.log('开始登录请求...');
 
     // 显示加载状态
@@ -127,7 +134,7 @@ async function onSubmit() { // 将函数改为异步
 
     const response = await axios.post('/api/auth/login', {
       email: username.value, // 将 username 作为 email 发送给后端
-      pw: password.value
+      password: password.value
     });
 
     console.log('登录请求成功返回:', response);
@@ -138,9 +145,9 @@ async function onSubmit() { // 将函数改为异步
     if (response.data) {
       // 更新用户登录状态，使用后端返回的数据
       userStore.login({
-        id: response.data.id, // 使用后端返回的 id
-        username: response.data.name, // 使用后端返回的 name 作为 username
-        email: response.data.email, // 使用后端返回的 email
+        id: response.data.user.id, // 使用后端返回的 id
+        username: response.data.user.name, // 使用后端返回的 name 作为 username
+        email: response.data.user.email, // 使用后端返回的 email
         avatar: '/icons/default-avatar.png',
         role: '员工'
       });
@@ -199,12 +206,15 @@ async function onSubmit() { // 将函数改为异步
 
       if (status === 400) {
         errorMessage = backendMessage || '请求数据格式错误（例如邮箱格式不正确）';
-      } else if (status === 401 || status === 450) { // 450 是自定义的 NO_Match 状态码
+      } else if (status === 401 || status === 450 || status === 451) { // 450: NO_Match, 451: PW_INCORRECT
         errorMessage = backendMessage || '用户名或密码错误';
       } else if (status === 429) { // 429 是请求频率限制
         errorMessage = backendMessage || '尝试次数过多，请稍后再试';
       } else if (status === 404) {
         errorMessage = '登录API不存在，请检查服务器配置';
+      } else if (status === 403) { // email_not_verified
+        errorMessage = backendMessage || '邮箱未验证，请先验证邮箱';
+        showResendVerificationLink.value = true;
       } else {
         errorMessage = backendMessage || `发生错误 (${status})`;
       }
@@ -217,6 +227,34 @@ async function onSubmit() { // 将函数改为异步
       message: errorMessage,
       position: 'top',
       timeout: 3000
+    });
+  }
+}
+
+async function resendVerificationEmail() {
+  if (!username.value) {
+    $q.notify({
+      type: 'negative',
+      message: '请输入您的邮箱地址',
+      position: 'top'
+    });
+    return;
+  }
+
+  try {
+    await axios.post('/api/auth/send-email-verification', {
+      email: username.value
+    });
+    $q.notify({
+      type: 'positive',
+      message: '验证邮件已发送，请检查您的收件箱。',
+      position: 'top'
+    });
+  } catch (error) {
+    $q.notify({
+      type: 'negative',
+      message: '发送验证邮件失败，请稍后重试。',
+      position: 'top'
     });
   }
 }

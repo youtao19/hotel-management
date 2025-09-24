@@ -168,51 +168,57 @@
     console.log('表单数据:', { name: name.value, email: email.value, pw: password.value });
 
     // 检查是否存在此邮箱
-    const checkResponse = await fetch('/check-email', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ email: email.value })
-    }).catch(() => null);
+    try {
+      const checkResponse = await axios.get(`/api/auth/check/email/${email.value}`);
 
-    if (checkResponse && checkResponse.status === 409) {
-      $q.notify({
-        type: 'negative',
-        message: '该邮箱已被注册',
-        position: 'top'
-      });
-      return;
+      if (checkResponse.data && checkResponse.data.exist) {
+        $q.notify({
+          type: 'negative',
+          message: '该邮箱已被注册',
+          position: 'top'
+        });
+        return;
+      }
+    } catch (error) {
+      console.error('检查邮箱时出错:', error);
+      // 如果检查邮箱失败，继续进行注册尝试
     }
 
-    // 由于后端可能尚未完全配置好，我们将使用模拟注册流程
-    // 在实际实现中，应替换为真实的API调用
-    localStorage.setItem('justRegistered', 'true');
-    localStorage.setItem('registeredEmail', email.value);
-    localStorage.setItem('registeredName', name.value);
-
-    // 存储用户信息到本地，模拟注册功能
-    let users = JSON.parse(localStorage.getItem('users') || '[]');
-    users.push({
-      id: Date.now(),
+    // 调用后端注册 API
+    const response = await axios.post('/api/auth/signup', {
       name: name.value,
       email: email.value,
-      password: password.value // 实际系统中应使用加密存储
-    });
-    localStorage.setItem('users', JSON.stringify(users));
-
-    // 显示注册成功通知
-    $q.notify({
-      type: 'positive',
-      message: '注册成功！正在跳转到登录页面...',
-      position: 'top',
-      timeout: 2500
+      pw: password.value
     });
 
-    // 注册成功后跳转到登录页面
-    setTimeout(() => {
-      router.push('/login');
-    }, 1500);
+    console.log('注册请求成功返回:', response);
+
+    // 检查后端返回的状态码
+    if (response.data) {
+      // 设置注册成功标志
+      localStorage.setItem('justRegistered', 'true');
+      localStorage.setItem('registeredEmail', email.value);
+      localStorage.setItem('registeredName', name.value);
+
+      // 显示注册成功通知
+      $q.notify({
+        type: 'positive',
+        message: '注册成功！正在跳转到登录页面...',
+        position: 'top',
+        timeout: 2500
+      });
+
+      // 注册成功后跳转到登录页面
+      setTimeout(() => {
+        router.push('/login');
+      }, 1500);
+    } else {
+      $q.notify({
+        type: 'negative',
+        message: '注册响应异常',
+        position: 'top'
+      });
+    }
 
   } catch (error) {
     isSubmitting = false;
@@ -229,6 +235,22 @@
     }
 
     let errorMessage = '注册失败，请稍后重试';
+    if (error.response) {
+      const status = error.response.status;
+      const backendMessage = error.response.data?.message;
+
+      if (status === 400) {
+        errorMessage = backendMessage || '请求数据格式错误';
+      } else if (status === 409) {
+        errorMessage = backendMessage || '该邮箱已被注册';
+      } else if (status === 429) {
+        errorMessage = backendMessage || '请求过于频繁，请稍后再试';
+      } else {
+        errorMessage = backendMessage || `注册失败 (${status})`;
+      }
+    } else if (error.request) {
+      errorMessage = '服务器没有响应，请检查网络连接';
+    }
 
     $q.notify({
       type: 'negative',

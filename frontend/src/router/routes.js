@@ -8,6 +8,10 @@ const routes = [
     component: () => import('pages/Register.vue')
   },
   {
+    path: '/verify-email/:code',
+    component: () => import('pages/EmailVerification.vue')
+  },
+  {
     path: '/',
     component: () => import('layouts/HomeView.vue'),
     children: [

@@ -218,5 +218,6 @@ module.exports = {
   getClient,       // 获取客户端连接
   createPool,      // 创建连接池
   initializeHotelDB, // 初始化数据库
-  closePool        // 关闭连接池
+  closePool,       // 关闭连接池
+  pool             // 导出连接池实例
 };

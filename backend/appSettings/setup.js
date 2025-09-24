@@ -20,12 +20,9 @@ for (const p of candidateEnvPaths) {
 }
 
 //check if there is any missing env
-const env = [
+const requiredEnv = [
   "APP_NAME",
   "APP_URL",
-  "OPENAI_KEY",
-  "OPENAI_HOST",
-  "OPENAI_CHAT_COMPLETION_PATH",
   "NODE_ENV",
   "NODE_PORT",
   "POSTGRES_HOST",
@@ -35,7 +32,6 @@ const env = [
   "POSTGRES_DB",
   "REDIS_HOST",
   "REDIS_PORT",
-  "REDIS_PW",
   "ADMIN_EMAIL",
   "EMAIL_HOST",
   "EMAIL_PORT",
@@ -43,9 +39,24 @@ const env = [
   "EMAIL_PW",
 ];
 
-for (let envName of env) {
+// Optional env vars that can be empty
+const optionalEnv = [
+  "REDIS_PW",
+  "OPENAI_KEY",
+  "OPENAI_HOST",
+  "OPENAI_CHAT_COMPLETION_PATH"
+];
+
+for (let envName of requiredEnv) {
   if (!process.env[envName]) {
     throw new Error(`Missing env : ${envName}`);
+  }
+}
+
+// Set defaults for optional env vars
+for (let envName of optionalEnv) {
+  if (process.env[envName] === undefined) {
+    process.env[envName] = '';
   }
 }
 

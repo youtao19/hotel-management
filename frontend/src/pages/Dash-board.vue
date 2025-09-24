@@ -444,7 +444,7 @@ const recentGuests = computed(() => {
   // 统一以英文状态筛选，展示时再转中文
   const STATUS = { IN: 'checked-in', OUT: 'checked-out' }
   return orderStore.orders
-    .filter(order => [STATUS.IN, STATUS.OUT, '已入住', '已退房'].includes(order.status))
+    .filter(order => order && order.status && [STATUS.IN, STATUS.OUT, '已入住', '已退房'].includes(order.status))
     .map(o => ({
       ...o,
       // 兼容中文状态
@@ -452,9 +452,11 @@ const recentGuests = computed(() => {
     }))
     .sort((a, b) => {
       // 按创建时间倒序（兼容 create_time/createTime）
-      const dateA = a.createTime || a.create_time
-      const dateB = b.createTime || b.create_time
-      return new Date(dateB) - new Date(dateA)
+      const dateA = new Date(a.createTime || a.create_time || 0);
+      const dateB = new Date(b.createTime || b.create_time || 0);
+      if (isNaN(dateA.getTime())) return 1;
+      if (isNaN(dateB.getTime())) return -1;
+      return dateB - dateA;
     })
     .slice(0, 5)
     .map(order => ({
