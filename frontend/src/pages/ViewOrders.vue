@@ -19,7 +19,7 @@
             @update:model-value="searchOrders" />
         </div>
         <div class="col-md-3 col-xs-12">
-          <q-input v-model="filterDate" label="筛选日期" filled clearable @update:model-value="searchOrders">
+          <q-input v-model="filterDate" label="筛选日期" filled clearable @update:model-value="searchOrders" readonly>
             <template v-slot:append>
               <q-icon name="event" class="cursor-pointer">
                 <q-popup-proxy cover transition-show="scale" transition-hide="scale">
@@ -36,8 +36,11 @@
             </template>
           </q-input>
         </div>
-        <div class="col-md-2 col-xs-12">
+        <div class="col-md-1 col-xs-6">
           <q-btn color="primary" label="搜索" class="full-width" @click="searchOrders" />
+        </div>
+        <div class="col-md-1 col-xs-6">
+          <q-btn color="grey" label="清除" class="full-width" @click="clearFilters" />
         </div>
       </div>
     </div>
@@ -56,6 +59,12 @@
 
     <q-card>
       <q-card-section>
+        <div class="row items-center justify-between q-mb-md">
+          <div class="text-h6">订单列表</div>
+          <div class="text-caption">
+            显示 {{ filteredOrders.length }} / {{ orderStore.orders.length }} 条订单
+          </div>
+        </div>
         <q-table :rows="filteredOrders" :columns="orderColumns" row-key="orderNumber" :pagination="{ rowsPerPage: 10 }"
           :loading="loadingOrders" no-data-label="没有找到订单">
           <template v-slot:loading>
@@ -320,10 +329,20 @@ const filteredOrders = computed(() => {
   // 根据日期筛选（匹配入住或离店日期）
   if (filterDate.value) {
     result = result.filter(order => {
-      // 格式化日期为 YYYY-MM-DD 格式进行比较
-      const filterDateStr = filterDate.value
+      // 确保filterDate也经过相同的格式化处理
+      const filterDateStr = formatDate(filterDate.value)
       const checkInDateStr = order.checkInDate ? formatDate(order.checkInDate) : ''
       const checkOutDateStr = order.checkOutDate ? formatDate(order.checkOutDate) : ''
+
+      // 调试信息（在开发时可以开启）
+      if (process.env.NODE_ENV === 'development') {
+        console.log('日期筛选:', {
+          filter: filterDateStr,
+          checkIn: checkInDateStr,
+          checkOut: checkOutDateStr,
+          order: order.orderNumber
+        })
+      }
 
       return checkInDateStr === filterDateStr || checkOutDateStr === filterDateStr
     })
@@ -334,7 +353,17 @@ const filteredOrders = computed(() => {
 
 // 日期选择处理函数
 function onDateSelected(date) {
+  console.log('日期选择器返回的日期:', date, '格式化后:', formatDate(date));
   filterDate.value = date
+  searchOrders()
+}
+
+// 清除所有筛选条件
+function clearFilters() {
+  searchQuery.value = ''
+  filterStatus.value = null
+  filterDate.value = null
+  console.log('已清除所有筛选条件');
   searchOrders()
 }
 
@@ -586,15 +615,24 @@ function checkoutOrderFromDetails() {
 
 // 搜索订单
 function searchOrders() {
-  console.log('搜索订单:', searchQuery.value, filterStatus.value, filterDate.value);
+  if (process.env.NODE_ENV === 'development') {
+    console.log('搜索订单参数:', {
+      searchQuery: searchQuery.value,
+      filterStatus: filterStatus.value,
+      filterDate: filterDate.value,
+      formattedFilterDate: filterDate.value ? formatDate(filterDate.value) : null
+    });
+  }
 
   // 设置加载状态
   loadingOrders.value = true;
 
   // 短暂延迟模拟数据刷新，确保UI能够响应数据变化
   setTimeout(() => {
-    // 不需要额外操作，filteredOrders计算属性会自动重新计算
-    // 这里的setTimeout只是为了确保UI触发更新
+    // filteredOrders计算属性会自动重新计算
+    if (process.env.NODE_ENV === 'development') {
+      console.log('搜索完成，过滤结果:', filteredOrders.value.length, '/', orderStore.orders.length);
+    }
     loadingOrders.value = false;
   }, 100);
 }
@@ -869,37 +907,38 @@ function formatDateTime(dateTimeStr) {
 
 /**
  * 格式化日期（仅显示年月日）
- * @param {string} dateStr - 日期字符串
+ * @param {string|Date} dateStr - 日期字符串或Date对象
  * @returns {string} 格式化后的日期，格式为 YYYY-MM-DD
  */
 function formatDate(dateStr) {
   if (!dateStr) return '';
 
   try {
-    // 处理各种可能的日期格式
-    let dateObj;
+    // 如果已经是YYYY-MM-DD格式（Quasar日期选择器通常返回这种格式）
+    if (typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      return dateStr;
+    }
 
     // 如果是ISO格式的时间戳 (包含T)
     if (typeof dateStr === 'string' && dateStr.includes('T')) {
       return dateStr.split('T')[0];
     }
-    // 如果是Date对象或其他格式
-    else {
-      dateObj = new Date(dateStr);
 
-      // 检查是否是有效日期
-      if (isNaN(dateObj.getTime())) {
-        console.warn('无效的日期格式:', dateStr);
-        return dateStr; // 返回原始值
-      }
+    // 处理其他格式，转换为Date对象
+    const dateObj = new Date(dateStr);
 
-      // 格式化为 YYYY-MM-DD
-      const year = dateObj.getFullYear();
-      const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-      const day = String(dateObj.getDate()).padStart(2, '0');
-
-      return `${year}-${month}-${day}`;
+    // 检查是否是有效日期
+    if (isNaN(dateObj.getTime())) {
+      console.warn('无效的日期格式:', dateStr);
+      return dateStr; // 返回原始值
     }
+
+    // 格式化为 YYYY-MM-DD
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const day = String(dateObj.getDate()).padStart(2, '0');
+
+    return `${year}-${month}-${day}`;
   } catch (error) {
     console.error('日期格式化错误:', error, dateStr);
     return dateStr; // 出错时返回原始值
