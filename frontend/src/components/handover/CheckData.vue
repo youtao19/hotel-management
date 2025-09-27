@@ -22,8 +22,8 @@
             class="data-check-table"
           >
             <template v-slot:body-cell-actions="props">
-              <q-td :props="props">
-                <div class="row q-gutter-xs">
+              <q-td :props="props" class="text-center">
+                <div class="action-buttons">
                   <q-btn
                     size="sm"
                     round
@@ -32,6 +32,7 @@
                     icon="check"
                     @click="confirmRow(props.row, 'hotel')"
                     :disable="props.row.confirmed"
+                    class="q-mr-xs"
                   >
                     <q-tooltip>确认数据无误</q-tooltip>
                   </q-btn>
@@ -82,8 +83,8 @@
             class="data-check-table"
           >
             <template v-slot:body-cell-actions="props">
-              <q-td :props="props">
-                <div class="row q-gutter-xs">
+              <q-td :props="props" class="text-center">
+                <div class="action-buttons">
                   <q-btn
                     size="sm"
                     round
@@ -92,6 +93,7 @@
                     icon="check"
                     @click="confirmRow(props.row, 'rest')"
                     :disable="props.row.confirmed"
+                    class="q-mr-xs"
                   >
                     <q-tooltip>确认数据无误</q-tooltip>
                   </q-btn>
@@ -131,13 +133,13 @@
         <!-- 确认核对按钮 -->
         <div class="text-center">
           <q-btn
-            color="positive"
-            icon="verified"
-            label="确认核对"
+            :color="dataCheckCompleted ? 'grey-6' : 'positive'"
+            :icon="dataCheckCompleted ? 'check_circle' : 'verified'"
+            :label="dataCheckCompleted ? '数据核对已完成' : '确认核对'"
             size="md"
             @click="confirmDataCheck"
             :loading="isConfirmingData"
-            :disable="isConfirmingData || !allDataConfirmed"
+            :disable="isConfirmingData || !allDataConfirmed || dataCheckCompleted"
           />
         </div>
       </q-card-section>
@@ -204,6 +206,7 @@ const $q = useQuasar()
 
 // 响应式数据
 const isConfirmingData = ref(false)
+const dataCheckCompleted = ref(false) // 数据核对是否已完成
 
 // 表格列定义
 const roomColumns = [
@@ -369,9 +372,12 @@ const saveEdit = () => {
     editDialog.value.originalData.deposit = editDialog.value.data.deposit
     editDialog.value.originalData.confirmed = false // 修改后需要重新确认
 
+    // 数据修改后重置核对完成状态
+    dataCheckCompleted.value = false
+
     $q.notify({
       type: 'positive',
-      message: `订单 ${editDialog.value.data.orderNo} 数据修改成功`,
+      message: `订单 ${editDialog.value.data.orderNo} 数据修改成功，请重新确认数据`,
       position: 'top'
     })
   }
@@ -381,6 +387,16 @@ const saveEdit = () => {
 
 // 确认数据核对
 const confirmDataCheck = async () => {
+  // 如果已经完成，直接返回
+  if (dataCheckCompleted.value) {
+    $q.notify({
+      type: 'info',
+      message: '数据核对已完成，无需重复操作',
+      position: 'top'
+    })
+    return
+  }
+
   try {
     isConfirmingData.value = true
 
@@ -392,6 +408,9 @@ const confirmDataCheck = async () => {
 
     // 模拟确认延迟
     await new Promise(resolve => setTimeout(resolve, 1500))
+
+    // 设置为已完成状态
+    dataCheckCompleted.value = true
 
     $q.notify({
       type: 'positive',
@@ -446,6 +465,7 @@ onMounted(() => {
 
 .data-check-table :deep(td) {
   padding: 12px 8px;
+  vertical-align: middle; /* 确保垂直居中 */
 }
 
 /* 汇总行样式 */
@@ -467,6 +487,14 @@ onMounted(() => {
   padding-bottom: 8px;
 }
 
+/* 操作按钮居中样式 */
+.action-buttons {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 4px; /* 按钮间距 */
+}
+
 /* 响应式设计 */
 @media (max-width: 768px) {
   .check-data-container {
@@ -479,6 +507,10 @@ onMounted(() => {
 
   .data-check-table :deep(.q-btn) {
     min-width: 32px;
+  }
+
+  .action-buttons {
+    gap: 2px; /* 移动端减小按钮间距 */
   }
 
   .summary-row .row > div {
