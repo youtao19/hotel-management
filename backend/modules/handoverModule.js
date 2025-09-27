@@ -774,6 +774,51 @@ async function getHandoverTableData(date) {
 }
 
 /**
+ * 检查昨日是否有交接记录
+ * @param {string} date - 当前日期 YYYY-MM-DD
+ * @returns {Promise<Object>} 检查结果 { hasYesterdayRecord: boolean, yesterdayDate: string, reserveAmount: number }
+ */
+async function checkYesterdayHandoverRecord(date) {
+  try {
+    // 获取昨日日期
+    const yesterdayDate = getPreviousDateString(date);
+
+    // 查询昨日是否有交接记录（查询支付方式1-4的记录）
+    const sql = `
+      SELECT COUNT(*) as record_count,
+             COALESCE(SUM(handover), 0) as total_handover
+      FROM handover
+      WHERE date = $1::date
+        AND payment_type IN (1, 2, 3, 4)
+    `;
+
+    const result = await query(sql, [yesterdayDate]);
+    const recordCount = parseInt(result.rows[0].record_count);
+    const totalHandover = parseFloat(result.rows[0].total_handover);
+
+    // 如果有4条记录（每种支付方式一条），说明昨日有完整的交接记录
+    const hasYesterdayRecord = recordCount === 4;
+
+    return {
+      hasYesterdayRecord,
+      yesterdayDate,
+      reserveAmount: totalHandover, // 昨日交接款总额作为今日备用金
+      recordCount
+    };
+
+  } catch (error) {
+    console.error('检查昨日交接记录失败:', error);
+    // 出错时返回默认值
+    return {
+      hasYesterdayRecord: false,
+      yesterdayDate: getPreviousDateString(date),
+      reserveAmount: 0,
+      recordCount: 0
+    };
+  }
+}
+
+/**
  * 保存管理员备忘录到交接班表中（支付方式1的记录）
  * @param {Object} memoData - 备忘录数据
  * @param {string} memoData.date - 日期 YYYY-MM-DD
@@ -959,4 +1004,5 @@ module.exports = {
   getHandoverTableData,
   saveAdminMemoToHandover,
   getAdminMemosFromHandover,
+  checkYesterdayHandoverRecord,
 };

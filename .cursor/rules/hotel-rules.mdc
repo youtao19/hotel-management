@@ -4,7 +4,7 @@ globs:
 alwaysApply: true
 ---
 ## 技术栈
-前段使用 VUE.js
+前段使用 VUE.js 组合式API写法
 后端使用 JavaScript
 使用 express 
 状态管理使用 pinia

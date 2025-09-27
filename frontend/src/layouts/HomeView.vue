@@ -101,6 +101,7 @@
           <q-route-tab to="/review-management" label="好评管理" />
           <q-route-tab to="/revenue-statistics" label="收入统计" />
           <q-route-tab to="/shift-handover" label="交接班" />
+          <q-route-tab to="/handover" label="交班" />
         </q-tabs>
       </q-header>
 

@@ -11,7 +11,8 @@ const {
   saveAmountChanges,
   getHandoverTableData,
   saveAdminMemoToHandover,
-  getAdminMemosFromHandover
+  getAdminMemosFromHandover,
+  checkYesterdayHandoverRecord
 } = require('../modules/handoverModule');
 
 
@@ -299,5 +300,32 @@ router.post('/save-admin-memo', async (req, res) => {
 
 
 
+
+// 检查昨日交接记录
+router.get('/check-yesterday', async (req, res) => {
+  try {
+    const { date } = req.query;
+
+    if (!date) {
+      return res.status(400).json({
+        success: false,
+        message: '缺少必需的日期参数'
+      });
+    }
+
+    const result = await checkYesterdayHandoverRecord(date);
+    res.json({
+      success: true,
+      data: result,
+      message: '昨日交接记录检查完成'
+    });
+  } catch (error) {
+    console.error('检查昨日交接记录失败:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || '检查昨日交接记录失败'
+    });
+  }
+});
 
 module.exports = router;

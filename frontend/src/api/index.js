@@ -296,7 +296,10 @@ export const shiftHandoverApi = {
   saveAdminMemo: (memoData) => api.post('/handover/save-admin-memo', memoData),
 
   // 获取交接班表中的管理员备忘录
-  getAdminMemos: (params) => api.get('/handover/admin-memos', { params })
+  getAdminMemos: (params) => api.get('/handover/admin-memos', { params }),
+
+  // 检查昨日交接记录
+  checkYesterdayRecord: (params) => api.get('/handover/check-yesterday', { params })
 
 }
 
