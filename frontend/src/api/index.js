@@ -4,17 +4,12 @@ import axios from 'axios'
 const api = axios.create({
   baseURL: 'http://localhost:3000/api', // 后端API运行在3000端口
   timeout: 30000, // 增加到30秒
-  withCredentials: false // 允许CORS预检请求携带cookie
+  withCredentials: true // 允许携带session cookie
 })
 
 // 请求拦截器
 api.interceptors.request.use(
   config => {
-    // 可以在这里添加请求头等通用配置
-    const token = localStorage.getItem('token')
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
     return config
   },
   error => {
@@ -46,7 +41,22 @@ api.interceptors.response.use(
     }
 
     // 处理错误响应
-    console.error('API请求错误:', error.response || error)
+    if (error.response) {
+      const status = error.response.status
+      const url = originalRequest.url
+
+      // 对于 /user/info 接口的 401 错误，完全静默处理
+      if (status === 401 && (url === '/user/info' || url.endsWith('/user/info'))) {
+        // 不记录任何日志，静默处理
+      } else if (status !== 401) {
+        // 其他非 401 错误正常记录
+        console.error('API请求错误:', error.response || error)
+      }
+      // 其他 401 错误（非 user/info 接口）也不记录日志，但组件可以自行处理
+    } else {
+      console.error('网络请求失败:', error.message || error)
+    }
+
     return Promise.reject(error)
   }
 )
@@ -138,10 +148,25 @@ export const userApi = {
   login: (credentials) => api.post('/auth/login', credentials),
 
   // 获取当前用户信息
-  getCurrentUser: () => api.get('/users/me'),
+  getCurrentUser: () => api.get('/user/info'),
 
   // 用户登出
-  logout: () => api.post('/auth/logout'),
+  logout: () => api.get('/user/logout'),
+}
+
+// 认证相关接口
+export const authApi = {
+  // 用户注册
+  signup: (credentials) => api.post('/auth/signup', credentials),
+
+  // 检查邮箱是否存在
+  checkEmail: (email) => api.get(`/auth/check/email/${email}`),
+
+  // 发送邮箱验证邮件
+  sendEmailVerification: (email) => api.post('/auth/send-email-verification', { email }),
+
+  // 验证邮箱
+  verifyEmail: (code) => api.post('/auth/email-verify', { code }),
 }
 
 // 账单相关接口

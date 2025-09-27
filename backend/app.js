@@ -43,7 +43,7 @@ if (setup.env === "dev") {
   const cors = require('cors');
   app.use(cors({
     origin: ['http://localhost:9000', 'http://localhost:9001'],
-    credentials: false,
+    credentials: true, // 允许携带cookie和session
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
   }));
@@ -54,7 +54,6 @@ if (setup.env === "dev") {
 // 引入并挂载路由
 const userRoute = require("./routes/userRoute");
 const authRoute = require("./routes/authRoute");
-const debugAuthRoute = require("./routes/debugAuthRoute");
 const orderRoute = require("./routes/orderRoute");
 const roomRoute = require("./routes/roomRoute");
 const roomTypeRoute = require("./routes/roomTypeRoute");
@@ -66,7 +65,6 @@ const revenueStatisticsRoute = require("./routes/revenueStatisticsRoute");
 
 app.use("/api/user", userRoute);
 app.use("/api/auth", authRoute);
-app.use("/api/debug", debugAuthRoute);
 app.use("/api/orders", orderRoute);
 app.use("/api/rooms", roomRoute);
 app.use("/api/room-types", roomTypeRoute);
@@ -81,11 +79,5 @@ app.all("/", function (req, res) {
   console.log(`req route not found with url : ${req.originalUrl}\nreq ip is : ${req.ip}`);
   res.status(404).json();
 });
-
-app.use(session(sessionOptions));
-app.use(authtication.authenticationMiddleware);
-
-
-
 
 module.exports = app;

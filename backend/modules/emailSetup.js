@@ -6,29 +6,19 @@ let emailTransport = nodemailer.createTransport({
   host: setup.email.host,
   port: setup.email.port,
   //for port 587, secure set to false, true for port 465
-  secure: setup.email.port == 465, // 465端口使用SSL，587端口使用STARTTLS
+  secure: true,
   auth: {
     user: setup.email.user,
     pass: setup.email.pw,
   },
-  connectionTimeout: 5000, // 5秒连接超时
-  greetingTimeout: 5000,   // 5秒问候超时
-  socketTimeout: 10000,    // 10秒socket超时
 });
 
 async function testConnection() {
   try {
-    // 设置更短的超时时间
-    const result = await Promise.race([
-      emailTransport.verify(),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Connection timeout')), 5000)
-      )
-    ]);
+    const result = await emailTransport.verify();
     console.log(`email connection is ready! ${result}`);
   } catch (error) {
-    console.log(`email smtp connection is not ready with error ${error.message}`);
-    console.log('邮箱功能将在需要时尝试连接');
+    console.log(`email smtp connection is not ready with error ${error}`);
   }
 };
 
@@ -53,7 +43,7 @@ async function sendResetPWEmail(code, to, lan) {
 }
 
 async function sendEmailVerification(code, to, lan) {
-  const link = setup.appUrl + "/verify-email/" + code;
+  const link = setup.appUrl + "/email-verify/" + code;
   let text;
   let subject;
   if (lan === "zh-Hans") {
@@ -69,6 +59,7 @@ async function sendEmailVerification(code, to, lan) {
     subject,
     text
   };
+  // console.log(message);
   return await emailTransport.sendMail(message);
 }
 

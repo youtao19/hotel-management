@@ -22,7 +22,7 @@
 
         <!-- 日期和人员信息 -->
         <div class="row q-col-gutter-md q-mb-md">
-          <div class="col-md-4">
+          <div class="col-md-2">
             <q-select
               v-model="selectedDate"
               :options="filteredAvailableDates"
@@ -75,7 +75,7 @@
               </template>
             </q-select>
           </div>
-          <div class="col-md-4">
+          <div class="col-md-2">
             <q-input
               v-model="handoverPerson"
               label="交班人"
@@ -83,7 +83,7 @@
               :rules="[val => !!val && val.trim() !== '' || '请输入交班人姓名']"
             />
           </div>
-          <div class="col-md-4">
+          <div class="col-md-2">
             <q-input
               v-model="receivePerson"
               label="接班人"

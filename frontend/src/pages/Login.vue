@@ -34,7 +34,7 @@
 
           <!-- 密码输入框 -->
           <q-input
-            v-model="password"
+            v-model="pw"
             filled
             :type="isPwd ? 'password' : 'text'"
             label="密码"
@@ -72,18 +72,40 @@
             <q-btn flat dense color="primary" label="还没有账户？立即注册" @click="goToRegister" />
           </div>
 
-          <!-- 重新发送验证邮件 -->
-          <div v-if="showResendVerificationLink" class="text-center q-mt-md">
-            <q-btn flat dense color="secondary" label="重新发送验证邮件" @click="resendVerificationEmail" />
-          </div>
         </q-form>
 
         <!-- 底部版权信息 -->
         <div class="text-center q-mt-lg text-grey-7 text-caption">
-          © 2023 酒店管理系统 版权所有
+          © 2025 酒店管理系统 版权所有
         </div>
       </q-card>
     </div>
+
+    <!-- 邮箱验证提示对话框 -->
+    <q-dialog v-model="showEmailVerificationDialog" persistent>
+      <q-card style="min-width: 350px">
+        <q-card-section>
+          <div class="text-h6">邮箱验证</div>
+        </q-card-section>
+
+        <q-card-section class="q-pt-none">
+          <p>您的邮箱 <strong>{{ username }}</strong> 尚未验证。</p>
+          <p>请查收您的邮箱并点击验证链接，或者点击下方按钮重新发送验证邮件。</p>
+        </q-card-section>
+
+        <q-card-actions align="right">
+          <q-btn flat label="取消" color="grey" v-close-popup />
+          <q-btn
+            flat
+            label="重新发送验证邮件"
+            color="primary"
+            :loading="isResendingEmail"
+            @click="resendVerificationEmail"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
   </div>
 </template>
 
@@ -93,6 +115,7 @@ import { useRouter } from 'vue-router'
 import { useQuasar } from 'quasar'
 import { useUserStore } from '../stores/userStore'
 import axios from 'axios' // 导入 axios
+import { authApi } from '../api/index.js'
 
 // 路由实例
 const router = useRouter()
@@ -103,24 +126,25 @@ const userStore = useUserStore()
 
 // 表单数据
 const username = ref('') // 存储用户邮箱
-const password = ref('')
+const pw = ref('')
 const rememberMe = ref(false)
+// 邮箱验证相关变量
+const showEmailVerificationDialog = ref(false)
+const isResendingEmail = ref(false)
 const isPwd = ref(true)
-const showResendVerificationLink = ref(false)
 
 /**
  * 表单提交处理函数
  */
 async function onSubmit() { // 将函数改为异步
   try {
-    showResendVerificationLink.value = false;
     console.log('开始登录请求...');
 
     // 显示加载状态
     let isLoading = true;
 
     // 验证表单
-    if (!username.value || !password.value) {
+    if (!username.value || !pw.value) {
       $q.notify({
         type: 'negative',
         message: '请填写所有必填字段',
@@ -129,28 +153,33 @@ async function onSubmit() { // 将函数改为异步
       return;
     }
 
-    // 调用后端登录 API
-    console.log('登录表单数据:', { email: username.value, pw: password.value });
+    // 使用userStore的login方法
+    console.log('登录表单数据:', { email: username.value, pw: pw.value });
 
-    const response = await axios.post('/api/auth/login', {
-      email: username.value, // 将 username 作为 email 发送给后端
-      password: password.value
+    const result = await userStore.login({
+      email: username.value,
+      pw: pw.value
     });
 
-    console.log('登录请求成功返回:', response);
+    console.log('登录结果:', result);
+
     isLoading = false;
 
-    // 检查后端返回的状态码 (axios 默认认为 2xx 为成功)
-    // 后端在成功时返回了用户信息
-    if (response.data) {
-      // 更新用户登录状态，使用后端返回的数据
-      userStore.login({
-        id: response.data.user.id, // 使用后端返回的 id
-        username: response.data.user.name, // 使用后端返回的 name 作为 username
-        email: response.data.user.email, // 使用后端返回的 email
-        avatar: '/icons/default-avatar.png',
-        role: '员工'
+    // 检查是否是邮箱未验证错误
+    if (result && result.emailNotVerified) {
+      // 显示邮箱验证对话框
+      showEmailVerificationDialog.value = true;
+      $q.notify({
+        type: 'warning',
+        message: '您的邮箱尚未验证，请先验证邮箱后再登录',
+        position: 'top',
+        timeout: 4000
       });
+      return;
+    }
+
+    if (result === true) {
+      console.log('登录成功');
 
       // 显示登录成功通知
       $q.notify({
@@ -178,86 +207,66 @@ async function onSubmit() { // 将函数改为异步
       }, 1000);
 
     } else {
-      // 理论上 axios 成功回调里 response.data 应该存在，但也处理一下以防万一
+      // 登录失败，显示错误信息
       $q.notify({
         type: 'negative',
-        message: '登录响应异常',
-        position: 'top'
+        message: userStore.error || '登录失败，请检查用户名和密码',
+        position: 'top',
+        timeout: 3000
       });
     }
   } catch (error) {
-    console.error('登录请求失败:', error);
-
-    // 更详细地打印错误信息
-    if (error.response) {
-      console.error('错误响应数据:', error.response.data);
-      console.error('错误状态码:', error.response.status);
-    } else if (error.request) {
-      console.error('请求已发送但未收到响应:', error.request);
-    } else {
-      console.error('请求设置过程中出错:', error.message);
-    }
-
-    let errorMessage = '登录失败，请稍后重试';
-    if (error.response) {
-      // 尝试从后端响应获取更具体的错误信息
-      const status = error.response.status;
-      const backendMessage = error.response.data?.message;
-
-      if (status === 400) {
-        errorMessage = backendMessage || '请求数据格式错误（例如邮箱格式不正确）';
-      } else if (status === 401 || status === 450 || status === 451) { // 450: NO_Match, 451: PW_INCORRECT
-        errorMessage = backendMessage || '用户名或密码错误';
-      } else if (status === 429) { // 429 是请求频率限制
-        errorMessage = backendMessage || '尝试次数过多，请稍后再试';
-      } else if (status === 404) {
-        errorMessage = '登录API不存在，请检查服务器配置';
-      } else if (status === 403) { // email_not_verified
-        errorMessage = backendMessage || '邮箱未验证，请先验证邮箱';
-        showResendVerificationLink.value = true;
-      } else {
-        errorMessage = backendMessage || `发生错误 (${status})`;
-      }
-    } else if (error.request) {
-      errorMessage = '服务器没有响应，请检查网络连接';
-    }
-
+    console.error('登录过程中发生错误:', error);
     $q.notify({
       type: 'negative',
-      message: errorMessage,
+      message: '登录过程中发生错误，请稍后重试',
       position: 'top',
       timeout: 3000
     });
   }
 }
 
+// 重发验证邮件的方法
 async function resendVerificationEmail() {
   if (!username.value) {
     $q.notify({
       type: 'negative',
-      message: '请输入您的邮箱地址',
+      message: '请先输入邮箱地址',
       position: 'top'
     });
     return;
   }
 
   try {
-    await axios.post('/api/auth/send-email-verification', {
-      email: username.value
-    });
+    isResendingEmail.value = true;
+    await authApi.sendEmailVerification(username.value);
+
     $q.notify({
       type: 'positive',
-      message: '验证邮件已发送，请检查您的收件箱。',
-      position: 'top'
+      message: '验证邮件已重新发送，请查收您的邮箱',
+      position: 'top',
+      timeout: 4000
     });
+
+    showEmailVerificationDialog.value = false;
   } catch (error) {
+    console.error('重发验证邮件失败:', error);
+
+    let errorMessage = '发送验证邮件失败，请稍后重试';
+    if (error.response && error.response.status === 429) {
+      errorMessage = '请求过于频繁，请稍后再试';
+    }
+
     $q.notify({
       type: 'negative',
-      message: '发送验证邮件失败，请稍后重试。',
+      message: errorMessage,
       position: 'top'
     });
+  } finally {
+    isResendingEmail.value = false;
   }
 }
+
 
 // 组件挂载后的钩子函数
 onMounted(() => {

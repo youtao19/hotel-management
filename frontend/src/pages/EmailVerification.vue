@@ -9,7 +9,7 @@
       <div v-if="success" class="text-h4">
         <q-icon name="check_circle" size="2em" />
         <div class="q-mt-md">邮箱验证成功！</div>
-        <div class="text-subtitle1">将在 {{ countdown }} 秒后跳转到仪表盘...</div>
+        <div class="text-subtitle1">将在 {{ countdown }} 秒后跳转到登录页面...</div>
       </div>
 
       <div v-if="error" class="text-h4">
@@ -24,12 +24,10 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { useUserStore } from '../stores/userStore';
-import axios from 'axios';
+import { authApi } from '../api/index.js';
 
 const route = useRoute();
 const router = useRouter();
-const userStore = useUserStore();
 
 const loading = ref(true);
 const success = ref(false);
@@ -48,30 +46,45 @@ onMounted(async () => {
   }
 
   try {
-    const response = await axios.post('/api/auth/email-verify', { code });
+    // 调用邮箱验证API
+    await authApi.verifyEmail(code);
 
     loading.value = false;
     success.value = true;
 
-    // Log the user in
-    userStore.login(response.data.user);
-
+    // 验证成功后倒计时跳转到登录页面
     const interval = setInterval(() => {
       countdown.value--;
       if (countdown.value === 0) {
         clearInterval(interval);
-        router.push('/Dash-board');
+        router.push('/login');
       }
     }, 1000);
 
   } catch (err) {
     loading.value = false;
     error.value = true;
-    if (err.response && err.response.status === 452) {
-        errorMessage.value = '验证链接无效或已过期。';
+
+    // 根据后端返回的错误状态码显示不同的错误信息
+    if (err.response) {
+      switch (err.response.status) {
+        case 452: // 根据后端代码，452是CODE_INVALID的状态码
+          errorMessage.value = '验证链接无效或已过期。';
+          break;
+        case 400:
+          errorMessage.value = '验证请求格式错误。';
+          break;
+        case 500:
+          errorMessage.value = '服务器内部错误，请稍后重试。';
+          break;
+        default:
+          errorMessage.value = '邮箱验证失败，请稍后重试。';
+      }
     } else {
-        errorMessage.value = '邮箱验证失败，请稍后重试。';
+      errorMessage.value = '网络连接错误，请检查网络后重试。';
     }
+
+    console.error('邮箱验证失败:', err);
   }
 });
 </script>

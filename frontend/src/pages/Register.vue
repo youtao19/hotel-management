@@ -47,7 +47,7 @@
 
             <!-- 密码输入框 -->
             <q-input
-              v-model="password"
+              v-model="pw"
               filled
               :type="isPwd ? 'password' : 'text'"
               label="密码"
@@ -71,14 +71,14 @@
 
              <!-- 确认密码输入框 -->
             <q-input
-              v-model="confirmPassword"
+              v-model="confirmpw"
               filled
               :type="isConfirmPwd ? 'password' : 'text'"
               label="确认密码"
               lazy-rules
               :rules="[
                 val => !!val || '请再次输入密码',
-                val => val === password || '两次输入的密码不一致'
+                val => val === pw || '两次输入的密码不一致'
               ]"
             >
               <template v-slot:prepend>
@@ -110,7 +110,7 @@
 
           <!-- 底部版权信息 -->
           <div class="text-center q-mt-lg text-grey-7 text-caption">
-            © 2023 酒店管理系统 版权所有
+            © 2025 酒店管理系统 版权所有
           </div>
         </q-card>
       </div>
@@ -122,6 +122,7 @@
   import { useRouter } from 'vue-router'
   import { useQuasar } from 'quasar'
   import axios from 'axios'
+  import { authApi } from '../api'
 
   // 路由实例
   const router = useRouter()
@@ -131,8 +132,8 @@
   // 表单数据
   const name = ref('')
   const email = ref('')
-  const password = ref('')
-  const confirmPassword = ref('') // 新增确认密码
+  const pw = ref('')
+  const confirmpw = ref('') // 新增确认密码
   const isPwd = ref(true)
   const isConfirmPwd = ref(true) // 控制确认密码可见性
 
@@ -146,7 +147,7 @@
     console.log('开始注册请求...');
 
     // 前端再次验证
-    if (!name.value || !email.value || !password.value || !confirmPassword.value) {
+    if (!name.value || !email.value || !pw.value || !confirmpw.value) {
       $q.notify({
         type: 'negative',
         message: '请填写所有必填字段',
@@ -155,7 +156,7 @@
       return;
     }
 
-    if (password.value !== confirmPassword.value) {
+    if (pw.value !== confirmpw.value) {
       $q.notify({
         type: 'negative',
         message: '两次输入的密码不一致',
@@ -165,7 +166,7 @@
     }
 
     // 调用后端注册 API
-    console.log('表单数据:', { name: name.value, email: email.value, pw: password.value });
+    console.log('表单数据:', { name: name.value, email: email.value, pw: pw.value });
 
     // 检查是否存在此邮箱
     try {
@@ -185,40 +186,57 @@
     }
 
     // 调用后端注册 API
-    const response = await axios.post('/api/auth/signup', {
+    const response = await authApi.signup({
       name: name.value,
       email: email.value,
-      pw: password.value
+      pw: pw.value
     });
 
     console.log('注册请求成功返回:', response);
 
+
+
     // 检查后端返回的状态码
-    if (response.data) {
-      // 设置注册成功标志
-      localStorage.setItem('justRegistered', 'true');
-      localStorage.setItem('registeredEmail', email.value);
-      localStorage.setItem('registeredName', name.value);
+if (response.data) {
+  // 设置注册成功标志
+  localStorage.setItem('justRegistered', 'true');
+  localStorage.setItem('registeredEmail', email.value);
+  localStorage.setItem('registeredName', name.value);
 
-      // 显示注册成功通知
-      $q.notify({
-        type: 'positive',
-        message: '注册成功！正在跳转到登录页面...',
-        position: 'top',
-        timeout: 2500
-      });
+  // 注册成功后自动发送邮箱验证邮件
+  try {
+    await authApi.sendEmailVerification(email.value);
 
-      // 注册成功后跳转到登录页面
-      setTimeout(() => {
-        router.push('/login');
-      }, 1500);
-    } else {
-      $q.notify({
-        type: 'negative',
-        message: '注册响应异常',
-        position: 'top'
-      });
-    }
+    // 显示注册成功和邮件发送成功通知
+    $q.notify({
+      type: 'positive',
+      message: '注册成功！验证邮件已发送到您的邮箱，请查收并点击验证链接',
+      position: 'top',
+      timeout: 4000
+    });
+  } catch (emailError) {
+    console.warn('自动发送验证邮件失败:', emailError);
+
+    // 显示注册成功但邮件发送失败的通知
+    $q.notify({
+      type: 'warning',
+      message: '注册成功！但验证邮件发送失败，请在登录页面手动发送验证邮件',
+      position: 'top',
+      timeout: 4000
+    });
+  }
+
+  // 注册成功后跳转到登录页面
+  setTimeout(() => {
+    router.push('/login');
+  }, 2000);
+} else {
+  $q.notify({
+    type: 'negative',
+    message: '注册响应异常',
+    position: 'top'
+  });
+}
 
   } catch (error) {
     isSubmitting = false;

@@ -26,5 +26,37 @@ export default defineRouter(function (/* { store, ssrContext } */) {
     history: createHistory(process.env.VUE_ROUTER_BASE)
   })
 
+  // 添加路由守卫
+  Router.beforeEach(async (to, from, next) => {
+    // 动态导入userStore，避免循环依赖
+    const { useUserStore } = await import('src/stores/userStore')
+    const userStore = useUserStore()
+
+    // 定义不需要认证的路由
+    const publicRoutes = ['/login', '/register']
+    const isPublicRoute = publicRoutes.includes(to.path) || to.path.startsWith('/email-verify/')
+
+    // 如果是公共路由，直接放行
+    if (isPublicRoute) {
+      return next()
+    }
+
+    // 检查用户是否已登录
+    try {
+      const isAuthenticated = await userStore.checkAuth()
+
+      if (isAuthenticated) {
+        next()
+      } else {
+        // 未登录，重定向到登录页
+        next('/login')
+      }
+    } catch (error) {
+      console.error('路由守卫检查登录状态失败:', error)
+      // 出错时也重定向到登录页
+      next('/login')
+    }
+  })
+
   return Router
 })

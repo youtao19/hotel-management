@@ -5,19 +5,19 @@
     "productName": "酒店管理系统",
     "author": "youtao19 <wuyoutao19@gmail.com>",
     "private": true,
-  "scripts": {
-    "dev": "npm --workspace backend run dev",
-    "start": "concurrently \"npm --workspace backend run dev\" \"npm --workspace frontend run dev\"",
-    "build": "npm --workspace frontend run build",
-    "test": "cross-env NODE_ENV=test jest --config ./jest.config.js",
-    "test:watch": "cross-env NODE_ENV=test jest --config ./jest.config.js --watch",
-    "export-schema": "npm --workspace backend run export-schema",
-    "export-structure": "npm --workspace backend run export-structure",
-    "export-all": "npm --workspace backend run export-all",
-    "db:backup": "npm --workspace backend run db:backup",
-    "db:init": "npm --workspace backend run db:init",
-    "db:migrate": "npm --workspace backend run db:migrate"
-  },
+    "scripts": {
+        "dev": "npm --workspace backend run dev",
+        "start": "concurrently \"npm --workspace backend run dev\" \"npm --workspace frontend run dev\"",
+        "build": "npm --workspace frontend run build",
+        "test": "cross-env NODE_ENV=test jest --config ./jest.config.js",
+        "test:watch": "cross-env NODE_ENV=test jest --config ./jest.config.js --watch",
+        "export-schema": "npm --workspace backend run export-schema",
+        "export-structure": "npm --workspace backend run export-structure",
+        "export-all": "npm --workspace backend run export-all",
+        "db:backup": "npm --workspace backend run db:backup",
+        "db:init": "npm --workspace backend run db:init",
+        "db:migrate": "npm --workspace backend run db:migrate"
+    },
     "dependencies": {
         "@quasar/extras": "^1.16.4",
         "ajv": "^8.17.1",
@@ -32,6 +32,7 @@
         "express-session": "^1.18.1",
         "express-validator": "^7.2.1",
         "ioredis": "^5.6.1",
+        "nanoid": "^5.1.6",
         "nodemailer": "^7.0.3",
         "pg": "^8.16.0",
         "pinia": "^3.0.1",
@@ -54,10 +55,10 @@
         "postcss": "^8.4.14",
         "supertest": "^7.1.1"
     },
-  "workspaces": [
-    "frontend",
-    "backend"
-  ],
+    "workspaces": [
+        "frontend",
+        "backend"
+    ],
     "engines": {
         "node": "^28 || ^26 || ^24 || ^22 || ^20 || ^18",
         "npm": ">= 6.13.4"

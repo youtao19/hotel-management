@@ -16,13 +16,6 @@ async function bootup() {
   redisDB.initialize();
   console.log('Redis连接已初始化');
 
-  // 等待Redis连接就绪后初始化限流器
-  const rateLimiter = require("./modules/rateLimiter");
-  setTimeout(() => {
-    rateLimiter.initializeLimiters();
-    console.log('限流器已初始化');
-  }, 1000); // 给Redis连接1秒时间建立
-
   // 异步测试邮箱连接，不阻塞服务器启动
   emailJob.testConnection().catch(err => {
     console.log('邮箱连接测试失败，但不影响服务器启动:', err.message);

@@ -1,4 +1,5 @@
 const routes = [
+  // 无布局的页面（登录、注册、邮箱验证）
   {
     path: '/login',
     component: () => import('pages/Login.vue')
@@ -8,9 +9,11 @@ const routes = [
     component: () => import('pages/Register.vue')
   },
   {
-    path: '/verify-email/:code',
+    path: '/email-verify/:code',
     component: () => import('pages/EmailVerification.vue')
   },
+
+  // 有主布局的页面
   {
     path: '/',
     component: () => import('layouts/HomeView.vue'),

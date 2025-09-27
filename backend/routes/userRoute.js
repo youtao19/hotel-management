@@ -13,22 +13,33 @@ const authentication = require("../modules/authentication");
 router.use(authentication.ensureAuthenticated);
 
 router.get("/info", async (req, res) => {
-    try {
-        const getAccountQuery = {
-            text: `SELECT id, name, email,email_verified FROM ${account.tableName} WHERE id = $1`,
-            values: [req.session.account.id]
-        };
-        const result = await db.query(getAccountQuery);
-        if(result.rows.length === 0){
-            throw new Error(`can not find account using id : ${req.session.account.id}`);
-        } else {
-            return res.status(200).json(result.rows[0]);
-        }
-    } catch (e) {
-        console.log(`/info route failed with ${e}`);
-        return res.status(500).json();
+  try {
+    // 1. 检查是否已登录
+    if (!req.session.account || !req.session.account.id) {
+      return res.status(401).json({ message: "未登录" })
     }
-});
+
+    // 2. 查询数据库
+    const getAccountQuery = {
+      text: `SELECT id, name, email, email_verified
+             FROM ${account.tableName}
+             WHERE id = $1`,
+      values: [req.session.account.id]
+    }
+    const result = await db.query(getAccountQuery)
+
+    // 3. 没找到用户
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "用户不存在" })
+    }
+
+    // 4. 返回用户数据
+    return res.status(200).json(result.rows[0])
+  } catch (e) {
+    console.error(`/info route failed:`, e)
+    return res.status(500).json({ message: "服务器内部错误" })
+  }
+})
 
 router.get("/check/email", async (req, res) => {
     try {
@@ -68,13 +79,18 @@ const feedbackSchema = {
 }
 const validateFeedback = ajv.compile(feedbackSchema);
 
+// 登出路由不需要认证检查，因为即使session失效也应该允许登出
 router.get("/logout", async (req, res, next) => {
     try {
-        await req.logout();
+        // 即使session已经失效，也尝试执行登出操作
+        if (req.logout) {
+            await req.logout();
+        }
         return res.status(200).json();
     } catch (e) {
-        console.log(e);
-        return res.status(500).json();
+        console.log('登出操作失败:', e);
+        // 即使登出失败，也返回200，因为前端需要清理状态
+        return res.status(200).json();
     }
 });
 
