@@ -545,7 +545,7 @@ const nextStep = async () => {
     stepLoading.value = true
 
     // 模拟步骤处理时间
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    // await new Promise(resolve => setTimeout(resolve, 1000))
 
     if (props.currentStep < 6) {
       emit('step-change', props.currentStep + 1)

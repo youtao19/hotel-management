@@ -521,18 +521,18 @@ async function createOrder(orderData) {
     // 将日期字符串转换为标准的 YYYY-MM-DD 格式，避免时区问题
     const formatDateForDB = (dateInput) => {
       if (!dateInput) return null;
-      
+
       // 如果已经是 YYYY-MM-DD 格式，直接返回
       if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
         return dateInput;
       }
-      
+
       // 如果是其他格式，转换为本地日期字符串
       const date = new Date(dateInput);
       if (isNaN(date.getTime())) {
         throw new Error(`无效的日期格式: ${dateInput}`);
       }
-      
+
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');
@@ -871,7 +871,7 @@ async function checkInOrder(orderId) {
     // 创建日期解析函数，避免时区问题
     const parseDBDate = (dateInput) => {
       if (!dateInput) return null;
-      
+
       // 如果是字符串格式，优先按 YYYY-MM-DD 格式解析
       if (typeof dateInput === 'string') {
         if (/^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
@@ -884,22 +884,26 @@ async function checkInOrder(orderId) {
           return new Date(isoDate.getFullYear(), isoDate.getMonth(), isoDate.getDate());
         }
       }
-      
+
       // 兜底：直接使用 Date 构造函数
       return new Date(dateInput);
     };
 
     const checkInDate = parseDBDate(order.check_in_date);
     const checkOutDate = parseDBDate(order.check_out_date);
-    
+
     console.log(`📅 [checkInOrder] 日期解析: 入住 ${order.check_in_date} -> ${checkInDate.toDateString()}, 退房 ${order.check_out_date} -> ${checkOutDate.toDateString()}`);
 
     // 4. 计算平均每日房价
-    const nights = Math.ceil((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24));
+    let nights = Math.ceil((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24));
 
-    if (nights <= 0) {
-        // 对于休息房等当天退房的情况，按1晚计算
-        const err = new Error('入住天数必须大于0');
+    // 对于休息房等当天退房的情况（nights === 0），按1晚计算
+    if (nights === 0) {
+        console.log(`📝 [checkInOrder] 检测到休息房订单（同日入住退房），按1晚计算`);
+        nights = 1;
+    } else if (nights < 0) {
+        // 退房日期早于入住日期，这是不合理的
+        const err = new Error('退房日期不能早于入住日期');
         err.statusCode = 400;
         err.code = 'INVALID_NIGHTS';
         throw err;
@@ -922,32 +926,81 @@ async function checkInOrder(orderId) {
     for (let i = 0; i < nights; i++) {
       const billDate = new Date(checkInDate);
       billDate.setDate(billDate.getDate() + i);
+      const stayDateStr = formatLocalDate(billDate);
 
-      const bill = {
+      console.log(`创建账单 ${i + 1}: 订单入住日期=${order.check_in_date}, 计算账单日期=${formatLocalDate(billDate)}, 存储日期=${stayDateStr}`);
+
+      // 新版本：为每天创建独立的房费和押金账单记录
+
+      // 1. 创建房费记录
+      const roomFeeBill = {
         order_id: order.order_id,
         room_number: order.room_number,
         guest_name: order.guest_name,
-        room_fee: averageDailyRate.toFixed(2),
-        pay_way: order.payment_method, // 从订单获取
+        change_price: averageDailyRate,
+        change_type: '房费',
+        pay_way: order.payment_method,
         create_time: new Date(),
-        remarks: '办理入住创建', // 说明备注
+        remarks: '办理入住创建',
         stay_type: order.stay_type,
-        stay_date: formatLocalDate(billDate), // 使用本地时间格式化，避免时区问题
-        deposit: i === 0 ? order.deposit : 0,
-        change_price: 0,
-        change_type: '订单账单', // 标识这是订单的正常账单
+        stay_date: stayDateStr
       };
 
-      console.log(`创建账单 ${i + 1}: 订单入住日期=${order.check_in_date}, 计算账单日期=${formatLocalDate(billDate)}, 存储日期=${bill.stay_date}`);
-
-      const insertBillQuery = `
-        INSERT INTO bills (order_id, room_number, guest_name, room_fee, pay_way, create_time, remarks, stay_type, stay_date, deposit, change_price, change_type)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      const insertRoomFeeBillQuery = `
+        INSERT INTO bills (order_id, room_number, guest_name, change_price, change_type, pay_way, create_time, remarks, stay_type, stay_date)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         RETURNING *;
       `;
-      const billValues = Object.values(bill);
-      const newBillResult = await client.query(insertBillQuery, billValues);
-      createdBills.push(newBillResult.rows[0]);
+
+      const roomFeeBillResult = await client.query(insertRoomFeeBillQuery, [
+        roomFeeBill.order_id,
+        roomFeeBill.room_number,
+        roomFeeBill.guest_name,
+        roomFeeBill.change_price,
+        roomFeeBill.change_type,
+        roomFeeBill.pay_way,
+        roomFeeBill.create_time,
+        roomFeeBill.remarks,
+        roomFeeBill.stay_type,
+        roomFeeBill.stay_date
+      ]);
+      createdBills.push(roomFeeBillResult.rows[0]);
+
+      // 2. 仅在第一天创建押金记录
+      if (i === 0 && order.deposit && Number(order.deposit) > 0) {
+        const depositBill = {
+          order_id: order.order_id,
+          room_number: order.room_number,
+          guest_name: order.guest_name,
+          change_price: Number(order.deposit),
+          change_type: '收押',
+          pay_way: order.payment_method,
+          create_time: new Date(),
+          remarks: '办理入住收押金',
+          stay_type: order.stay_type,
+          stay_date: stayDateStr
+        };
+
+        const insertDepositBillQuery = `
+          INSERT INTO bills (order_id, room_number, guest_name, change_price, change_type, pay_way, create_time, remarks, stay_type, stay_date)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          RETURNING *;
+        `;
+
+        const depositBillResult = await client.query(insertDepositBillQuery, [
+          depositBill.order_id,
+          depositBill.room_number,
+          depositBill.guest_name,
+          depositBill.change_price,
+          depositBill.change_type,
+          depositBill.pay_way,
+          depositBill.create_time,
+          depositBill.remarks,
+          depositBill.stay_type,
+          depositBill.stay_date
+        ]);
+        createdBills.push(depositBillResult.rows[0]);
+      }
     }
 
     // 5. 更新订单状态

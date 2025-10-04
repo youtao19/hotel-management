@@ -75,10 +75,12 @@
           <!-- 客房汇总行 -->
           <div class="summary-row q-pa-md bg-grey-1">
             <div class="row items-center text-weight-medium">
-              <div class="col">汇总</div>
+              <div class="col-2">汇总</div>
               <div class="col text-center">房费: ¥{{ hotelSummary.roomFee.toFixed(2) }}</div>
-              <div class="col text-center">押金: ¥{{ hotelSummary.deposit.toFixed(2) }}</div>
-              <div class="col text-center">合计: ¥{{ (hotelSummary.roomFee + hotelSummary.deposit).toFixed(2) }}</div>
+              <div class="col text-center">收押: ¥{{ hotelSummary.deposit.toFixed(2) }}</div>
+              <div class="col text-center">退押: ¥{{ hotelSummary.refundDeposit.toFixed(2) }}</div>
+              <div class="col text-center">其他: ¥{{ hotelSummary.otherCharges.toFixed(2) }}</div>
+              <div class="col text-center text-primary text-weight-bold">合计: ¥{{ (hotelSummary.roomFee + hotelSummary.deposit + hotelSummary.refundDeposit + hotelSummary.otherCharges).toFixed(2) }}</div>
             </div>
           </div>
         </div>
@@ -144,10 +146,12 @@
           <!-- 休息房汇总行 -->
           <div class="summary-row q-pa-md bg-grey-1">
             <div class="row items-center text-weight-medium">
-              <div class="col">汇总</div>
+              <div class="col-2">汇总</div>
               <div class="col text-center">房费: ¥{{ restSummary.roomFee.toFixed(2) }}</div>
-              <div class="col text-center">押金: ¥{{ restSummary.deposit.toFixed(2) }}</div>
-              <div class="col text-center">合计: ¥{{ (restSummary.roomFee + restSummary.deposit).toFixed(2) }}</div>
+              <div class="col text-center">收押: ¥{{ restSummary.deposit.toFixed(2) }}</div>
+              <div class="col text-center">退押: ¥{{ restSummary.refundDeposit.toFixed(2) }}</div>
+              <div class="col text-center">其他: ¥{{ restSummary.otherCharges.toFixed(2) }}</div>
+              <div class="col text-center text-primary text-weight-bold">合计: ¥{{ (restSummary.roomFee + restSummary.deposit + restSummary.refundDeposit + restSummary.otherCharges).toFixed(2) }}</div>
             </div>
           </div>
         </div>
@@ -178,8 +182,8 @@
           <div class="q-mb-md">
             <strong>订单号：</strong>{{ editDialog.data.orderNo }}
           </div>
-          <div class="row q-gutter-md">
-            <div class="col">
+          <div class="row q-col-gutter-md q-mb-md">
+            <div class="col-6">
               <q-input
                 v-model.number="editDialog.data.roomFee"
                 type="number"
@@ -188,13 +192,35 @@
                 prefix="¥"
               />
             </div>
-            <div class="col">
+            <div class="col-6">
               <q-input
                 v-model.number="editDialog.data.deposit"
                 type="number"
-                label="押金"
+                label="收押"
                 outlined
                 prefix="¥"
+              />
+            </div>
+          </div>
+          <div class="row q-col-gutter-md">
+            <div class="col-6">
+              <q-input
+                v-model.number="editDialog.data.refundDeposit"
+                type="number"
+                label="退押"
+                outlined
+                prefix="¥"
+                hint="负数表示退款"
+              />
+            </div>
+            <div class="col-6">
+              <q-input
+                v-model.number="editDialog.data.otherCharges"
+                type="number"
+                label="其他费用"
+                outlined
+                prefix="¥"
+                hint="补收或退款"
               />
             </div>
           </div>
@@ -265,11 +291,27 @@ const roomColumns = [
   },
   {
     name: 'deposit',
-    label: '押金',
+    label: '收押',
     field: 'deposit',
     align: 'center',
     headerStyle: 'font-weight: bold;',
     format: val => `¥${val.toFixed(2)}`
+  },
+  {
+    name: 'refundDeposit',
+    label: '退押',
+    field: 'refundDeposit',
+    align: 'center',
+    headerStyle: 'font-weight: bold;',
+    format: val => val !== 0 ? `¥${val.toFixed(2)}` : '-'
+  },
+  {
+    name: 'otherCharges',
+    label: '其他',
+    field: 'otherCharges',
+    align: 'center',
+    headerStyle: 'font-weight: bold;',
+    format: val => val !== 0 ? `¥${val.toFixed(2)}` : '-'
   },
   {
     name: 'actions',
@@ -292,7 +334,9 @@ const editDialog = ref({
   data: {
     orderNo: '',
     roomFee: 0,
-    deposit: 0
+    deposit: 0,
+    refundDeposit: 0,
+    otherCharges: 0
   },
   originalData: null
 })
@@ -301,14 +345,18 @@ const editDialog = ref({
 const hotelSummary = computed(() => {
   const roomFee = hotelRoomData.value.reduce((sum, item) => sum + item.roomFee, 0)
   const deposit = hotelRoomData.value.reduce((sum, item) => sum + item.deposit, 0)
-  return { roomFee, deposit }
+  const refundDeposit = hotelRoomData.value.reduce((sum, item) => sum + item.refundDeposit, 0)
+  const otherCharges = hotelRoomData.value.reduce((sum, item) => sum + item.otherCharges, 0)
+  return { roomFee, deposit, refundDeposit, otherCharges }
 })
 
 // 计算属性 - 休息房汇总
 const restSummary = computed(() => {
   const roomFee = restRoomData.value.reduce((sum, item) => sum + item.roomFee, 0)
   const deposit = restRoomData.value.reduce((sum, item) => sum + item.deposit, 0)
-  return { roomFee, deposit }
+  const refundDeposit = restRoomData.value.reduce((sum, item) => sum + item.refundDeposit, 0)
+  const otherCharges = restRoomData.value.reduce((sum, item) => sum + item.otherCharges, 0)
+  return { roomFee, deposit, refundDeposit, otherCharges }
 })
 
 // 计算属性 - 是否所有数据都已确认
@@ -342,7 +390,9 @@ const cancelEdit = () => {
   editDialog.value.data = {
     orderNo: '',
     roomFee: 0,
-    deposit: 0
+    deposit: 0,
+    refundDeposit: 0,
+    otherCharges: 0
   }
   editDialog.value.originalData = null
 }
@@ -352,6 +402,8 @@ const saveEdit = () => {
   if (editDialog.value.originalData) {
     editDialog.value.originalData.roomFee = editDialog.value.data.roomFee
     editDialog.value.originalData.deposit = editDialog.value.data.deposit
+    editDialog.value.originalData.refundDeposit = editDialog.value.data.refundDeposit
+    editDialog.value.originalData.otherCharges = editDialog.value.data.otherCharges
     editDialog.value.originalData.confirmed = false // 修改后需要重新确认
 
     // 数据修改后重置核对完成状态
@@ -440,6 +492,8 @@ const loadBillsData = async () => {
         guestName: bill.guest_name || '未知',
         roomFee: parseFloat(bill.room_fee) || 0,
         deposit: parseFloat(bill.deposit) || 0,
+        refundDeposit: parseFloat(bill.refund_deposit) || 0,
+        otherCharges: parseFloat(bill.other_charges) || 0,
         payWay: bill.pay_way,
         confirmed: false
       }))
@@ -452,6 +506,8 @@ const loadBillsData = async () => {
         guestName: bill.guest_name || '未知',
         roomFee: parseFloat(bill.room_fee) || 0,
         deposit: parseFloat(bill.deposit) || 0,
+        refundDeposit: parseFloat(bill.refund_deposit) || 0,
+        otherCharges: parseFloat(bill.other_charges) || 0,
         payWay: bill.pay_way,
         confirmed: false
       }))

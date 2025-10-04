@@ -42,44 +42,51 @@ async function getShiftTable(date) {
 
 
     const billSql = `
-      SELECT bill_id, order_id, pay_way, change_price, change_type, deposit, stay_type, room_fee, stay_date
+      SELECT bill_id, order_id, pay_way, change_price, change_type, stay_type, stay_date
       FROM bills
       WHERE stay_date::date = $1::date
-      order by bill_id asc
+      ORDER BY bill_id ASC
     `;
 
     // 获取账单数据
     const billRes = await query(billSql, [date])
 
-    // const payWayMapping = {
-    //   'cash': '现金',
-    //   'wechat': '微信',
-    //   'alipay': '微邮付',
-    //   'platform': '其他'
-    // };
-
+    // 遍历账单记录，根据 change_type 分类统计
     for (const row of billRes.rows) {
-      const { pay_way, change_price, change_type, deposit, stay_type, room_fee } = row
-      // const mappedPayWay = payWayMapping[pay_way] || '其他';
+      const { pay_way, change_price, change_type, stay_type } = row
+      const amount = Number(change_price) || 0;
 
-      if (change_type === '订单账单'){
+      // 房费收入统计（正数）
+      if (change_type === '房费') {
         if (stay_type === '客房'){
-          // hotelIncome[mappedPayWay] += (Number(room_fee) + Number(deposit)) // 客房收入
-          hotelIncome[pay_way] += (Number(room_fee) + Number(deposit)) // 客房收入
-
+          hotelIncome[pay_way] += amount;
         } else if (stay_type === '休息房'){
-          // restIncome[mappedPayWay] += (Number(room_fee) + Number(deposit)) // 休息房收入
-          restIncome[pay_way] += (Number(room_fee) + Number(deposit)) // 休息房收入
+          restIncome[pay_way] += amount;
         }
-      } else if (change_type === '退押'){
+      }
+      // 收押金统计（正数）
+      else if (change_type === '收押') {
         if (stay_type === '客房'){
-          // hotelDeposit[mappedPayWay] += Number(change_price) // 客房退押
-          hotelDeposit[pay_way] += Number(change_price) // 客房退押
-
+          hotelIncome[pay_way] += amount;
         } else if (stay_type === '休息房'){
-          // restDeposit[mappedPayWay] += Number(change_price) // 休息房退押
-          restDeposit[pay_way] += Number(change_price) // 休息房退押
-
+          restIncome[pay_way] += amount;
+        }
+      }
+      // 退押金统计（负数，需要转为绝对值）
+      else if (change_type === '退押'){
+        const refundAmount = Math.abs(amount); // change_price 是负数，取绝对值
+        if (stay_type === '客房'){
+          hotelDeposit[pay_way] += refundAmount;
+        } else if (stay_type === '休息房'){
+          restDeposit[pay_way] += refundAmount;
+        }
+      }
+      // 兼容旧格式的"订单账单"类型
+      else if (change_type === '订单账单'){
+        if (stay_type === '客房'){
+          hotelIncome[pay_way] += amount;
+        } else if (stay_type === '休息房'){
+          restIncome[pay_way] += amount;
         }
       }
     }
