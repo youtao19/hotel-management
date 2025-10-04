@@ -156,7 +156,12 @@ function createEmptyPaymentData() {
 }
 
 const paymentData = computed(() => {
-  const pd = props.paymentData || {}
+  // 如果没有传入数据或数据为null，使用空数据
+  if (!props.paymentData) {
+    return createEmptyPaymentData()
+  }
+
+  const pd = props.paymentData
   const empty = createEmptyPaymentData()
   return {
     reserve: pd.reserve || empty.reserve,

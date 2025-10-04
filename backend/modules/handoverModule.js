@@ -685,7 +685,8 @@ async function getHandoverTableData(date) {
         handover,
         vip_card,
         handover_person,
-        takeover_person
+        takeover_person,
+        remarks
       FROM handover
       WHERE date = $1::date
         AND payment_type IN (1, 2, 3, 4)
@@ -704,6 +705,7 @@ async function getHandoverTableData(date) {
     let vipCards = 0;
     let handoverPerson = '';
     let takeoverPerson = '';
+    let remarks = '';
 
     // 首先尝试从查询结果中找到支付方式1的记录
     const cashRecord = result.rows.find(row => row.payment_type === 1);
@@ -711,11 +713,12 @@ async function getHandoverTableData(date) {
       vipCards = Number(cashRecord.vip_card) || 0;
       handoverPerson = cashRecord.handover_person || '';
       takeoverPerson = cashRecord.takeover_person || '';
+      remarks = cashRecord.remarks || '';
     } else {
       // 如果查询结果中没有支付方式1的记录，单独查询一次
       try {
         const vipCardQuery = `
-          SELECT vip_card, handover_person, takeover_person FROM handover
+          SELECT vip_card, handover_person, takeover_person, remarks FROM handover
           WHERE date = $1::date AND payment_type = 1
           LIMIT 1
         `;
@@ -724,12 +727,14 @@ async function getHandoverTableData(date) {
           vipCards = Number(vipCardResult.rows[0].vip_card) || 0;
           handoverPerson = vipCardResult.rows[0].handover_person || '';
           takeoverPerson = vipCardResult.rows[0].takeover_person || '';
+          remarks = vipCardResult.rows[0].remarks || '';
         }
       } catch (error) {
         console.warn('查询vipCard和人员信息失败，使用默认值:', error);
         vipCards = 0;
         handoverPerson = '';
         takeoverPerson = '';
+        remarks = '';
       }
     }
 
@@ -764,7 +769,8 @@ async function getHandoverTableData(date) {
       handoverAmount,
       vipCards, // 添加vipCards数据
       handoverPerson, // 添加交班人信息
-      takeoverPerson  // 添加接班人信息
+      takeoverPerson,  // 添加接班人信息
+      remarks // 添加备注信息
     };
 
   } catch (error) {

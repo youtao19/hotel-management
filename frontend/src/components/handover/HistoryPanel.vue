@@ -27,8 +27,14 @@
         <div class="history-stats q-mb-md">
           <q-card flat class="stats-card">
             <q-card-section class="q-pa-sm">
+              <div class="text-caption text-grey-7">可用日期</div>
+              <div class="text-h6 text-primary">{{ availableDates.length }}个</div>
+            </q-card-section>
+          </q-card>
+          <q-card flat class="stats-card q-mt-xs">
+            <q-card-section class="q-pa-sm">
               <div class="text-caption text-grey-7">本月交接</div>
-              <div class="text-h6 text-primary">{{ monthlyCount }}次</div>
+              <div class="text-h6 text-secondary">{{ monthlyCount }}次</div>
             </q-card-section>
           </q-card>
         </div>
@@ -49,11 +55,26 @@
         @click="handleSelectRecord(record)"
       >
         <q-card-section class="q-pa-sm">
-          <div class="text-caption text-grey-7">
-            {{ formatDate(record.date) }}
+          <div class="row items-center justify-between q-mb-xs">
+            <div class="text-body2 text-primary">{{ record.date }}</div>
+            <q-chip
+              size="sm"
+              color="positive"
+              text-color="white"
+              :label="`${record.paymentCount}种支付`"
+            />
           </div>
-          <div class="text-caption text-grey-6">
+          <div class="text-caption text-grey-7 q-mb-xs">
+            <q-icon name="person" size="xs" class="q-mr-xs"/>
             {{ record.operator }}
+          </div>
+          <div v-if="record.vipCards > 0" class="text-caption text-orange-7">
+            <q-icon name="card_membership" size="xs" class="q-mr-xs"/>
+            VIP卡: {{ record.vipCards }}
+          </div>
+          <div v-if="record.taskList && record.taskList.length > 0" class="text-caption text-blue-7">
+            <q-icon name="task_alt" size="xs" class="q-mr-xs"/>
+            {{ record.taskList.length }} 条备忘录
           </div>
         </q-card-section>
       </q-card>
@@ -64,27 +85,13 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useQuasar } from 'quasar'
+import { shiftHandoverApi } from '../../api/index.js'
 
 // 响应式状态
 const $q = useQuasar()
 const isLoading = ref(false)
-const historyRecords = ref([
-  {
-    id: 1,
-    date: '2024-01-15',
-    operator: '张三'
-  },
-  {
-    id: 2,
-    date: '2024-01-14',
-    operator: '李四'
-  },
-  {
-    id: 3,
-    date: '2024-01-14',
-    operator: '王五'
-  }
-])
+const historyRecords = ref([])
+const availableDates = ref([])
 
 // 计算属性
 const hasHistoryRecords = computed(() => historyRecords.value.length > 0)
@@ -111,34 +118,40 @@ const handleSearchHistory = async () => {
     isLoading.value = true
     $q.notify({
       type: 'info',
-      message: '正在查询历史记录...',
+      message: '正在查询交接班历史记录...',
       position: 'top'
     })
 
-    // 这里可以添加实际的API调用
-    // const response = await api.getHandoverHistory()
-    // historyRecords.value = response.data
+    // 调用后端API查询所有交接班记录
+    const response = await shiftHandoverApi.queryHandoverRecords()
 
-    // 模拟API调用延迟
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    if (response.success) {
+      // 将后端返回的数据转换为前端需要的格式
+      historyRecords.value = response.data.map(record => ({
+        id: record.date, // 使用日期作为唯一标识
+        date: record.date,
+        operator: record.handoverPerson ? `${record.handoverPerson} → ${record.takeoverPerson}` : '未知',
+        handoverPerson: record.handoverPerson,
+        takeoverPerson: record.takeoverPerson,
+        vipCards: record.vipCards,
+        taskList: record.taskList,
+        remarks: record.remarks,
+        paymentCount: record.paymentCount
+      }))
 
-    // 模拟添加新的历史记录
-    const newRecord = {
-      id: Date.now(),
-      date: new Date().toISOString().split('T')[0],
-      operator: '系统管理员'
+      $q.notify({
+        type: 'positive',
+        message: `查询成功，找到 ${historyRecords.value.length} 条交接班记录`,
+        position: 'top'
+      })
+    } else {
+      throw new Error(response.message || '查询失败')
     }
-    historyRecords.value.unshift(newRecord)
-
-    $q.notify({
-      type: 'positive',
-      message: '历史记录已更新',
-      position: 'top'
-    })
   } catch (error) {
+    console.error('查询交接班历史记录失败:', error)
     $q.notify({
       type: 'negative',
-      message: '查询失败，请重试',
+      message: error.message || '查询失败，请重试',
       position: 'top'
     })
   } finally {
@@ -175,12 +188,28 @@ const deleteRecord = (recordId) => {
   }
 }
 
+// 获取可用日期
+const loadAvailableDates = async () => {
+  try {
+    const response = await shiftHandoverApi.getAvailableHandoverDates()
+    if (response.success) {
+      availableDates.value = response.data
+      console.log('可用的交接班日期:', availableDates.value)
+    }
+  } catch (error) {
+    console.error('获取可用日期失败:', error)
+  }
+}
+
 // 刷新历史记录
 const refreshHistory = async () => {
   isLoading.value = true
   try {
-    // 模拟API调用
-    await new Promise(resolve => setTimeout(resolve, 500))
+    // 同时获取历史记录和可用日期
+    await Promise.all([
+      handleSearchHistory(),
+      loadAvailableDates()
+    ])
 
     $q.notify({
       type: 'positive',
@@ -188,6 +217,7 @@ const refreshHistory = async () => {
       position: 'top'
     })
   } catch (error) {
+    console.error('刷新历史记录失败:', error)
     $q.notify({
       type: 'negative',
       message: '刷新失败',
@@ -201,8 +231,8 @@ const refreshHistory = async () => {
 // 生命周期钩子
 onMounted(() => {
   console.log('HistoryPanel mounted')
-  // 组件挂载时自动加载历史记录
-  refreshHistory()
+  // 组件挂载时自动加载可用日期
+  loadAvailableDates()
 })
 </script>
 

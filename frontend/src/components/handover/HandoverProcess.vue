@@ -28,15 +28,34 @@
 
           <!-- 检查结果显示区域 -->
           <div v-if="!isCheckingRecord && recordCheckResult.checked" class="record-check q-mt-md">
-            <!-- 有记录的情况 -->
-            <div v-if="recordCheckResult.hasRecord" class="text-body2 text-positive">
-              ✅ 昨日有交接记录，将自动导入备用金
-            </div>
+            <q-card flat bordered class="check-result-card">
+              <q-card-section>
+                <!-- 有记录的情况 -->
+                <div v-if="recordCheckResult.hasRecord">
+                  <div class="text-body1 text-positive q-mb-sm">
+                    <q-icon name="check_circle" size="24px" class="q-mr-sm" />
+                    ✅ 昨日（{{ recordCheckResult.yesterdayDate }}）有完整的交接记录
+                  </div>
+                  <div class="text-body2 text-grey-7 q-ml-lg">
+                    • 包含 {{ recordCheckResult.recordCount }} 种支付方式（现金、微信、微邮付、其他）<br>
+                    • 昨日交接款总额：¥{{ recordCheckResult.reserveAmount.toFixed(2) }}<br>
+                    • 系统将自动导入为今日备用金
+                  </div>
+                </div>
 
-            <!-- 无记录的情况 -->
-            <div v-else class="text-body2 text-negative">
-              ❌ 昨日没有交接记录，请手动输入备用金
-            </div>
+                <!-- 无记录的情况 -->
+                <div v-else>
+                  <div class="text-body1 text-warning q-mb-sm">
+                    <q-icon name="warning" size="24px" class="q-mr-sm" />
+                    ⚠️ 昨日（{{ recordCheckResult.yesterdayDate }}）无完整交接记录
+                  </div>
+                  <div class="text-body2 text-grey-7 q-ml-lg">
+                    • 找到 {{ recordCheckResult.recordCount }} 条记录，但需要 4 条（现金、微信、微邮付、其他）<br>
+                    • 请在下一步手动输入今日备用金金额
+                  </div>
+                </div>
+              </q-card-section>
+            </q-card>
           </div>
         </q-card-section>
       </q-card>
@@ -276,6 +295,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useQuasar } from 'quasar'
+import { shiftHandoverApi } from '../../api/index.js'
 import CheckData from './CheckData.vue'
 import ShiftHandoverPaymentTable from './ShiftHandoverPaymentTable.vue'
 import ShiftHandoverSpecialStats from './ShiftHandoverSpecialStats.vue'
@@ -309,7 +329,10 @@ const handoverInfo = ref({
 const isCheckingRecord = ref(false)
 const recordCheckResult = ref({
   checked: false,
-  hasRecord: false
+  hasRecord: false,
+  yesterdayDate: '',
+  recordCount: 0,
+  reserveAmount: 0
 })
 
 // 备用金表格相关数据
@@ -463,34 +486,48 @@ const checkYesterdayRecord = async () => {
       position: 'top'
     })
 
-    // 模拟检查延迟
-    await new Promise(resolve => setTimeout(resolve, 1500))
+    // 获取今天的日期
+    const today = new Date().toISOString().split('T')[0]
 
-    // 模拟随机结果
-    const hasRecord = Math.random() > 0.5
+    // 调用后端API检查昨日交接记录
+    const response = await shiftHandoverApi.checkYesterdayRecord({ date: today })
 
-    recordCheckResult.value.checked = true
-    recordCheckResult.value.hasRecord = hasRecord
+    if (response.success) {
+      const { hasYesterdayRecord, yesterdayDate, recordCount, reserveAmount } = response.data
 
-    if (hasRecord) {
-      $q.notify({
-        type: 'positive',
-        message: '检查完成：发现昨日交接记录',
-        position: 'top'
-      })
+      recordCheckResult.value.checked = true
+      recordCheckResult.value.hasRecord = hasYesterdayRecord
+      recordCheckResult.value.yesterdayDate = yesterdayDate
+      recordCheckResult.value.recordCount = recordCount
+      recordCheckResult.value.reserveAmount = reserveAmount
+
+      if (hasYesterdayRecord) {
+        $q.notify({
+          type: 'positive',
+          message: `检查完成：发现昨日（${yesterdayDate}）交接记录，包含${recordCount}种支付方式`,
+          position: 'top'
+        })
+
+        // 如果有昨日记录，自动将昨日交接款作为今日备用金
+        if (reserveAmount > 0) {
+          console.log('自动导入昨日交接款作为今日备用金:', reserveAmount)
+        }
+      } else {
+        $q.notify({
+          type: 'warning',
+          message: `检查完成：昨日（${yesterdayDate}）无完整交接记录（找到${recordCount}条记录，需要4条）`,
+          position: 'top'
+        })
+      }
     } else {
-      $q.notify({
-        type: 'warning',
-        message: '检查完成：昨日无交接记录',
-        position: 'top'
-      })
+      throw new Error(response.message || '检查失败')
     }
 
   } catch (error) {
     console.error('检查昨日交接记录失败:', error)
     $q.notify({
       type: 'negative',
-      message: '检查昨日交接记录失败，请稍后重试',
+      message: error.message || '检查昨日交接记录失败，请稍后重试',
       position: 'top'
     })
 
@@ -680,6 +717,24 @@ const getStepTitle = (step) => {
 
 .reserve-cash-table :deep(.q-input .q-field__control) {
   height: 32px;
+}
+
+/* 检查结果卡片样式 */
+.check-result-card {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(250, 250, 250, 0.95) 100%);
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.check-result-card .text-positive {
+  display: flex;
+  align-items: center;
+}
+
+.check-result-card .text-warning {
+  display: flex;
+  align-items: center;
 }
 
 /* 响应式设计 */

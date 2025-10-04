@@ -1,7 +1,13 @@
 <template>
   <div class="check-data-container">
+    <!-- 加载状态 -->
+    <div v-if="isLoadingData" class="loading-container">
+      <q-spinner-dots color="primary" size="50px" />
+      <div class="text-body1 text-grey-7 q-mt-md">正在加载账单数据...</div>
+    </div>
+
     <!-- 核对数据卡片 -->
-    <q-card flat bordered>
+    <q-card v-else flat bordered>
       <q-card-section>
         <div class="text-h6 q-mb-md">
           <q-icon name="fact_check" color="primary" class="q-mr-sm" />
@@ -11,7 +17,15 @@
         <!-- 客房数据表格 -->
         <div class="data-check-section q-mb-lg">
           <div class="text-subtitle1 q-mb-sm text-weight-medium">客房数据</div>
+
+          <!-- 无数据提示 -->
+          <div v-if="hotelRoomData.length === 0" class="no-data-hint q-pa-md text-center">
+            <q-icon name="info" size="32px" color="grey-5" />
+            <div class="text-body2 text-grey-6 q-mt-sm">今日暂无客房账单数据</div>
+          </div>
+
           <q-table
+            v-else
             :rows="hotelRoomData"
             :columns="roomColumns"
             row-key="orderNo"
@@ -72,7 +86,15 @@
         <!-- 休息房数据表格 -->
         <div class="data-check-section q-mb-lg">
           <div class="text-subtitle1 q-mb-sm text-weight-medium">休息房数据</div>
+
+          <!-- 无数据提示 -->
+          <div v-if="restRoomData.length === 0" class="no-data-hint q-pa-md text-center">
+            <q-icon name="info" size="32px" color="grey-5" />
+            <div class="text-body2 text-grey-6 q-mt-sm">今日暂无休息房账单数据</div>
+          </div>
+
           <q-table
+            v-else
             :rows="restRoomData"
             :columns="roomColumns"
             row-key="orderNo"
@@ -201,12 +223,14 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useQuasar } from 'quasar'
+import { billApi } from '../../api/index.js'
 
 const $q = useQuasar()
 
 // 响应式数据
 const isConfirmingData = ref(false)
 const dataCheckCompleted = ref(false) // 数据核对是否已完成
+const isLoadingData = ref(false) // 是否正在加载数据
 
 // 表格列定义
 const roomColumns = [
@@ -257,52 +281,10 @@ const roomColumns = [
 ]
 
 // 客房数据
-const hotelRoomData = ref([
-  {
-    orderNo: 'H001',
-    roomNo: '101',
-    guestName: '张三',
-    roomFee: 288.00,
-    deposit: 100.00,
-    confirmed: false
-  },
-  {
-    orderNo: 'H002',
-    roomNo: '102',
-    guestName: '李四',
-    roomFee: 328.00,
-    deposit: 100.00,
-    confirmed: false
-  },
-  {
-    orderNo: 'H003',
-    roomNo: '201',
-    guestName: '王五',
-    roomFee: 388.00,
-    deposit: 200.00,
-    confirmed: false
-  }
-])
+const hotelRoomData = ref([])
 
 // 休息房数据
-const restRoomData = ref([
-  {
-    orderNo: 'R001',
-    roomNo: '301',
-    guestName: '赵六',
-    roomFee: 88.00,
-    deposit: 50.00,
-    confirmed: false
-  },
-  {
-    orderNo: 'R002',
-    roomNo: '302',
-    guestName: '钱七',
-    roomFee: 98.00,
-    deposit: 50.00,
-    confirmed: false
-  }
-])
+const restRoomData = ref([])
 
 // 编辑对话框数据
 const editDialog = ref({
@@ -430,9 +412,83 @@ const confirmDataCheck = async () => {
   }
 }
 
+// 加载账单数据
+const loadBillsData = async () => {
+  try {
+    isLoadingData.value = true
+
+    // 获取今天的日期
+    const today = new Date().toISOString().split('T')[0]
+
+    $q.notify({
+      type: 'info',
+      message: `正在加载 ${today} 的账单数据...`,
+      position: 'top'
+    })
+
+    // 调用API获取指定日期的账单数据
+    const response = await billApi.getBillsByDate(today)
+
+    if (response.success) {
+      const { hotelBills, restBills, totalCount } = response.data
+
+      // 转换客房数据格式
+      hotelRoomData.value = hotelBills.map(bill => ({
+        billId: bill.bill_id,
+        orderNo: bill.order_id,
+        roomNo: bill.room_number || '未知',
+        guestName: bill.guest_name || '未知',
+        roomFee: parseFloat(bill.room_fee) || 0,
+        deposit: parseFloat(bill.deposit) || 0,
+        payWay: bill.pay_way,
+        confirmed: false
+      }))
+
+      // 转换休息房数据格式
+      restRoomData.value = restBills.map(bill => ({
+        billId: bill.bill_id,
+        orderNo: bill.order_id,
+        roomNo: bill.room_number || '未知',
+        guestName: bill.guest_name || '未知',
+        roomFee: parseFloat(bill.room_fee) || 0,
+        deposit: parseFloat(bill.deposit) || 0,
+        payWay: bill.pay_way,
+        confirmed: false
+      }))
+
+      $q.notify({
+        type: 'positive',
+        message: `成功加载 ${totalCount} 条账单数据（客房：${hotelBills.length}，休息房：${restBills.length}）`,
+        position: 'top'
+      })
+
+      console.log('账单数据加载完成:', {
+        today,
+        hotelCount: hotelBills.length,
+        restCount: restBills.length,
+        totalCount
+      })
+    } else {
+      throw new Error(response.message || '加载失败')
+    }
+
+  } catch (error) {
+    console.error('加载账单数据失败:', error)
+    $q.notify({
+      type: 'negative',
+      message: error.message || '加载账单数据失败，请重试',
+      position: 'top'
+    })
+  } finally {
+    isLoadingData.value = false
+  }
+}
+
 // 生命周期
 onMounted(() => {
   console.log('CheckData component mounted')
+  // 自动加载当天的账单数据
+  loadBillsData()
 })
 </script>
 
@@ -441,6 +497,24 @@ onMounted(() => {
   padding: 20px;
   max-width: 1000px;
   margin: 0 auto;
+}
+
+/* 加载状态样式 */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  min-height: 400px;
+}
+
+/* 无数据提示样式 */
+.no-data-hint {
+  background: rgba(245, 245, 245, 0.5);
+  border: 1px dashed #d0d0d0;
+  border-radius: 8px;
+  margin-bottom: 16px;
 }
 
 /* 数据检查表格样式 */

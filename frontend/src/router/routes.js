@@ -24,7 +24,6 @@ const routes = [
       { path: 'room-management', component: () => import('pages/RoomManagement.vue') },
       { path: 'ViewOrders', component: () => import('pages/ViewOrders.vue') },
       { path: 'CreateOrder', component: () => import('pages/CreateOrder.vue') },
-      { path: 'shift-handover', component: () => import('pages/ShiftHandover.vue') },
       { path: 'review-management', component: () => import('pages/ReviewManagement.vue') },
       { path: 'revenue-statistics', component: () => import('pages/RevenueStatistics.vue') },
       { path: 'handover', component: () => import('pages/Handover.vue') }

@@ -203,6 +203,9 @@ export const billApi = {
 
   // 获取已邀请但未设置好评状态的账单
   getPendingReviews: () => api.get('/bills/pending-reviews'),
+
+  // 获取指定日期的所有账单（用于交接班核对数据）
+  getBillsByDate: (date) => api.get(`/bills/by-date/${date}`),
 }
 
 // 好评相关接口
@@ -299,7 +302,16 @@ export const shiftHandoverApi = {
   getAdminMemos: (params) => api.get('/handover/admin-memos', { params }),
 
   // 检查昨日交接记录
-  checkYesterdayRecord: (params) => api.get('/handover/check-yesterday', { params })
+  checkYesterdayRecord: (params) => api.get('/handover/check-yesterday', { params }),
+
+  // 查询所有交接班记录
+  queryHandoverRecords: () => api.get('/handover/query'),
+
+  // 按日期范围查询交接班记录
+  queryHandoverByRange: (params) => api.get('/handover/query-by-range', { params }),
+
+  // 获取有交接记录的日期列表
+  getAvailableHandoverDates: () => api.get('/handover/available-dates')
 
 }
 

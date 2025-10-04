@@ -74,4 +74,59 @@ router.put('/order/:orderId/date/:stayDate', async (req, res) => {
   }
 });
 
+// 获取指定日期的所有账单（用于交接班核对数据）
+router.get('/by-date/:date', async (req, res) => {
+  const { date } = req.params;
+  const { query } = require('../database/postgreDB/pg');
+
+  try {
+    // 查询指定日期的所有账单，关联订单信息
+    const sql = `
+      SELECT
+        b.bill_id,
+        b.order_id,
+        b.stay_date,
+        b.stay_type,
+        b.room_fee,
+        b.deposit,
+        b.pay_way,
+        b.change_type,
+        b.change_price,
+        o.room_number,
+        o.guest_name,
+        o.phone_number,
+        o.status as order_status
+      FROM bills b
+      LEFT JOIN orders o ON b.order_id = o.order_id
+      WHERE b.stay_date::date = $1::date
+        AND b.change_type = '订单账单'
+      ORDER BY b.stay_type, b.bill_id ASC
+    `;
+
+    const result = await query(sql, [date]);
+
+    // 按住宿类型分组
+    const hotelBills = result.rows.filter(bill => bill.stay_type === '客房');
+    const restBills = result.rows.filter(bill => bill.stay_type === '休息房');
+
+    res.json({
+      success: true,
+      data: {
+        hotelBills,
+        restBills,
+        totalCount: result.rows.length
+      },
+      message: `成功获取 ${date} 的账单数据`
+    });
+
+  } catch (err) {
+    console.error('获取指定日期账单失败:', err);
+    res.status(500).json({
+      success: false,
+      message: '获取指定日期账单失败',
+      error: err.message
+    });
+  }
+});
+
 module.exports = router;

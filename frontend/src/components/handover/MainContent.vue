@@ -279,6 +279,7 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useQuasar } from 'quasar'
 import { useRouter } from 'vue-router'
+import { shiftHandoverApi } from '../../api/index.js'
 import HandoverProcess from './HandoverProcess.vue'
 import ShiftHandoverPaymentTable from './ShiftHandoverPaymentTable.vue'
 import ShiftHandoverSpecialStats from './ShiftHandoverSpecialStats.vue'
@@ -309,63 +310,24 @@ const todayStats = ref({
   checkOutCount: 8
 })
 
-// 最近交接记录
-const recentHandovers = ref([
-  {
-    id: 1,
-    date: '2024-01-15',
-    shift: '早班',
-    operator: '张三',
-    status: 'completed',
-    statusText: '已完成'
-  },
-  {
-    id: 2,
-    date: '2024-01-14',
-    shift: '晚班',
-    operator: '李四',
-    status: 'completed',
-    statusText: '已完成'
-  },
-  {
-    id: 3,
-    date: '2024-01-14',
-    shift: '早班',
-    operator: '王五',
-    status: 'completed',
-    statusText: '已完成'
-  }
-])
+// 最近交接记录（从API获取）
+const recentHandovers = ref([])
 
 // 当前时间
 const currentTime = ref('')
 let timeTimer = null
 
-// 查看交接记录相关数据
+// 查看交接记录相关数据（从API获取）
 const selectedRecord = ref(null)
 const recordViewData = ref({
-  paymentData: {
-    reserve: { '现金': 300, '微信': 0, '微邮付': 0, '其他': 0 },
-    hotelIncome: { '现金': 800, '微信': 1200, '微邮付': 400, '其他': 200 },
-    restIncome: { '现金': 300, '微信': 500, '微邮付': 150, '其他': 50 },
-    carRentIncome: { '现金': 0, '微信': 150, '微邮付': 0, '其他': 0 },
-    totalIncome: { '现金': 1400, '微信': 1850, '微邮付': 550, '其他': 250 },
-    hotelDeposit: { '现金': 200, '微信': 300, '微邮付': 100, '其他': 0 },
-    restDeposit: { '现金': 50, '微信': 100, '微邮付': 50, '其他': 0 },
-    retainedAmount: { '现金': 150, '微信': 0, '微邮付': 0, '其他': 0 },
-    handoverAmount: { '现金': 1000, '微信': 1450, '微邮付': 400, '其他': 250 }
-  },
-  totalRooms: 18,
-  restRooms: 12,
-  vipCards: 5,
-  cashierName: '张三',
-  notes: '昨日营业正常，无特殊情况',
-  goodReview: '邀8得6',
-  taskList: [
-    { id: 1, title: '房间清洁检查完毕', completed: true, type: 'admin', time: '22:30' },
-    { id: 2, title: '明日VIP客户接待准备', completed: true, type: 'order', time: '22:45' },
-    { id: 3, title: '设备维护记录更新', completed: false, type: 'admin', time: '23:00' }
-  ],
+  paymentData: null,
+  totalRooms: 0,
+  restRooms: 0,
+  vipCards: 0,
+  cashierName: '',
+  notes: '',
+  goodReview: '',
+  taskList: [],
   newTaskTitle: ''
 })
 
@@ -469,31 +431,104 @@ const handleLogout = async () => {
   }
 }
 
+// 加载交接记录数据
+const loadHandoverRecordData = async (date) => {
+  try {
+    // 并行请求所有需要的数据
+    const [tableResponse, specialStatsResponse, memoResponse] = await Promise.all([
+      shiftHandoverApi.getHandoverTableData({ date }),
+      shiftHandoverApi.getSpecialStats({ date }),
+      shiftHandoverApi.getAdminMemos({ date })
+    ])
+
+    // 处理表格数据
+    if (tableResponse.success) {
+      recordViewData.value.paymentData = tableResponse.data
+      // 从表格数据中提取 vipCards、cashierName 和 notes
+      recordViewData.value.vipCards = tableResponse.data.vipCards || 0
+      recordViewData.value.cashierName = tableResponse.data.handoverPerson || ''
+      recordViewData.value.notes = tableResponse.data.remarks || ''
+    }
+
+    // 处理统计数据
+    if (specialStatsResponse.success) {
+      const stats = specialStatsResponse.data
+      recordViewData.value.totalRooms = stats.openCount || 0
+      recordViewData.value.restRooms = stats.restCount || 0
+      // 拼接好评字符串：邀X得Y
+      recordViewData.value.goodReview = `邀${stats.invited || 0}得${stats.positive || 0}`
+    }
+
+    // 处理备忘录数据
+    if (memoResponse.success) {
+      recordViewData.value.taskList = memoResponse.data || []
+    }
+
+    $q.notify({
+      type: 'positive',
+      message: '交接记录加载完成',
+      position: 'top'
+    })
+
+  } catch (error) {
+    console.error('加载交接记录数据失败:', error)
+    throw error
+  }
+}
+
 // 查看交接记录
-const viewHandoverRecord = (record) => {
-  console.log('点击查看记录:', record)
-  console.log('当前步骤变更前:', currentStep.value)
+const viewHandoverRecord = async (record) => {
+  try {
+    console.log('点击查看记录:', record)
 
-  selectedRecord.value = record
-  currentStep.value = -1 // 使用-1表示查看记录状态
+    selectedRecord.value = record
+    currentStep.value = -1 // 使用-1表示查看记录状态
 
-  console.log('当前步骤变更后:', currentStep.value)
+    $q.notify({
+      type: 'info',
+      message: `正在加载 ${record.date} 的交接记录...`,
+      position: 'top'
+    })
 
-  $q.notify({
-    type: 'info',
-    message: `正在查看 ${record.date} ${record.shift} 的交接记录`,
-    position: 'top'
-  })
+    // 调用后端API获取交接班表格数据
+    await loadHandoverRecordData(record.date)
+
+  } catch (error) {
+    console.error('查看交接记录失败:', error)
+    $q.notify({
+      type: 'negative',
+      message: '加载交接记录失败，请重试',
+      position: 'top'
+    })
+  }
 }
 
 // 监听来自父组件的 selectedRecord 变化
-watch(() => props.selectedRecord, (newRecord) => {
+watch(() => props.selectedRecord, async (newRecord) => {
   if (newRecord) {
     console.log('MainContent - 接收到选中的记录:', newRecord)
     selectedRecord.value = newRecord
     currentStep.value = -1 // 切换到查看记录状态
 
     console.log('MainContent - 当前步骤变更为:', currentStep.value)
+
+    try {
+      $q.notify({
+        type: 'info',
+        message: `正在加载 ${newRecord.date} 的交接记录...`,
+        position: 'top'
+      })
+
+      // 调用后端API获取交接班表格数据
+      await loadHandoverRecordData(newRecord.date)
+    } catch (error) {
+      console.error('从父组件加载交接记录失败:', error)
+      $q.notify({
+        type: 'negative',
+        message: '加载交接记录失败，请重试',
+        position: 'top'
+      })
+    }
   }
 })
 
@@ -519,6 +554,29 @@ const updateCurrentTime = () => {
   })
 }
 
+// 加载最近交接记录
+const loadRecentHandovers = async () => {
+  try {
+    const response = await shiftHandoverApi.queryHandoverRecords()
+    if (response.success) {
+      // 取最近的3条记录并格式化
+      recentHandovers.value = response.data.slice(0, 3).map(record => ({
+        id: record.date,
+        date: record.date,
+        shift: '班次', // 可以根据时间判断班次
+        operator: record.handoverPerson && record.takeoverPerson
+          ? `${record.handoverPerson} → ${record.takeoverPerson}`
+          : '未知',
+        status: 'completed',
+        statusText: '已完成'
+      }))
+    }
+  } catch (error) {
+    console.error('加载最近交接记录失败:', error)
+    // 不显示错误通知，因为这不是关键功能
+  }
+}
+
 // 生命周期钩子
 onMounted(() => {
   console.log('MainContent mounted')
@@ -528,6 +586,9 @@ onMounted(() => {
 
   // 每秒更新时间
   timeTimer = setInterval(updateCurrentTime, 1000)
+
+  // 加载最近交接记录
+  loadRecentHandovers()
 })
 
 onUnmounted(() => {
