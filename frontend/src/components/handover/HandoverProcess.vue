@@ -162,7 +162,7 @@
 
     <!-- 步骤3: 核对数据 -->
     <div v-if="currentStep === 3" class="step-3-content">
-      <CheckData />
+      <CheckData ref="checkDataRef" />
     </div>
 
     <!-- 步骤4: 确认数据 -->
@@ -318,6 +318,17 @@ const $q = useQuasar()
 // 响应式状态
 const stepLoading = ref(false)
 
+// CheckData 组件引用
+const checkDataRef = ref(null)
+
+// 保存步骤3的核对数据（持久化，避免组件销毁后丢失）
+const savedCheckData = ref({
+  hotelRoomData: [],
+  restRoomData: [],
+  hotelSummary: { roomFee: 0, deposit: 0, refundDeposit: 0, otherCharges: 0 },
+  restSummary: { roomFee: 0, deposit: 0, refundDeposit: 0, otherCharges: 0 }
+})
+
 // 步骤相关数据
 const handoverInfo = ref({
   nextOperator: '',
@@ -394,31 +405,171 @@ const pettyCashRows = ref([
   }
 ])
 
-// 确认数据的模拟数据
-const confirmationData = ref({
-  paymentData: {
-    reserve: { '现金': 500, '微信': 0, '微邮付': 0, '其他': 0 },
-    hotelIncome: { '现金': 1200, '微信': 800, '微邮付': 300, '其他': 100 },
-    restIncome: { '现金': 400, '微信': 600, '微邮付': 200, '其他': 50 },
-    carRentIncome: { '现金': 0, '微信': 200, '微邮付': 0, '其他': 0 },
-    totalIncome: { '现金': 2100, '微信': 1600, '微邮付': 500, '其他': 150 },
-    hotelDeposit: { '现金': 300, '微信': 200, '微邮付': 100, '其他': 0 },
-    restDeposit: { '现金': 100, '微信': 150, '微邮付': 50, '其他': 0 },
-    retainedAmount: { '现金': 200, '微信': 0, '微邮付': 0, '其他': 0 },
-    handoverAmount: { '现金': 1600, '微信': 1250, '微邮付': 350, '其他': 150 }
-  },
-  totalRooms: 15,
-  restRooms: 8,
-  vipCards: 3,
-  cashierName: '张三',
-  notes: '今日正常营业，无异常情况',
-  goodReview: '邀5得3',
-  taskList: [
-    { id: 1, title: '检查房间清洁状况', completed: true, type: 'admin', time: '14:30' },
-    { id: 2, title: '确认明日预订情况', completed: false, type: 'order', time: '15:00' },
-    { id: 3, title: '整理前台文件', completed: true, type: 'admin', time: '16:00' }
-  ],
-  newTaskTitle: ''
+// 计算确认数据（从步骤3的核对数据中获取）
+const confirmationData = computed(() => {
+  // 优先使用保存的数据（步骤4时 CheckData 组件已销毁）
+  // 如果没有保存的数据，尝试从 checkDataRef 获取（步骤3时）
+  let hotelData = []
+  let restData = []
+  let hotelSum = { roomFee: 0, deposit: 0, refundDeposit: 0, otherCharges: 0 }
+  let restSum = { roomFee: 0, deposit: 0, refundDeposit: 0, otherCharges: 0 }
+
+  if (savedCheckData.value.hotelRoomData.length > 0 || savedCheckData.value.restRoomData.length > 0) {
+    // 使用保存的数据
+    hotelData = savedCheckData.value.hotelRoomData
+    restData = savedCheckData.value.restRoomData
+    hotelSum = savedCheckData.value.hotelSummary
+    restSum = savedCheckData.value.restSummary
+    console.log('📦 [步骤4] 使用保存的数据')
+  } else if (checkDataRef.value) {
+    // 使用实时数据（步骤3时）
+    hotelData = checkDataRef.value.hotelRoomData || []
+    restData = checkDataRef.value.restRoomData || []
+    hotelSum = checkDataRef.value.hotelSummary || { roomFee: 0, deposit: 0, refundDeposit: 0, otherCharges: 0 }
+    restSum = checkDataRef.value.restSummary || { roomFee: 0, deposit: 0, refundDeposit: 0, otherCharges: 0 }
+    console.log('📡 [步骤4] 使用实时数据')
+  } else {
+    // 没有任何数据
+    console.warn('⚠️ [步骤4] 没有可用的数据')
+    return {
+      paymentData: {
+        reserve: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
+        hotelIncome: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
+        restIncome: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
+        carRentIncome: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
+        totalIncome: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
+        hotelDeposit: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
+        restDeposit: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
+        retainedAmount: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
+        handoverAmount: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
+      },
+      totalRooms: 0,
+      restRooms: 0,
+      vipCards: 0,
+      cashierName: '',
+      notes: '',
+      goodReview: '',
+      taskList: [],
+      newTaskTitle: ''
+    }
+  }
+
+  console.log('📊 [步骤4] 获取核对数据:', {
+    hotelDataCount: hotelData.length,
+    restDataCount: restData.length,
+    hotelSum,
+    restSum,
+    hotelDataSample: hotelData[0],
+    restDataSample: restData[0],
+    allHotelData: hotelData,
+    allRestData: restData
+  })
+
+  // 按支付方式统计客房数据
+  const hotelIncomeByPayment = { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
+  const hotelDepositByPayment = { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
+
+  hotelData.forEach(item => {
+    const payWay = item.payWay || '其他'
+    console.log('客房账单详情:', {
+      orderNo: item.orderNo,
+      payWay: payWay,
+      payWayType: typeof payWay,
+      roomFee: item.roomFee,
+      deposit: item.deposit,
+      完整item: item
+    })
+
+    // 确保支付方式在字典中
+    if (!hotelIncomeByPayment.hasOwnProperty(payWay)) {
+      console.warn(`⚠️ 未知的支付方式: "${payWay}"，将归入"其他"`)
+      hotelIncomeByPayment['其他'] = (hotelIncomeByPayment['其他'] || 0) + (item.roomFee || 0)
+      hotelDepositByPayment['其他'] = (hotelDepositByPayment['其他'] || 0) + (item.deposit || 0)
+    } else {
+      hotelIncomeByPayment[payWay] = (hotelIncomeByPayment[payWay] || 0) + (item.roomFee || 0)
+      hotelDepositByPayment[payWay] = (hotelDepositByPayment[payWay] || 0) + (item.deposit || 0)
+    }
+  })
+
+  // 按支付方式统计休息房数据
+  const restIncomeByPayment = { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
+  const restDepositByPayment = { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
+
+  restData.forEach(item => {
+    const payWay = item.payWay || '其他'
+    console.log('休息房账单详情:', {
+      orderNo: item.orderNo,
+      payWay: payWay,
+      payWayType: typeof payWay,
+      roomFee: item.roomFee,
+      deposit: item.deposit,
+      完整item: item
+    })
+
+    // 确保支付方式在字典中
+    if (!restIncomeByPayment.hasOwnProperty(payWay)) {
+      console.warn(`⚠️ 未知的支付方式: "${payWay}"，将归入"其他"`)
+      restIncomeByPayment['其他'] = (restIncomeByPayment['其他'] || 0) + (item.roomFee || 0)
+      restDepositByPayment['其他'] = (restDepositByPayment['其他'] || 0) + (item.deposit || 0)
+    } else {
+      restIncomeByPayment[payWay] = (restIncomeByPayment[payWay] || 0) + (item.roomFee || 0)
+      restDepositByPayment[payWay] = (restDepositByPayment[payWay] || 0) + (item.deposit || 0)
+    }
+  })
+
+  console.log('💰 [步骤4] 按支付方式统计:', {
+    hotelIncome: hotelIncomeByPayment,
+    restIncome: restIncomeByPayment,
+    hotelDeposit: hotelDepositByPayment,
+    restDeposit: restDepositByPayment
+  })
+
+  // 计算总收入
+  const totalIncome = { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
+  Object.keys(totalIncome).forEach(key => {
+    totalIncome[key] = (hotelIncomeByPayment[key] || 0) + (restIncomeByPayment[key] || 0)
+  })
+
+  // 获取备用金（来自步骤2）
+  const reserveCash = pettyCashRows.value[0] || { cash: 0, wechat: 0, weyoufu: 0, other: 0 }
+  const reserve = {
+    '现金': reserveCash.cash || 0,
+    '微信': reserveCash.wechat || 0,
+    '微邮付': reserveCash.weyoufu || 0,
+    '其他': reserveCash.other || 0
+  }
+
+  // 计算交接款（备用金 + 总收入）
+  const handoverAmount = { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
+  Object.keys(handoverAmount).forEach(key => {
+    handoverAmount[key] = (reserve[key] || 0) + (totalIncome[key] || 0)
+  })
+
+  const result = {
+    paymentData: {
+      reserve,
+      hotelIncome: hotelIncomeByPayment,
+      restIncome: restIncomeByPayment,
+      carRentIncome: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }, // 暂无数据
+      totalIncome,
+      hotelDeposit: hotelDepositByPayment,
+      restDeposit: restDepositByPayment,
+      retainedAmount: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }, // 暂无数据
+      handoverAmount
+    },
+    totalRooms: hotelData.length,
+    restRooms: restData.length,
+    vipCards: 0, // 暂无数据
+    cashierName: '', // 需要从用户信息获取
+    notes: '',
+    goodReview: '', // 暂无数据
+    taskList: [],
+    newTaskTitle: ''
+  }
+
+  console.log('🎯 [步骤4] 最终 confirmationData:', result)
+
+  return result
 })
 
 // 完成交接的信息
@@ -480,11 +631,7 @@ const checkYesterdayRecord = async () => {
     isCheckingRecord.value = true
     recordCheckResult.value.checked = false
 
-    $q.notify({
-      type: 'info',
-      message: '正在检查昨日交接记录...',
-      position: 'top'
-    })
+
 
     // 获取今天的日期
     const today = new Date().toISOString().split('T')[0]
@@ -502,12 +649,6 @@ const checkYesterdayRecord = async () => {
       recordCheckResult.value.reserveAmount = reserveAmount
 
       if (hasYesterdayRecord) {
-        $q.notify({
-          type: 'positive',
-          message: `检查完成：发现昨日（${yesterdayDate}）交接记录，包含${recordCount}种支付方式`,
-          position: 'top'
-        })
-
         // 如果有昨日记录，自动将昨日交接款作为今日备用金
         if (reserveAmount > 0) {
           console.log('自动导入昨日交接款作为今日备用金:', reserveAmount)
@@ -544,16 +685,86 @@ const nextStep = async () => {
   try {
     stepLoading.value = true
 
-    // 模拟步骤处理时间
-    // await new Promise(resolve => setTimeout(resolve, 1000))
+    // 步骤3进入步骤4时，检查数据核对是否完成
+    if (props.currentStep === 3) {
+      console.log('🔍 [步骤验证] checkDataRef:', checkDataRef.value)
+
+      if (!checkDataRef.value) {
+        $q.notify({
+          type: 'warning',
+          message: '请先完成数据核对',
+          position: 'top'
+        })
+        return
+      }
+
+      // 打印 checkDataRef 暴露的所有属性
+      console.log('🔍 [步骤验证] checkDataRef 暴露的属性:', {
+        hotelRoomData: checkDataRef.value.hotelRoomData,
+        restRoomData: checkDataRef.value.restRoomData,
+        hotelSummary: checkDataRef.value.hotelSummary,
+        restSummary: checkDataRef.value.restSummary,
+        allDataConfirmed: checkDataRef.value.allDataConfirmed,
+        dataCheckCompleted: checkDataRef.value.dataCheckCompleted
+      })
+
+      // 检查数据（defineExpose 会自动解包，直接访问即可）
+      const hotelData = checkDataRef.value.hotelRoomData || []
+      const restData = checkDataRef.value.restRoomData || []
+      const allConfirmed = checkDataRef.value.allDataConfirmed
+      const dataCheckCompleted = checkDataRef.value.dataCheckCompleted
+
+      console.log('🔍 [步骤验证] 数据核对状态:', {
+        hotelDataCount: hotelData.length,
+        restDataCount: restData.length,
+        allConfirmed,
+        dataCheckCompleted,
+        hotelConfirmedStatus: hotelData.map(item => ({ orderNo: item.orderNo, confirmed: item.confirmed })),
+        restConfirmedStatus: restData.map(item => ({ orderNo: item.orderNo, confirmed: item.confirmed }))
+      })
+
+      // 如果没有数据，也不能进入下一步
+      if (hotelData.length === 0 && restData.length === 0) {
+        $q.notify({
+          type: 'warning',
+          message: '当前没有账单数据，请确认是否已加载数据',
+          position: 'top'
+        })
+        return
+      }
+
+      if (!allConfirmed) {
+        $q.notify({
+          type: 'warning',
+          message: '请确认所有账单数据后再进入下一步',
+          position: 'top'
+        })
+        return
+      }
+
+      // 检查数据核对是否完成
+      if (!dataCheckCompleted) {
+        $q.notify({
+          type: 'warning',
+          message: '请点击"确认核对"按钮完成数据核对',
+          position: 'top'
+        })
+        return
+      }
+
+      // ✅ 数据验证通过，保存数据到 savedCheckData（避免组件销毁后丢失）
+      savedCheckData.value = {
+        hotelRoomData: [...hotelData],
+        restRoomData: [...restData],
+        hotelSummary: checkDataRef.value.hotelSummary,
+        restSummary: checkDataRef.value.restSummary
+      }
+
+      console.log('💾 [步骤3→4] 保存核对数据:', savedCheckData.value)
+    }
 
     if (props.currentStep < 6) {
       emit('step-change', props.currentStep + 1)
-      $q.notify({
-        type: 'positive',
-        message: `进入步骤 ${props.currentStep + 1}: ${getStepTitle(props.currentStep + 1)}`,
-        position: 'top'
-      })
     }
   } catch (error) {
     $q.notify({
@@ -570,46 +781,85 @@ const nextStep = async () => {
 const previousStep = () => {
   if (props.currentStep > 1) {
     emit('step-change', props.currentStep - 1)
-    $q.notify({
-      type: 'info',
-      message: `返回步骤 ${props.currentStep - 1}: ${getStepTitle(props.currentStep - 1)}`,
-      position: 'top'
-    })
   }
 }
 
 // 完成交接
 const completeHandover = async () => {
+  console.log('🎯 [完成交接] 开始执行，接班人员:', handoverInfo.value.nextOperator)
+
+  // ⚠️ 先验证，验证通过后再设置 loading
+  // 验证接班人员是否填写
+  if (!handoverInfo.value.nextOperator || handoverInfo.value.nextOperator.trim() === '') {
+    console.warn('❌ [完成交接] 验证失败：未填写接班人员')
+    $q.notify({
+      type: 'warning',
+      message: '请输入接班人员姓名',
+      position: 'top'
+    })
+    return  // ✅ 验证失败，直接返回，不继续执行
+  }
+
+  console.log('✅ [完成交接] 验证通过，开始处理...')
+
   try {
     stepLoading.value = true
 
     $q.notify({
       type: 'info',
-      message: '正在完成交接班...',
+      message: '正在保存交接班数据...',
       position: 'top'
     })
 
-    // 模拟完成交接的处理时间
-    await new Promise(resolve => setTimeout(resolve, 2000))
+    // 准备交接班数据
+    const today = new Date().toISOString().split('T')[0]
+    const handoverData = {
+      date: today,
+      handoverPerson: '当前操作员', // TODO: 从用户 store 获取当前用户名
+      receivePerson: handoverInfo.value.nextOperator.trim(),
+      paymentData: confirmationData.value.paymentData,
+      vipCard: confirmationData.value.vipCards || 0,
+      taskList: confirmationData.value.taskList || [],
+      notes: handoverInfo.value.notes || ''
+    }
 
-    // 跳转到完成页面（步骤6）
-    emit('step-change', 6)
-    emit('complete')
+    console.log('📤 [完成交接] 准备保存的数据:', handoverData)
 
-    $q.notify({
-      type: 'positive',
-      message: '交接班流程已完成！',
-      position: 'top'
-    })
+    // 调用后端 API 保存交接班数据
+    const response = await shiftHandoverApi.completeHandover(handoverData)
+
+    if (response.success) {
+      console.log('✅ [完成交接] 数据保存成功:', response.data)
+
+      $q.notify({
+        type: 'positive',
+        message: '交接班数据已保存',
+        position: 'top'
+      })
+
+      // 跳转到完成页面（步骤6）
+      emit('step-change', 6)
+      emit('complete')
+
+      $q.notify({
+        type: 'positive',
+        message: '交接班流程已完成！',
+        position: 'top'
+      })
+    } else {
+      throw new Error(response.message || '保存失败')
+    }
 
   } catch (error) {
+    console.error('❌ [完成交接] 执行失败:', error)
     $q.notify({
       type: 'negative',
-      message: '完成交接失败，请重试',
+      message: error.message || '完成交接失败，请重试',
       position: 'top'
     })
   } finally {
     stepLoading.value = false
+    console.log('🏁 [完成交接] 执行结束')
   }
 }
 

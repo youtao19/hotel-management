@@ -361,8 +361,27 @@ const restSummary = computed(() => {
 
 // 计算属性 - 是否所有数据都已确认
 const allDataConfirmed = computed(() => {
-  const allHotelConfirmed = hotelRoomData.value.every(item => item.confirmed)
-  const allRestConfirmed = restRoomData.value.every(item => item.confirmed)
+  const hotelData = hotelRoomData.value || []
+  const restData = restRoomData.value || []
+
+  // 如果没有数据，返回 true（允许跳过）
+  const totalCount = hotelData.length + restData.length
+  if (totalCount === 0) {
+    return true
+  }
+
+  // 检查所有数据是否都已确认
+  const allHotelConfirmed = hotelData.every(item => item.confirmed)
+  const allRestConfirmed = restData.every(item => item.confirmed)
+
+  console.log('✅ [CheckData] allDataConfirmed:', {
+    hotelCount: hotelData.length,
+    restCount: restData.length,
+    allHotelConfirmed,
+    allRestConfirmed,
+    result: allHotelConfirmed && allRestConfirmed
+  })
+
   return allHotelConfirmed && allRestConfirmed
 })
 
@@ -370,11 +389,6 @@ const allDataConfirmed = computed(() => {
 // 确认行数据
 const confirmRow = (row, type) => {
   row.confirmed = true
-  $q.notify({
-    type: 'positive',
-    message: `订单 ${row.orderNo} 数据确认完成`,
-    position: 'top'
-  })
 }
 
 // 编辑行数据
@@ -472,12 +486,6 @@ const loadBillsData = async () => {
     // 获取今天的日期
     const today = new Date().toISOString().split('T')[0]
 
-    $q.notify({
-      type: 'info',
-      message: `正在加载 ${today} 的账单数据...`,
-      position: 'top'
-    })
-
     // 调用API获取指定日期的账单数据
     const response = await billApi.getBillsByDate(today)
 
@@ -512,11 +520,7 @@ const loadBillsData = async () => {
         confirmed: false
       }))
 
-      $q.notify({
-        type: 'positive',
-        message: `成功加载 ${totalCount} 条账单数据（客房：${hotelBills.length}，休息房：${restBills.length}）`,
-        position: 'top'
-      })
+
 
       console.log('账单数据加载完成:', {
         today,
@@ -545,6 +549,16 @@ onMounted(() => {
   console.log('CheckData component mounted')
   // 自动加载当天的账单数据
   loadBillsData()
+})
+
+// 暴露数据给父组件
+defineExpose({
+  hotelRoomData,
+  restRoomData,
+  hotelSummary,
+  restSummary,
+  dataCheckCompleted,
+  allDataConfirmed
 })
 </script>
 

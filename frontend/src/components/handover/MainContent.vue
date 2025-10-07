@@ -320,7 +320,17 @@ let timeTimer = null
 // 查看交接记录相关数据（从API获取）
 const selectedRecord = ref(null)
 const recordViewData = ref({
-  paymentData: null,
+  paymentData: {
+    reserve: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
+    hotelIncome: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
+    restIncome: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
+    carRentIncome: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
+    totalIncome: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
+    hotelDeposit: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
+    restDeposit: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
+    retainedAmount: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
+    handoverAmount: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
+  },
   totalRooms: 0,
   restRooms: 0,
   vipCards: 0,
@@ -335,14 +345,6 @@ const recordViewData = ref({
 const handleStartHandover = async () => {
   try {
     isHandoverInProgress.value = true
-
-    $q.notify({
-      type: 'info',
-      message: '正在准备交接班数据...',
-      position: 'top'
-    })
-
-    // 模拟数据准备过程
 
     // 显示交接班确认对话框
     $q.dialog({
@@ -374,11 +376,6 @@ const handleStartHandover = async () => {
 // 开始交接班流程
 const startHandoverProcess = () => {
   currentStep.value = 1
-  $q.notify({
-    type: 'positive',
-    message: '交接班流程已开始',
-    position: 'top'
-  })
 }
 
 // 处理步骤变化
@@ -573,7 +570,6 @@ const loadRecentHandovers = async () => {
     }
   } catch (error) {
     console.error('加载最近交接记录失败:', error)
-    // 不显示错误通知，因为这不是关键功能
   }
 }
 

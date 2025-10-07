@@ -120,94 +120,7 @@ async function getShiftTable(date) {
   }
 }
 
-/**
- * 保存页面数据（保存完整的页面数据，包括金额、统计数据等）
- * @param {Object} pageData - 页面数据
- * @returns {Promise<Object>} 保存结果
- */
-async function saveAmountChanges(amountData) {
-  const {
-    date,
-    taskList, // Admin-added memos
-    vipCards, // From specialStats - 这是我们要保存的主要数据
-    cashierName, // From specialStats
-    handoverPerson, // Add this
-    receivePerson,  // Add this
-    notes           // Add this
-  } = amountData;
 
-  // 只保存vipCards到vip_card字段
-  const vipCardValue = Number(vipCards) || 0;
-
-  // Persist memo as plain text array only
-  const textOnlyTaskList = Array.isArray(taskList)
-    ? taskList.map(item => (typeof item === 'string' ? item : (item && item.title) ? item.title : String(item)))
-    : [];
-
-  try {
-    // 只更新支付方式1（现金）记录的vip_card字段
-    const updateSql = `
-      UPDATE handover
-      SET vip_card = $1
-      WHERE date = $2::date AND payment_type = 1
-    `;
-
-    const updateResult = await query(updateSql, [vipCardValue, date]);
-
-    if (updateResult.rowCount > 0) {
-      console.log(`成功更新支付方式1（现金）记录的vip_card字段为 ${vipCardValue}`);
-      return {
-        success: true,
-        message: `vipCard已保存: ${vipCardValue}`,
-        updatedRows: updateResult.rowCount
-      };
-    } else {
-      // 如果没有支付方式1的记录，创建一个
-      console.log(`日期 ${date} 没有找到支付方式1的记录，创建新记录`);
-
-      const insertSql = `
-        INSERT INTO handover (
-          date, handover_person, takeover_person, vip_card, payment_type,
-          reserve_cash, room_income, rest_income, rent_income, total_income,
-          room_refund, rest_refund, retained, handover, task_list, remarks
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-        ON CONFLICT (date, payment_type) DO UPDATE SET
-          vip_card = EXCLUDED.vip_card
-        RETURNING *
-      `;
-
-      const insertResult = await query(insertSql, [
-        date,                   // $1: date
-        handoverPerson || '',   // $2: handover_person
-        receivePerson || '',    // $3: takeover_person
-        vipCardValue,           // $4: vip_card
-        1,                      // $5: payment_type (固定为1-现金)
-        0,                      // $6: reserve_cash
-        0,                      // $7: room_income
-        0,                      // $8: rest_income
-        0,                      // $9: rent_income
-        0,                      // $10: total_income
-        0,                      // $11: room_refund
-        0,                      // $12: rest_refund
-        0,                      // $13: retained
-        0,                      // $14: handover
-        JSON.stringify(textOnlyTaskList), // $15: task_list
-        notes || ''             // $16: remarks
-      ]);
-
-      return {
-        success: true,
-        message: `已创建支付方式1记录并保存vipCard: ${vipCardValue}`,
-        insertedRows: 1
-      };
-    }
-
-  } catch (error) {
-    console.error('保存vipCard失败:', error);
-    throw new Error(`保存vipCard失败: ${error.message}`);
-  }
-}
 
 /**
  * 获取备忘录数据
@@ -1005,9 +918,10 @@ async function getAdminMemosFromHandover(date) {
   }
 }
 
+
+
 module.exports = {
   getShiftTable,
-  saveAmountChanges,
   getRemarks,
   getAvailableDates,
   getAvailableDatesFlexible,

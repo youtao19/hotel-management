@@ -73,72 +73,6 @@ router.get('/special-stats', async (req, res) => {
   }
 });
 
-
-// 开始交接班（首日默认，已存在则不重复创建）
-router.post('/start', async (req, res) => {
-  try {
-    console.log('收到开始交接班请求:', {
-      body: JSON.stringify(req.body, null, 2),
-      timestamp: new Date().toISOString()
-    });
-
-    // 基本数据验证
-    if (!req.body || Object.keys(req.body).length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: '请求数据为空'
-      });
-    }
-
-    const { date, paymentData } = req.body;
-
-    if (!date) {
-      return res.status(400).json({
-        success: false,
-        message: '缺少必需的日期参数'
-      });
-    }
-
-    if (!paymentData) {
-      return res.status(400).json({
-        success: false,
-        message: '缺少支付数据'
-      });
-    }
-
-    const result = await startHandover(req.body);
-
-    console.log('交接班操作成功完成:', result);
-
-    res.json({
-      success: true,
-      data: result,
-      message: result.message || '交接班成功'
-    });
-
-  } catch (error) {
-    console.error('开始交接班失败:', {
-      message: error.message,
-      stack: error.stack,
-      requestBody: JSON.stringify(req.body, null, 2)
-    });
-
-    // 根据错误类型返回不同的HTTP状态码
-    let statusCode = 500;
-    if (error.message.includes('格式不正确') || error.message.includes('缺少')) {
-      statusCode = 400; // 客户端错误
-    } else if (error.message.includes('已存在')) {
-      statusCode = 409; // 冲突
-    }
-
-    res.status(statusCode).json({
-      success: false,
-      message: error.message || '服务器内部错误',
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
 // 获取交接班表中的管理员备忘录
 router.get('/admin-memos', async (req, res) => {
   try {
@@ -236,11 +170,54 @@ router.get('/check-yesterday', async (req, res) => {
       });
     }
 
-    const result = await checkYesterdayHandoverRecord(date);
+    console.log('检查昨日交接记录，当前日期:', date);
+
+    // 计算前一天的日期
+    const currentDate = new Date(date);
+    const yesterday = new Date(currentDate);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+    console.log('前一天日期:', yesterdayStr);
+
+    // 查询前一天是否有完整的交接记录
+    // 完整的交接记录需要包含所有4种支付方式（1=现金, 2=微信, 3=微邮付, 4=其他）
+    const sql = `
+      SELECT
+        date::text as date,
+        COUNT(DISTINCT payment_type) as payment_count,
+        array_agg(DISTINCT payment_type ORDER BY payment_type) as payment_types,
+        MIN(handover_person) as handover_person,
+        MIN(takeover_person) as takeover_person
+      FROM handover
+      WHERE date = $1::date
+        AND payment_type IN (1, 2, 3, 4)
+      GROUP BY date
+    `;
+
+    const result = await query(sql, [yesterdayStr]);
+
+    // 判断是否有完整的交接记录
+  const hasRecord = result.rows.length > 0;
+  const paymentCount = hasRecord ? Number(result.rows[0].payment_count) : 0;
+  const isComplete = hasRecord && paymentCount === 4;
+
+    const responseData = {
+      date: yesterdayStr,
+      hasRecord,
+      isComplete,
+  paymentCount,
+      paymentTypes: hasRecord ? result.rows[0].payment_types : [],
+      handoverPerson: hasRecord ? result.rows[0].handover_person : null,
+      takeoverPerson: hasRecord ? result.rows[0].takeover_person : null
+    };
+
+    console.log('昨日交接记录检查结果:', responseData);
+
     res.json({
       success: true,
-      data: result,
-      message: '昨日交接记录检查完成'
+      data: responseData,
+      message: isComplete ? '昨日已完成交接' : (hasRecord ? '昨日交接记录不完整' : '昨日无交接记录')
     });
   } catch (error) {
     console.error('检查昨日交接记录失败:', error);
@@ -406,6 +383,164 @@ router.get('/available-dates', async (req, res) => {
       success: false,
       message: error.message || '查询可用交接班日期失败'
     });
+  }
+});
+
+// 完成交接班（保存完整数据并标记完成）
+router.post('/complete', async (req, res) => {
+  const client = await require('../database/postgreDB/pg').getClient();
+
+  try {
+    console.log('收到完成交接班请求:', {
+      body: JSON.stringify(req.body, null, 2),
+      timestamp: new Date().toISOString()
+    });
+
+    const {
+      date,
+      handoverPerson,
+      receivePerson,
+      paymentData,
+      vipCard,
+      taskList,
+      notes
+    } = req.body;
+
+    // 验证必需字段
+    if (!date) {
+      return res.status(400).json({
+        success: false,
+        message: '缺少必需的日期参数'
+      });
+    }
+
+    if (!receivePerson || receivePerson.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        message: '请输入接班人员姓名'
+      });
+    }
+
+    if (!paymentData) {
+      return res.status(400).json({
+        success: false,
+        message: '缺少支付数据'
+      });
+    }
+
+    console.log('开始保存交接班数据到数据库');
+
+    // 开启事务
+    await client.query('BEGIN');
+
+    // 支付方式映射：前端字段名 -> 数据库代码
+    const paymentTypeMapping = {
+      '现金': 1,
+      '微信': 2,
+      '微邮付': 3,
+      '其他': 4
+    };
+
+    // 定义要保存的支付方式
+    const paymentMethods = ['现金', '微信', '微邮付', '其他'];
+
+    // 保存结果数组
+    const savedRecords = [];
+
+    // 为每种支付方式保存一条记录
+    for (const method of paymentMethods) {
+      const sql = `
+        INSERT INTO handover (
+          date, handover_person, takeover_person, vip_card, payment_type,
+          reserve_cash, room_income, rest_income, rent_income, total_income,
+          room_refund, rest_refund, retained, handover, task_list, remarks
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        ON CONFLICT (date, payment_type) DO UPDATE SET
+          handover_person = EXCLUDED.handover_person,
+          takeover_person = EXCLUDED.takeover_person,
+          vip_card = EXCLUDED.vip_card,
+          reserve_cash = EXCLUDED.reserve_cash,
+          room_income = EXCLUDED.room_income,
+          rest_income = EXCLUDED.rest_income,
+          rent_income = EXCLUDED.rent_income,
+          total_income = EXCLUDED.total_income,
+          room_refund = EXCLUDED.room_refund,
+          rest_refund = EXCLUDED.rest_refund,
+          retained = EXCLUDED.retained,
+          handover = EXCLUDED.handover,
+          task_list = EXCLUDED.task_list,
+          remarks = EXCLUDED.remarks
+        RETURNING *;
+      `;
+
+      // 提取当前支付方式的数据
+      const values = [
+        date,                                                      // $1: date
+        handoverPerson || '系统',                                  // $2: handover_person
+        receivePerson.trim(),                                     // $3: takeover_person
+        method === '现金' ? (vipCard || 0) : 0,                   // $4: vip_card (只在现金记录中保存)
+        paymentTypeMapping[method],                               // $5: payment_type
+        paymentData.reserve?.[method] || 0,                       // $6: reserve_cash
+        paymentData.hotelIncome?.[method] || 0,                   // $7: room_income
+        paymentData.restIncome?.[method] || 0,                    // $8: rest_income
+        paymentData.carRentIncome?.[method] || 0,                 // $9: rent_income
+        paymentData.totalIncome?.[method] || 0,                   // $10: total_income
+        paymentData.hotelDeposit?.[method] || 0,                  // $11: room_refund
+        paymentData.restDeposit?.[method] || 0,                   // $12: rest_refund
+        paymentData.retainedAmount?.[method] || 0,                // $13: retained
+        paymentData.handoverAmount?.[method] || 0,                // $14: handover
+        method === '现金' ? JSON.stringify(taskList || []) : '[]', // $15: task_list (只在现金记录中保存)
+        method === '现金' ? (notes || '') : ''                    // $16: remarks (只在现金记录中保存)
+      ];
+
+      console.log(`保存 ${method} 支付方式的记录:`, {
+        payment_type: paymentTypeMapping[method],
+        handover_person: values[1],
+        takeover_person: values[2]
+      });
+
+      const result = await client.query(sql, values);
+      savedRecords.push(result.rows[0]);
+
+      console.log(`${method} 记录保存成功，ID: ${result.rows[0].id}`);
+    }
+
+    // 提交事务
+    await client.query('COMMIT');
+
+    console.log('所有交接班记录保存成功，共保存', savedRecords.length, '条记录');
+
+    res.json({
+      success: true,
+      message: '交接班完成，数据已保存',
+      data: {
+        date,
+        handoverPerson: handoverPerson || '系统',
+        receivePerson: receivePerson.trim(),
+        recordCount: savedRecords.length,
+        records: savedRecords
+      }
+    });
+
+  } catch (error) {
+    // 回滚事务
+    try {
+      await client.query('ROLLBACK');
+      console.log('事务已回滚');
+    } catch (rollbackError) {
+      console.error('回滚事务失败:', rollbackError);
+    }
+
+    console.error('完成交接班失败:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || '完成交接班失败',
+      error: error.stack
+    });
+  } finally {
+    // 释放数据库连接
+    client.release();
   }
 });
 

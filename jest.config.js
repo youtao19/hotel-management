@@ -4,6 +4,9 @@ module.exports = {
   maxWorkers: 1,
   testTimeout: 30000,
   forceExit: true, // 如果 setup.js 已经关闭了数据库，可以改成 false
+  moduleNameMapper: {
+    '^nanoid$': '<rootDir>/backend/tests/__mocks__/nanoid.js'
+  },
   collectCoverageFrom: [
     'modules/**/*.js',
     '!modules/**/index.js'

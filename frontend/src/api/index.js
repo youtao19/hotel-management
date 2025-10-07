@@ -262,8 +262,6 @@ export const revenueApi = {
 // 交接班相关接口
 export const shiftHandoverApi = {
 
-  // 导出Excel
-  exportHandover: (handoverData) => api.post('/shift-handover/export', handoverData, { responseType: 'blob' }),
 
   // 获取交接班表格（计算版本）
   getShiftTable: (params) => api.get('/handover/table', { params }),
@@ -274,26 +272,8 @@ export const shiftHandoverApi = {
   // 获取备忘录
   getRemarks: (params) => api.get('/handover/remarks', { params }),
 
-  // 获取统计信息
-  getStatistics: (params) => api.get('/handover/statistics', { params }),
-
   // 获取交接班特殊统计（开房数、休息房数、好评邀/得）
   getSpecialStats: (params) => api.get('/handover/special-stats', { params }),
-
-  // 获取某日已保存的备用金（若后端实现）
-  getReserveCash: (date) => api.get('/handover/reserve-cash', { params: { date } }),
-
-  // 获取已有交接班日期（可访问日期）
-  getAvailableDates: () => api.get('/handover/dates'),
-
-  // 获取已有交接班日期（宽松模式：支持支付方式0，只要有记录就可选择）
-  getAvailableDatesFlexible: () => api.get('/handover/dates-flexible'),
-
-  // 开始交接班（首日默认、避免重复创建）
-  startHandover: (handoverData) => api.post('/handover/start', handoverData),
-
-  // 保存页面数据（保存完整的页面数据，包括金额、统计数据等）
-  saveAmountChanges: (amountData) => api.post('/handover/save-amounts', amountData),
 
   // 保存管理员备忘录到交接班表
   saveAdminMemo: (memoData) => api.post('/handover/save-admin-memo', memoData),
@@ -311,7 +291,10 @@ export const shiftHandoverApi = {
   queryHandoverByRange: (params) => api.get('/handover/query-by-range', { params }),
 
   // 获取有交接记录的日期列表
-  getAvailableHandoverDates: () => api.get('/handover/available-dates')
+  getAvailableHandoverDates: () => api.get('/handover/available-dates'),
+
+  // 完成交接班（保存完整数据）
+  completeHandover: (handoverData) => api.post('/handover/complete', handoverData)
 
 }
 
