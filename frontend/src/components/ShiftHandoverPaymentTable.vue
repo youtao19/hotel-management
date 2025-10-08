@@ -1,5 +1,12 @@
 <template>
   <div class="shift-table-wrapper">
+    <!-- 调试信息 -->
+    <div style="background: #ffeb3b; padding: 5px; margin-bottom: 5px; font-size: 11px;">
+      🔍 表格组件内部调试：<br/>
+      payWay.other = "{{ payWay.other }}"<br/>
+      paymentData.restRefundDeposit = {{ paymentData.restRefundDeposit }}<br/>
+      paymentData.restRefundDeposit[payWay.other] = {{ paymentData.restRefundDeposit[payWay.other] }}
+    </div>
     <table class="shift-table">
       <thead>
         <tr class="table-header">
@@ -35,10 +42,10 @@
           </td>
           <td class="total-cell">{{ paymentData.totalIncome[payWay.cash].toFixed(0) }}</td>
           <td class="editable-cell">
-            <q-input :model-value="paymentData.hotelDeposit[payWay.cash]" dense borderless class="table-input" readonly />
+            <q-input :model-value="paymentData.hotelRefundDeposit[payWay.cash]" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="paymentData.restDeposit[payWay.cash]" dense borderless class="table-input" readonly />
+            <q-input :model-value="paymentData.restRefundDeposit[payWay.cash]" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
             <q-input :model-value="paymentData.retainedAmount[payWay.cash]" dense borderless class="table-input" readonly />
@@ -61,10 +68,10 @@
           </td>
           <td class="total-cell">{{ paymentData.totalIncome[payWay.wechat].toFixed(0) }}</td>
           <td class="editable-cell">
-            <q-input :model-value="paymentData.hotelDeposit[payWay.wechat]" dense borderless class="table-input" readonly />
+            <q-input :model-value="paymentData.hotelRefundDeposit[payWay.wechat]" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="paymentData.restDeposit[payWay.wechat]" dense borderless class="table-input" readonly />
+            <q-input :model-value="paymentData.restRefundDeposit[payWay.wechat]" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
             <q-input :model-value="paymentData.retainedAmount[payWay.wechat]" dense borderless class="table-input" readonly />
@@ -87,10 +94,10 @@
           </td>
               <td class="total-cell">{{ paymentData.totalIncome[payWay.digital].toFixed(0) }}</td>
           <td class="editable-cell">
-            <q-input :model-value="paymentData.hotelDeposit[payWay.digital]" dense borderless class="table-input" readonly />
+            <q-input :model-value="paymentData.hotelRefundDeposit[payWay.digital]" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="paymentData.restDeposit[payWay.digital]" dense borderless class="table-input" readonly />
+            <q-input :model-value="paymentData.restRefundDeposit[payWay.digital]" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
             <q-input :model-value="paymentData.retainedAmount[payWay.digital]" dense borderless class="table-input" readonly />
@@ -113,10 +120,10 @@
           </td>
           <td class="total-cell">{{ paymentData.totalIncome[payWay.other].toFixed(0) }}</td>
           <td class="editable-cell">
-            <q-input :model-value="paymentData.hotelDeposit[payWay.other]" dense borderless class="table-input" readonly />
+            <q-input :model-value="paymentData.hotelRefundDeposit[payWay.other]" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-              <q-input :model-value="paymentData.restDeposit[payWay.other]" dense borderless class="table-input" readonly />
+              <q-input :model-value="paymentData.restRefundDeposit[payWay.other]" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
             <q-input :model-value="paymentData.retainedAmount[payWay.other]" dense borderless class="table-input" readonly />
@@ -148,8 +155,8 @@ function createEmptyPaymentData() {
     restIncome: createEmptyBuckets(),
     carRentIncome: createEmptyBuckets(),
     totalIncome: createEmptyBuckets(),
-    hotelDeposit: createEmptyBuckets(),
-    restDeposit: createEmptyBuckets(),
+    hotelRefundDeposit: createEmptyBuckets(),
+    restRefundDeposit: createEmptyBuckets(),
     retainedAmount: createEmptyBuckets(),
     handoverAmount: createEmptyBuckets()
   }
@@ -158,17 +165,23 @@ function createEmptyPaymentData() {
 const paymentData = computed(() => {
   const pd = props.paymentData || {}
   const empty = createEmptyPaymentData()
-  return {
+
+  const result = {
     reserve: pd.reserve || empty.reserve,
     hotelIncome: pd.hotelIncome || empty.hotelIncome,
     restIncome: pd.restIncome || empty.restIncome,
     carRentIncome: pd.carRentIncome || empty.carRentIncome,
     totalIncome: pd.totalIncome || empty.totalIncome,
-    hotelDeposit: pd.hotelDeposit || empty.hotelDeposit,
-    restDeposit: pd.restDeposit || empty.restDeposit,
+    hotelRefundDeposit: pd.hotelRefundDeposit || empty.hotelRefundDeposit,
+    restRefundDeposit: pd.restRefundDeposit || empty.restRefundDeposit,
     retainedAmount: pd.retainedAmount || empty.retainedAmount,
     handoverAmount: pd.handoverAmount || empty.handoverAmount
   }
+
+  console.log('🔍 [表格组件] 接收到的 props.paymentData:', pd)
+  console.log('🔍 [表格组件] 处理后的 restRefundDeposit:', result.restRefundDeposit)
+
+  return result
 })
 
 </script>

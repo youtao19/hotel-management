@@ -83,60 +83,60 @@
               class="reserve-cash-table"
             >
               <template v-slot:body-cell-cash="props">
-                <q-td :props="props">
+                <q-td :props="props" class="input-cell">
                   <q-input
                     v-model.number="props.row.cash"
                     type="number"
                     dense
-                    outlined
+                    borderless
                     prefix="¥"
-                    style="min-width: 100px;"
+                    class="centered-input"
                     @update:model-value="updateTotal"
                   />
                 </q-td>
               </template>
               <template v-slot:body-cell-wechat="props">
-                <q-td :props="props">
+                <q-td :props="props" class="input-cell">
                   <q-input
                     v-model.number="props.row.wechat"
                     type="number"
                     dense
-                    outlined
+                    borderless
                     prefix="¥"
-                    style="min-width: 100px;"
+                    class="centered-input"
                     @update:model-value="updateTotal"
                   />
                 </q-td>
               </template>
               <template v-slot:body-cell-weyoufu="props">
-                <q-td :props="props">
+                <q-td :props="props" class="input-cell">
                   <q-input
                     v-model.number="props.row.weyoufu"
                     type="number"
                     dense
-                    outlined
+                    borderless
                     prefix="¥"
-                    style="min-width: 100px;"
+                    class="centered-input"
                     @update:model-value="updateTotal"
                   />
                 </q-td>
               </template>
               <template v-slot:body-cell-other="props">
-                <q-td :props="props">
+                <q-td :props="props" class="input-cell">
                   <q-input
                     v-model.number="props.row.other"
                     type="number"
                     dense
-                    outlined
+                    borderless
                     prefix="¥"
-                    style="min-width: 100px;"
+                    class="centered-input"
                     @update:model-value="updateTotal"
                   />
                 </q-td>
               </template>
               <template v-slot:body-cell-total="props">
-                <q-td :props="props">
-                  <div class="text-weight-bold text-primary">
+                <q-td :props="props" class="total-amount-cell">
+                  <div class="text-weight-bold text-primary total-amount">
                     ¥{{ props.row.total.toFixed(2) }}
                   </div>
                 </q-td>
@@ -296,6 +296,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useQuasar } from 'quasar'
 import { shiftHandoverApi } from '../../api/index.js'
+import { useShiftHandoverStore } from '../../stores/shiftHandoverStore.js'
 import CheckData from './CheckData.vue'
 import ShiftHandoverPaymentTable from './ShiftHandoverPaymentTable.vue'
 import ShiftHandoverSpecialStats from './ShiftHandoverSpecialStats.vue'
@@ -314,6 +315,7 @@ const props = defineProps({
 const emit = defineEmits(['step-change', 'complete', 'logout'])
 
 const $q = useQuasar()
+const shiftHandoverStore = useShiftHandoverStore()
 
 // 响应式状态
 const stepLoading = ref(false)
@@ -327,6 +329,22 @@ const savedCheckData = ref({
   restRoomData: [],
   hotelSummary: { roomFee: 0, deposit: 0, refundDeposit: 0, otherCharges: 0 },
   restSummary: { roomFee: 0, deposit: 0, refundDeposit: 0, otherCharges: 0 }
+})
+
+// 保存步骤3的汇总数据对象（用于步骤4展示）
+const savedSummaryDataObject = ref({
+  hotelIncome: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
+  restIncome: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
+  hotelRefundDeposit: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },  // 包含退押和退款
+  restRefundDeposit: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }   // 包含退押和退款
+})
+
+// 保存特殊统计数据
+const savedSpecialStats = ref({
+  openCount: 0,
+  restCount: 0,
+  invited: 0,
+  positive: 0
 })
 
 // 步骤相关数据
@@ -397,138 +415,22 @@ const pettyCashRows = ref([
   {
     id: 1,
     label: '备用金',
-    cash: 500,
+    cash: 320,
     wechat: 0,
     weyoufu: 0,
     other: 0,
-    total: 500
+    total: 0
   }
 ])
 
-// 计算确认数据（从步骤3的核对数据中获取）
+// 计算确认数据（从步骤3的汇总数据对象中获取）
 const confirmationData = computed(() => {
-  // 优先使用保存的数据（步骤4时 CheckData 组件已销毁）
-  // 如果没有保存的数据，尝试从 checkDataRef 获取（步骤3时）
-  let hotelData = []
-  let restData = []
-  let hotelSum = { roomFee: 0, deposit: 0, refundDeposit: 0, otherCharges: 0 }
-  let restSum = { roomFee: 0, deposit: 0, refundDeposit: 0, otherCharges: 0 }
+  // 优先使用保存的汇总数据对象
+  const summaryData = savedSummaryDataObject.value
 
-  if (savedCheckData.value.hotelRoomData.length > 0 || savedCheckData.value.restRoomData.length > 0) {
-    // 使用保存的数据
-    hotelData = savedCheckData.value.hotelRoomData
-    restData = savedCheckData.value.restRoomData
-    hotelSum = savedCheckData.value.hotelSummary
-    restSum = savedCheckData.value.restSummary
-    console.log('📦 [步骤4] 使用保存的数据')
-  } else if (checkDataRef.value) {
-    // 使用实时数据（步骤3时）
-    hotelData = checkDataRef.value.hotelRoomData || []
-    restData = checkDataRef.value.restRoomData || []
-    hotelSum = checkDataRef.value.hotelSummary || { roomFee: 0, deposit: 0, refundDeposit: 0, otherCharges: 0 }
-    restSum = checkDataRef.value.restSummary || { roomFee: 0, deposit: 0, refundDeposit: 0, otherCharges: 0 }
-    console.log('📡 [步骤4] 使用实时数据')
-  } else {
-    // 没有任何数据
-    console.warn('⚠️ [步骤4] 没有可用的数据')
-    return {
-      paymentData: {
-        reserve: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
-        hotelIncome: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
-        restIncome: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
-        carRentIncome: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
-        totalIncome: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
-        hotelDeposit: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
-        restDeposit: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
-        retainedAmount: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
-        handoverAmount: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
-      },
-      totalRooms: 0,
-      restRooms: 0,
-      vipCards: 0,
-      cashierName: '',
-      notes: '',
-      goodReview: '',
-      taskList: [],
-      newTaskTitle: ''
-    }
-  }
-
-  console.log('📊 [步骤4] 获取核对数据:', {
-    hotelDataCount: hotelData.length,
-    restDataCount: restData.length,
-    hotelSum,
-    restSum,
-    hotelDataSample: hotelData[0],
-    restDataSample: restData[0],
-    allHotelData: hotelData,
-    allRestData: restData
-  })
-
-  // 按支付方式统计客房数据
-  const hotelIncomeByPayment = { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
-  const hotelDepositByPayment = { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
-
-  hotelData.forEach(item => {
-    const payWay = item.payWay || '其他'
-    console.log('客房账单详情:', {
-      orderNo: item.orderNo,
-      payWay: payWay,
-      payWayType: typeof payWay,
-      roomFee: item.roomFee,
-      deposit: item.deposit,
-      完整item: item
-    })
-
-    // 确保支付方式在字典中
-    if (!hotelIncomeByPayment.hasOwnProperty(payWay)) {
-      console.warn(`⚠️ 未知的支付方式: "${payWay}"，将归入"其他"`)
-      hotelIncomeByPayment['其他'] = (hotelIncomeByPayment['其他'] || 0) + (item.roomFee || 0)
-      hotelDepositByPayment['其他'] = (hotelDepositByPayment['其他'] || 0) + (item.deposit || 0)
-    } else {
-      hotelIncomeByPayment[payWay] = (hotelIncomeByPayment[payWay] || 0) + (item.roomFee || 0)
-      hotelDepositByPayment[payWay] = (hotelDepositByPayment[payWay] || 0) + (item.deposit || 0)
-    }
-  })
-
-  // 按支付方式统计休息房数据
-  const restIncomeByPayment = { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
-  const restDepositByPayment = { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
-
-  restData.forEach(item => {
-    const payWay = item.payWay || '其他'
-    console.log('休息房账单详情:', {
-      orderNo: item.orderNo,
-      payWay: payWay,
-      payWayType: typeof payWay,
-      roomFee: item.roomFee,
-      deposit: item.deposit,
-      完整item: item
-    })
-
-    // 确保支付方式在字典中
-    if (!restIncomeByPayment.hasOwnProperty(payWay)) {
-      console.warn(`⚠️ 未知的支付方式: "${payWay}"，将归入"其他"`)
-      restIncomeByPayment['其他'] = (restIncomeByPayment['其他'] || 0) + (item.roomFee || 0)
-      restDepositByPayment['其他'] = (restDepositByPayment['其他'] || 0) + (item.deposit || 0)
-    } else {
-      restIncomeByPayment[payWay] = (restIncomeByPayment[payWay] || 0) + (item.roomFee || 0)
-      restDepositByPayment[payWay] = (restDepositByPayment[payWay] || 0) + (item.deposit || 0)
-    }
-  })
-
-  console.log('💰 [步骤4] 按支付方式统计:', {
-    hotelIncome: hotelIncomeByPayment,
-    restIncome: restIncomeByPayment,
-    hotelDeposit: hotelDepositByPayment,
-    restDeposit: restDepositByPayment
-  })
-
-  // 计算总收入
-  const totalIncome = { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
-  Object.keys(totalIncome).forEach(key => {
-    totalIncome[key] = (hotelIncomeByPayment[key] || 0) + (restIncomeByPayment[key] || 0)
-  })
+  console.log('📦 [步骤4] 使用汇总数据对象:', JSON.parse(JSON.stringify(summaryData)))
+  console.log('📦 [步骤4] 客房退押:', summaryData.hotelRefundDeposit)
+  console.log('📦 [步骤4] 休息退押:', summaryData.restRefundDeposit)
 
   // 获取备用金（来自步骤2）
   const reserveCash = pettyCashRows.value[0] || { cash: 0, wechat: 0, weyoufu: 0, other: 0 }
@@ -539,35 +441,65 @@ const confirmationData = computed(() => {
     '其他': reserveCash.other || 0
   }
 
-  // 计算交接款（备用金 + 总收入）
+  // 计算总收入（客房收入 + 休息房收入）
+  const totalIncome = { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
+  Object.keys(totalIncome).forEach(key => {
+    totalIncome[key] = (summaryData.hotelIncome[key] || 0) + (summaryData.restIncome[key] || 0)
+  })
+
+  // 计算总退押（客房退押 + 休息房退押）- 已包含退押金和退款
+  const totalRefundDeposit = { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
+  Object.keys(totalRefundDeposit).forEach(key => {
+    totalRefundDeposit[key] = (summaryData.hotelRefundDeposit[key] || 0) + (summaryData.restRefundDeposit[key] || 0)
+  })
+
+  // 计算交接款（备用金 + 总收入 - 总退押）
   const handoverAmount = { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
   Object.keys(handoverAmount).forEach(key => {
-    handoverAmount[key] = (reserve[key] || 0) + (totalIncome[key] || 0)
+    handoverAmount[key] = (reserve[key] || 0) + (totalIncome[key] || 0) - (totalRefundDeposit[key] || 0)
   })
+
+  // 获取房间统计数据（优先使用特殊统计API的数据）
+  let totalRooms = savedSpecialStats.value.openCount || 0
+  let restRooms = savedSpecialStats.value.restCount || 0
+
+  // 如果没有特殊统计数据，使用核对数据的账单数量
+  if (totalRooms === 0 && restRooms === 0) {
+    if (savedCheckData.value.hotelRoomData.length > 0 || savedCheckData.value.restRoomData.length > 0) {
+      totalRooms = savedCheckData.value.hotelRoomData.length
+      restRooms = savedCheckData.value.restRoomData.length
+    }
+  }
+
+  // 格式化好评数据为 "邀X得Y"
+  const goodReview = `邀${savedSpecialStats.value.invited}得${savedSpecialStats.value.positive}`
 
   const result = {
     paymentData: {
       reserve,
-      hotelIncome: hotelIncomeByPayment,
-      restIncome: restIncomeByPayment,
+      hotelIncome: summaryData.hotelIncome,
+      restIncome: summaryData.restIncome,
       carRentIncome: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }, // 暂无数据
       totalIncome,
-      hotelDeposit: hotelDepositByPayment,
-      restDeposit: restDepositByPayment,
+      hotelRefundDeposit: summaryData.hotelRefundDeposit,
+      restRefundDeposit: summaryData.restRefundDeposit,
+      totalRefundDeposit, // 总退押（已包含退押金和退款）
       retainedAmount: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }, // 暂无数据
       handoverAmount
     },
-    totalRooms: hotelData.length,
-    restRooms: restData.length,
+    totalRooms,
+    restRooms,
     vipCards: 0, // 暂无数据
     cashierName: '', // 需要从用户信息获取
     notes: '',
-    goodReview: '', // 暂无数据
+    goodReview,
     taskList: [],
     newTaskTitle: ''
   }
 
   console.log('🎯 [步骤4] 最终 confirmationData:', result)
+  console.log('🎯 [步骤4] paymentData.hotelRefundDeposit:', result.paymentData.hotelRefundDeposit)
+  console.log('🎯 [步骤4] paymentData.restRefundDeposit:', result.paymentData.restRefundDeposit)
 
   return result
 })
@@ -602,8 +534,6 @@ const confirmReserveCash = async () => {
       position: 'top'
     })
 
-    // 模拟确认延迟
-    await new Promise(resolve => setTimeout(resolve, 1000))
 
     const total = pettyCashRows.value[0].total
 
@@ -625,38 +555,152 @@ const confirmReserveCash = async () => {
   }
 }
 
+// 辅助函数：将Date对象转换为本地日期字符串（YYYY-MM-DD）
+const formatLocalDate = (date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+// 获取特殊统计数据
+const fetchSpecialStatsData = async () => {
+  try {
+    console.log('📊 [获取特殊统计] 开始调用API...')
+
+    // 计算要查询的日期（与核对数据的日期逻辑一致）
+    const now = new Date()
+    const currentHour = now.getHours()
+
+    // 计算当前营业日
+    let currentBusinessDate = new Date(now)
+    if (currentHour < 8) {
+      currentBusinessDate.setDate(currentBusinessDate.getDate() - 1)
+    }
+
+    // 计算要查询的营业日（当前营业日的前一天）
+    let queryDate = new Date(currentBusinessDate)
+    queryDate.setDate(queryDate.getDate() - 1)
+    const queryDateStr = formatLocalDate(queryDate)
+
+    console.log('📊 [获取特殊统计] 查询日期:', queryDateStr)
+
+    // 调用API
+    const response = await shiftHandoverApi.getSpecialStats({ date: queryDateStr })
+
+    if (response.success) {
+      savedSpecialStats.value = {
+        openCount: response.data.openCount || 0,
+        restCount: response.data.restCount || 0,
+        invited: response.data.invited || 0,
+        positive: response.data.positive || 0
+      }
+
+      console.log('✅ [获取特殊统计] 数据获取成功:', savedSpecialStats.value)
+
+      $q.notify({
+        type: 'positive',
+        message: `特殊统计加载成功：客房${savedSpecialStats.value.openCount}间，休息房${savedSpecialStats.value.restCount}间`,
+        position: 'top',
+        timeout: 2000
+      })
+    } else {
+      throw new Error(response.message || '获取失败')
+    }
+  } catch (error) {
+    console.error('❌ [获取特殊统计] 失败:', error)
+
+    // 出错时使用默认值
+    savedSpecialStats.value = {
+      openCount: 0,
+      restCount: 0,
+      invited: 0,
+      positive: 0
+    }
+
+    $q.notify({
+      type: 'warning',
+      message: '特殊统计数据加载失败，使用默认值',
+      position: 'top',
+      timeout: 2000
+    })
+  }
+}
+
 // 检查昨日交接记录
 const checkYesterdayRecord = async () => {
   try {
     isCheckingRecord.value = true
     recordCheckResult.value.checked = false
 
+    // 交接班业务逻辑：
+    // 1. 营业日从每天8:00开始，到次日8:00结束
+    // 2. 交接的是"前一个营业日"的工作和账目
+    // 3. 查询的是"要交接的营业日的前一天"的交接记录
+    const now = new Date()
+    const currentHour = now.getHours()
 
+    // 计算当前营业日
+    let currentBusinessDate = new Date(now)
+    if (currentHour < 8) {
+      // 还没到8点，还在昨天营业日的时间范围内
+      currentBusinessDate.setDate(currentBusinessDate.getDate() - 1)
+    }
 
-    // 获取今天的日期
-    const today = new Date().toISOString().split('T')[0]
+    // 计算要交接的营业日（当前营业日的前一天）
+    let handoverBusinessDate = new Date(currentBusinessDate)
+    handoverBusinessDate.setDate(handoverBusinessDate.getDate() - 1)
+
+    // 计算要查询的记录日期（要交接的营业日的前一天）
+    let queryDate = new Date(handoverBusinessDate)
+    queryDate.setDate(queryDate.getDate() - 1)
+    const queryDateStr = formatLocalDate(queryDate)
+
+    console.log('📅 [检查记录] 日期计算:', {
+      currentTime: now.toLocaleString('zh-CN'),
+      currentHour,
+      currentBusinessDate: formatLocalDate(currentBusinessDate),
+      handoverBusinessDate: formatLocalDate(handoverBusinessDate),
+      queryDate: queryDateStr,
+      logic: '查询"要交接营业日的前一天"的交接记录'
+    })
 
     // 调用后端API检查昨日交接记录
-    const response = await shiftHandoverApi.checkYesterdayRecord({ date: today })
+    // 后端直接查询传入的日期
+    const response = await shiftHandoverApi.checkYesterdayRecord({ date: queryDateStr })
 
     if (response.success) {
-      const { hasYesterdayRecord, yesterdayDate, recordCount, reserveAmount } = response.data
+      // 后端返回的数据结构：{ date, hasRecord, isComplete, paymentCount, handoverAmounts, ... }
+      const { date, isComplete, paymentCount, handoverAmounts } = response.data
 
       recordCheckResult.value.checked = true
-      recordCheckResult.value.hasRecord = hasYesterdayRecord
-      recordCheckResult.value.yesterdayDate = yesterdayDate
-      recordCheckResult.value.recordCount = recordCount
-      recordCheckResult.value.reserveAmount = reserveAmount
+      recordCheckResult.value.hasRecord = isComplete
+      recordCheckResult.value.yesterdayDate = date
+      recordCheckResult.value.recordCount = paymentCount || 0
 
-      if (hasYesterdayRecord) {
-        // 如果有昨日记录，自动将昨日交接款作为今日备用金
-        if (reserveAmount > 0) {
-          console.log('自动导入昨日交接款作为今日备用金:', reserveAmount)
-        }
+      if (isComplete && handoverAmounts) {
+        // 如果有完整的昨日记录，保存交接款到 store，作为今日备用金
+        const totalReserve = handoverAmounts.cash + handoverAmounts.wechat + handoverAmounts.weyoufu + handoverAmounts.other
+        recordCheckResult.value.reserveAmount = totalReserve
+
+        shiftHandoverStore.setYesterdayHandoverAmounts(handoverAmounts)
+
+        console.log('昨日交接记录完整，已保存交接款到 store:', handoverAmounts)
+        console.log('昨日交接款总额:', totalReserve)
+
+        $q.notify({
+          type: 'positive',
+          message: `检查完成：昨日（${date}）交接记录完整，交接款 ¥${totalReserve.toFixed(2)} 将作为今日备用金`,
+          position: 'top'
+        })
       } else {
+        // 无完整记录，清空 store 中的昨日交接款
+        recordCheckResult.value.reserveAmount = 0
+        shiftHandoverStore.clearYesterdayHandoverAmounts()
+
         $q.notify({
           type: 'warning',
-          message: `检查完成：昨日（${yesterdayDate}）无完整交接记录（找到${recordCount}条记录，需要4条）`,
+          message: `检查完成：昨日（${date}）无完整交接记录（找到${paymentCount}条记录，需要4条），请手动输入备用金`,
           position: 'top'
         })
       }
@@ -672,9 +716,12 @@ const checkYesterdayRecord = async () => {
       position: 'top'
     })
 
-    // 出错时设置为无记录状态
+    // 出错时设置为无记录状态，并填充昨天的日期信息
     recordCheckResult.value.checked = true
     recordCheckResult.value.hasRecord = false
+    recordCheckResult.value.yesterdayDate = yesterdayStr
+    recordCheckResult.value.recordCount = 0
+    recordCheckResult.value.reserveAmount = 0
   } finally {
     isCheckingRecord.value = false
   }
@@ -684,6 +731,53 @@ const checkYesterdayRecord = async () => {
 const nextStep = async () => {
   try {
     stepLoading.value = true
+
+    // 步骤1进入步骤2时，检查是否已完成昨日记录检查
+    if (props.currentStep === 1) {
+      if (!recordCheckResult.value.checked) {
+        $q.notify({
+          type: 'warning',
+          message: '请先检查昨日交接记录',
+          position: 'top'
+        })
+        return
+      }
+
+      // 如果有昨日记录，自动填入昨日交接款作为备用金
+      if (recordCheckResult.value.hasRecord) {
+        const amounts = shiftHandoverStore.yesterdayHandoverAmounts
+        pettyCashRows.value[0].cash = amounts.cash || 0
+        pettyCashRows.value[0].wechat = amounts.wechat || 0
+        pettyCashRows.value[0].weyoufu = amounts.weyoufu || 0
+        pettyCashRows.value[0].other = amounts.other || 0
+        updateTotal()
+
+        console.log('✅ [步骤1→2] 自动填入昨日交接款作为备用金:', amounts)
+
+        $q.notify({
+          type: 'positive',
+          message: '已自动填入昨日交接款作为今日备用金',
+          position: 'top',
+          timeout: 2000
+        })
+      } else {
+        // 如果没有昨日记录，清空备用金表格，让用户手动输入
+        pettyCashRows.value[0].cash = 0
+        pettyCashRows.value[0].wechat = 0
+        pettyCashRows.value[0].weyoufu = 0
+        pettyCashRows.value[0].other = 0
+        updateTotal()
+
+        console.log('⚠️ [步骤1→2] 无昨日记录，请手动输入备用金')
+
+        $q.notify({
+          type: 'info',
+          message: '无昨日交接记录，请手动输入今日备用金',
+          position: 'top',
+          timeout: 2000
+        })
+      }
+    }
 
     // 步骤3进入步骤4时，检查数据核对是否完成
     if (props.currentStep === 3) {
@@ -760,7 +854,16 @@ const nextStep = async () => {
         restSummary: checkDataRef.value.restSummary
       }
 
+      // 保存汇总数据对象（用于步骤4展示）
+      if (checkDataRef.value.summaryDataObject) {
+        savedSummaryDataObject.value = JSON.parse(JSON.stringify(checkDataRef.value.summaryDataObject))
+        console.log('💾 [步骤3→4] 保存汇总数据对象:', savedSummaryDataObject.value)
+      }
+
       console.log('💾 [步骤3→4] 保存核对数据:', savedCheckData.value)
+
+      // 调用后端API获取特殊统计数据
+      await fetchSpecialStatsData()
     }
 
     if (props.currentStep < 6) {
@@ -812,9 +915,32 @@ const completeHandover = async () => {
     })
 
     // 准备交接班数据
-    const today = new Date().toISOString().split('T')[0]
+    // 交接班业务逻辑：保存的是"要交接的营业日"的日期
+    const now = new Date()
+    const currentHour = now.getHours()
+
+    // 计算当前营业日
+    let currentBusinessDate = new Date(now)
+    if (currentHour < 8) {
+      // 还没到8点，还在昨天营业日的时间范围内
+      currentBusinessDate.setDate(currentBusinessDate.getDate() - 1)
+    }
+
+    // 计算要交接的营业日（当前营业日的前一天）
+    let handoverBusinessDate = new Date(currentBusinessDate)
+    handoverBusinessDate.setDate(handoverBusinessDate.getDate() - 1)
+    const handoverDateStr = formatLocalDate(handoverBusinessDate)
+
+    console.log('📤 [完成交接] 日期计算:', {
+      currentTime: now.toLocaleString('zh-CN'),
+      currentHour,
+      currentBusinessDate: formatLocalDate(currentBusinessDate),
+      handoverBusinessDate: handoverDateStr,
+      logic: '保存"要交接的营业日"的日期'
+    })
+
     const handoverData = {
-      date: today,
+      date: handoverDateStr,
       handoverPerson: '当前操作员', // TODO: 从用户 store 获取当前用户名
       receivePerson: handoverInfo.value.nextOperator.trim(),
       paymentData: confirmationData.value.paymentData,
@@ -823,7 +949,12 @@ const completeHandover = async () => {
       notes: handoverInfo.value.notes || ''
     }
 
-    console.log('📤 [完成交接] 准备保存的数据:', handoverData)
+    console.log('📤 [完成交接] 准备保存的数据:', {
+      currentTime: now.toLocaleString('zh-CN'),
+      currentHour,
+      handoverDate,
+      handoverData
+    })
 
     // 调用后端 API 保存交接班数据
     const response = await shiftHandoverApi.completeHandover(handoverData)
@@ -941,6 +1072,7 @@ const getStepTitle = (step) => {
 .reserve-cash-table {
   background: rgba(255, 255, 255, 0.95);
   border-radius: 8px;
+  border: 1px solid #e0e0e0;
 }
 
 .reserve-cash-table :deep(.q-table__top) {
@@ -955,10 +1087,21 @@ const getStepTitle = (step) => {
   background: #f5f5f5;
   font-weight: 600;
   color: #333;
+  text-align: center !important;
+  padding: 14px 12px;
+  border-bottom: 2px solid #e0e0e0;
+  font-size: 15px;
 }
 
 .reserve-cash-table :deep(td) {
-  padding: 12px 8px;
+  padding: 16px 12px;
+  text-align: center !important;
+  vertical-align: middle;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.reserve-cash-table :deep(tbody tr:hover) {
+  background-color: #f8f9fa;
 }
 
 .reserve-cash-table :deep(.q-input) {
@@ -966,7 +1109,74 @@ const getStepTitle = (step) => {
 }
 
 .reserve-cash-table :deep(.q-input .q-field__control) {
-  height: 32px;
+  height: 40px;
+  text-align: center;
+}
+
+.reserve-cash-table :deep(.q-input .q-field__native) {
+  text-align: center;
+  font-weight: 500;
+  font-size: 16px;
+}
+
+.reserve-cash-table :deep(.q-input input) {
+  text-align: center !important;
+}
+
+.reserve-cash-table :deep(.q-input .q-field__prefix) {
+  font-weight: 500;
+  color: #666;
+}
+
+/* 合计列样式 */
+.reserve-cash-table :deep(.total-amount-cell) {
+  background-color: #e3f2fd !important;
+  font-size: 17px;
+}
+
+.reserve-cash-table :deep(.total-amount) {
+  text-align: center;
+  font-size: 18px;
+  letter-spacing: 0.5px;
+}
+
+/* 第一列标签样式 */
+.reserve-cash-table :deep(td:first-child) {
+  font-weight: 600;
+  background-color: #fafafa;
+  color: #555;
+}
+
+/* 输入框单元格样式 */
+.reserve-cash-table :deep(.input-cell) {
+  background-color: #ffffff;
+  padding: 8px 4px !important;
+}
+
+.reserve-cash-table :deep(.input-cell:hover) {
+  background-color: #f5f5f5;
+}
+
+/* 居中输入框样式 */
+.reserve-cash-table :deep(.centered-input) {
+  width: 100%;
+  max-width: 200px;
+  margin: 0 auto;
+}
+
+.reserve-cash-table :deep(.centered-input .q-field__control) {
+  background-color: transparent;
+  border-radius: 4px;
+  padding: 4px 8px;
+}
+
+.reserve-cash-table :deep(.centered-input .q-field__control:hover) {
+  background-color: #f8f9fa;
+}
+
+.reserve-cash-table :deep(.centered-input .q-field__control:focus-within) {
+  background-color: #e3f2fd;
+  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.2);
 }
 
 /* 检查结果卡片样式 */
@@ -1001,11 +1211,20 @@ const getStepTitle = (step) => {
 
   /* 表格响应式 */
   .reserve-cash-table :deep(td) {
-    padding: 8px 4px;
+    padding: 10px 4px;
   }
 
-  .reserve-cash-table :deep(.q-input) {
-    min-width: 80px !important;
+  .reserve-cash-table :deep(th) {
+    padding: 10px 6px;
+    font-size: 13px;
+  }
+
+  .reserve-cash-table :deep(.centered-input) {
+    max-width: 100px;
+  }
+
+  .reserve-cash-table :deep(.total-amount) {
+    font-size: 16px;
   }
 }
 </style>

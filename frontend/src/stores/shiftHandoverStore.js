@@ -8,6 +8,14 @@ export const useShiftHandoverStore = defineStore("shiftHandover", () => {
   let statistics_data = ref([])
   let special_stats_data = ref(null)
 
+  // 昨日交接款（用作今日备用金）
+  let yesterdayHandoverAmounts = ref({
+    cash: 0,
+    wechat: 0,
+    weyoufu: 0,
+    other: 0
+  })
+
   // 获取表格数据（可选传入日期）
   const fetchShiftTable = async (date) => {
     const response = await shiftHandoverApi.getShiftTable(date ? { date } : {});
@@ -62,6 +70,25 @@ export const useShiftHandoverStore = defineStore("shiftHandover", () => {
     return response
   }
 
+  // 设置昨日交接款
+  const setYesterdayHandoverAmounts = (amounts) => {
+    yesterdayHandoverAmounts.value = {
+      cash: amounts.cash || 0,
+      wechat: amounts.wechat || 0,
+      weyoufu: amounts.weyoufu || 0,
+      other: amounts.other || 0
+    }
+  }
+
+  // 清空昨日交接款
+  const clearYesterdayHandoverAmounts = () => {
+    yesterdayHandoverAmounts.value = {
+      cash: 0,
+      wechat: 0,
+      weyoufu: 0,
+      other: 0
+    }
+  }
 
   return {
     shiftTable_data,
@@ -75,6 +102,9 @@ export const useShiftHandoverStore = defineStore("shiftHandover", () => {
     startHandover,
     fetchAvailableDates,
     fetchAvailableDatesFlexible,
-    fetchHandoverTableData
+    fetchHandoverTableData,
+    yesterdayHandoverAmounts,
+    setYesterdayHandoverAmounts,
+    clearYesterdayHandoverAmounts
   };
 });

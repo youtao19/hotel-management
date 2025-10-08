@@ -3,7 +3,7 @@ module.exports = {
   setupFilesAfterEnv: ['./backend/tests/setup.js'],
   maxWorkers: 1,
   testTimeout: 30000,
-  forceExit: true, // 如果 setup.js 已经关闭了数据库，可以改成 false
+  forceExit: false, // setup.js 已经正确关闭了所有连接
   moduleNameMapper: {
     '^nanoid$': '<rootDir>/backend/tests/__mocks__/nanoid.js'
   },

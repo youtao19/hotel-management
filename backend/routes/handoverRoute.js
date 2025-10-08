@@ -1,6 +1,6 @@
 const express =  require('express');
 const router = express.Router();
-const { query } = require('../database/postgreDB/pg');
+const { query, getClient } = require('../database/postgreDB/pg');
 
 const {
   getShiftTable,
@@ -158,7 +158,8 @@ router.post('/save-admin-memo', async (req, res) => {
 });
 
 
-// 检查昨日交接记录
+
+
 router.get('/check-yesterday', async (req, res) => {
   try {
     const { date } = req.query;
@@ -170,17 +171,15 @@ router.get('/check-yesterday', async (req, res) => {
       });
     }
 
-    console.log('检查昨日交接记录，当前日期:', date);
+    console.log('检查交接记录，查询日期:', date);
 
-    // 计算前一天的日期
-    const currentDate = new Date(date);
-    const yesterday = new Date(currentDate);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    // 前端已经根据交接时间规则（8:00）计算好了要查询的交接记录日期
+    // 后端直接查询这个日期的交接记录即可
+    const queryDate = date;
 
-    console.log('前一天日期:', yesterdayStr);
+    console.log('实际查询日期:', queryDate);
 
-    // 查询前一天是否有完整的交接记录
+    // 查询指定日期是否有完整的交接记录
     // 完整的交接记录需要包含所有4种支付方式（1=现金, 2=微信, 3=微邮付, 4=其他）
     const sql = `
       SELECT
@@ -195,35 +194,80 @@ router.get('/check-yesterday', async (req, res) => {
       GROUP BY date
     `;
 
-    const result = await query(sql, [yesterdayStr]);
+    const result = await query(sql, [queryDate]);
 
     // 判断是否有完整的交接记录
-  const hasRecord = result.rows.length > 0;
-  const paymentCount = hasRecord ? Number(result.rows[0].payment_count) : 0;
-  const isComplete = hasRecord && paymentCount === 4;
+    const hasRecord = result.rows.length > 0;
+    const paymentCount = hasRecord ? Number(result.rows[0].payment_count) : 0;
+    const isComplete = hasRecord && paymentCount === 4;
 
-    const responseData = {
-      date: yesterdayStr,
-      hasRecord,
-      isComplete,
-  paymentCount,
-      paymentTypes: hasRecord ? result.rows[0].payment_types : [],
-      handoverPerson: hasRecord ? result.rows[0].handover_person : null,
-      takeoverPerson: hasRecord ? result.rows[0].takeover_person : null
+    // 如果有完整记录，查询各支付方式的交接款金额
+    let handoverAmounts = {
+      cash: 0,
+      wechat: 0,
+      weyoufu: 0,
+      other: 0
     };
 
-    console.log('昨日交接记录检查结果:', responseData);
+    if (isComplete) {
+      const amountSql = `
+        SELECT
+          payment_type,
+          handover as handover_amount
+        FROM handover
+        WHERE date = $1::date
+          AND payment_type IN (1, 2, 3, 4)
+        ORDER BY payment_type
+      `;
+
+      const amountResult = await query(amountSql, [queryDate]);
+
+      // 将查询结果转换为前端需要的格式
+      // payment_type: 1=现金, 2=微信, 3=微邮付, 4=其他
+      amountResult.rows.forEach(row => {
+        const amount = Number(row.handover_amount) || 0;
+        switch (row.payment_type) {
+          case 1:
+            handoverAmounts.cash = amount;
+            break;
+          case 2:
+            handoverAmounts.wechat = amount;
+            break;
+          case 3:
+            handoverAmounts.weyoufu = amount;
+            break;
+          case 4:
+            handoverAmounts.other = amount;
+            break;
+        }
+      });
+
+      console.log('查询到的交接款金额:', handoverAmounts);
+    }
+
+    const responseData = {
+      date: queryDate,  // 返回实际查询的日期
+      hasRecord,
+      isComplete,
+      paymentCount,
+      paymentTypes: hasRecord ? result.rows[0].payment_types : [],
+      handoverPerson: hasRecord ? result.rows[0].handover_person : null,
+      takeoverPerson: hasRecord ? result.rows[0].takeover_person : null,
+      handoverAmounts: handoverAmounts  // 新增：返回昨日的交接款金额
+    };
+
+    console.log('交接记录检查结果:', responseData);
 
     res.json({
       success: true,
       data: responseData,
-      message: isComplete ? '昨日已完成交接' : (hasRecord ? '昨日交接记录不完整' : '昨日无交接记录')
+      message: isComplete ? '已完成交接' : (hasRecord ? '交接记录不完整' : '无交接记录')
     });
   } catch (error) {
-    console.error('检查昨日交接记录失败:', error);
+    console.error('检查交接记录失败:', error);
     res.status(500).json({
       success: false,
-      message: error.message || '检查昨日交接记录失败'
+      message: error.message || '检查交接记录失败'
     });
   }
 });
@@ -388,7 +432,7 @@ router.get('/available-dates', async (req, res) => {
 
 // 完成交接班（保存完整数据并标记完成）
 router.post('/complete', async (req, res) => {
-  const client = await require('../database/postgreDB/pg').getClient();
+  let client;
 
   try {
     console.log('收到完成交接班请求:', {
@@ -428,10 +472,11 @@ router.post('/complete', async (req, res) => {
       });
     }
 
-    console.log('开始保存交接班数据到数据库');
+  console.log('开始保存交接班数据到数据库');
 
-    // 开启事务
-    await client.query('BEGIN');
+  // 获取数据库连接并开启事务
+  client = await getClient();
+  await client.query('BEGIN');
 
     // 支付方式映射：前端字段名 -> 数据库代码
     const paymentTypeMapping = {
@@ -525,11 +570,13 @@ router.post('/complete', async (req, res) => {
 
   } catch (error) {
     // 回滚事务
-    try {
-      await client.query('ROLLBACK');
-      console.log('事务已回滚');
-    } catch (rollbackError) {
-      console.error('回滚事务失败:', rollbackError);
+    if (client) {
+      try {
+        await client.query('ROLLBACK');
+        console.log('事务已回滚');
+      } catch (rollbackError) {
+        console.error('回滚事务失败:', rollbackError);
+      }
     }
 
     console.error('完成交接班失败:', error);
@@ -540,7 +587,9 @@ router.post('/complete', async (req, res) => {
     });
   } finally {
     // 释放数据库连接
-    client.release();
+    if (client) {
+      client.release();
+    }
   }
 });
 

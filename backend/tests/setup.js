@@ -45,7 +45,12 @@ afterAll(async () => {
   } catch (e) {
     console.warn('清理测试数据时出现警告:', e.message);
   } finally {
-    await db.closePool(); // 关闭连接池
+    // 关闭 Redis 连接
+    await redisDB.close();
+    // 关闭数据库连接池
+    await db.closePool();
+    // 等待一小段时间，确保所有连接完全关闭
+    await new Promise(resolve => setTimeout(resolve, 100));
   }
 });
 

@@ -28,7 +28,7 @@
             v-else
             :rows="hotelRoomData"
             :columns="roomColumns"
-            row-key="orderNo"
+            row-key="billId"
             flat
             bordered
             hide-pagination
@@ -63,7 +63,7 @@
                 </div>
               </q-td>
             </template>
-            <template v-slot:body-cell-orderNo="props">
+            <template v-slot:body-cell-billId="props">
               <q-td :props="props">
                 <span :class="props.row.confirmed ? 'text-positive' : ''">
                   {{ props.value }}
@@ -74,13 +74,18 @@
 
           <!-- 客房汇总行 -->
           <div class="summary-row q-pa-md bg-grey-1">
-            <div class="row items-center text-weight-medium">
-              <div class="col-2">汇总</div>
-              <div class="col text-center">房费: ¥{{ hotelSummary.roomFee.toFixed(2) }}</div>
-              <div class="col text-center">收押: ¥{{ hotelSummary.deposit.toFixed(2) }}</div>
-              <div class="col text-center">退押: ¥{{ hotelSummary.refundDeposit.toFixed(2) }}</div>
-              <div class="col text-center">其他: ¥{{ hotelSummary.otherCharges.toFixed(2) }}</div>
-              <div class="col text-center text-primary text-weight-bold">合计: ¥{{ (hotelSummary.roomFee + hotelSummary.deposit + hotelSummary.refundDeposit + hotelSummary.otherCharges).toFixed(2) }}</div>
+            <div class="text-weight-medium">
+              <div class="row items-center q-mb-xs">
+                <div class="col-2">汇总</div>
+                <div class="col">
+                  <span v-for="(amount, type) in hotelSummary.byType" :key="type" class="q-mr-md">
+                    {{ type }}: ¥{{ amount.toFixed(2) }}
+                  </span>
+                </div>
+                <div class="col-auto text-primary text-h6">
+                  合计: ¥{{ hotelSummary.totalAmount.toFixed(2) }}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -99,7 +104,7 @@
             v-else
             :rows="restRoomData"
             :columns="roomColumns"
-            row-key="orderNo"
+            row-key="billId"
             flat
             bordered
             hide-pagination
@@ -134,7 +139,7 @@
                 </div>
               </q-td>
             </template>
-            <template v-slot:body-cell-orderNo="props">
+            <template v-slot:body-cell-billId="props">
               <q-td :props="props">
                 <span :class="props.row.confirmed ? 'text-positive' : ''">
                   {{ props.value }}
@@ -145,13 +150,18 @@
 
           <!-- 休息房汇总行 -->
           <div class="summary-row q-pa-md bg-grey-1">
-            <div class="row items-center text-weight-medium">
-              <div class="col-2">汇总</div>
-              <div class="col text-center">房费: ¥{{ restSummary.roomFee.toFixed(2) }}</div>
-              <div class="col text-center">收押: ¥{{ restSummary.deposit.toFixed(2) }}</div>
-              <div class="col text-center">退押: ¥{{ restSummary.refundDeposit.toFixed(2) }}</div>
-              <div class="col text-center">其他: ¥{{ restSummary.otherCharges.toFixed(2) }}</div>
-              <div class="col text-center text-primary text-weight-bold">合计: ¥{{ (restSummary.roomFee + restSummary.deposit + restSummary.refundDeposit + restSummary.otherCharges).toFixed(2) }}</div>
+            <div class="text-weight-medium">
+              <div class="row items-center q-mb-xs">
+                <div class="col-2">汇总</div>
+                <div class="col">
+                  <span v-for="(amount, type) in restSummary.byType" :key="type" class="q-mr-md">
+                    {{ type }}: ¥{{ amount.toFixed(2) }}
+                  </span>
+                </div>
+                <div class="col-auto text-primary text-h6">
+                  合计: ¥{{ restSummary.totalAmount.toFixed(2) }}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -180,49 +190,29 @@
 
         <q-card-section>
           <div class="q-mb-md">
+            <strong>账单ID：</strong>{{ editDialog.data.billId }}
+          </div>
+          <div class="q-mb-md">
             <strong>订单号：</strong>{{ editDialog.data.orderNo }}
           </div>
-          <div class="row q-col-gutter-md q-mb-md">
-            <div class="col-6">
-              <q-input
-                v-model.number="editDialog.data.roomFee"
-                type="number"
-                label="房费"
-                outlined
-                prefix="¥"
-              />
-            </div>
-            <div class="col-6">
-              <q-input
-                v-model.number="editDialog.data.deposit"
-                type="number"
-                label="收押"
-                outlined
-                prefix="¥"
-              />
-            </div>
+          <div class="q-mb-md">
+            <q-input
+              v-model="editDialog.data.changeType"
+              label="账单类型"
+              outlined
+              readonly
+              disable
+            />
           </div>
-          <div class="row q-col-gutter-md">
-            <div class="col-6">
-              <q-input
-                v-model.number="editDialog.data.refundDeposit"
-                type="number"
-                label="退押"
-                outlined
-                prefix="¥"
-                hint="负数表示退款"
-              />
-            </div>
-            <div class="col-6">
-              <q-input
-                v-model.number="editDialog.data.otherCharges"
-                type="number"
-                label="其他费用"
-                outlined
-                prefix="¥"
-                hint="补收或退款"
-              />
-            </div>
+          <div class="q-mb-md">
+            <q-input
+              v-model.number="editDialog.data.amount"
+              type="number"
+              label="金额"
+              outlined
+              prefix="¥"
+              hint="正数表示收入，负数表示支出"
+            />
           </div>
         </q-card-section>
 
@@ -261,6 +251,13 @@ const isLoadingData = ref(false) // 是否正在加载数据
 // 表格列定义
 const roomColumns = [
   {
+    name: 'billId',
+    label: '账单ID',
+    field: 'billId',
+    align: 'left',
+    headerStyle: 'font-weight: bold;'
+  },
+  {
     name: 'orderNo',
     label: '订单号',
     field: 'orderNo',
@@ -282,36 +279,30 @@ const roomColumns = [
     headerStyle: 'font-weight: bold;'
   },
   {
-    name: 'roomFee',
-    label: '房费',
-    field: 'roomFee',
+    name: 'changeType',
+    label: '账单类型',
+    field: 'changeType',
     align: 'center',
-    headerStyle: 'font-weight: bold;',
-    format: val => `¥${val.toFixed(2)}`
+    headerStyle: 'font-weight: bold;'
   },
   {
-    name: 'deposit',
-    label: '收押',
-    field: 'deposit',
+    name: 'amount',
+    label: '金额',
+    field: 'amount',
     align: 'center',
     headerStyle: 'font-weight: bold;',
-    format: val => `¥${val.toFixed(2)}`
+    format: val => {
+      if (val === 0) return '-'
+      const prefix = val > 0 ? '+' : ''
+      return `${prefix}¥${val.toFixed(2)}`
+    }
   },
   {
-    name: 'refundDeposit',
-    label: '退押',
-    field: 'refundDeposit',
+    name: 'payWay',
+    label: '支付方式',
+    field: 'payWay',
     align: 'center',
-    headerStyle: 'font-weight: bold;',
-    format: val => val !== 0 ? `¥${val.toFixed(2)}` : '-'
-  },
-  {
-    name: 'otherCharges',
-    label: '其他',
-    field: 'otherCharges',
-    align: 'center',
-    headerStyle: 'font-weight: bold;',
-    format: val => val !== 0 ? `¥${val.toFixed(2)}` : '-'
+    headerStyle: 'font-weight: bold;'
   },
   {
     name: 'actions',
@@ -332,31 +323,74 @@ const restRoomData = ref([])
 const editDialog = ref({
   show: false,
   data: {
+    billId: '',
     orderNo: '',
-    roomFee: 0,
-    deposit: 0,
-    refundDeposit: 0,
-    otherCharges: 0
+    changeType: '',
+    amount: 0
   },
   originalData: null
 })
 
+// 汇总数据对象（按支付方式统计）
+const summaryDataObject = ref({
+  // 客房收入（按支付方式）- 包含：房费 + 收押 + 补收 + 订单账单
+  hotelIncome: {
+    '现金': 0,
+    '微信': 0,
+    '微邮付': 0,
+    '其他': 0
+  },
+  // 休息房收入（按支付方式）- 包含：房费 + 收押 + 补收 + 订单账单
+  restIncome: {
+    '现金': 0,
+    '微信': 0,
+    '微邮付': 0,
+    '其他': 0
+  },
+  // 客房退押（按支付方式）- 实退金额（包含退押金和退款）
+  hotelRefundDeposit: {
+    '现金': 0,
+    '微信': 0,
+    '微邮付': 0,
+    '其他': 0
+  },
+  // 休息房退押（按支付方式）- 实退金额（包含退押金和退款）
+  restRefundDeposit: {
+    '现金': 0,
+    '微信': 0,
+    '微邮付': 0,
+    '其他': 0
+  }
+})
+
 // 计算属性 - 客房汇总
 const hotelSummary = computed(() => {
-  const roomFee = hotelRoomData.value.reduce((sum, item) => sum + item.roomFee, 0)
-  const deposit = hotelRoomData.value.reduce((sum, item) => sum + item.deposit, 0)
-  const refundDeposit = hotelRoomData.value.reduce((sum, item) => sum + item.refundDeposit, 0)
-  const otherCharges = hotelRoomData.value.reduce((sum, item) => sum + item.otherCharges, 0)
-  return { roomFee, deposit, refundDeposit, otherCharges }
+  const totalAmount = hotelRoomData.value.reduce((sum, item) => sum + item.amount, 0)
+  const byType = {}
+
+  hotelRoomData.value.forEach(bill => {
+    if (!byType[bill.changeType]) {
+      byType[bill.changeType] = 0
+    }
+    byType[bill.changeType] += bill.amount
+  })
+
+  return { totalAmount, byType }
 })
 
 // 计算属性 - 休息房汇总
 const restSummary = computed(() => {
-  const roomFee = restRoomData.value.reduce((sum, item) => sum + item.roomFee, 0)
-  const deposit = restRoomData.value.reduce((sum, item) => sum + item.deposit, 0)
-  const refundDeposit = restRoomData.value.reduce((sum, item) => sum + item.refundDeposit, 0)
-  const otherCharges = restRoomData.value.reduce((sum, item) => sum + item.otherCharges, 0)
-  return { roomFee, deposit, refundDeposit, otherCharges }
+  const totalAmount = restRoomData.value.reduce((sum, item) => sum + item.amount, 0)
+  const byType = {}
+
+  restRoomData.value.forEach(bill => {
+    if (!byType[bill.changeType]) {
+      byType[bill.changeType] = 0
+    }
+    byType[bill.changeType] += bill.amount
+  })
+
+  return { totalAmount, byType }
 })
 
 // 计算属性 - 是否所有数据都已确认
@@ -374,26 +408,88 @@ const allDataConfirmed = computed(() => {
   const allHotelConfirmed = hotelData.every(item => item.confirmed)
   const allRestConfirmed = restData.every(item => item.confirmed)
 
-  console.log('✅ [CheckData] allDataConfirmed:', {
-    hotelCount: hotelData.length,
-    restCount: restData.length,
-    allHotelConfirmed,
-    allRestConfirmed,
-    result: allHotelConfirmed && allRestConfirmed
-  })
-
   return allHotelConfirmed && allRestConfirmed
 })
 
 // 方法
+// 计算并更新汇总数据对象
+const calculateSummaryData = () => {
+  // 重置汇总对象
+  summaryDataObject.value = {
+    hotelIncome: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
+    restIncome: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
+    hotelRefundDeposit: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
+    restRefundDeposit: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
+  }
+
+  // 统计客房数据
+  hotelRoomData.value.forEach(bill => {
+    const payWay = bill.payWay || '其他'
+    const changeType = bill.changeType
+    const amount = bill.amount || 0
+
+    // 确保支付方式存在于对象中
+    const normalizedPayWay = ['现金', '微信', '微邮付'].includes(payWay) ? payWay : '其他'
+
+    // 根据账单类型分类统计
+    if (changeType === '房费' || changeType === '收押' || changeType === '押金' || changeType === '补收' || changeType === '订单账单') {
+      // 收入类型：房费 + 收押 + 补收 + 订单账单（兼容旧数据）
+      summaryDataObject.value.hotelIncome[normalizedPayWay] += amount
+      console.log(`💰 [收入统计] 客房收入: ${bill.orderNo}, 类型: ${changeType}, 金额: ${amount}, 支付方式: ${normalizedPayWay}`)
+    } else if (changeType === '退押' || changeType === '退押金' || changeType === '退款') {
+      // 退押金/退款是负数，取绝对值统计实退金额（合并到退押列）
+      summaryDataObject.value.hotelRefundDeposit[normalizedPayWay] += Math.abs(amount)
+      console.log(`💰 [退款统计] 客房退款/退押: ${bill.orderNo}, 类型: ${changeType}, 金额: ${amount}, 支付方式: ${normalizedPayWay}`)
+    } else {
+      // 未知类型，记录警告
+      console.warn(`⚠️ [未知类型] 客房账单: ${bill.orderNo}, 类型: ${changeType}, 金额: ${amount}`)
+    }
+  })
+
+  // 统计休息房数据
+  restRoomData.value.forEach(bill => {
+    const payWay = bill.payWay || '其他'
+    const changeType = bill.changeType
+    const amount = bill.amount || 0
+
+    // 确保支付方式存在于对象中
+    const normalizedPayWay = ['现金', '微信', '微邮付'].includes(payWay) ? payWay : '其他'
+
+    // 根据账单类型分类统计
+    if (changeType === '房费' || changeType === '收押' || changeType === '押金' || changeType === '补收' || changeType === '订单账单') {
+      // 收入类型：房费 + 收押 + 补收 + 订单账单（兼容旧数据）
+      summaryDataObject.value.restIncome[normalizedPayWay] += amount
+      console.log(`💰 [收入统计] 休息房收入: ${bill.orderNo}, 类型: ${changeType}, 金额: ${amount}, 支付方式: ${normalizedPayWay}`)
+    } else if (changeType === '退押' || changeType === '退押金' || changeType === '退款') {
+      // 退押金/退款是负数，取绝对值统计实退金额（合并到退押列）
+      summaryDataObject.value.restRefundDeposit[normalizedPayWay] += Math.abs(amount)
+      console.log(`💰 [退款统计] 休息房退款/退押: ${bill.orderNo}, 类型: ${changeType}, 金额: ${amount}, 支付方式: ${normalizedPayWay}`)
+    } else {
+      // 未知类型，记录警告
+      console.warn(`⚠️ [未知类型] 休息房账单: ${bill.orderNo}, 类型: ${changeType}, 金额: ${amount}`)
+    }
+  })
+
+  console.log('📊 [汇总对象更新]:', JSON.parse(JSON.stringify(summaryDataObject.value)))
+  console.log('📊 [客房退押详情]:', summaryDataObject.value.hotelRefundDeposit)
+  console.log('📊 [休息退押详情]:', summaryDataObject.value.restRefundDeposit)
+}
+
 // 确认行数据
 const confirmRow = (row, type) => {
   row.confirmed = true
+  // 确认后重新计算汇总数据
+  calculateSummaryData()
 }
 
 // 编辑行数据
 const editRow = (row) => {
-  editDialog.value.data = { ...row }
+  editDialog.value.data = {
+    billId: row.billId,
+    orderNo: row.orderNo,
+    changeType: row.changeType,
+    amount: row.amount
+  }
   editDialog.value.originalData = row
   editDialog.value.show = true
 }
@@ -402,11 +498,10 @@ const editRow = (row) => {
 const cancelEdit = () => {
   editDialog.value.show = false
   editDialog.value.data = {
+    billId: '',
     orderNo: '',
-    roomFee: 0,
-    deposit: 0,
-    refundDeposit: 0,
-    otherCharges: 0
+    changeType: '',
+    amount: 0
   }
   editDialog.value.originalData = null
 }
@@ -414,18 +509,18 @@ const cancelEdit = () => {
 // 保存编辑
 const saveEdit = () => {
   if (editDialog.value.originalData) {
-    editDialog.value.originalData.roomFee = editDialog.value.data.roomFee
-    editDialog.value.originalData.deposit = editDialog.value.data.deposit
-    editDialog.value.originalData.refundDeposit = editDialog.value.data.refundDeposit
-    editDialog.value.originalData.otherCharges = editDialog.value.data.otherCharges
+    editDialog.value.originalData.amount = editDialog.value.data.amount
     editDialog.value.originalData.confirmed = false // 修改后需要重新确认
 
     // 数据修改后重置核对完成状态
     dataCheckCompleted.value = false
 
+    // 重新计算汇总数据
+    calculateSummaryData()
+
     $q.notify({
       type: 'positive',
-      message: `订单 ${editDialog.value.data.orderNo} 数据修改成功，请重新确认数据`,
+      message: `账单 ${editDialog.value.data.billId} 数据修改成功，请重新确认数据`,
       position: 'top'
     })
   }
@@ -448,14 +543,8 @@ const confirmDataCheck = async () => {
   try {
     isConfirmingData.value = true
 
-    $q.notify({
-      type: 'info',
-      message: '正在确认数据核对...',
-      position: 'top'
-    })
-
-    // 模拟确认延迟
-    await new Promise(resolve => setTimeout(resolve, 1500))
+    // 计算最终汇总数据
+    calculateSummaryData()
 
     // 设置为已完成状态
     dataCheckCompleted.value = true
@@ -478,56 +567,96 @@ const confirmDataCheck = async () => {
   }
 }
 
+// 辅助函数：将Date对象转换为本地日期字符串（YYYY-MM-DD）
+const formatLocalDate = (date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 // 加载账单数据
 const loadBillsData = async () => {
   try {
     isLoadingData.value = true
 
-    // 获取今天的日期
-    const today = new Date().toISOString().split('T')[0]
+    // 交接班业务逻辑：
+    // 1. 营业日从每天8:00开始，到次日8:00结束
+    // 2. 核对的是"前一个营业日"的账单数据
+    const now = new Date()
+    const currentHour = now.getHours()
+
+    // 计算当前营业日
+    let currentBusinessDate = new Date(now)
+    if (currentHour < 8) {
+      // 还没到8点，还在昨天营业日的时间范围内
+      currentBusinessDate.setDate(currentBusinessDate.getDate() - 1)
+    }
+
+    // 计算要核对的营业日（当前营业日的前一天）
+    let checkDate = new Date(currentBusinessDate)
+    checkDate.setDate(checkDate.getDate() - 1)
+    const checkDateStr = formatLocalDate(checkDate)
+
+    console.log('📅 [CheckData] 日期计算:', {
+      currentTime: now.toLocaleString('zh-CN'),
+      currentHour,
+      currentBusinessDate: formatLocalDate(currentBusinessDate),
+      checkDate: checkDateStr,
+      logic: '核对"前一个营业日"的账单数据'
+    })
 
     // 调用API获取指定日期的账单数据
-    const response = await billApi.getBillsByDate(today)
+    const response = await billApi.getBillsByDate(checkDateStr)
 
     if (response.success) {
       const { hotelBills, restBills, totalCount } = response.data
 
-      // 转换客房数据格式
+      console.log('📊 [CheckData] API返回数据:', {
+        hotelBills: hotelBills.length,
+        restBills: restBills.length,
+        totalCount,
+        hotelBillsData: hotelBills,
+        restBillsData: restBills
+      })
+
+      // 转换客房数据格式 - 每条账单一行
       hotelRoomData.value = hotelBills.map(bill => ({
         billId: bill.bill_id,
         orderNo: bill.order_id,
         roomNo: bill.room_number || '未知',
         guestName: bill.guest_name || '未知',
-        roomFee: parseFloat(bill.room_fee) || 0,
-        deposit: parseFloat(bill.deposit) || 0,
-        refundDeposit: parseFloat(bill.refund_deposit) || 0,
-        otherCharges: parseFloat(bill.other_charges) || 0,
+        changeType: bill.change_type,
+        amount: parseFloat(bill.change_price) || 0,
         payWay: bill.pay_way,
+        stayDate: bill.stay_date,
+        createTime: bill.create_time,
         confirmed: false
       }))
 
-      // 转换休息房数据格式
+      // 转换休息房数据格式 - 每条账单一行
       restRoomData.value = restBills.map(bill => ({
         billId: bill.bill_id,
         orderNo: bill.order_id,
         roomNo: bill.room_number || '未知',
         guestName: bill.guest_name || '未知',
-        roomFee: parseFloat(bill.room_fee) || 0,
-        deposit: parseFloat(bill.deposit) || 0,
-        refundDeposit: parseFloat(bill.refund_deposit) || 0,
-        otherCharges: parseFloat(bill.other_charges) || 0,
+        changeType: bill.change_type,
+        amount: parseFloat(bill.change_price) || 0,
         payWay: bill.pay_way,
+        stayDate: bill.stay_date,
+        createTime: bill.create_time,
         confirmed: false
       }))
 
-
-
-      console.log('账单数据加载完成:', {
-        today,
-        hotelCount: hotelBills.length,
-        restCount: restBills.length,
+      console.log('✅ [CheckData] 数据转换完成:', {
+        checkDate: checkDateStr,
+        hotelCount: hotelRoomData.value.length,
+        restCount: restRoomData.value.length,
         totalCount
       })
+
+      // 加载数据后初始计算汇总数据
+      calculateSummaryData()
     } else {
       throw new Error(response.message || '加载失败')
     }
@@ -546,7 +675,6 @@ const loadBillsData = async () => {
 
 // 生命周期
 onMounted(() => {
-  console.log('CheckData component mounted')
   // 自动加载当天的账单数据
   loadBillsData()
 })
@@ -558,7 +686,8 @@ defineExpose({
   hotelSummary,
   restSummary,
   dataCheckCompleted,
-  allDataConfirmed
+  allDataConfirmed,
+  summaryDataObject  // 暴露汇总数据对象给步骤4使用
 })
 </script>
 

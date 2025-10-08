@@ -481,12 +481,6 @@ const viewHandoverRecord = async (record) => {
     selectedRecord.value = record
     currentStep.value = -1 // 使用-1表示查看记录状态
 
-    $q.notify({
-      type: 'info',
-      message: `正在加载 ${record.date} 的交接记录...`,
-      position: 'top'
-    })
-
     // 调用后端API获取交接班表格数据
     await loadHandoverRecordData(record.date)
 

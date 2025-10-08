@@ -11,33 +11,10 @@
             :loading="isLoading"
             @click="handleSearchHistory"
           />
-          <q-btn
-            color="secondary"
-            icon="refresh"
-            label="刷新"
-            size="sm"
-            class="full-width"
-            flat
-            :loading="isLoading"
-            @click="refreshHistory"
-          />
         </div>
 
         <!-- 统计信息 -->
-        <div class="history-stats q-mb-md">
-          <q-card flat class="stats-card">
-            <q-card-section class="q-pa-sm">
-              <div class="text-caption text-grey-7">可用日期</div>
-              <div class="text-h6 text-primary">{{ availableDates.length }}个</div>
-            </q-card-section>
-          </q-card>
-          <q-card flat class="stats-card q-mt-xs">
-            <q-card-section class="q-pa-sm">
-              <div class="text-caption text-grey-7">本月交接</div>
-              <div class="text-h6 text-secondary">{{ monthlyCount }}次</div>
-            </q-card-section>
-          </q-card>
-        </div>
+
 
     <div class="history-list">
       <div v-if="!hasHistoryRecords && !isLoading" class="no-records">
@@ -55,27 +32,7 @@
         @click="handleSelectRecord(record)"
       >
         <q-card-section class="q-pa-sm">
-          <div class="row items-center justify-between q-mb-xs">
-            <div class="text-body2 text-primary">{{ record.date }}</div>
-            <q-chip
-              size="sm"
-              color="positive"
-              text-color="white"
-              :label="`${record.paymentCount}种支付`"
-            />
-          </div>
-          <div class="text-caption text-grey-7 q-mb-xs">
-            <q-icon name="person" size="xs" class="q-mr-xs"/>
-            {{ record.operator }}
-          </div>
-          <div v-if="record.vipCards > 0" class="text-caption text-orange-7">
-            <q-icon name="card_membership" size="xs" class="q-mr-xs"/>
-            VIP卡: {{ record.vipCards }}
-          </div>
-          <div v-if="record.taskList && record.taskList.length > 0" class="text-caption text-blue-7">
-            <q-icon name="task_alt" size="xs" class="q-mr-xs"/>
-            {{ record.taskList.length }} 条备忘录
-          </div>
+          <div class="text-body2 text-primary q-mb-xs">{{ record.date }}</div>
         </q-card-section>
       </q-card>
     </div>
@@ -96,21 +53,6 @@ const availableDates = ref([])
 // 计算属性
 const hasHistoryRecords = computed(() => historyRecords.value.length > 0)
 
-const monthlyCount = computed(() => {
-  const currentMonth = new Date().getMonth()
-  const currentYear = new Date().getFullYear()
-
-  return historyRecords.value.filter(record => {
-    const recordDate = new Date(record.date)
-    return recordDate.getMonth() === currentMonth && recordDate.getFullYear() === currentYear
-  }).length
-})
-
-// 工具函数
-const formatDate = (dateString) => {
-  const date = new Date(dateString)
-  return `${date.getMonth() + 1}/${date.getDate()}`
-}
 
 // 搜索历史记录
 const handleSearchHistory = async () => {
@@ -164,29 +106,11 @@ const emit = defineEmits(['select-record'])
 
 // 选择历史记录
 const handleSelectRecord = (record) => {
-  $q.notify({
-    type: 'info',
-    message: `查看 ${record.date} ${record.operator} 的交接记录`,
-    position: 'top'
-  })
-
   // 发送事件到父组件
   console.log('Selected record:', record)
   emit('select-record', record)
 }
 
-// 删除历史记录
-const deleteRecord = (recordId) => {
-  const index = historyRecords.value.findIndex(record => record.id === recordId)
-  if (index > -1) {
-    historyRecords.value.splice(index, 1)
-    $q.notify({
-      type: 'positive',
-      message: '记录已删除',
-      position: 'top'
-    })
-  }
-}
 
 // 获取可用日期
 const loadAvailableDates = async () => {
@@ -201,32 +125,7 @@ const loadAvailableDates = async () => {
   }
 }
 
-// 刷新历史记录
-const refreshHistory = async () => {
-  isLoading.value = true
-  try {
-    // 同时获取历史记录和可用日期
-    await Promise.all([
-      handleSearchHistory(),
-      loadAvailableDates()
-    ])
 
-    $q.notify({
-      type: 'positive',
-      message: '历史记录已刷新',
-      position: 'top'
-    })
-  } catch (error) {
-    console.error('刷新历史记录失败:', error)
-    $q.notify({
-      type: 'negative',
-      message: '刷新失败',
-      position: 'top'
-    })
-  } finally {
-    isLoading.value = false
-  }
-}
 
 // 生命周期钩子
 onMounted(() => {
@@ -242,14 +141,19 @@ onMounted(() => {
   padding: 16px 8px;
   border-right: 1px solid #e0e0e0;
   height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .history-header {
   margin-bottom: 16px;
+  flex-shrink: 0;
 }
 
 .history-stats {
   margin-bottom: 12px;
+  flex-shrink: 0;
 }
 
 .stats-card {
@@ -259,8 +163,29 @@ onMounted(() => {
 }
 
 .history-list {
-  max-height: calc(100vh - 120px);
+  flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
+
+/* 自定义滚动条样式 */
+.history-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.history-list::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 3px;
+}
+
+.history-list::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+.history-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
 }
 
 .history-item {
@@ -271,6 +196,19 @@ onMounted(() => {
 .history-item:hover {
   background-color: #e3f2fd;
   transform: translateX(2px);
+}
+
+.operator-line {
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.operator-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .no-records {

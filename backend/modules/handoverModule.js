@@ -53,8 +53,18 @@ async function getShiftTable(date) {
 
     // 遍历账单记录，根据 change_type 分类统计
     for (const row of billRes.rows) {
-      const { pay_way, change_price, change_type, stay_type } = row
+      const { pay_way: rawPayWay, change_price, change_type, stay_type } = row
       const amount = Number(change_price) || 0;
+
+      // 支付方式映射：将账单中的支付方式映射到交接班统计的支付方式
+      // '平台' 和其他未知支付方式映射到 '其他'
+      const payWayMapping = {
+        '现金': '现金',
+        '微信': '微信',
+        '微邮付': '微邮付',
+        '平台': '其他',
+      };
+      const pay_way = payWayMapping[rawPayWay] || '其他';
 
       // 房费收入统计（正数）
       if (change_type === '房费') {
@@ -111,6 +121,8 @@ async function getShiftTable(date) {
       restDeposit,
       hotelRefund: hotelDeposit, // 添加别名以兼容测试
       restRefund: restDeposit,   // 添加别名以兼容测试
+      hotelRefundDeposit: hotelDeposit, // 前端组件使用的字段名
+      restRefundDeposit: restDeposit,   // 前端组件使用的字段名
       retainedAmount,
       handoverAmount
     }
@@ -685,6 +697,8 @@ async function getHandoverTableData(date) {
       restDeposit,
       hotelRefund: hotelDeposit, // 添加别名以兼容测试
       restRefund: restDeposit,   // 添加别名以兼容测试
+      hotelRefundDeposit: hotelDeposit, // 前端组件使用的字段名
+      restRefundDeposit: restDeposit,   // 前端组件使用的字段名
       retainedAmount,
       handoverAmount,
       vipCards, // 添加vipCards数据
