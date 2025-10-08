@@ -939,11 +939,24 @@ const completeHandover = async () => {
       logic: '保存"要交接的营业日"的日期'
     })
 
+    // 转换字段名：前端使用 hotelRefundDeposit/restRefundDeposit，后端使用 hotelDeposit/restDeposit
+    const paymentDataForBackend = {
+      reserve: confirmationData.value.paymentData.reserve,
+      hotelIncome: confirmationData.value.paymentData.hotelIncome,
+      restIncome: confirmationData.value.paymentData.restIncome,
+      carRentIncome: confirmationData.value.paymentData.carRentIncome,
+      totalIncome: confirmationData.value.paymentData.totalIncome,
+      hotelDeposit: confirmationData.value.paymentData.hotelRefundDeposit,  // 字段名转换
+      restDeposit: confirmationData.value.paymentData.restRefundDeposit,    // 字段名转换
+      retainedAmount: confirmationData.value.paymentData.retainedAmount,
+      handoverAmount: confirmationData.value.paymentData.handoverAmount
+    }
+
     const handoverData = {
       date: handoverDateStr,
       handoverPerson: '当前操作员', // TODO: 从用户 store 获取当前用户名
       receivePerson: handoverInfo.value.nextOperator.trim(),
-      paymentData: confirmationData.value.paymentData,
+      paymentData: paymentDataForBackend,
       vipCard: confirmationData.value.vipCards || 0,
       taskList: confirmationData.value.taskList || [],
       notes: handoverInfo.value.notes || ''
@@ -952,7 +965,7 @@ const completeHandover = async () => {
     console.log('📤 [完成交接] 准备保存的数据:', {
       currentTime: now.toLocaleString('zh-CN'),
       currentHour,
-      handoverDate,
+      handoverDate: handoverDateStr,
       handoverData
     })
 

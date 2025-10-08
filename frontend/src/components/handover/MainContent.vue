@@ -109,14 +109,6 @@
 
             <q-card flat bordered class="stat-card">
               <q-card-section class="text-center">
-                <q-icon name="account_balance_wallet" size="2rem" color="orange" class="q-mb-sm" />
-                <div class="text-h6 text-orange">¥{{ todayStats.totalIncome.toFixed(0) }}</div>
-                <div class="text-caption text-grey-6">今日收入</div>
-              </q-card-section>
-            </q-card>
-
-            <q-card flat bordered class="stat-card">
-              <q-card-section class="text-center">
                 <q-icon name="schedule" size="2rem" color="purple" class="q-mb-sm" />
                 <div class="text-h6 text-purple">{{ currentTime }}</div>
                 <div class="text-caption text-grey-6">当前时间</div>
@@ -303,11 +295,8 @@ const currentStep = ref(0) // 0: 未开始, 1-6: 各个步骤
 
 // 今日统计数据
 const todayStats = ref({
-  totalRooms: 12,
-  restRooms: 8,
-  totalIncome: 3580,
-  checkInCount: 15,
-  checkOutCount: 8
+  totalRooms: 0,
+  restRooms: 0
 })
 
 // 最近交接记录（从API获取）
@@ -545,6 +534,36 @@ const updateCurrentTime = () => {
   })
 }
 
+// 加载今日统计数据
+const loadTodayStats = async () => {
+  try {
+    // 获取今天的日期
+    const today = new Date().toISOString().split('T')[0]
+
+    console.log('📊 [MainContent] 获取今日统计数据:', today)
+
+    // 调用 API 获取今日开房和休息房数据
+    const response = await shiftHandoverApi.getSpecialStats({ date: today })
+
+    if (response.success) {
+      todayStats.value.totalRooms = response.data.openCount || 0
+      todayStats.value.restRooms = response.data.restCount || 0
+
+      console.log('✅ [MainContent] 今日统计数据加载成功:', {
+        开房数: todayStats.value.totalRooms,
+        休息房数: todayStats.value.restRooms
+      })
+    }
+  } catch (error) {
+    console.error('❌ [MainContent] 加载今日统计数据失败:', error)
+    $q.notify({
+      type: 'warning',
+      message: '加载今日统计数据失败',
+      position: 'top'
+    })
+  }
+}
+
 // 加载最近交接记录
 const loadRecentHandovers = async () => {
   try {
@@ -576,6 +595,9 @@ onMounted(() => {
 
   // 每秒更新时间
   timeTimer = setInterval(updateCurrentTime, 1000)
+
+  // 加载今日统计数据
+  loadTodayStats()
 
   // 加载最近交接记录
   loadRecentHandovers()
@@ -813,8 +835,10 @@ onUnmounted(() => {
 
 .quick-stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 16px;
+  max-width: 900px;
+  margin: 0 auto;
 }
 
 .stat-card {
