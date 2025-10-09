@@ -9,12 +9,13 @@ const emailJob = require("./modules/emailSetup");
 const webServer = http.createServer(app);
 
 async function bootup() {
-  // 初始化数据库
-  await posgreDB.initializeHotelDB();
-
   // 初始化Redis连接
   redisDB.initialize();
   console.log('Redis连接已初始化');
+
+  // 初始化数据库
+  await posgreDB.initializeHotelDB();
+
 
   // 异步测试邮箱连接，不阻塞服务器启动
   emailJob.testConnection().catch(err => {

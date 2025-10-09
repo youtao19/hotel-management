@@ -6,6 +6,9 @@ const session = require("express-session");
 const setup = require("./appSettings/setup");
 const posgreDB = require("./database/postgreDB/pg");
 const authtication = require("./modules/authentication");
+const RedisDb = require('./database/redis/redis');
+const RedisStore = require("connect-redis")(session);
+
 
 let app = express();
 
@@ -15,6 +18,16 @@ app.disable('x-powered-by');
 app.use(express.json({ limit: setup.reqSizeLimit, strict: false }));
 app.use(express.urlencoded({ extended: true, limit: setup.reqSizeLimit }));
 app.use(express.text({ limit: setup.reqSizeLimit }));
+
+const redisClient = RedisDb.initialize();
+
+const store = new RedisStore({
+  client: redisClient,
+  prefix: 'sess:',
+  ttl: setup.cookieMaxAge , // 设置session过期时间
+  // 不要 ttl，这会报错
+  // serializer: JSON（可选）
+});
 
 const sessionOptions = {
   name: setup.appName + ".sid",
@@ -26,6 +39,7 @@ const sessionOptions = {
     maxAge: setup.cookieMaxAge,
     sameSite: setup.env !== "dev" ? "lax" : "none"
   },
+  store: store,
   saveUninitialized: false,
 };
 

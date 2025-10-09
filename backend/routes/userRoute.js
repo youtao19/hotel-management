@@ -10,6 +10,28 @@ addFormats(ajv);
 const emailSetup = require("../modules/emailSetup");
 const router = express.Router();
 const authentication = require("../modules/authentication");
+
+// 登出路由不需要认证检查，放在认证中间件之前
+router.get("/logout", async (req, res, next) => {
+    try {
+        // 即使session已经失效，也尝试执行登出操作
+        if (req.session && req.logout) {
+            await req.logout();
+            console.log('登出操作完成');
+        } else {
+            console.log('session 或 logout 方法不存在，跳过登出');
+        }
+
+        return res.status(200).json({ message: '登出成功' });
+    } catch (e) {
+        console.error('登出操作失败:', e);
+        console.error('错误堆栈:', e.stack);
+        // 即使登出失败，也返回200，因为前端需要清理状态
+        return res.status(200).json({ message: '登出完成' });
+    }
+});
+
+// 其他路由需要认证
 router.use(authentication.ensureAuthenticated);
 
 router.get("/info", async (req, res) => {
@@ -78,20 +100,5 @@ const feedbackSchema = {
     additionalProperties: false
 }
 const validateFeedback = ajv.compile(feedbackSchema);
-
-// 登出路由不需要认证检查，因为即使session失效也应该允许登出
-router.get("/logout", async (req, res, next) => {
-    try {
-        // 即使session已经失效，也尝试执行登出操作
-        if (req.logout) {
-            await req.logout();
-        }
-        return res.status(200).json();
-    } catch (e) {
-        console.log('登出操作失败:', e);
-        // 即使登出失败，也返回200，因为前端需要清理状态
-        return res.status(200).json();
-    }
-});
 
 module.exports = router;
