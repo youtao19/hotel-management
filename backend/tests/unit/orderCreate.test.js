@@ -1,8 +1,8 @@
 const request = require('supertest');
-const { query } = require('../database/postgreDB/pg');
+const { query } = require('../../database/postgreDB/pg');
 // const { migrateTestDatabase } = require('../database/postgreDB/migrations/test_migration');
-const app = require('../app');
-const { createTestRoomType, createTestRoom, createTestOrder, generatePriceData } = require('./test-helpers');
+const app = require('../../app');
+const { createTestRoomType, createTestRoom, createTestOrder, generatePriceData } = require('../test-helpers');
 
 describe('POST /api/orders/new', () => {
   beforeAll(async () => {});

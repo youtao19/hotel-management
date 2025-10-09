@@ -1,6 +1,6 @@
 const request = require('supertest');
-const app = require('../app');
-const { createTestRoomType, createTestRoom, createTestOrder } = require('./test-helpers');
+const app = require('../../app');
+const { createTestRoomType, createTestRoom, createTestOrder } = require('../test-helpers');
 
 // 专注覆盖尚未测试的失败分支
 describe('POST /api/orders/new 失败分支补充', () => {

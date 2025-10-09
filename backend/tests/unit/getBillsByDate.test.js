@@ -4,8 +4,8 @@
  */
 
 const request = require('supertest');
-const app = require('../app');
-const { query, getClient, pool } = require('../database/postgreDB/pg');
+const app = require('../../app');
+const { query, getClient, pool } = require('../../database/postgreDB/pg');
 
 describe('账单路由测试 - /api/bills', () => {
   let testOrderId1;

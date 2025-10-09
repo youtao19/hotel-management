@@ -1,7 +1,7 @@
 const request = require('supertest');
-const app = require('../app');
-const { query } = require('../database/postgreDB/pg');
-const { createTestRoomType, createTestRoom, createTestOrder } = require('./test-helpers');
+const app = require('../../app');
+const { query } = require('../../database/postgreDB/pg');
+const { createTestRoomType, createTestRoom, createTestOrder } = require('../test-helpers');
 
 // 更改订单状态
 describe('POST /api/orders/:orderNumber/status',() => {

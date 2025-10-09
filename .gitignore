@@ -42,3 +42,7 @@ backend/database/postgreDB/dbConfig.js
 
 .xlsx
 
+# Jest coverage reports
+coverage
+*.lcov
+

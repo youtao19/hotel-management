@@ -16,8 +16,8 @@
  */
 
 const request = require('supertest');
-const app = require('../app');
-const { query } = require('../database/postgreDB/pg');
+const app = require('../../app');
+const { query } = require('../../database/postgreDB/pg');
 
 describe('GET /api/handover/check-yesterday - 检查昨日交接记录', () => {
   beforeEach(async () => {

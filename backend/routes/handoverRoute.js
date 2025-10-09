@@ -472,11 +472,11 @@ router.post('/complete', async (req, res) => {
       });
     }
 
-  console.log('开始保存交接班数据到数据库');
+    console.log('开始保存交接班数据到数据库');
 
-  // 获取数据库连接并开启事务
-  client = await getClient();
-  await client.query('BEGIN');
+    // 获取数据库连接并开启事务
+    client = await getClient();
+    await client.query('BEGIN');
 
     // 支付方式映射：前端字段名 -> 数据库代码
     const paymentTypeMapping = {
@@ -556,7 +556,8 @@ router.post('/complete', async (req, res) => {
 
     console.log('所有交接班记录保存成功，共保存', savedRecords.length, '条记录');
 
-    res.json({
+    // 准备响应数据
+    const responseData = {
       success: true,
       message: '交接班完成，数据已保存',
       data: {
@@ -566,7 +567,9 @@ router.post('/complete', async (req, res) => {
         recordCount: savedRecords.length,
         records: savedRecords
       }
-    });
+    };
+
+    res.json(responseData);
 
   } catch (error) {
     // 回滚事务
