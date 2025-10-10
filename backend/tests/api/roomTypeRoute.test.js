@@ -1,7 +1,7 @@
 const request = require('supertest');
-const app = require('../app');
-const { query } = require('../database/postgreDB/pg');
-const { createTestRoomType, createTestRoom } = require('./test-helpers');
+const app = require('../../app');
+const { query } = require('../../database/postgreDB/pg');
+const { createTestRoomType, createTestRoom } = require('../test-helpers');
 
 describe('Room Type Routes Tests', () => {
   beforeEach(async () => {

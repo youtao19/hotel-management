@@ -46,28 +46,42 @@ global.cleanupTestData = async () => {
 beforeAll(async () => {
   // ✅ 初始化 app 的 session 和路由（重要！）
   await app.initializeSession();
-  
+
   // 初始化数据库结构
   await db.initializeHotelDB();
-  
+
   // 初始化 Redis 连接
   await redisDB.initialize();
-  
+
   console.log('✅ 测试环境初始化完成');
 }, 60000); // 增加超时时间
 
 // 全局测试清理
 afterAll(async () => {
   try {
-    await db.query(truncateTablesSQL()); // 清空数据
+    // 直接关闭连接，不清理数据（因为数据库是测试数据库）
+    console.log('开始清理测试环境...');
   } catch (e) {
     console.warn('清理测试数据时出现警告:', e.message);
   } finally {
     // 关闭 Redis 连接
-    await redisDB.close();
+    try {
+      await redisDB.close();
+      console.log('Redis 连接已关闭');
+    } catch (e) {
+      console.warn('关闭 Redis 时出现警告:', e.message);
+    }
+
     // 关闭数据库连接池
-    await db.closePool();
+    try {
+      await db.closePool();
+      console.log('数据库连接池已关闭');
+    } catch (e) {
+      console.warn('关闭数据库时出现警告:', e.message);
+    }
+
     // 等待一小段时间，确保所有连接完全关闭
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    console.log('测试环境清理完成');
   }
-});
+}, 10000); // 10秒超时
