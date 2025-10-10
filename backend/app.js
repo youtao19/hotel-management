@@ -48,9 +48,10 @@ async function initializeSession() {
         resave: false,
         rolling: false,
         cookie: {
-            secure: false,
+            secure: setup.env !== "dev", // ✅ 生产环境才用 true
             maxAge: setup.cookieMaxAge,
-            sameSite: "none"
+            sameSite: setup.env === "dev" ? "lax" : "none", // ✅ 开发环境用 lax
+            httpOnly: true // ✅ 添加安全性
         },
         saveUninitialized: false,
     };

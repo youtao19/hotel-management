@@ -10,23 +10,62 @@ addFormats(ajv);
 const emailSetup = require("../modules/emailSetup");
 const router = express.Router();
 const authentication = require("../modules/authentication");
+const setup = require("../appSettings/setup"); // ✅ 添加这行
 
 // 登出路由不需要认证检查，放在认证中间件之前
 router.get("/logout", async (req, res, next) => {
     try {
-        // 即使session已经失效，也尝试执行登出操作
+        console.log('=== 开始登出流程 ===');
+        console.log('Session exists:', !!req.session);
+        console.log('Session ID:', req.sessionID);
+        console.log('Session data:', req.session);
+
+        // 即使 session 不存在，也清除 cookie
+        const cookieName = setup.appName + ".sid";
+
         if (req.session && req.logout) {
             await req.logout();
-            console.log('登出操作完成');
-        } else {
-            console.log('session 或 logout 方法不存在，跳过登出');
+            console.log('✅ 登出方法执行成功');
+        } else if (req.session) {
+            // 手动清理 session
+            await new Promise((resolve, reject) => {
+                req.session.destroy((err) => {
+                    if (err) {
+                        console.error('❌ Session destroy 失败:', err);
+                        reject(err);
+                    } else {
+                        console.log('✅ Session 已销毁');
+                        resolve();
+                    }
+                });
+            });
         }
+
+        // 清除 cookie（重要！）
+        res.clearCookie(cookieName, {
+            path: '/',
+            httpOnly: true,
+            sameSite: setup.env === "dev" ? "lax" : "none",
+            secure: setup.env !== "dev"
+        });
+
+        console.log('✅ Cookie 已清除:', cookieName);
+        console.log('=== 登出完成 ===');
 
         return res.status(200).json({ message: '登出成功' });
     } catch (e) {
-        console.error('登出操作失败:', e);
+        console.error('❌ 登出操作失败:', e);
         console.error('错误堆栈:', e.stack);
-        // 即使登出失败，也返回200，因为前端需要清理状态
+
+        // 即使失败也清除 cookie
+        const cookieName = setup.appName + ".sid";
+        res.clearCookie(cookieName, {
+            path: '/',
+            httpOnly: true,
+            sameSite: setup.env === "dev" ? "lax" : "none",
+            secure: setup.env !== "dev"
+        });
+
         return res.status(200).json({ message: '登出完成' });
     }
 });

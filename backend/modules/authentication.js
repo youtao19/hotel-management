@@ -68,86 +68,33 @@ const logout = function (callback) {
     const req = this;
     if (!callback) {
         //return a promise
-        return new Promise(async (resolve, reject) => {
+        return new Promise((resolve, reject) => {
             try {
-                // 保存 sessionID 用于日志和 Redis 删除
-                const sessionID = req.sessionID;
-                const redis = redisDB.getClient();
-
-                // 删除 session 属性
                 delete req.session.account;
                 delete req.session.authenticated;
-
-                // 销毁 session，这会从 Redis 中删除
-                req.session.destroy(async function (err) {
+                req.session.destroy(function (err) {
                     if (err) {
-                        console.error(`登出失败: session ${sessionID} 销毁出错:`, err);
+                        return reject(err);
                     } else {
-                        console.log(`session.destroy() 完成: ${sessionID}`);
+                        return resolve(null);
                     }
-
-                    // 显式从 Redis 中删除 session，确保清理完成
-                    // connect-redis 使用 'sess:' 前缀（在 app.js 中配置）
-                    try {
-                        if (redis && sessionID) {
-                            const redisKey = 'sess:' + sessionID;
-                            const deleted = await redis.del(redisKey);
-                            if (deleted > 0) {
-                                console.log(`登出成功: 已从 Redis 中显式删除 session ${sessionID}`);
-                            } else {
-                                console.log(`Redis 中未找到 session ${sessionID}，可能已被 destroy() 删除`);
-                            }
-                        }
-                    } catch (redisErr) {
-                        console.error(`从 Redis 删除 session 时出错:`, redisErr);
-                    }
-
-                    // 无论如何都返回成功，因为前端需要清理状态
-                    return resolve(null);
                 });
             } catch (e) {
-                console.error('登出异常:', e);
                 return reject(e);
             }
         });
     } else {
         try {
-            // 保存 sessionID 用于日志和 Redis 删除
-            const sessionID = req.sessionID;
-            const redis = redisDB.getClient();
-
-            // 删除 session 属性
             delete req.session.account;
             delete req.session.authenticated;
-
-            // 销毁 session，这会从 Redis 中删除
-            req.session.destroy(async function (err) {
+            req.session.destroy(function (err) {
                 if (err) {
-                    console.error(`登出失败: session ${sessionID} 销毁出错:`, err);
+                    return callback(err);
                 } else {
-                    console.log(`session.destroy() 完成: ${sessionID}`);
+                    return callback(null);
                 }
-
-                // 显式从 Redis 中删除 session，确保清理完成
-                try {
-                    if (redis && sessionID) {
-                        const redisKey = 'sess:' + sessionID;
-                        const deleted = await redis.del(redisKey);
-                        if (deleted > 0) {
-                            console.log(`登出成功: 已从 Redis 中显式删除 session ${sessionID}`);
-                        } else {
-                            console.log(`Redis 中未找到 session ${sessionID}，可能已被 destroy() 删除`);
-                        }
-                    }
-                } catch (redisErr) {
-                    console.error(`从 Redis 删除 session 时出错:`, redisErr);
-                }
-
-                // 无论如何都返回成功
-                return callback(null);
             });
         } catch (e) {
-            console.error('登出异常:', e);
             return callback(e);
         }
     }
