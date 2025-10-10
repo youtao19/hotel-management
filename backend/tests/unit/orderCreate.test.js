@@ -1,10 +1,60 @@
+/**
+ * 订单创建测试文件
+ *
+ * 测试接口：POST /api/orders/new
+ *
+ * ✅ 核心功能说明：
+ * 1. 创建新订单（客房/休息房）
+ * 2. 验证订单数据完整性和合法性
+ * 3. 处理房间可用性检查
+ * 4. 自动生成账单记录
+ * 5. 防止重复订单创建
+ *
+ * ✅ 测试覆盖范围：
+ * - ✅ 正常业务流程（成功创建订单）
+ * - ✅ 数据验证（必填字段、数据格式）
+ * - ✅ 业务规则（房间可用性、价格计算、日期范围）
+ * - ✅ 错误处理（重复订单、房间不可用、无效数据）
+ * - ✅ 边界情况（特殊日期、价格边界值）
+ *
+ * 📊 相关数据库表：
+ * - orders: 订单表
+ *   - order_id: VARCHAR(50) PRIMARY KEY - 订单编号
+ *   - guest_name: VARCHAR(100) - 客人姓名
+ *   - phone: VARCHAR(20) - 联系电话
+ *   - room_type: VARCHAR(50) - 房型代码
+ *   - room_number: VARCHAR(20) - 房间号
+ *   - check_in_date: DATE - 入住日期
+ *   - check_out_date: DATE - 退房日期
+ *   - status: VARCHAR(20) - 订单状态
+ *   - total_price: NUMERIC(10,2) - 总价
+ *   - deposit: NUMERIC(10,2) - 押金
+ *   - price_data: JSONB - 价格明细
+ *   - stay_type: VARCHAR(20) - 住宿类型（客房/休息房）
+ * - bills: 账单表（自动创建）
+ * - rooms: 房间表（检查可用性）
+ * - room_types: 房型表（价格参考）
+ *
+ * 💡 业务规则说明：
+ * 1. 订单编号（order_id）必须唯一
+ * 2. 入住日期不能晚于退房日期
+ * 3. 同日入住退房判定为休息房，否则为客房
+ * 4. 房间在订单时间段内必须可用
+ * 5. 价格数据（price_data）可以是数字或JSON对象
+ * 6. 创建订单时自动生成初始账单（收押金记录）
+ * 7. 默认状态为 'pending'（待入住）
+ * 8. 重复订单（相同order_id）会被拒绝
+ *
+ * 作者：AI Assistant
+ * 日期：2025-10-10
+ */
+
 const request = require('supertest');
 const { query } = require('../../database/postgreDB/pg');
-// const { migrateTestDatabase } = require('../database/postgreDB/migrations/test_migration');
 const app = require('../../app');
 const { createTestRoomType, createTestRoom, createTestOrder, generatePriceData } = require('../test-helpers');
 
-describe('POST /api/orders/new', () => {
+describe('POST /api/orders/new - 创建新订单', () => {
   beforeAll(async () => {});
 
   beforeEach(async () => {

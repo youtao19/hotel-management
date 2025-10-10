@@ -1,13 +1,61 @@
 /**
- * 账单路由测试
- * 测试 /api/bills 相关接口
+ * 账单查询测试文件
+ *
+ * 测试接口：GET /api/bills
+ *
+ * ✅ 核心功能说明：
+ * 1. 按日期查询账单记录
+ * 2. 支持多种查询条件（日期、订单ID、支付方式等）
+ * 3. 账单数据聚合和统计
+ * 4. 处理不同类型的账单（房费、押金、退押等）
+ *
+ * ✅ 测试覆盖范围：
+ * - ✅ 正常业务流程（按日期查询账单）
+ * - ✅ 数据过滤（单日、日期范围、订单筛选）
+ * - ✅ 账单类型处理（房费、收押、退押、订单账单）
+ * - ✅ 数据完整性（金额计算、字段验证）
+ * - ✅ 边界情况（空结果、特殊日期）
+ *
+ * 📊 相关数据库表：
+ * - bills: 账单表
+ *   - bill_id: SERIAL PRIMARY KEY - 账单ID
+ *   - order_id: VARCHAR(50) - 订单编号
+ *   - pay_way: VARCHAR(20) - 支付方式（现金/微信/微邮付/平台）
+ *   - change_price: NUMERIC(10,2) - 金额变动
+ *   - change_type: VARCHAR(20) - 变动类型（房费/收押/退押/订单账单）
+ *   - stay_type: VARCHAR(20) - 住宿类型（客房/休息房）
+ *   - stay_date: DATE - 账单日期
+ *   - created_at: TIMESTAMP - 创建时间
+ * - orders: 订单表（关联查询）
+ * - room_types: 房型表（关联查询）
+ *
+ * 💡 业务规则说明：
+ * 1. 账单记录所有订单相关的资金变动
+ * 2. 支付方式：现金、微信、微邮付、平台
+ * 3. 变动类型：
+ *    - 房费：正常房费收入
+ *    - 收押：收取押金（正数）
+ *    - 退押：退还押金（负数）
+ *    - 订单账单：兼容旧格式
+ * 4. stay_date 是账单的业务日期（用于交接班统计）
+ * 5. 金额为负数表示退款
+ * 6. 查询时可按日期范围过滤
+ *
+ * 🧪 测试数据说明：
+ * - 使用测试订单（TEST_开头的order_id）
+ * - 测试房型：TEST_A、TEST_B
+ * - 测试房间：TEST_115、TEST_106
+ * - 测试日期：2025-10-07
+ *
+ * 作者：AI Assistant
+ * 日期：2025-10-10
  */
 
 const request = require('supertest');
 const app = require('../../app');
 const { query, getClient, pool } = require('../../database/postgreDB/pg');
 
-describe('账单路由测试 - /api/bills', () => {
+describe('GET /api/bills - 按日期查询账单', () => {
   let testOrderId1;
   let testOrderId2;
   let testDate;
@@ -15,21 +63,21 @@ describe('账单路由测试 - /api/bills', () => {
   let testRoomType2;
 
   // 设置测试超时时间为 30 秒
-  jest.setTimeout(30000);
+  // jest.setTimeout(30000);
 
   beforeAll(async () => {
     // 设置测试日期
     testDate = '2025-10-07';
 
-    // 清理测试数据
+    // 清理测试数据 - 先删除所有依赖数据，避免外键冲突
     await query('DELETE FROM bills WHERE order_id LIKE $1', ['TEST_%']);
-    await query('DELETE FROM orders WHERE order_id LIKE $1', ['TEST_%']);
-    await query('DELETE FROM rooms WHERE room_number LIKE $1', ['TEST_%']);
+    await query('DELETE FROM orders WHERE room_type LIKE $1', ['TEST_%']); // 删除所有使用TEST_房型的订单
+    await query('DELETE FROM rooms WHERE type_code LIKE $1', ['TEST_%']); // 删除所有使用TEST_房型的房间
     await query('DELETE FROM room_types WHERE type_code LIKE $1', ['TEST_%']);
 
-    // 创建测试房型
-    testRoomType1 = 'TEST_A';
-    testRoomType2 = 'TEST_B';
+    // 创建测试房型 - 使用唯一标识避免与其他测试冲突
+    testRoomType1 = 'TEST_BILLS_A';
+    testRoomType2 = 'TEST_BILLS_B';
 
     await query(`
       INSERT INTO room_types (type_code, type_name, base_price)
@@ -47,10 +95,10 @@ describe('账单路由测试 - /api/bills', () => {
   });
 
   afterAll(async () => {
-    // 清理测试数据
+    // 清理测试数据 - 必须按照外键依赖顺序删除
     await query('DELETE FROM bills WHERE order_id LIKE $1', ['TEST_%']);
-    await query('DELETE FROM orders WHERE order_id LIKE $1', ['TEST_%']);
-    await query('DELETE FROM rooms WHERE room_number LIKE $1', ['TEST_%']);
+    await query('DELETE FROM orders WHERE room_type LIKE $1', ['TEST_%']); // 删除所有使用TEST_房型的订单
+    await query('DELETE FROM rooms WHERE type_code LIKE $1', ['TEST_%']); // 删除所有使用TEST_房型的房间
     await query('DELETE FROM room_types WHERE type_code LIKE $1', ['TEST_%']);
 
     // 注意：不要在这里关闭连接池，全局的 setup.js 会处理
@@ -110,7 +158,7 @@ describe('账单路由测试 - /api/bills', () => {
     });
 
     afterEach(async () => {
-      // 清理测试数据
+      // 清理测试数据 - 按外键依赖顺序
       await query('DELETE FROM bills WHERE order_id LIKE $1', ['TEST_%']);
       await query('DELETE FROM orders WHERE order_id LIKE $1', ['TEST_%']);
     });

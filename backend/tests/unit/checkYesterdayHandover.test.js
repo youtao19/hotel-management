@@ -77,6 +77,8 @@ describe('GET /api/handover/check-yesterday - 检查昨日交接记录', () => {
     it('应该正确检查指定日期交接记录不完整（只有部分支付方式）', async () => {
       // 准备测试数据：在2024-01-20只插入2种支付方式
       const testDate = '2024-01-20';
+      // 确保该日期没有残留数据
+      await query('DELETE FROM handover WHERE date = $1', [testDate]);
       const insertSql = `
         INSERT INTO handover (
           date, handover_person, takeover_person, payment_type,

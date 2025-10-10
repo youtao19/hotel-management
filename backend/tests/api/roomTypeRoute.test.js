@@ -1,9 +1,98 @@
+/**
+ * 房型路由API测试文件
+ *
+ * 测试接口：
+ * - GET /api/room-types - 获取所有房型列表
+ * - GET /api/room-types/:code - 获取指定房型详情
+ * - POST /api/room-types - 创建新房型
+ * - PUT /api/room-types/:code - 更新房型信息
+ * - DELETE /api/room-types/:code - 删除房型
+ * - POST /api/room-types/:code/price - 批量设置房型价格
+ *
+ * ✅ 核心功能说明：
+ * 1. 房型信息的增删改查（CRUD）
+ * 2. 房型价格管理（批量设置日期范围价格）
+ * 3. 房型数据验证（代码唯一性、价格范围）
+ * 4. 房型删除约束（有关联房间时不可删除）
+ *
+ * ✅ 测试覆盖范围：
+ * - ✅ 查询操作（全部房型、单个房型、排序、空数据）
+ * - ✅ 创建操作（成功创建、重复代码、必填字段、数据验证）
+ * - ✅ 更新操作（部分更新、完整更新、不存在的房型）
+ * - ✅ 删除操作（成功删除、关联约束、不存在的房型）
+ * - ✅ 价格管理（单日价格、批量价格、价格验证）
+ * - ✅ 参数验证（特殊字符、格式验证、边界值）
+ * - ✅ 错误处理（404、400、409等）
+ *
+ * 📊 相关数据库表：
+ * - room_types: 房型表
+ *   - type_code: VARCHAR(50) PRIMARY KEY - 房型代码（唯一标识）
+ *   - type_name: VARCHAR(100) NOT NULL - 房型名称
+ *   - base_price: NUMERIC(10,2) NOT NULL - 基础价格
+ *   - description: TEXT - 房型描述
+ *   - facilities: JSONB - 设施信息
+ *   - max_occupancy: INTEGER - 最大入住人数
+ *   - created_at: TIMESTAMP - 创建时间
+ *   - updated_at: TIMESTAMP - 更新时间
+ * - rooms: 房间表（外键约束）
+ * - price_calendar: 价格日历表（关联表）
+ *
+ * 💡 业务规则说明：
+ * 1. 房型代码（type_code）必须唯一，创建后不可修改
+ * 2. 基础价格（base_price）必须大于0
+ * 3. 房型名称不能为空
+ * 4. 删除房型时，如果有关联的房间，则不允许删除
+ * 5. 价格设置支持单日或日期范围批量设置
+ * 6. 更新操作支持部分字段更新
+ * 7. 房型代码不区分大小写但保留原始大小写
+ *
+ * 🎯 接口详细说明：
+ *
+ * **GET /api/room-types**
+ * - 获取所有房型列表
+ * - 按 type_code 排序
+ * - 返回完整房型信息
+ *
+ * **GET /api/room-types/:code**
+ * - 获取指定房型详情
+ * - 不存在返回404
+ *
+ * **POST /api/room-types**
+ * - 创建新房型
+ * - 必填：type_code, type_name, base_price
+ * - type_code 必须唯一
+ * - base_price 必须 > 0
+ *
+ * **PUT /api/room-types/:code**
+ * - 更新房型信息
+ * - type_code 不可修改
+ * - 支持部分字段更新
+ *
+ * **DELETE /api/room-types/:code**
+ * - 删除房型
+ * - 有关联房间时返回400错误
+ *
+ * **POST /api/room-types/:code/price**
+ * - 批量设置价格
+ * - 支持日期范围
+ * - 价格必须 > 0
+ *
+ * 🧪 测试数据规范：
+ * - 测试房型代码以 TEST_ 开头
+ * - 使用 createTestRoomType 辅助函数
+ * - 每个测试前清理数据
+ * - 价格范围：0.01 - 99999.99
+ *
+ * 作者：AI Assistant
+ * 日期：2025-10-10
+ */
+
 const request = require('supertest');
 const app = require('../../app');
 const { query } = require('../../database/postgreDB/pg');
 const { createTestRoomType, createTestRoom } = require('../test-helpers');
 
-describe('Room Type Routes Tests', () => {
+describe('房型路由API测试 - Room Type Routes', () => {
   beforeEach(async () => {
     await global.cleanupTestData();
   });

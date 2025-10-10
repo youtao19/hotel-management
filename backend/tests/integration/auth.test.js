@@ -1,3 +1,65 @@
+/**
+ * 认证系统集成测试文件
+ *
+ * 测试接口：
+ * - POST /api/auth/login - 用户登录
+ * - POST /api/auth/logout - 用户登出
+ * - GET /api/auth/session - 获取会话信息
+ *
+ * ✅ 核心功能说明：
+ * 1. 用户登录认证（邮箱+密码）
+ * 2. Session 会话管理（Redis存储）
+ * 3. 用户登出（清除会话）
+ * 4. 邮箱验证状态检查
+ * 5. 速率限制保护
+ * 6. Cookie 会话持久化
+ *
+ * ✅ 测试覆盖范围：
+ * - ✅ 登录流程（成功登录、Session创建）
+ * - ✅ Session管理（持久化、验证、跨请求）
+ * - ✅ 登出流程（Session删除、Cookie清除）
+ * - ✅ 错误处理（邮箱未验证、错误密码、用户不存在）
+ * - ✅ 边界情况（重复登录、未登录访问）
+ *
+ * 📊 相关数据库表：
+ * - account: 用户账户表
+ *   - id: SERIAL PRIMARY KEY - 用户ID
+ *   - email: VARCHAR(255) UNIQUE - 邮箱（登录凭证）
+ *   - name: VARCHAR(100) - 用户名
+ *   - pw: TEXT - 加密密码（bcrypt）
+ *   - email_verified: BOOLEAN - 邮箱验证状态
+ *   - created_at: TIMESTAMP - 创建时间
+ * - Redis Session Store:
+ *   - sess:${sessionId} - 会话数据（JSON）
+ *   - TTL: 24小时（默认）
+ *
+ * 💡 业务规则说明：
+ * 1. 登录前必须验证邮箱（email_verified=true）
+ * 2. 密码使用 bcrypt 加密存储（salt rounds: 10）
+ * 3. 登录成功后创建 Session，存储在 Redis
+ * 4. Session ID 通过 Cookie 传递（connect.sid）
+ * 5. 登出时删除 Redis 中的 Session 数据
+ * 6. 使用速率限制防止暴力破解（rlflx:* keys）
+ * 7. Session 默认过期时间：24小时
+ *
+ * 🔒 安全特性：
+ * - bcrypt 密码加密
+ * - 登录速率限制
+ * - 邮箱验证要求
+ * - Session 安全存储
+ * - Cookie HttpOnly 保护
+ *
+ * 🧪 测试策略：
+ * - 使用真实的 Redis 和 PostgreSQL
+ * - 测试用户：test@example.com
+ * - 完整的端到端测试流程
+ * - 清理速率限制数据避免测试干扰
+ * - 验证 Session 的创建和销毁
+ *
+ * 作者：AI Assistant
+ * 日期：2025-10-10
+ */
+
 "use strict";
 const request = require('supertest');
 const app = require('../../app');
@@ -7,7 +69,7 @@ const account = require("../../database/postgreDB/tables/account");
 const bcrypt = require('bcrypt');
 const setup = require("../../appSettings/setup");
 
-describe('登录登出测试 - Session 管理', () => {
+describe('认证系统集成测试 - Session 管理', () => {
     let server;
     let redisClient;
     let testUser;

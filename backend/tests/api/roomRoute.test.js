@@ -1,9 +1,106 @@
+/**
+ * 房间路由API测试文件
+ *
+ * 测试接口：
+ * - GET /api/rooms - 获取所有房间列表（支持日期查询）
+ * - GET /api/rooms/available - 获取可用房间列表
+ * - GET /api/rooms/:roomNumber - 获取指定房间详情
+ * - POST /api/rooms - 创建新房间
+ * - PUT /api/rooms/:roomNumber - 更新房间信息
+ * - DELETE /api/rooms/:roomNumber - 删除房间
+ * - PATCH /api/rooms/:roomNumber/status - 更新房间状态
+ *
+ * ✅ 核心功能说明：
+ * 1. 房间信息的增删改查（CRUD）
+ * 2. 房间可用性查询（日期范围查询）
+ * 3. 房间状态管理（空闲/占用/清扫/维修）
+ * 4. 房间与订单的关联检查
+ * 5. 房间数据验证（房号唯一性、房型关联）
+ *
+ * ✅ 测试覆盖范围：
+ * - ✅ 查询操作（全部房间、带日期参数、空数据）
+ * - ✅ 可用房间查询（日期范围、房型筛选、状态过滤）
+ * - ✅ 创建操作（成功创建、重复房号、房型验证）
+ * - ✅ 更新操作（信息更新、状态更新、不存在的房间）
+ * - ✅ 删除操作（成功删除、关联订单约束）
+ * - ✅ 参数验证（日期格式、必填字段、数据类型）
+ * - ✅ 错误处理（404、400、500等）
+ *
+ * 📊 相关数据库表：
+ * - rooms: 房间表
+ *   - room_id: SERIAL PRIMARY KEY - 房间ID
+ *   - room_number: VARCHAR(20) UNIQUE NOT NULL - 房间号（唯一）
+ *   - type_code: VARCHAR(50) NOT NULL - 房型代码（外键）
+ *   - status: VARCHAR(20) DEFAULT '空闲' - 房间状态
+ *   - floor: INTEGER - 楼层
+ *   - price: NUMERIC(10,2) - 当前价格
+ *   - created_at: TIMESTAMP - 创建时间
+ *   - updated_at: TIMESTAMP - 更新时间
+ * - room_types: 房型表（外键关联）
+ * - orders: 订单表（查询房间占用情况）
+ *
+ * 💡 业务规则说明：
+ * 1. 房间号（room_number）必须唯一
+ * 2. 房间必须关联有效的房型（type_code）
+ * 3. 房间状态：空闲、占用、清扫、维修
+ * 4. 可用房间判断规则：
+ *    - 状态为"空闲"或"清扫"
+ *    - 在指定日期范围内没有"待入住"或"已入住"的订单
+ *    - 维修状态的房间不可用
+ * 5. 删除房间时，如果有关联订单，则不允许删除
+ * 6. 日期查询格式：YYYY-MM-DD
+ *
+ * 🎯 接口详细说明：
+ *
+ * **GET /api/rooms**
+ * - 获取所有房间
+ * - 可选参数：date（查询指定日期的房间状态）
+ * - 日期格式：YYYY-MM-DD
+ *
+ * **GET /api/rooms/available**
+ * - 查询可用房间
+ * - 必填参数：startDate, endDate
+ * - 可选参数：typeCode（房型筛选）
+ * - 返回指定日期范围内可用的房间
+ *
+ * **GET /api/rooms/:roomNumber**
+ * - 获取房间详情
+ * - 包含房型信息
+ *
+ * **POST /api/rooms**
+ * - 创建新房间
+ * - 必填：room_number, type_code
+ * - 可选：floor, price, status
+ *
+ * **PUT /api/rooms/:roomNumber**
+ * - 更新房间信息
+ * - room_number 不可修改
+ *
+ * **PATCH /api/rooms/:roomNumber/status**
+ * - 更新房间状态
+ * - 只更新 status 字段
+ *
+ * 🧪 测试数据规范：
+ * - 测试房间号包含时间戳避免冲突
+ * - 使用 createTestRoom 辅助函数
+ * - 每个测试前清理数据
+ * - 测试订单状态：pending、checked-in
+ *
+ * 🔍 可用性查询逻辑：
+ * - 订单日期与查询日期的重叠判断
+ * - 入住日 <= 查询结束日 AND 退房日 > 查询开始日
+ * - 排除已取消和已退房的订单
+ *
+ * 作者：AI Assistant
+ * 日期：2025-10-10
+ */
+
 const request = require('supertest');
 const app = require('../../app');
 const { query } = require('../../database/postgreDB/pg');
 const { createTestRoomType, createTestRoom, createTestOrder } = require('../test-helpers');
 
-describe('Room Routes Tests', () => {
+describe('房间路由API测试 - Room Routes', () => {
   beforeEach(async () => {
     await global.cleanupTestData();
   });
