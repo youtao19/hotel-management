@@ -297,6 +297,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useQuasar } from 'quasar'
 import { shiftHandoverApi } from '../../api/index.js'
 import { useShiftHandoverStore } from '../../stores/shiftHandoverStore.js'
+import { useUserStore } from '../../stores/userStore.js'
 import CheckData from './CheckData.vue'
 import ShiftHandoverPaymentTable from './ShiftHandoverPaymentTable.vue'
 import ShiftHandoverSpecialStats from './ShiftHandoverSpecialStats.vue'
@@ -316,6 +317,7 @@ const emit = defineEmits(['step-change', 'complete', 'logout'])
 
 const $q = useQuasar()
 const shiftHandoverStore = useShiftHandoverStore()
+const userStore = useUserStore()
 
 // 响应式状态
 const stepLoading = ref(false)
@@ -506,8 +508,8 @@ const confirmationData = computed(() => {
 
 // 完成交接的信息
 const completeHandoverInfo = computed(() => ({
-  currentOperator: '张三', // 当前交班人
-  nextOperator: handoverInfo.value.nextOperator || '李四', // 接班人
+  currentOperator: userStore.user.username || '交班人', // 当前交班人（从 userStore 获取）
+  nextOperator: handoverInfo.value.nextOperator || '接班人', // 接班人
   completedTime: new Date().toLocaleString('zh-CN', {
     year: 'numeric',
     month: '2-digit',
@@ -954,7 +956,7 @@ const completeHandover = async () => {
 
     const handoverData = {
       date: handoverDateStr,
-      handoverPerson: '当前操作员', // TODO: 从用户 store 获取当前用户名
+      handoverPerson: userStore.user.username || '当前操作员', // 从 userStore 获取当前用户名
       receivePerson: handoverInfo.value.nextOperator.trim(),
       paymentData: paymentDataForBackend,
       vipCard: confirmationData.value.vipCards || 0,
