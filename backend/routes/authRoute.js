@@ -128,6 +128,10 @@ router.post("/signup", async (req, res, next) => {
 });
 
 router.post("/login", async (req, res) => {
+
+    console.log("req.session exists?", !!req.session);
+    console.log("req.login exists?", typeof req.login);
+
     try {
         const valid = validateLogin(req.body);
         if (!valid) {
@@ -245,7 +249,6 @@ router.post("/login", async (req, res) => {
         console.error("some error occured in login",e);
         return res.status(500).json()
     }
-
 });
 
 // 向新注册用户发送验证邮件

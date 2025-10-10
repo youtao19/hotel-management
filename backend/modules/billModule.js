@@ -351,25 +351,43 @@ async function getOrderBillDetails(order_id) {
 // 更新账单（新版本：使用 change_price + change_type）
 async function updateBill(billId, updateData) {
     try {
+        // 1. 先获取原始账单数据
+        const originalResult = await query('SELECT * FROM bills WHERE bill_id = $1', [billId]);
+
+        if (originalResult.rows.length === 0) {
+            throw new Error(`账单 ${billId} 不存在`);
+        }
+
+        const originalBill = originalResult.rows[0];
+
+        // 2. 对比数据，构建需要更新的字段
         const updateFields = [];
         const values = [];
         let paramIndex = 1;
+        let hasChanges = false;
 
         // 可更新的字段（移除了 room_fee, deposit, refund_deposit, total_income）
         const allowedFields = ['change_price', 'change_type', 'pay_way', 'remarks'];
 
         allowedFields.forEach(field => {
-            if (updateData[field] !== undefined) {
+            if (updateData[field] !== undefined && updateData[field] !== originalBill[field]) {
+                // 只有当值真正改变时才添加到更新列表
                 updateFields.push(`${field} = $${paramIndex}`);
                 values.push(updateData[field]);
                 paramIndex++;
+                hasChanges = true;
+
+                console.log(`📝 [updateBill] 字段 ${field} 从 ${originalBill[field]} 更新为 ${updateData[field]}`);
             }
         });
 
-        if (updateFields.length === 0) {
-            throw new Error('没有要更新的字段');
+        // 3. 如果没有变化，直接返回原始数据
+        if (!hasChanges || updateFields.length === 0) {
+            console.log(`ℹ️ [updateBill] 账单 ${billId} 没有变化，返回原始数据`);
+            return originalBill;
         }
 
+        // 4. 执行更新
         const updateQuery = `
             UPDATE bills
             SET ${updateFields.join(', ')}
@@ -380,10 +398,7 @@ async function updateBill(billId, updateData) {
 
         const result = await query(updateQuery, values);
 
-        if (result.rows.length === 0) {
-            throw new Error(`账单 ${billId} 不存在`);
-        }
-
+        console.log(`✅ [updateBill] 账单 ${billId} 更新成功`);
         return result.rows[0];
     } catch (error) {
         console.error('更新账单失败:', error);

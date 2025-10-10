@@ -1,41 +1,57 @@
-const Redis = require("ioredis");
+const { createClient } = require("redis");
 const setup = require("../../appSettings/setup");
-let db = null;
+
+
+let client = null;
 let isInitialized = false;
 
 const redis = {
-    initialize: () => {
+    initialize: async () => {
         // 只初始化一次，避免创建多个连接
-        if (isInitialized && db) {
+        if (isInitialized && client) {
             console.log('Redis已经初始化，跳过重复初始化');
-            return db;
+            return client;
         }
 
-        db = new Redis({
-            host: setup.db.redis.host,
-            port: setup.db.redis.port,
-            enable_offline_queue: false,
-            username: "default", // needs Redis >= 6
-            password: setup.db.redis.password
-        });
-        isInitialized = true;
-        return db;
+        try {
+            client = createClient({
+                socket: {
+                    host: setup.db.redis.host || 'localhost',
+                    port: parseInt(setup.db.redis.port) || 6379
+                },
+                password: setup.db.redis.password
+            });
+
+            client.on('error', (err) => {
+                console.error('Redis错误:', err);
+            });
+
+            await client.connect();
+            isInitialized = true;
+            console.log('Redis连接成功');
+            return client;
+        } catch (error) {
+            console.error('Redis初始化失败:', error);
+            throw error;
+        }
     },
+
     getClient: () => {
-      return db;
+        return client;
     },
+
     close: async () => {
-        if (db && db.disconnect) {
-            // 使用 disconnect 而不是 quit，立即关闭连接
-            db.disconnect();
-            db = null;
-            isInitialized = false;
-            console.log('Redis连接已关闭');
+        if (client && isInitialized) {
+            try {
+                await client.quit();
+                client = null;
+                isInitialized = false;
+                console.log('Redis连接已关闭');
+            } catch (error) {
+                console.error('关闭Redis连接失败:', error);
+            }
         }
     }
 };
 
 module.exports = redis;
-
-
-

@@ -1,97 +1,112 @@
-// app.js
 "use strict";
 const express = require("express");
-const path = require("path");
 const session = require("express-session");
 const setup = require("./appSettings/setup");
 const posgreDB = require("./database/postgreDB/pg");
 const authtication = require("./modules/authentication");
 const RedisDb = require('./database/redis/redis');
-const RedisStore = require("connect-redis")(session);
-
+const { RedisStore } = require("connect-redis");
 
 let app = express();
 
 app.disable('x-powered-by');
 
-// 先挂载解析中间件与会话/认证，确保后续路由能访问 req.body 和会话
-app.use(express.json({ limit: setup.reqSizeLimit, strict: false }));
-app.use(express.urlencoded({ extended: true, limit: setup.reqSizeLimit }));
-app.use(express.text({ limit: setup.reqSizeLimit }));
+// 解析中间件
+app.use(express.json({
+  limit: setup.reqSizeLimit,
+  strict: false
+}));
 
-const redisClient = RedisDb.initialize();
+app.use(express.urlencoded({
+  extended: true,
+  limit: setup.reqSizeLimit
+}));
 
-const store = new RedisStore({
-  client: redisClient,
-  prefix: 'sess:',
-  ttl: setup.cookieMaxAge , // 设置session过期时间
-  // 不要 ttl，这会报错
-  // serializer: JSON（可选）
-});
-
-const sessionOptions = {
-  name: setup.appName + ".sid",
-  secret: setup.sessionSecret,
-  resave: false,
-  rolling: false,
-  cookie: {
-    secure: setup.env !== "dev",
-    maxAge: setup.cookieMaxAge,
-    sameSite: setup.env !== "dev" ? "lax" : "none"
-  },
-  store: store,
-  saveUninitialized: false,
-};
-
-if (setup.env !== "dev") {
-  sessionOptions.proxy = true;
-  app.set("trust proxy", true);
-  sessionOptions.cookie.sameSite = "strict";
-}
-
-app.use(session(sessionOptions));
-app.use(authtication.authenticationMiddleware);
+app.use(express.text({
+  limit: setup.reqSizeLimit
+}));
 
 if (setup.env === "dev") {
   const history = require('connect-history-api-fallback');
   const cors = require('cors');
   app.use(cors({
-    origin: ['http://localhost:9000', 'http://localhost:9001'],
-    credentials: true, // 允许携带cookie和session
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    origin: ['http://localhost:9000'],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']
   }));
-  // app.use(history());
-
+  app.use(history());
 }
 
-// 引入并挂载路由
-const userRoute = require("./routes/userRoute");
-const authRoute = require("./routes/authRoute");
-const orderRoute = require("./routes/orderRoute");
-const roomRoute = require("./routes/roomRoute");
-const roomTypeRoute = require("./routes/roomTypeRoute");
-const billRoute = require("./routes/billRoute");
-const reviewRoute = require("./routes/reviewRoute");
-const HandoverRoute = require("./routes/handoverRoute");
-const revenueRoute = require("./routes/revenueRoute");
-const revenueStatisticsRoute = require("./routes/revenueStatisticsRoute");
+// 初始化 session 和 Redis store 的函数
+async function initializeSession() {
+    const redisClient = await RedisDb.initialize();
 
-app.use("/api/user", userRoute);
-app.use("/api/auth", authRoute);
-app.use("/api/orders", orderRoute);
-app.use("/api/rooms", roomRoute);
-app.use("/api/room-types", roomTypeRoute);
-app.use("/api/bills", billRoute);
-app.use("/api/reviews", reviewRoute);
-app.use("/api/handover", HandoverRoute);
-app.use("/api/revenue", revenueRoute);
-app.use("/api/revenue-statistics", revenueStatisticsRoute);
-app.get("/api/hup", (req, res) => res.status(200).json({ ok: true }));
+    const sessionOptions = {
+        name: setup.appName + ".sid",
+        store: new RedisStore({ client: redisClient }),
+        secret: setup.sessionSecret,
+        resave: false,
+        rolling: false,
+        cookie: {
+            secure: false,
+            maxAge: setup.cookieMaxAge,
+            sameSite: "none"
+        },
+        saveUninitialized: false,
+    };
 
-app.all("/", function (req, res) {
-  console.log(`req route not found with url : ${req.originalUrl}\nreq ip is : ${req.ip}`);
-  res.status(404).json();
-});
+    if (setup.env !== "dev") {
+        sessionOptions.proxy = true;
+        app.set("trust proxy", true);
+        sessionOptions.cookie.sameSite = true;
+    }
+
+    // ✅ 先注册 session 和 authentication 中间件
+    app.use(session(sessionOptions));
+    app.use(authtication.authenticationMiddleware);
+
+    console.log('Session 中间件已初始化');
+
+    // ✅ 然后注册所有路由 (确保在中间件之后)
+    const userRoute = require("./routes/userRoute");
+    app.use("/api/user", userRoute);
+
+    const authRoute = require("./routes/authRoute");
+    app.use("/api/auth", authRoute);
+
+    const orderRoute = require("./routes/orderRoute");
+    app.use("/api/orders", orderRoute);
+
+    const roomRoute = require("./routes/roomRoute");
+    app.use("/api/rooms", roomRoute);
+
+    const roomTypeRoute = require("./routes/roomTypeRoute");
+    app.use("/api/room-types", roomTypeRoute);
+
+    const billRoute = require("./routes/billRoute");
+    app.use("/api/bills", billRoute);
+
+    const reviewRoute = require("./routes/reviewRoute");
+    app.use("/api/reviews", reviewRoute);
+
+    const HandoverRoute = require("./routes/handoverRoute");
+    app.use("/api/handover", HandoverRoute);
+
+    const revenueRoute = require("./routes/revenueRoute");
+    app.use("/api/revenue", revenueRoute);
+
+    const revenueStatisticsRoute = require("./routes/revenueStatisticsRoute");
+    app.use("/api/revenue-statistics", revenueStatisticsRoute);
+
+    app.get("/api/hup", (req, res) => res.status(200).json({ ok: true }));
+
+    app.all("/", function (req, res) {
+      console.log(`req route not found with url : ${req.originalUrl}\nreq ip is : ${req.ip}`);
+      res.status(404).json();
+    });
+
+    console.log('所有路由已注册');
+}
 
 module.exports = app;
+module.exports.initializeSession = initializeSession;

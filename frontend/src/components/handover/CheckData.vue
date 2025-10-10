@@ -196,12 +196,13 @@
             <strong>订单号：</strong>{{ editDialog.data.orderNo }}
           </div>
           <div class="q-mb-md">
-            <q-input
+            <q-select
               v-model="editDialog.data.changeType"
+              :options="changeTypeOptions"
               label="账单类型"
               outlined
-              readonly
-              disable
+              emit-value
+              map-options
             />
           </div>
           <div class="q-mb-md">
@@ -223,12 +224,15 @@
             label="取消"
             flat
             @click="cancelEdit"
+            :disable="isSavingEdit"
           />
           <q-btn
             color="positive"
             icon="check"
             label="确认"
             @click="saveEdit"
+            :loading="isSavingEdit"
+            :disable="isSavingEdit"
           />
         </q-card-actions>
       </q-card>
@@ -243,10 +247,23 @@ import { billApi } from '../../api/index.js'
 
 const $q = useQuasar()
 
+// 账单类型选项
+const changeTypeOptions = [
+  '房费',
+  '收押',
+  '押金',
+  '补收',
+  '退押',
+  '退押金',
+  '退款',
+  '订单账单'
+]
+
 // 响应式数据
 const isConfirmingData = ref(false)
 const dataCheckCompleted = ref(false) // 数据核对是否已完成
 const isLoadingData = ref(false) // 是否正在加载数据
+const isSavingEdit = ref(false) // 是否正在保存编辑
 
 // 表格列定义
 const roomColumns = [
@@ -507,25 +524,69 @@ const cancelEdit = () => {
 }
 
 // 保存编辑
-const saveEdit = () => {
-  if (editDialog.value.originalData) {
-    editDialog.value.originalData.amount = editDialog.value.data.amount
-    editDialog.value.originalData.confirmed = false // 修改后需要重新确认
-
-    // 数据修改后重置核对完成状态
-    dataCheckCompleted.value = false
-
-    // 重新计算汇总数据
-    calculateSummaryData()
-
-    $q.notify({
-      type: 'positive',
-      message: `账单 ${editDialog.value.data.billId} 数据修改成功，请重新确认数据`,
-      position: 'top'
-    })
+const saveEdit = async () => {
+  if (!editDialog.value.originalData) {
+    return
   }
 
-  cancelEdit()
+  try {
+    isSavingEdit.value = true
+
+    // 准备更新数据
+    const updateData = {
+      change_type: editDialog.value.data.changeType,
+      change_price: editDialog.value.data.amount
+    }
+
+    console.log('📝 [saveEdit] 准备更新账单:', {
+      billId: editDialog.value.data.billId,
+      updateData
+    })
+
+    // 调用后端 API 更新账单
+    const response = await billApi.updateBill(editDialog.value.data.billId, updateData)
+
+    console.log('✅ [saveEdit] API返回数据:', response)
+
+    if (response.success && response.data) {
+      // 用返回的数据更新表格中的对应行
+      const updatedBill = response.data
+      const originalRow = editDialog.value.originalData
+
+      // 更新显示数据
+      originalRow.changeType = updatedBill.change_type
+      originalRow.amount = parseFloat(updatedBill.change_price) || 0
+      originalRow.payWay = updatedBill.pay_way
+      originalRow.confirmed = false // 修改后需要重新确认
+
+      // 数据修改后重置核对完成状态
+      dataCheckCompleted.value = false
+
+      // 重新计算汇总数据
+      calculateSummaryData()
+
+      $q.notify({
+        type: 'positive',
+        message: `账单 ${editDialog.value.data.billId} 更新成功，请重新确认数据`,
+        position: 'top'
+      })
+
+      // 关闭对话框
+      cancelEdit()
+    } else {
+      throw new Error(response.message || '更新失败')
+    }
+
+  } catch (error) {
+    console.error('❌ [saveEdit] 更新账单失败:', error)
+    $q.notify({
+      type: 'negative',
+      message: error.message || '更新账单失败，请重试',
+      position: 'top'
+    })
+  } finally {
+    isSavingEdit.value = false
+  }
 }
 
 // 确认数据核对
