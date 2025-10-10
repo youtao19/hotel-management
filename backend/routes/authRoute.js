@@ -128,10 +128,6 @@ router.post("/signup", async (req, res, next) => {
 });
 
 router.post("/login", async (req, res) => {
-
-    console.log("req.session exists?", !!req.session);
-    console.log("req.login exists?", typeof req.login);
-
     try {
         const valid = validateLogin(req.body);
         if (!valid) {
@@ -218,6 +214,7 @@ router.post("/login", async (req, res) => {
                             }
                         };
                         await req.login(params);
+                        
                         // Reset rate limiter on successful authorisation
                         if (resUsernameAndIP !== null && resUsernameAndIP.consumedPoints > 0) {
                             await limiterConsecutiveFailsByUsernameAndIP.delete(usernameIPkey);

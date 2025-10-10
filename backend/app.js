@@ -48,18 +48,17 @@ async function initializeSession() {
         resave: false,
         rolling: false,
         cookie: {
-            secure: setup.env !== "dev", // ✅ 生产环境才用 true
+            secure: setup.env === "production", // ✅ 只有生产环境才用 true
             maxAge: setup.cookieMaxAge,
-            sameSite: setup.env === "dev" ? "lax" : "none", // ✅ 开发环境用 lax
+            sameSite: setup.env === "production" ? "none" : "lax", // ✅ 生产环境用 none，其他用 lax
             httpOnly: true // ✅ 添加安全性
         },
         saveUninitialized: false,
     };
 
-    if (setup.env !== "dev") {
+    if (setup.env === "production") {
         sessionOptions.proxy = true;
         app.set("trust proxy", true);
-        sessionOptions.cookie.sameSite = true;
     }
 
     // ✅ 先注册 session 和 authentication 中间件

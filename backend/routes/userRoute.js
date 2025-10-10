@@ -15,26 +15,19 @@ const setup = require("../appSettings/setup"); // ✅ 添加这行
 // 登出路由不需要认证检查，放在认证中间件之前
 router.get("/logout", async (req, res, next) => {
     try {
-        console.log('=== 开始登出流程 ===');
-        console.log('Session exists:', !!req.session);
-        console.log('Session ID:', req.sessionID);
-        console.log('Session data:', req.session);
-
         // 即使 session 不存在，也清除 cookie
         const cookieName = setup.appName + ".sid";
 
         if (req.session && req.logout) {
             await req.logout();
-            console.log('✅ 登出方法执行成功');
         } else if (req.session) {
             // 手动清理 session
             await new Promise((resolve, reject) => {
                 req.session.destroy((err) => {
                     if (err) {
-                        console.error('❌ Session destroy 失败:', err);
+                        console.error('Session destroy 失败:', err);
                         reject(err);
                     } else {
-                        console.log('✅ Session 已销毁');
                         resolve();
                     }
                 });
@@ -45,25 +38,21 @@ router.get("/logout", async (req, res, next) => {
         res.clearCookie(cookieName, {
             path: '/',
             httpOnly: true,
-            sameSite: setup.env === "dev" ? "lax" : "none",
-            secure: setup.env !== "dev"
+            sameSite: setup.env === "production" ? "none" : "lax",
+            secure: setup.env === "production"
         });
-
-        console.log('✅ Cookie 已清除:', cookieName);
-        console.log('=== 登出完成 ===');
 
         return res.status(200).json({ message: '登出成功' });
     } catch (e) {
-        console.error('❌ 登出操作失败:', e);
-        console.error('错误堆栈:', e.stack);
+        console.error('登出操作失败:', e);
 
         // 即使失败也清除 cookie
         const cookieName = setup.appName + ".sid";
         res.clearCookie(cookieName, {
             path: '/',
             httpOnly: true,
-            sameSite: setup.env === "dev" ? "lax" : "none",
-            secure: setup.env !== "dev"
+            sameSite: setup.env === "production" ? "none" : "lax",
+            secure: setup.env === "production"
         });
 
         return res.status(200).json({ message: '登出完成' });

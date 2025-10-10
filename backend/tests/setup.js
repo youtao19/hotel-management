@@ -16,6 +16,7 @@ process.env.OPENAI_CHAT_COMPLETION_PATH = process.env.OPENAI_CHAT_COMPLETION_PAT
 
 const db = require('../database/postgreDB/pg');
 const redisDB = require('../database/redis/redis');
+const app = require('../app');
 
 // 所有测试表，统一管理
 const tables = [
@@ -32,11 +33,28 @@ const tables = [
 // 生成 TRUNCATE SQL
 const truncateTablesSQL = () => `TRUNCATE TABLE ${tables.join(', ')} RESTART IDENTITY CASCADE;`;
 
+// ✅ 立即定义全局清理函数（在 beforeAll 之前）
+global.cleanupTestData = async () => {
+  try {
+    await db.query(truncateTablesSQL());
+  } catch (error) {
+    console.warn('cleanupTestData 警告:', error.message);
+  }
+};
+
 // 全局测试设置
 beforeAll(async () => {
-  await db.initializeHotelDB(); // 初始化数据库结构
-  redisDB.initialize(); // 初始化Redis连接
-});
+  // ✅ 初始化 app 的 session 和路由（重要！）
+  await app.initializeSession();
+  
+  // 初始化数据库结构
+  await db.initializeHotelDB();
+  
+  // 初始化 Redis 连接
+  await redisDB.initialize();
+  
+  console.log('✅ 测试环境初始化完成');
+}, 60000); // 增加超时时间
 
 // 全局测试清理
 afterAll(async () => {
@@ -53,12 +71,3 @@ afterAll(async () => {
     await new Promise(resolve => setTimeout(resolve, 100));
   }
 });
-
-// 提供给各个测试文件使用的清理函数
-global.cleanupTestData = async () => {
-  try {
-    await db.query(truncateTablesSQL());
-  } catch (error) {
-    console.warn('cleanupTestData 警告:', error.message);
-  }
-};
