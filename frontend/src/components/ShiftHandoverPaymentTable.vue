@@ -1,12 +1,5 @@
 <template>
   <div class="shift-table-wrapper">
-    <!-- 调试信息 -->
-    <div style="background: #ffeb3b; padding: 5px; margin-bottom: 5px; font-size: 11px;">
-      🔍 表格组件内部调试：<br/>
-      payWay.other = "{{ payWay.other }}"<br/>
-      paymentData.restRefundDeposit = {{ paymentData.restRefundDeposit }}<br/>
-      paymentData.restRefundDeposit[payWay.other] = {{ paymentData.restRefundDeposit[payWay.other] }}
-    </div>
     <table class="shift-table">
       <thead>
         <tr class="table-header">

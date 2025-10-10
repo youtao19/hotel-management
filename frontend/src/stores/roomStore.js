@@ -859,12 +859,10 @@ export const useRoomStore = defineStore('room', () => {
 
     // 如果是维修或清扫状态，保持原样
     if (room.status === ROOM_STATES.REPAIR || room.status === ROOM_STATES.CLEANING) {
-      console.log(`房间${room.room_number}：保持原状态${room.status}`);
       return room.status;
     }
 
     // 其他任何状态均视为可用
-    console.log(`房间${room.room_number}：设为可用状态`);
     return ROOM_STATES.AVAILABLE;
   }
 

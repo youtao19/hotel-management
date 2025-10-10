@@ -17,7 +17,6 @@ const VALID_ORDER_STATES = ['pending', 'checked-in', 'checked-out', 'cancelled']
 router.get('/', async (req, res) => {
   try {
     console.log('获取所有订单请求');
-    // 在开发调试时可通过 ?debug=1 触发表存在检查，避免生产热路径额外查询
     if (process.env.NODE_ENV === 'dev' && req.query?.debug === '1') {
       try {
         const tableCheck = await orderModule.checkTableExists();

@@ -345,11 +345,7 @@ const handleStartHandover = async () => {
     }).onOk(() => {
       startHandoverProcess()
     }).onCancel(() => {
-      $q.notify({
-        type: 'info',
-        message: '已取消交接班',
-        position: 'top'
-      })
+      console.log('MainContent - 已取消交接班')
     })
   } catch (error) {
     $q.notify({
@@ -450,11 +446,7 @@ const loadHandoverRecordData = async (date) => {
       recordViewData.value.taskList = memoResponse.data || []
     }
 
-    $q.notify({
-      type: 'positive',
-      message: '交接记录加载完成',
-      position: 'top'
-    })
+
 
   } catch (error) {
     console.error('加载交接记录数据失败:', error)
@@ -493,21 +485,11 @@ watch(() => props.selectedRecord, async (newRecord) => {
     console.log('MainContent - 当前步骤变更为:', currentStep.value)
 
     try {
-      $q.notify({
-        type: 'info',
-        message: `正在加载 ${newRecord.date} 的交接记录...`,
-        position: 'top'
-      })
-
+      console.log('MainContent - 加载交接记录:', newRecord.date)
       // 调用后端API获取交接班表格数据
       await loadHandoverRecordData(newRecord.date)
     } catch (error) {
       console.error('从父组件加载交接记录失败:', error)
-      $q.notify({
-        type: 'negative',
-        message: '加载交接记录失败，请重试',
-        position: 'top'
-      })
     }
   }
 })
@@ -517,11 +499,6 @@ const closeRecordView = () => {
   selectedRecord.value = null
   currentStep.value = 0 // 返回初始状态
 
-  $q.notify({
-    type: 'info',
-    message: '已关闭交接记录查看',
-    position: 'top'
-  })
 }
 
 // 更新当前时间
@@ -548,19 +525,9 @@ const loadTodayStats = async () => {
     if (response.success) {
       todayStats.value.totalRooms = response.data.openCount || 0
       todayStats.value.restRooms = response.data.restCount || 0
-
-      console.log('✅ [MainContent] 今日统计数据加载成功:', {
-        开房数: todayStats.value.totalRooms,
-        休息房数: todayStats.value.restRooms
-      })
     }
   } catch (error) {
-    console.error('❌ [MainContent] 加载今日统计数据失败:', error)
-    $q.notify({
-      type: 'warning',
-      message: '加载今日统计数据失败',
-      position: 'top'
-    })
+    console.error('加载今日统计数据失败:', error)
   }
 }
 

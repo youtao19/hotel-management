@@ -959,9 +959,6 @@ const roomCalendarEvents = computed(() => {
     const dateStr = `${year}/${String(month + 1).padStart(2, '0')}/${String(i).padStart(2, '0')}`;
     events.push(dateStr);
   }
-
-  console.log('生成的日历事件:', events.slice(0, 5), '...'); // 调试信息
-
   return events;
 })
 
@@ -993,12 +990,6 @@ const getEventColor = (timestamp) => {
     default:
       color = 'grey'; // 默认灰色
   }
-
-  // 添加调试信息（仅显示前几个日期的信息）
-  if (timestamp.endsWith('/01') || timestamp.endsWith('/02')) {
-    console.log(`getEventColor: ${timestamp} -> ${dateStr} -> ${status} -> ${color}`);
-  }
-
   return color;
 }
 
@@ -1068,8 +1059,6 @@ function onDateSelect(date) {
     color: getEventColor(date), // 使用getEventColor函数获取颜色
     guestName: booking?.guest_name || null
   };
-
-  console.log('选中日期信息:', selectedDateInfo.value); // 添加调试信息
 }
 
 /**
@@ -1377,7 +1366,6 @@ const availableRoomTypeOptions = computed(() => {
       .filter(roomType => {
         // 检查该房型是否有房间存在
         const totalRoomCount = roomStore.rooms.filter(room => room.type_code === roomType.type_code).length
-        console.log(`房型 ${roomType.type_code} (${roomType.type_name}) 有 ${totalRoomCount} 个房间`)
         return totalRoomCount > 0 // 只显示有房间的房型（不论是否可用）
       })
       .map(roomType => ({
@@ -1464,16 +1452,7 @@ function getRoomDateStatus(dateInput) {
 
   // 检查是否有预订数据
   if (!roomBookingData.value || roomBookingData.value.length === 0) {
-    // 添加调试信息（仅显示前几个日期的信息）
-    if (dateStr.endsWith('-01') || dateStr.endsWith('-02')) {
-      console.log(`getRoomDateStatus: ${dateStr} -> 无预订数据 -> available`);
-    }
     return 'available';
-  }
-
-  // 添加调试信息
-  if (dateStr.endsWith('-01')) {
-    console.log(`getRoomDateStatus: ${dateStr} -> 预订数据数量: ${roomBookingData.value.length}`);
   }
 
   // 检查日期是否在任何预订范围内

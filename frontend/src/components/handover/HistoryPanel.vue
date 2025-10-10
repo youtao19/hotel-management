@@ -58,11 +58,6 @@ const hasHistoryRecords = computed(() => historyRecords.value.length > 0)
 const handleSearchHistory = async () => {
   try {
     isLoading.value = true
-    $q.notify({
-      type: 'info',
-      message: '正在查询交接班历史记录...',
-      position: 'top'
-    })
 
     // 调用后端API查询所有交接班记录
     const response = await shiftHandoverApi.queryHandoverRecords()

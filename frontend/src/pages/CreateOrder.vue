@@ -4,14 +4,6 @@
     <div class="q-pa-md">
       <!-- 页面标题 -->
       <h1 class="text-h4 q-mb-md">创建订单</h1>
-
-    <!-- 添加测试数据按钮 -->
-    <div class="row q-mb-md">
-      <q-btn label="填充测试数据" color="orange" icon="bug_report" @click="fillTestData" class="q-mr-sm" />
-      <q-btn v-if="isDev" label="随机数据" color="purple" icon="auto_awesome" @click="fillRandomData" class="q-mr-sm" />
-      <q-btn label="快速休息房" color="teal" icon="hotel" @click="fillRestRoomData" />
-    </div>
-
     <!-- 主卡片容器，包含整个表单 -->
     <q-card>
       <q-card-section>
@@ -156,10 +148,6 @@
                   </div>
                   <div class="col-auto q-ml-sm text-caption text-grey-6" v-if="isRestRoom">
                     当日入住，当日离店
-                  </div>
-                  <!-- 调试信息 -->
-                  <div class="col-auto q-ml-sm text-caption text-grey-6" v-if="isDev">
-                    (调试: 入住={{orderData.checkInDate}}, 离店={{orderData.checkOutDate}}, 休息房={{isRestRoom}})
                   </div>
                 </div>
               </div>
@@ -916,19 +904,11 @@ async function submitOrder() {
       // 构建价格数据
   let roomPriceData
 
-  // 调试信息
-  console.log('🏨 订单日期信息：');
-  console.log('  入住日期：', orderData.value.checkInDate);
-  console.log('  退房日期：', orderData.value.checkOutDate);
-  console.log('  是否多日：', isMultiDay.value);
-  console.log('  日期列表：', dateList.value);
-  console.log('  每日价格：', dailyPrices.value);
+
 
   if (isMultiDay.value) {
     // 多日订单：使用JSON格式
     roomPriceData = { ...dailyPrices.value }
-    console.log('📊 多日订单价格数据：', roomPriceData);
-
     // 验证所有日期都有价格
     const missingPrices = dateList.value.filter(date => !dailyPrices.value[date] || dailyPrices.value[date] <= 0)
     if (missingPrices.length > 0) {
@@ -1051,206 +1031,6 @@ async function submitOrder() {
       multiLine: true
     });
   }
-}
-
-/**
- * 填充测试数据
- */
-function fillTestData() {
-  // 填充基本订单数据
-  orderData.value.guestName = '张测试'
-  orderData.value.idNumber = '110101199001011234'
-  orderData.value.phone = '13800138000'
-  orderData.value.remarks = '测试订单，请勿处理'
-
-  // 获取第一个可用的房间类型
-  const availableRoomTypes = roomTypeOptionsWithCount.value
-    .filter(type => type.availableCount > 0)
-
-  if (availableRoomTypes.length > 0) {
-    // 设置房间类型
-    orderData.value.roomType = availableRoomTypes[0].value
-
-    // 等待DOM更新
-    nextTick(() => {
-      // 设置第一个可用房间
-      if (availableRoomOptions.value.length > 0) {
-        orderData.value.roomNumber = availableRoomOptions.value[0].value
-
-        // 根据选择的房间直接设置房间价格
-        const selectedRoom = roomStore.getRoomByNumber(orderData.value.roomNumber)
-        if (selectedRoom) {
-          console.log('设置房间价格:', selectedRoom.price)
-          orderData.value.roomPrice = Number(selectedRoom.price)
-        } else {
-          console.error('无法获取选择房间的价格信息')
-          // 设置一个默认价格
-          orderData.value.roomPrice = 299
-        }
-      }
-    })
-  }
-
-  // 设置支付信息
-  orderData.value.paymentMethod = 'cash'
-  orderData.value.deposit = 200
-
-  // 显示通知
-  $q.notify({
-    type: 'positive',
-    message: '测试数据已填充',
-    position: 'top'
-  })
-
-  // 添加验证
-  nextTick(() => {
-    // 验证房间是否正确选择
-    const room = roomStore.getRoomByNumber(orderData.value.roomNumber)
-    if (!room) {
-      console.error('测试数据填充后，无法找到选择的房间')
-    } else {
-      console.log('测试数据填充后，房间状态:', room.status)
-      console.log('测试数据填充后，房间价格:', room.price)
-    }
-  })
-}
-
-/**
- * 填充随机测试数据
- */
-function fillRandomData() {
-  // 随机名字
-  const firstNames = ['张', '王', '李', '赵', '刘', '陈', '杨', '黄']
-  const lastNames = ['明', '芳', '军', '华', '英', '伟', '强', '勇', '静', '敏']
-  const randomName = firstNames[Math.floor(Math.random() * firstNames.length)] +
-    lastNames[Math.floor(Math.random() * lastNames.length)]
-
-  // 随机身份证
-  const randomIdPrefix = '1101011990'
-  const randomMonth = String(Math.floor(Math.random() * 12) + 1).padStart(2, '0')
-  const randomDay = String(Math.floor(Math.random() * 28) + 1).padStart(2, '0')
-  const randomSuffix = String(Math.floor(Math.random() * 10000)).padStart(4, '0')
-  const randomId = `${randomIdPrefix}${randomMonth}${randomDay}${randomSuffix}`
-
-  // 随机手机号
-  const phonePrefix = ['138', '139', '186', '187', '158', '159']
-  const randomPhone = phonePrefix[Math.floor(Math.random() * phonePrefix.length)] +
-    String(Math.floor(Math.random() * 100000000)).padStart(8, '0')
-
-  // 填充数据
-  orderData.value.guestName = randomName
-  orderData.value.idNumber = randomId
-  orderData.value.phone = randomPhone
-  orderData.value.remarks = `随机生成的测试订单 - ${new Date().toLocaleString()}`
-
-  // 随机选择一个可用房型
-  const availableRoomTypes = roomTypeOptionsWithCount.value
-    .filter(type => type.availableCount > 0)
-
-  if (availableRoomTypes.length > 0) {
-    const randomRoomType = availableRoomTypes[Math.floor(Math.random() * availableRoomTypes.length)]
-    orderData.value.roomType = randomRoomType.value
-
-    // 等待DOM更新
-    nextTick(() => {
-      // 随机选择一个可用房间
-      if (availableRoomOptions.value.length > 0) {
-        const randomIndex = Math.floor(Math.random() * availableRoomOptions.value.length)
-        orderData.value.roomNumber = availableRoomOptions.value[randomIndex].value
-
-        // 根据选择的房间直接设置房间价格
-        const selectedRoom = roomStore.getRoomByNumber(orderData.value.roomNumber)
-        if (selectedRoom) {
-          console.log('设置随机房间价格:', selectedRoom.price)
-          orderData.value.roomPrice = Number(selectedRoom.price)
-        } else {
-          // 设置一个随机默认价格 (200-800)
-          orderData.value.roomPrice = Math.floor(Math.random() * 601) + 200
-        }
-      }
-    })
-  }
-
-  // 随机支付方式
-  const paymentMethods = viewStore.paymentMethodOptions
-  orderData.value.paymentMethod = paymentMethods[Math.floor(Math.random() * paymentMethods.length)].value
-
-  // 随机押金 (100-500)
-  orderData.value.deposit = Math.floor(Math.random() * 401) + 100
-
-  // 显示通知
-  $q.notify({
-    type: 'positive',
-    message: '随机测试数据已填充',
-    position: 'top'
-  })
-
-  // 添加随机数据的验证
-  setTimeout(() => {
-    console.log('房间价格设置情况:', {
-      roomNumber: orderData.value.roomNumber,
-      roomPrice: orderData.value.roomPrice,
-      selectedRoom: roomStore.getRoomByNumber(orderData.value.roomNumber)
-    })
-  }, 500)
-}
-
-/**
- * 填充休息房测试数据
- */
-function fillRestRoomData() {
-  // 填充基本订单数据
-  orderData.value.guestName = '李休息'
-  orderData.value.idNumber = '110101199002021234'
-  orderData.value.phone = '13900139000'
-
-  // 设置当天入住和离店
-  const today = date.formatDate(new Date(), 'YYYY-MM-DD')
-  orderData.value.checkInDate = today
-  orderData.value.checkOutDate = today
-
-  // 获取第一个可用的房间类型
-  const availableRoomTypes = roomTypeOptionsWithCount.value
-    .filter(type => type.availableCount > 0)
-
-  if (availableRoomTypes.length > 0) {
-    // 设置房间类型
-    orderData.value.roomType = availableRoomTypes[0].value
-
-    // 等待DOM更新
-    nextTick(() => {
-      // 设置第一个可用房间
-      if (availableRoomOptions.value.length > 0) {
-        orderData.value.roomNumber = availableRoomOptions.value[0].value
-
-        // 根据选择的房间设置房间价格（休息房半价）
-        const selectedRoom = roomStore.getRoomByNumber(orderData.value.roomNumber)
-        if (selectedRoom) {
-          console.log('设置休息房价格:', Math.round(selectedRoom.price / 2))
-          orderData.value.roomPrice = Math.round(Number(selectedRoom.price) / 2)
-        } else {
-          // 设置一个默认的休息房价格
-          orderData.value.roomPrice = 150
-        }
-      }
-    })
-  }
-
-  // 设置休息房特有的支付信息
-  orderData.value.paymentMethod = 'cash'
-  orderData.value.deposit = 50  // 休息房押金较低
-
-  // 显示通知
-  $q.notify({
-    type: 'positive',
-    message: '休息房数据已填充',
-    position: 'top'
-  })
-
-  // 刷新可用房间
-  setTimeout(() => {
-    updateAvailableRooms()
-  }, 100)
 }
 
 // 组件挂载时执行的钩子函数

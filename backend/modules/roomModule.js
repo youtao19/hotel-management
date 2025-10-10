@@ -294,8 +294,6 @@ async function getAvailableRooms(startDate, endDate, typeCode = null) {
     // 添加排序
     sqlQuery += ' ORDER BY r.room_number';
 
-    console.log('[Backend DEBUG] getAvailableRooms: 最终执行的SQL:\n', sqlQuery);
-    console.log('[Backend DEBUG] getAvailableRooms: SQL参数:', queryParams);
 
     const result = await query(sqlQuery, queryParams);
     const availableRooms = result.rows;

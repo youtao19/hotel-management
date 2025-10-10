@@ -751,8 +751,6 @@ const generateDateList = (start, end) => {
 // 填充缺失的每日数据为 0，确保趋势图起止日期与选择一致
 const fillMissingDailyData = (rows, start, end) => {
   try {
-    console.log('[DEBUG] 原始每日统计 rows 长度:', rows.length)
-    if (rows[0]) console.log('[DEBUG] 第一条原始记录:', rows[0])
     const map = new Map()
     rows.forEach(r => {
       const rawDate = r.date || r.day || r.check_in_date
@@ -788,7 +786,6 @@ const fillMissingDailyData = (rows, start, end) => {
     filled.sort((a,b) => a.date < b.date ? 1 : -1)
     const originalHasRevenue = rows.some(r => Number(r.total_revenue) > 0)
     const filledAllZero = filled.every(r => Number(r.total_revenue) === 0)
-    console.log(`[DEBUG] originalHasRevenue=${originalHasRevenue} filledAllZero=${filledAllZero}`)
     if (originalHasRevenue && filledAllZero) {
       console.warn('[WARN] 填充后全部为0，回退到原始数据（可能日期键不匹配）')
       return rows

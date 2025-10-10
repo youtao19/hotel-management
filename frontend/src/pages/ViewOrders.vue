@@ -333,17 +333,6 @@ const filteredOrders = computed(() => {
       const filterDateStr = formatDate(filterDate.value)
       const checkInDateStr = order.checkInDate ? formatDate(order.checkInDate) : ''
       const checkOutDateStr = order.checkOutDate ? formatDate(order.checkOutDate) : ''
-
-      // 调试信息（在开发时可以开启）
-      if (process.env.NODE_ENV === 'development') {
-        console.log('日期筛选:', {
-          filter: filterDateStr,
-          checkIn: checkInDateStr,
-          checkOut: checkOutDateStr,
-          order: order.orderNumber
-        })
-      }
-
       return checkInDateStr === filterDateStr || checkOutDateStr === filterDateStr
     })
   }
@@ -374,7 +363,6 @@ async function fetchAllOrders() {
     loadingOrders.value = true
 
     await orderStore.fetchAllOrders()
-    console.log('获取到的订单数据:', orderStore.orders)
 
   } catch (error) {
     console.error('获取订单数据失败:', error)
