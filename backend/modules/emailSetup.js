@@ -60,6 +60,7 @@ async function sendEmailVerification(code, to, lan) {
     text
   };
   // console.log(message);
+  
   return await emailTransport.sendMail(message);
 }
 

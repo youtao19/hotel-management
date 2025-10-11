@@ -1,17 +1,14 @@
 // server.js
 const http = require("http");
-const app = require("./app");
-const setup = require("./appSettings/setup");
-const posgreDB = require("./database/postgreDB/pg");
+const app = require("./backend/app");
+const setup = require("./backend/appSettings/setup");
+const posgreDB = require("./backend/database/postgreDB/pg");
 const webServer = http.createServer(app);
-const emailSetup = require("./modules/emailSetup");
 
 async function bootup() {
   // 初始化 Redis 和 Session（必须在处理请求前完成）
   await posgreDB.initializeHotelDB();
-
-  await emailSetup.testConnection();
-
+  
   await app.initializeSession();
 
   // 初始化数据库

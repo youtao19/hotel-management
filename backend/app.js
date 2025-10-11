@@ -12,7 +12,8 @@ let app = express();
 
 app.disable('x-powered-by');
 
-const staticFileRoot = path.join(__dirname, '..', 'frontend', 'dist', 'spa');
+// 静态文件路径：Docker 环境统一使用 ./frontend_dist
+const staticFileRoot = path.join(__dirname, 'frontend_dist');
 
 // 解析中间件
 app.use(express.json({
@@ -28,17 +29,6 @@ app.use(express.urlencoded({
 app.use(express.text({
   limit: setup.reqSizeLimit
 }));
-
-if (setup.env === "dev") {
-  const history = require('connect-history-api-fallback');
-  const cors = require('cors');
-  app.use(cors({
-    origin: ['http://localhost:9000'],
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']
-  }));
-  app.use(history());
-}
 
 // 初始化 session 和 Redis store 的函数
 async function initializeSession() {
@@ -101,14 +91,20 @@ async function initializeSession() {
     const revenueStatisticsRoute = require("./routes/revenueStatisticsRoute");
     app.use("/api/revenue-statistics", revenueStatisticsRoute);
 
-    app.use(express.static(staticFileRoot));
-
     app.get("/api/hup", (req, res) => res.status(200).json({ ok: true }));
 
-    app.all("/", function (req, res) {
-      console.log(`req route not found with url : ${req.originalUrl}\nreq ip is : ${req.ip}`);
-      res.status(404).json();
-    });
+    // ✅ SPA History Fallback - 必须在静态文件服务之前
+    const history = require('connect-history-api-fallback');
+    app.use(history({
+      verbose: setup.env === "dev",
+      rewrites: [
+        // API 路由不重写
+        { from: /^\/api\/.*$/, to: context => context.parsedUrl.path }
+      ]
+    }));
+
+    // ✅ 静态文件服务 - 放在 history fallback 之后
+    app.use(express.static(staticFileRoot));
 
     console.log('所有路由已注册');
 }
