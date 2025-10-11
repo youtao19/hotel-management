@@ -1,13 +1,19 @@
-FROM node:22.18.0 AS deps
+FROM node:22-bookworm-slim AS builder
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --no-progress --prefer-offline || npm i
-
-FROM node:22.18.0 AS runner
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
+RUN npm install --ignore-scripts
+RUN npm run postinstall || true
 COPY . .
+
+FROM node:22-bookworm-slim AS runner
+WORKDIR /app
+COPY --from=builder /app/node_modules /app/node_modules
+COPY --from=builder /app/package*.json /app/
+COPY . .
+
+ENV NODE_ENV=dev
+ENV VITE_API_BASE=http://localhost:3000
+
 EXPOSE 9000
+
 CMD ["npm", "run", "dev"]
-
-
