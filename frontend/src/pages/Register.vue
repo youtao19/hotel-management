@@ -194,18 +194,16 @@
 
     console.log('注册请求成功返回:', response);
 
+    // 检查后端返回的数据（响应拦截器已经返回了 data）
+    if (response && response.id) {
+      // 设置注册成功标志
+      localStorage.setItem('justRegistered', 'true');
+      localStorage.setItem('registeredEmail', email.value);
+      localStorage.setItem('registeredName', name.value);
 
-
-    // 检查后端返回的状态码
-if (response.data) {
-  // 设置注册成功标志
-  localStorage.setItem('justRegistered', 'true');
-  localStorage.setItem('registeredEmail', email.value);
-  localStorage.setItem('registeredName', name.value);
-
-  // 注册成功后自动发送邮箱验证邮件
-  try {
-    await authApi.sendEmailVerification(email.value);
+      // 注册成功后自动发送邮箱验证邮件
+      try {
+        await authApi.sendEmailVerification(email.value);
 
     // 显示注册成功和邮件发送成功通知
     $q.notify({

@@ -2,6 +2,48 @@
 
 本文档旨在提供对酒店管理系统项目的高层次概览，内容涵盖其技术栈、系统架构及核心功能。
 
+## 🌍 跨平台支持
+
+本项目完全支持在以下平台运行：
+- ✅ **macOS** (Intel & Apple Silicon)
+- ✅ **Linux** (Ubuntu, Debian, CentOS, etc.)
+- ✅ **Windows** 10/11 (Docker Desktop + WSL 2)
+
+### 快速开始
+
+#### 🚀 本地开发（推荐）
+```bash
+# 1. 安装依赖
+npm install
+
+# 2. 配置环境变量
+cp dev.env.template dev.env
+# 编辑 dev.env 填写数据库和邮件配置
+
+# 3. 启动服务
+npm start
+```
+
+前端: http://localhost:9000  
+后端: http://localhost:3000
+
+#### 🐳 Docker 部署
+
+**macOS / Linux**
+```bash
+docker compose up -d
+```
+
+**Windows**
+- 双击 `start.bat` 或
+- PowerShell: `.\start.ps1`
+
+📖 **详细文档:**
+- [本地开发 vs Docker](./docs/本地开发vs%20Docker开发.md) - 两种模式对比
+- [通用部署指南](./DOCKER.md) - 适用所有平台
+- [Windows 专用指南](./DOCKER-WINDOWS.md) - Windows 特有配置
+- [跨平台说明](./CROSS-PLATFORM.md) - 平台对比和最佳实践
+
 ## 1. 技术栈
 
 本项目为一个全栈应用，采用了以下技术：

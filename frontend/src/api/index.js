@@ -2,7 +2,10 @@ import axios from 'axios'
 
 // 创建axios实例
 const api = axios.create({
-  baseURL: 'http://localhost:3000/api', // 后端API运行在3000端口
+  // 使用相对路径，通过 Vite/Quasar 的 proxy 转发到后端
+  // Docker 环境：proxy 会转发到 http://backend:3000
+  // 本地开发：proxy 会转发到 http://localhost:3000
+  baseURL: '/api',
   timeout: 30000, // 增加到30秒
   withCredentials: true // 允许携带session cookie
 })

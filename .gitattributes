@@ -1,0 +1,28 @@
+# Windows 兼容性配置
+# 确保跨平台一致性
+
+# 强制使用 LF 行尾符
+* text=auto eol=lf
+
+# Shell 脚本必须使用 LF
+*.sh text eol=lf
+
+# SQL 文件
+*.sql text eol=lf
+
+# JavaScript/Node.js 文件
+*.js text eol=lf
+*.json text eol=lf
+
+# Docker 文件
+Dockerfile text eol=lf
+docker-compose.yml text eol=lf
+*.yaml text eol=lf
+
+# 环境变量文件
+*.env text eol=lf
+
+# 二进制文件
+*.png binary
+*.jpg binary
+*.ico binary
