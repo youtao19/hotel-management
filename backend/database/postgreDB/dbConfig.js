@@ -1,20 +1,22 @@
+const setup = require('../../appSettings/setup');
+
 const dbConfig = {
   dev: {
-    user: 'peach',
-    password: '1219',
-    host: 'localhost',
-    port: 5432,
-    database: 'hotel_db',
+    user: setup.db.postgres.user,
+    password: setup.db.postgres.pw,
+    host: setup.db.postgres.host,
+    port: setup.db.postgres.port,
+    database: setup.db.postgres.name,
     max: 20,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000
   },
   test: {
-    user: 'peach',
-    password: '1219',
-    host: 'localhost',
-    port: 5432,
-    database: 'hotel_db_test',
+    user: setup.db.postgres.user,
+    password: setup.db.postgres.pw,
+    host: setup.db.postgres.host,
+    port: setup.db.postgres.port,
+    database: setup.db.postgres.test_name,
     max: 10,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000

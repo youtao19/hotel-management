@@ -6,10 +6,13 @@ const posgreDB = require("./database/postgreDB/pg");
 const authtication = require("./modules/authentication");
 const RedisDb = require('./database/redis/redis');
 const { RedisStore } = require("connect-redis");
+const path = require("path");
 
 let app = express();
 
 app.disable('x-powered-by');
+
+const staticFileRoot = path.join(__dirname, '..', 'frontend', 'dist', 'spa');
 
 // 解析中间件
 app.use(express.json({
@@ -97,6 +100,8 @@ async function initializeSession() {
 
     const revenueStatisticsRoute = require("./routes/revenueStatisticsRoute");
     app.use("/api/revenue-statistics", revenueStatisticsRoute);
+
+    app.use(express.static(staticFileRoot));
 
     app.get("/api/hup", (req, res) => res.status(200).json({ ok: true }));
 

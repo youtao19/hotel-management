@@ -25,8 +25,8 @@ services:
 
   backend:
     build:
-      context: .
-      dockerfile: backend/Dockerfile
+      context: ./backend
+      dockerfile: Dockerfile
     depends_on:
       postgres:
         condition: service_healthy
@@ -37,6 +37,16 @@ services:
     ports:
       - "3000:3000"
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    depends_on:
+      - backend
+    env_file:
+      - docker.dev.env
+    ports:
+      - "9000:9000"
 
 volumes:
   pgdata:

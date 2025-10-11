@@ -75,7 +75,8 @@ export default defineConfig((/* ctx */) => {
         '/api': {
           // 优先使用环境变量，否则默认使用 localhost（本地开发）
           // Docker 环境会通过 VITE_API_BASE=http://backend:3000 覆盖
-          target: process.env.VITE_API_BASE || 'http://localhost:3000',
+          // target: process.env.VITE_API_BASE || 'http://localhost:3000',
+          target: 'http://localhost:3000',
           changeOrigin: true,
           pathRewrite: { '^/api': '/api' }
         }
