@@ -37,7 +37,6 @@ export const useOrderStore = defineStore('order', () => {
           orderNumber: order.order_id,
           guestName: order.guest_name,
           phone: order.phone,
-          idNumber: order.id_number,
           roomType: order.room_type,
           roomNumber: order.room_number,
           checkInDate: formatOrderDate(order.check_in_date),
@@ -155,8 +154,7 @@ export const useOrderStore = defineStore('order', () => {
       const orderData = {
         order_id: order.orderNumber?.toString(),
         guest_name: order.guestName?.toString(),
-        phone: order.phone?.toString(),
-        id_number: order.idNumber?.toString(),
+        phone: order.phone?.toString() || '',
         room_type: order.roomType?.toString(),
         room_number: order.roomNumber?.toString(),
         check_in_date: checkInDateISO,
@@ -171,7 +169,7 @@ export const useOrderStore = defineStore('order', () => {
         create_time: new Date().toISOString(),
       }
 
-      const requiredFields = ['order_id', 'guest_name', 'id_number', 'room_type', 'room_number', 'check_in_date', 'check_out_date', 'total_price'];
+      const requiredFields = ['order_id', 'guest_name', 'room_type', 'room_number', 'check_in_date', 'check_out_date', 'total_price'];
       const missingFields = requiredFields.filter(field => {
         const value = orderData[field];
         if (field === 'total_price') {
@@ -192,12 +190,8 @@ export const useOrderStore = defineStore('order', () => {
         throw new Error(`缺少必填字段: ${missingFields.join(', ')}`);
       }
 
-      if (!orderData.id_number || orderData.id_number.length !== 18) {
-        console.error('身份证号无效:', orderData.id_number);
-        throw new Error('身份证号必须为18位');
-      }
-
-      if (orderData.phone && orderData.phone.length !== 11) {
+      // 手机号如果提供，验证格式（可选）
+      if (orderData.phone && orderData.phone.length > 0 && orderData.phone.length !== 11) {
         console.error('手机号无效:', orderData.phone);
         throw new Error('手机号必须为11位');
       }
@@ -209,7 +203,6 @@ export const useOrderStore = defineStore('order', () => {
         orderNumber: newOrderFromApi.order_id,
         guestName: newOrderFromApi.guest_name,
         phone: newOrderFromApi.phone,
-        idNumber: newOrderFromApi.id_number,
         roomType: newOrderFromApi.room_type,
         roomNumber: newOrderFromApi.room_number,
         checkInDate: newOrderFromApi.check_in_date,
@@ -320,7 +313,6 @@ export const useOrderStore = defineStore('order', () => {
           orderNumber: orderData.order_id,
           guestName: orderData.guest_name,
           phone: orderData.phone,
-          idNumber: orderData.id_number,
           roomType: orderData.room_type,
           roomNumber: orderData.room_number,
           checkInDate: formatOrderDate(orderData.check_in_date),
@@ -364,7 +356,6 @@ export const useOrderStore = defineStore('order', () => {
       const map = {
         guestName: 'guest_name',
         phone: 'phone',
-        idNumber: 'id_number',
         roomType: 'room_type',
         roomNumber: 'room_number',
         checkInDate: 'check_in_date',
@@ -403,7 +394,6 @@ export const useOrderStore = defineStore('order', () => {
           ...orders.value[idx],
           guestName: updated.guest_name ?? orders.value[idx].guestName,
           phone: updated.phone ?? orders.value[idx].phone,
-          idNumber: updated.id_number ?? orders.value[idx].idNumber,
           roomType: updated.room_type ?? orders.value[idx].roomType,
           roomNumber: updated.room_number ?? orders.value[idx].roomNumber,
           checkInDate: updated.check_in_date ? formatOrderDate(updated.check_in_date) : orders.value[idx].checkInDate,
@@ -440,8 +430,7 @@ export const useOrderStore = defineStore('order', () => {
       const convertedOrderData = {
         orderNumber: orderData.orderNumber,
         guestName: orderData.guestName,
-        phone: orderData.phone,
-        idNumber: orderData.idNumber || '000000000000000000',
+        phone: orderData.phone || '',
         roomType: orderData.roomType,
         roomNumber: orderData.roomNumber,
         checkInDate: orderData.checkInDate,

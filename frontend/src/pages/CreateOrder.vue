@@ -44,26 +44,10 @@
               <div class="col-md-4 col-xs-12">
                 <q-input v-model="orderData.guestName" label="姓名" filled :rules="[val => !!val || '请输入姓名']" />
               </div>
-              <!-- 身份证号输入框 -->
+              <!-- 手机号输入框（可选） -->
               <div class="col-md-4 col-xs-12">
-                <q-input v-model="orderData.idNumber" label="身份证号" filled type="text" maxlength="18"
-                  @input="validateIdNumber" :rules="[
-                    val => !!val || '请输入身份证号',
-                    val => (val.length === 18) || '身份证号必须为18位',
-                    val => /^[0-9Xx]+$/.test(val) || '身份证号只能包含数字和X'
-                  ]">
-                  <!-- 提示文本 -->
-                  <template v-slot:hint>
-                    请输入18位身份证号，最后一位可以是数字或X
-                  </template>
-                </q-input>
-              </div>
-              <!-- 手机号输入框 -->
-              <div class="col-md-4 col-xs-12">
-                <q-input v-model="orderData.phone" label="手机号" filled mask="###########" :rules="[
-                  val => !!val || '请输入手机号',
-                  val => (val.length === 11) || '手机号必须为11位'
-                ]" />
+                <q-input v-model="orderData.phone" label="手机号（可选）" filled mask="###########"
+                  hint="选填，用于联系客人" />
               </div>
             </div>
           </div>
@@ -478,10 +462,10 @@ const statusOptions = [
 const sourceOptions = [
   { label: '前台录入', value: 'front_desk' },
   { label: '电话预订', value: 'phone' },
+  { label: '抖音', valuue:'douyin'},
+  { label: '美团', value: 'meituan' },
   { label: '携程', value: 'ctrip' },
   { label: '飞猪', value: 'fliggy' },
-  { label: '美团', value: 'meituan' },
-  { label: '去哪儿', value: 'qunar' },
   { label: '旅行社', value: 'agency' },
   { label: '其他', value: 'other' }
 ]
@@ -493,7 +477,6 @@ const orderData = ref({
   source: 'front_desk',                // 默认订单来源为前台录入
   sourceNumber: '',                    // 来源编号（可选）
   guestName: '',                       // 客人姓名
-  idNumber: '',                        // 身份证号
   phone: '',                           // 手机号
   roomType: null,                      // 房间类型
   roomNumber: null,                    // 房间号
@@ -818,23 +801,6 @@ function onRoomTypeChange(value) {
   });
 }
 
-/**
- * 身份证号验证函数
- * 确保身份证号只包含数字和最后一位的X
- */
-function validateIdNumber() {
-  // 仅保留数字和X/x
-  orderData.value.idNumber = orderData.value.idNumber.replace(/[^0-9Xx]/g, '');
-  // 中间过程只允许前17位数字
-  if (orderData.value.idNumber.length <= 17) {
-    orderData.value.idNumber = orderData.value.idNumber.replace(/[^0-9]/g, '');
-  } else if (orderData.value.idNumber.length === 18) {
-    // 第18位允许X/x，统一转大写
-    const first17 = orderData.value.idNumber.slice(0,17).replace(/[^0-9]/g,'');
-    const lastChar = orderData.value.idNumber.slice(17,18).toUpperCase();
-    orderData.value.idNumber = first17 + (/[0-9X]/.test(lastChar) ? lastChar : '');
-  }
-}
 
 /**
  * 格式化日期显示

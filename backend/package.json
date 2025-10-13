@@ -3,8 +3,8 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "cross-env NODE_ENV=dev nodemon server.js",
-    "start": "node server.js",
+    "dev": "dotenv -e ../dev.env -- cross-env NODE_ENV=dev nodemon server.js",
+    "start": "dotenv -e ../dev.env -- node server.js",
     "test": "cross-env NODE_ENV=test jest --config=../jest.config.js",
     "test:watch": "cross-env NODE_ENV=test jest --config=../jest.config.js --watch",
     "export-schema": "node scripts/exportSchema.js",

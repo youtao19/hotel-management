@@ -41,18 +41,18 @@ function isValidOrderStatus(status) {
  * @returns {Promise<Object|null>} 存在的订单或null
  */
 async function checkExistingOrder(orderData) {
-  const { guest_name, check_in_date, check_out_date, room_type } = orderData;
+  const { guest_name, check_in_date, check_out_date, room_number } = orderData;
 
   const checkQuery = `
     SELECT * FROM ${tableName}
     WHERE guest_name = $1
     AND check_in_date = $2
     AND check_out_date = $3
-    AND room_type = $4
+    AND room_number = $4
     AND status NOT IN ('cancelled', 'checked-out')
   `;
 
-  const result = await query(checkQuery, [guest_name, check_in_date, check_out_date, room_type]);
+  const result = await query(checkQuery, [guest_name, check_in_date, check_out_date, room_number]);
   return result.rows.length > 0 ? result.rows[0] : null;
 }
 
@@ -83,7 +83,7 @@ function handleOrderCreationError(error, orderData) {
       throw new Error(`订单号 '${order_id}' 已存在`);
     }
     if (error.constraint === 'unique_order_constraint') {
-      throw new Error('该客人在相同时间段已有相同类型的房间预订');
+      throw new Error(`该客人在相同时间段已有相同房间(${room_number})的预订`);
     }
     throw new Error(`创建订单失败：数据重复 - ${error.detail}`);
   }
@@ -230,7 +230,6 @@ function validateOrderData(orderData) {
   // 1. 验证必填字段
   const requiredFields = [
     { field: 'guest_name', name: '客人姓名' },
-    { field: 'phone', name: '联系电话' },
     { field: 'room_type', name: '房间类型' },
     { field: 'room_number', name: '房间号' },
     { field: 'check_in_date', name: '入住日期' },
@@ -269,12 +268,15 @@ function validateOrderData(orderData) {
     throw error;
   }
 
-  // 4. 验证电话号码格式
-  const phoneRegex = /^1[3-9]\d{9}$/;
-  if (!phoneRegex.test(orderData.phone)) {
-    const error = new Error('无效的电话号码格式');
-    error.code = 'INVALID_PHONE_FORMAT';
-    throw error;
+  // 4. 验证电话号码格式（可选字段）
+  // 如果提供了手机号，才验证格式
+  if (orderData.phone && orderData.phone.trim() !== '') {
+    const phoneRegex = /^1[3-9]\d{9}$/;
+    if (!phoneRegex.test(orderData.phone)) {
+      const error = new Error('无效的电话号码格式');
+      error.code = 'INVALID_PHONE_FORMAT';
+      throw error;
+    }
   }
 
   // 5. 验证价格和押金
@@ -456,7 +458,7 @@ async function createOrder(orderData) {
 
     // 6. 插入订单数据 - 解构订单数据
     const {
-      order_id, id_source, order_source, guest_name, phone, id_number,
+      order_id, id_source, order_source, guest_name, phone,
       room_type, room_number, check_in_date, check_out_date, status,
       payment_method, total_price, deposit, create_time, remarks
     } = orderData;
@@ -547,17 +549,17 @@ async function createOrder(orderData) {
     // 10. 执行数据库插入操作
     const insertQuery = `
       INSERT INTO orders (
-        order_id, id_source, order_source, guest_name, phone, id_number,
+        order_id, id_source, order_source, guest_name, phone,
         room_type, room_number, check_in_date, check_out_date, status,
         payment_method, total_price, deposit, create_time, stay_type, remarks
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
       )
       RETURNING *;
     `;
 
     const values = [
-      order_id, id_source, order_source, guest_name, phone, id_number,
+      order_id, id_source, order_source, guest_name, phone,
       room_type, room_number, formattedCheckInDate, formattedCheckOutDate, status,
       payment_method, calculateTotalPrice(processedTotalPrice), deposit, create_time || new Date(), stay_type, processedRemarks
     ];
@@ -661,7 +663,7 @@ async function updateOrder(orderNumber, updatedData, changedBy = 'system') {
     let paramIndex = 1;
 
     // 处理可更新字段
-    const updateableFields = ['guest_name', 'phone', 'id_number', 'room_type',
+    const updateableFields = ['guest_name', 'phone', 'room_type',
                             'room_number', 'check_in_date', 'check_out_date',
                             'payment_method', 'total_price', 'deposit', 'remarks'];
 
@@ -1119,7 +1121,7 @@ async function updateOrderWithBills(orderNumber, updatedData, billUpdates = {}, 
       let paramIndex = 1;
 
       // 处理可更新字段
-      const updateableFields = ['guest_name', 'phone', 'id_number', 'room_type',
+      const updateableFields = ['guest_name', 'phone', 'room_type',
                               'room_number', 'check_in_date', 'check_out_date',
                               'payment_method', 'total_price', 'deposit', 'remarks'];
 

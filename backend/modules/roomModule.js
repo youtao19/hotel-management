@@ -31,10 +31,11 @@ async function getAllRooms(queryDate = null) {
           o.check_out_date,
           o.status as order_status,
           o.order_id,
-          o.check_in_date
+          o.check_in_date,
+          o.stay_type
         FROM orders o
         WHERE o.check_in_date <= $1::date
-          AND o.check_out_date > $1::date
+          AND o.check_out_date >= $1::date
           AND o.status IN ('pending', 'checked-in')
         ORDER BY o.room_number, o.create_time DESC
       `;
@@ -49,11 +50,12 @@ async function getAllRooms(queryDate = null) {
           o.check_out_date,
           o.status as order_status,
           o.order_id,
-          o.check_in_date
+          o.check_in_date,
+          o.stay_type
         FROM orders o
         WHERE o.status IN ('pending', 'checked-in')
           AND NOW()::date >= o.check_in_date
-          AND NOW()::date < o.check_out_date
+          AND NOW()::date <= o.check_out_date
         ORDER BY o.room_number, o.create_time DESC
       `;
     }
@@ -78,7 +80,8 @@ async function getAllRooms(queryDate = null) {
           check_out_date: order.check_out_date,
           order_status: order.order_status,
           order_id: order.order_id,
-          check_in_date: order.check_in_date
+          check_in_date: order.check_in_date,
+          stay_type: order.stay_type
         };
       }
       return room;

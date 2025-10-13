@@ -1464,8 +1464,17 @@ function getRoomDateStatus(dateInput) {
     const checkIn = new Date(booking.check_in_date).toISOString().substr(0, 10);
     const checkOut = new Date(booking.check_out_date).toISOString().substr(0, 10);
 
-    // 检查日期是否在入住期间（不包含退房日期）
-    if (dateStr >= checkIn && dateStr < checkOut) {
+    // 检查是否为休息房（入住和退房日期相同）
+    const isRestRoom = checkIn === checkOut;
+
+    // 检查日期是否在入住期间
+    // 对于休息房：只在入住当天显示状态
+    // 对于普通订单：从入住日到退房日前一天都显示状态
+    const isInRange = isRestRoom
+      ? (dateStr === checkIn)
+      : (dateStr >= checkIn && dateStr < checkOut);
+
+    if (isInRange) {
       // 如果是已取消的订单，整个期间都显示为可用
       if (booking.status === 'cancelled') {
         if (dateStr.endsWith('-01') || dateStr.endsWith('-02')) {

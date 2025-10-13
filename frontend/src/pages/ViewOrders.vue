@@ -189,7 +189,15 @@
       @refund-deposit="handleRefundDeposit"
     />
 
-
+    <!-- 办理入住确认对话框 -->
+    <CheckInConfirmDialog
+      v-model="showCheckInConfirmDialog"
+      :order="checkInOrder_ref"
+      :getRoomTypeName="getRoomTypeName"
+      :getPaymentMethodName="getPaymentMethodName"
+      :formatDate="formatDate"
+      @confirm="handleCheckInConfirm"
+    />
 
     </div>
   </q-page>
@@ -210,6 +218,7 @@ import ChangeRoomDialog from 'src/components/ChangeRoomDialog.vue';
 import CheckIn from 'src/components/CheckIn.vue';
 import ExtendStayDialog from 'src/components/ExtendStayDialog.vue';
 import RefundDepositDialog from 'src/components/RefundDepositDialog.vue';
+import CheckInConfirmDialog from 'src/components/CheckInConfirmDialog.vue';
 import { watch } from 'vue'
 
 
@@ -465,6 +474,10 @@ const loadingExtendStayRooms = ref(false)
 // 退押金相关变量
 const showRefundDepositDialog = ref(false)
 const refundDepositOrder = ref(null)
+
+// 办理入住确认对话框
+const showCheckInConfirmDialog = ref(false)
+const checkInOrder_ref = ref(null)
 // 退押按钮可见性的本地缓存：true 可退；false 不可退；未定义 表示尚未计算
 const refundableMap = ref({})
 
@@ -642,21 +655,15 @@ async function checkInOrder(order) {
     return;
   }
 
-  // 使用 Quasar Dialog 显示确认对话框
-  $q.dialog({
-    title: '确认办理入住',
-    message: `确定要为订单 ${order.orderNumber} (客人: ${order.guestName}, 房间: ${order.roomNumber}) 办理入住吗？
+  // 显示账单确认对话框
+  checkInOrder_ref.value = order;
+  showCheckInConfirmDialog.value = true;
+}
 
-  办理入住后将自动创建账单。`,
-    cancel: true,
-    persistent: true
-  }).onOk(async () => {
-    // 用户点击确定，执行入住操作
-    await performCheckIn(order);
-  }).onCancel(() => {
-    // 用户点击取消，什么也不做
-    console.log('用户取消了入住操作');
-  });
+// 确认办理入住（从对话框回调）
+async function handleCheckInConfirm(order) {
+  showCheckInConfirmDialog.value = false;
+  await performCheckIn(order);
 }
 
 // 执行入住操作

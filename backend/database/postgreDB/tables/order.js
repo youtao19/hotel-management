@@ -7,8 +7,7 @@ const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
     id_source VARCHAR(50), -- 来源单号
     order_source VARCHAR(20) NOT NULL, -- 订单来源
     guest_name VARCHAR(50) NOT NULL, -- 客人姓名
-    phone VARCHAR(20) NOT NULL, -- 客人电话
-    id_number VARCHAR(30) NOT NULL, -- 证件号码
+    phone VARCHAR(20), -- 客人电话（非必填）
     room_type VARCHAR(20) NOT NULL, -- 房间类型
     room_number VARCHAR(20) NOT NULL, -- 房间号
     check_in_date DATE NOT NULL, -- 入住日期
@@ -22,7 +21,7 @@ const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
     remarks TEXT, -- 备注
     FOREIGN KEY (room_type) REFERENCES room_types(type_code),
     FOREIGN KEY (room_number) REFERENCES rooms(room_number),
-    CONSTRAINT unique_order_constraint UNIQUE (guest_name, check_in_date, check_out_date, room_type)
+    CONSTRAINT unique_order_constraint UNIQUE (guest_name, check_in_date, check_out_date, room_number)
 )`;
 
 
@@ -32,8 +31,8 @@ const createIndexQueryStrings = [
     `CREATE INDEX IF NOT EXISTS idx_orders_status ON ${tableName}(status)`,
     `CREATE INDEX IF NOT EXISTS idx_orders_check_dates ON ${tableName}(check_in_date, check_out_date)`,
   `CREATE INDEX IF NOT EXISTS idx_orders_create_time ON ${tableName}(create_time DESC)`,
-  // 仅对展示中的订单做唯一约束，避免历史版本冲突
-  `CREATE UNIQUE INDEX IF NOT EXISTS uniq_orders_active ON ${tableName} (guest_name, check_in_date, check_out_date, room_type)`
+  // 仅对活跃订单做唯一约束，避免历史订单冲突
+  `CREATE UNIQUE INDEX IF NOT EXISTS uniq_orders_active ON ${tableName} (guest_name, check_in_date, check_out_date, room_number) WHERE status NOT IN ('cancelled', 'checked-out')`
 ];
 
 const table = {
