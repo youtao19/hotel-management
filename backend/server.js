@@ -13,7 +13,7 @@ async function bootup() {
   // 初始化 Redis 和 Session（必须在处理请求前完成）
   await app.initializeSession();
 
-  await emailSetup.testConnection();
+  // await emailSetup.testConnection();
 
 
   const port = setup.port;

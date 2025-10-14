@@ -183,15 +183,16 @@ async function createTestOrder(overrides = {}, options = { insert: false }) {
       dbTotalPrice,
       orderData.deposit,
       new Date(),
-      orderData.remarks
+      orderData.remarks,
+      orderData.stay_type || '客房' // 添加 stay_type 字段，默认为客房
     ];
 
     await query(
       `INSERT INTO orders (
          order_id, id_source, order_source, guest_name, phone, id_number,
          room_type, room_number, check_in_date, check_out_date, status,
-         payment_method, total_price, deposit, create_time, remarks
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+         payment_method, total_price, deposit, create_time, remarks, stay_type
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
       values
     );
   }

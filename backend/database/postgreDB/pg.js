@@ -43,7 +43,7 @@ async function getClient() {
   //in dev mode, we check to see if there is any client leak
   //this should be disabled in production
   //since sensitive data could leak through the log
-  if (env.runningMode === "dev") {
+  if (process.env.NODE_ENV === "dev") {
     const query = client.query;
     const release = client.release;
     // set a timeout of 5 seconds, after which we will log this client's last query
@@ -168,6 +168,14 @@ async function initializePostgreDB() {
   await createIndex();
 }
 
+
+// only used in test
+async function closePool() {
+  if (pool && pool.end) {
+    await pool.end();
+  }
+}
+
 const db = {
   query,
   connect,
@@ -175,5 +183,6 @@ const db = {
   getClient,
   tearDownPostgreDB,
   createPool,
+  closePool,
 };
 module.exports = db;

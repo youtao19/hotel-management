@@ -102,5 +102,12 @@ const setup = {
   },
   workers: [],
   totalWorkerNum: 20,
+  changeType: {
+    roomFee: "房费",
+    deposit: "收押",
+    refundDeposit: "退押",
+    supplement: "补收",
+    refund: "退款",
+  },
 };
 module.exports = setup;

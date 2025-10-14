@@ -1,11 +1,16 @@
-
 const express = require('express');
 const router = express.Router();
 // 保险：为该路由挂载 JSON 解析（即使全局已启用）
 router.use(express.json());
 const { body, validationResult } = require('express-validator');
 const orderModule = require('../modules/orderModule');
+const billModule = require('../modules/billModule');
+const roomModule = require('../modules/roomModule');
 const { authenticationMiddleware } = require('../modules/authentication');
+const { query, getClient } = require('../database/postgreDB/pg');
+const setup = require('../appSettings/setup');
+const { formatDate } = require('../modules/tools');
+
 
 // 定义有效的订单状态
 const VALID_ORDER_STATES = ['pending', 'checked-in', 'checked-out', 'cancelled'];
@@ -315,21 +320,138 @@ router.get('/:order_id/deposit-info', async (req, res) => {
   }
 });
 
+
 /**
  * 办理入住
  * POST /api/orders/:orderId/check-in
  */
 router.post('/:orderId/check-in', async (req, res) => {
   const { orderId } = req.params;
+  const client = await getClient();
+
   try {
-    const result = await orderModule.checkInOrder(orderId);
-    res.json({ success: true, ...result });
-  } catch (error) {
-    res.status(error.statusCode || 500).json({
-      success: false,
-      message: error.message,
-      code: error.code || 'CHECK_IN_ERROR'
+    await client.query('BEGIN');
+
+    // 1. 获取订单信息
+    const orderResult = await client.query('SELECT * FROM orders WHERE order_id = $1', [orderId]);
+
+    if (orderResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, message: '订单不存在' });
+    }
+
+    const order = orderResult.rows[0];
+
+    // 2. 检查订单状态
+    if (order.status !== 'pending') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        message: `订单状态为 '${order.status}'，无法办理入住，只有待入住订单可以办理`
+      });
+    }
+
+    // 3. 格式化日期（确保是 YYYY-MM-DD 格式）
+    const stayDate = formatDate(order.check_in_date);
+    const stayType = order.stay_type || '客房'; // 默认值为客房
+
+    // 4. 插入第一天的房费账单
+    const insertRoomFeeBillQuery = `
+      INSERT INTO bills (
+        order_id, room_number, guest_name, change_price, change_type,
+        pay_way, create_time, remarks, stay_type, stay_date
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      RETURNING *
+    `;
+
+    const roomFeeBillResult = await client.query(insertRoomFeeBillQuery, [
+      orderId,
+      String(order.room_number).slice(0, 10), // 截断到 10 个字符以适应 bills 表
+      order.guest_name,
+      order.total_price,
+      setup.changeType.roomFee,
+      order.payment_method,
+      new Date(),
+      '办理入住房费',
+      stayType,
+      stayDate
+    ]);
+
+    const createdBills = [roomFeeBillResult.rows[0]];
+
+    // 5. 如果有押金，插入押金账单
+    if (order.deposit && Number(order.deposit) > 0) {
+      const insertDepositBillQuery = `
+        INSERT INTO bills (
+          order_id, room_number, guest_name, change_price, change_type,
+          pay_way, create_time, remarks, stay_type, stay_date
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        RETURNING *
+      `;
+
+      const depositBillResult = await client.query(insertDepositBillQuery, [
+        orderId,
+        String(order.room_number).slice(0, 10), // 截断到 10 个字符以适应 bills 表
+        order.guest_name,
+        Number(order.deposit),
+        setup.changeType.deposit,
+        order.payment_method,
+        new Date(),
+        '办理入住押金',
+        stayType,
+        stayDate
+      ]);
+
+      createdBills.push(depositBillResult.rows[0]);
+    }
+
+    // 5. 更新订单状态为已入住
+    const updateOrderQuery = `
+      UPDATE orders
+      SET status = 'checked-in'
+      WHERE order_id = $1
+      RETURNING *
+    `;
+    const updatedOrderResult = await client.query(updateOrderQuery, [orderId]);
+    const updatedOrder = updatedOrderResult.rows[0];
+
+    // 6. 更新房间状态为已入住 (occupied)
+    const updateRoomQuery = `
+      UPDATE rooms
+      SET status = 'occupied'
+      WHERE room_number = $1
+      RETURNING *
+    `;
+    await client.query(updateRoomQuery, [order.room_number]);
+
+    // 提交事务
+    await client.query('COMMIT');
+
+    // 格式化账单中的日期字段
+    const formattedBills = createdBills.map(bill => ({
+      ...bill,
+      stay_date: formatDate(bill.stay_date)
+    }));
+
+    return res.status(200).json({
+      success: true,
+      message: '办理入住成功',
+      data: {
+        order: updatedOrder,
+        bills: formattedBills
+      }
     });
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('办理入住失败:', error);
+    return res.status(500).json({
+      success: false,
+      message: '办理入住失败',
+      error: error.message
+    });
+  } finally {
+    client.release();
   }
 });
 

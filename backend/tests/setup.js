@@ -1,18 +1,32 @@
 // 在导入数据库之前先设置测试环境变量
 process.env.NODE_ENV = 'test';
+process.env.NODE_PORT = process.env.NODE_PORT || '3000';
+process.env.SERVER_URL = process.env.SERVER_URL || 'http://localhost:3000';
+
+// PostgreSQL 配置
+process.env.POSTGRES_HOST = process.env.POSTGRES_HOST || 'localhost';
+process.env.POSTGRES_PORT = process.env.POSTGRES_PORT || '5432';
+process.env.POSTGRES_USER = process.env.POSTGRES_USER || 'peach';
+process.env.POSTGRES_PASSWORD = process.env.POSTGRES_PASSWORD || '1219';
+process.env.POSTGRES_DB = process.env.POSTGRES_DB || 'hotel_db';
+process.env.POSTGRES_TEST_DB = process.env.POSTGRES_TEST_DB || 'hotel_db_test';
+
+// Redis 配置
 process.env.REDIS_PW = process.env.REDIS_PW || '';
 process.env.REDIS_HOST = process.env.REDIS_HOST || 'localhost';
 process.env.REDIS_PORT = process.env.REDIS_PORT || '6379';
+
+// 应用配置
 process.env.ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'test@example.com';
 process.env.APP_NAME = process.env.APP_NAME || 'hotelManagement';
 process.env.APP_URL = process.env.APP_URL || 'http://localhost:9000';
+
+// 邮件配置
 process.env.EMAIL_HOST = process.env.EMAIL_HOST || 'smtp.example.com';
 process.env.EMAIL_PORT = process.env.EMAIL_PORT || '587';
 process.env.EMAIL_USER = process.env.EMAIL_USER || 'test';
 process.env.EMAIL_PW = process.env.EMAIL_PW || 'test';
-process.env.OPENAI_KEY = process.env.OPENAI_KEY || 'test';
-process.env.OPENAI_HOST = process.env.OPENAI_HOST || 'test';
-process.env.OPENAI_CHAT_COMPLETION_PATH = process.env.OPENAI_CHAT_COMPLETION_PATH || 'test';
+
 
 const db = require('../database/postgreDB/pg');
 const redisDB = require('../database/redis/redis');
@@ -44,11 +58,11 @@ global.cleanupTestData = async () => {
 
 // 全局测试设置
 beforeAll(async () => {
+  // 初始化数据库结构
+  await db.initializePostgreDB();
+
   // ✅ 初始化 app 的 session 和路由（重要！）
   await app.initializeSession();
-
-  // 初始化数据库结构
-  await db.initializeHotelDB();
 
   // 初始化 Redis 连接
   await redisDB.initialize();
