@@ -97,33 +97,6 @@ const setup = {
     },
 
   },
-  OPENAI_KEY: process.env.OPENAI_KEY,
-  models: {
-    gpt35: {
-      name: "gpt-3.5-turbo",
-      maxTokenCount: 2500,
-    },
-    "gpt35-16k": {
-      name: "gpt-3.5-turbo-16k",
-      maxTokenCount: 10000,
-    },
-    gpt4: {
-      name: "gpt-4",
-      maxTokenCount: 6000,
-    },
-    "gpt-4-1106-preview": {
-      name: "gpt-4-1106-preview",
-      maxTokenCount: 70000,
-    },
-    "gpt-4-0125-preview": {
-      name: "gpt-4-0125-preview",
-      maxTokenCount: 120000,
-    },
-    latest: {
-      name: "gpt-4-0125-preview",
-      maxTokenCount: 120000,
-    },
-  },
   task: {
     sampleSizeMax: 22,
   },

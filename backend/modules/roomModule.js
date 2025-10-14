@@ -379,6 +379,13 @@ async function changeOrderRoom(orderNumber, oldRoomNumber, newRoomNumber) {
   throw err;
     }
 
+    // 3. 验证新房间与原订单房型是否相同
+    if (newRoom.type_code !== order.room_type) {
+  const err = new Error(`新房间房型(${newRoom.type_code})与订单房型(${order.room_type})不一致，无法更换`);
+  err.code = 'ROOM_TYPE_MISMATCH';
+  throw err;
+    }
+
     // 对于已入住的订单，新房间必须是可用状态
     if (order.status === 'checked-in' && newRoom.status !== 'available') {
   const err = new Error(`新房间当前状态为"${newRoom.status}"，已入住订单只能换到可用房间`);
@@ -386,7 +393,7 @@ async function changeOrderRoom(orderNumber, oldRoomNumber, newRoomNumber) {
   throw err;
     }
 
-        // 3. 检查新房间在订单日期期间是否有冲突
+        // 4. 检查新房间在订单日期期间是否有冲突
     const conflictCheckResult = await query(`
       SELECT COUNT(*) as count
       FROM orders
@@ -403,34 +410,32 @@ async function changeOrderRoom(orderNumber, oldRoomNumber, newRoomNumber) {
   throw err;
     }
 
-    // 4. 开始事务更新
+    // 5. 开始事务更新
     await query('BEGIN');
 
     try {
             // 更新订单的房间信息
-      // 准备新的 room_price JSON：保持 JSONB 结构 (满足 chk_room_price_json)
-      let newRoomPriceJson = {};
-      try {
-        // order.room_price 可能已是对象 (JSONB -> JS 对象)，也可能是数字(旧数据)，也可能为空
-        if (order.room_price && typeof order.room_price === 'object' && !Array.isArray(order.room_price)) {
-          Object.keys(order.room_price).forEach(k => { newRoomPriceJson[k] = Number(newRoom.price); });
-        } else {
-          // 构造单日键：使用入住日期；若为空则使用当前日期
-            const keyDate = (order.check_in_date || new Date().toISOString().split('T')[0]).toString().split('T')[0];
-          newRoomPriceJson[keyDate] = Number(newRoom.price);
-        }
-      } catch (e) {
-        console.warn('构造 newRoomPriceJson 失败，使用回退策略:', e.message);
-        const keyDate = (order.check_in_date || new Date().toISOString().split('T')[0]).toString().split('T')[0];
-        newRoomPriceJson[keyDate] = Number(newRoom.price);
+      // 计算新的总价格（根据住宿天数）
+      const checkInDate = new Date(order.check_in_date);
+      const checkOutDate = new Date(order.check_out_date);
+      let nights = Math.ceil((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24));
+
+      // 对于休息房等当天退房的情况（nights === 0），按1晚计算
+      if (nights === 0) {
+        nights = 1;
       }
+
+      // 计算新的总价格
+      const newTotalPrice = Number(newRoom.price) * nights;
+
+      console.log(`更换房间价格计算: 新房间单价 ${newRoom.price} × ${nights}晚 = ${newTotalPrice}`);
 
       const updateOrderResult = await query(`
         UPDATE orders
-        SET room_number = $1, room_type = $2, room_price = $3::jsonb
+        SET room_number = $1, room_type = $2, total_price = $3
         WHERE order_id = $4
         RETURNING *
-      `, [newRoomNumber, newRoom.type_code, JSON.stringify(newRoomPriceJson), orderNumber]);
+      `, [newRoomNumber, newRoom.type_code, newTotalPrice, orderNumber]);
 
       if (updateOrderResult.rows.length === 0) {
         const err = new Error('更新订单失败');

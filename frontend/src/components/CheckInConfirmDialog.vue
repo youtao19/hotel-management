@@ -4,7 +4,7 @@
     @update:model-value="val => emit('update:modelValue', val)"
     persistent
   >
-    <q-card style="min-width: 600px; max-width: 750px;" class="q-col">
+    <q-card style="min-width: 600px; max-width: 750px;">
       <!-- 对话框标题 -->
       <q-card-section class="bg-primary text-white q-py-sm">
         <div class="text-subtitle1 text-weight-bold">
@@ -13,7 +13,7 @@
         </div>
       </q-card-section>
 
-      <q-card-section v-if="order" class="q-pa-sm row q-col-gutter-y-md" >
+      <q-card-section v-if="order" class="q-pa-sm">
         <!-- 订单基本信息 -->
         <div class="q-mb-sm">
           <q-card flat bordered>
@@ -246,7 +246,7 @@ const roomPriceDetails = computed(() => {
 // 房费总计
 const totalRoomFee = computed(() => {
   console.log('🔍 计算房费总计 - roomPrice类型:', typeof props.order?.roomPrice, '值:', props.order?.roomPrice)
-
+  
   // 处理数字类型
   if (typeof props.order?.roomPrice === 'number') {
     console.log('✅ roomPrice是数字:', props.order.roomPrice)

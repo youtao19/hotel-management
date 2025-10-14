@@ -1,9 +1,9 @@
 const { createClient } = require("redis");
 const setup = require("../../appSettings/setup");
 
-
 let client = null;
 let isInitialized = false;
+
 
 const redis = {
     initialize: async () => {

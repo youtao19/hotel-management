@@ -785,6 +785,7 @@ async function changeRoom(newRoomNumber) {
         NEW_ROOM_REPAIR: '目标房间正在维修中',
         NEW_ROOM_NOT_AVAILABLE: '目标房间当前不可用',
         NEW_ROOM_CONFLICT: '目标房间在该日期范围内已有冲突订单',
+        ROOM_TYPE_MISMATCH: '目标房间的房型与订单房型不一致',
         ROOM_CHANGE_VALIDATION: '请求参数校验失败',
         ROOM_CHANGE_SERVER: '服务器内部错误，请稍后再试'
       };
@@ -801,7 +802,7 @@ async function changeRoom(newRoomNumber) {
   }
 }
 
-// 打开更换房间对话框时获取可用房间
+// 打开更换房间对话框时获取可用房间（只获取相同房型的房间）
 async function openChangeRoomDialog() {
   console.log('openChangeRoomDialog function called'); // 确认函数被调用
 
@@ -815,7 +816,8 @@ async function openChangeRoomDialog() {
     // 从订单中获取入住和离店日期
     const rawCheckInDate = currentOrder.value.checkInDate;
     const rawCheckOutDate = currentOrder.value.checkOutDate;
-    console.log('Raw dates from order:', { rawCheckInDate, rawCheckOutDate });
+    const roomType = currentOrder.value.roomType; // 获取当前房型
+    console.log('Raw dates from order:', { rawCheckInDate, rawCheckOutDate, roomType });
 
     // 确保日期格式正确（YYYY-MM-DD）
     const startDate = formatDate(rawCheckInDate);
@@ -832,12 +834,22 @@ async function openChangeRoomDialog() {
       return;
     }
 
-    // 调用 roomStore 中的方法获取可用房间
-    console.log('Calling roomStore.getAvailableRoomsByDate...');
-    const rooms = await roomStore.getAvailableRoomsByDate(startDate, endDate);
-    console.log('Rooms received from API:', rooms); // 打印从API获取的房间
+    if (!roomType) {
+      console.error('Room type is missing from current order.');
+      $q.notify({
+        type: 'negative',
+        message: '无法获取订单的房型信息',
+        position: 'top'
+      });
+      return;
+    }
 
-    // 更新可用房间选项
+    // 调用 roomStore 中的方法获取可用房间，并传入房型参数
+    console.log('Calling roomStore.getAvailableRoomsByDate with roomType:', roomType);
+    const rooms = await roomStore.getAvailableRoomsByDate(startDate, endDate, roomType);
+    console.log('Rooms received from API (same type only):', rooms); // 打印从API获取的房间
+
+    // 更新可用房间选项（排除当前房间）
     availableRoomOptions.value = rooms
       .filter(room => room.room_number !== currentOrder.value.roomNumber)
       .map(room => ({

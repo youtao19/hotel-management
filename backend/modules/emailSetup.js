@@ -6,7 +6,7 @@ let emailTransport = nodemailer.createTransport({
   host: setup.email.host,
   port: setup.email.port,
   //for port 587, secure set to false, true for port 465
-  secure: true,
+  secure: setup.email.port === 465,
   auth: {
     user: setup.email.user,
     pass: setup.email.pw,
@@ -60,7 +60,7 @@ async function sendEmailVerification(code, to, lan) {
     text
   };
   // console.log(message);
-  
+
   return await emailTransport.sendMail(message);
 }
 

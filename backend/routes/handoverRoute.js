@@ -1,6 +1,7 @@
 const express =  require('express');
 const router = express.Router();
 const { query, getClient } = require('../database/postgreDB/pg');
+const db = require("../database/postgreDB/pg")
 
 const {
   getShiftTable,

@@ -7,14 +7,14 @@ const webServer = http.createServer(app);
 const emailSetup = require("./modules/emailSetup");
 
 async function bootup() {
+  // 初始化数据库
+  await posgreDB.initializePostgreDB();
+
   // 初始化 Redis 和 Session（必须在处理请求前完成）
-  await posgreDB.initializeHotelDB();
+  await app.initializeSession();
 
   await emailSetup.testConnection();
 
-  await app.initializeSession();
-
-  // 初始化数据库
 
   const port = setup.port;
   webServer.listen(port, "0.0.0.0", () => {

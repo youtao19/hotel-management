@@ -340,7 +340,8 @@ router.post('/change-room', async (req, res) => {
     console.error('更换房间失败:', error.message);
     const clientErrorCodes = [
       'MISSING_PARAMS', 'SAME_ROOM', 'ORDER_STATUS_INVALID', 'NEW_ROOM_NOT_FOUND',
-      'NEW_ROOM_CLOSED', 'NEW_ROOM_REPAIR', 'NEW_ROOM_NOT_AVAILABLE', 'NEW_ROOM_CONFLICT'
+      'NEW_ROOM_CLOSED', 'NEW_ROOM_REPAIR', 'NEW_ROOM_NOT_AVAILABLE', 'NEW_ROOM_CONFLICT',
+      'ROOM_TYPE_MISMATCH'
     ];
     const status = clientErrorCodes.includes(error.code) ? 400 : 500;
     res.status(status).json({
