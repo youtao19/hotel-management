@@ -1102,19 +1102,25 @@ async function handleExtendStay(extendStayData) {
       orderNumber: newOrderNumber,
       guestName: extendStayGuestName, // 使用带唯一标识的客人姓名
       phone: extendStayData.phone,
-      idNumber: extendStayData.idNumber || '000000000000000000', // 使用原订单的身份证号，如果没有则使用默认值
       roomType: extendStayData.roomType,
       roomNumber: extendStayData.roomNumber,
       checkInDate: extendStayData.checkInDate,
       checkOutDate: extendStayData.checkOutDate,
       status: 'pending', // 新订单默认为待入住状态
-      paymentMethod: 'cash', // 默认现金支付，管理员可以修改
-      roomPrice: extendStayData.roomPrice, // 单日房价
+      paymentMethod: extendStayData.paymentMethod || 'cash', // 使用用户选择的支付方式
+      roomPrice: extendStayData.totalPrice, // 使用总价而不是roomPrice
       deposit: 0, // 续住默认押金为0
       remarks: `续住订单，原客人：${extendStayData.guestName}，原订单号：${extendStayData.originalOrderNumber}。${extendStayData.notes || ''}`.trim(),
       source: 'extend_stay', // 标记为续住来源
       sourceNumber: extendStayData.originalOrderNumber || ''
     };
+
+    console.log('🔍 续住数据调试:', {
+      '对话框传递的roomPrice': extendStayData.roomPrice,
+      '对话框传递的totalPrice': extendStayData.totalPrice,
+      '最终发送的roomPrice': newOrderData.roomPrice,
+      '支付方式': newOrderData.paymentMethod
+    });
 
     console.log('📋 准备创建续住订单:', newOrderData);
 

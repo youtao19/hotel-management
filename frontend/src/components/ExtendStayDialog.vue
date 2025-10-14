@@ -136,14 +136,13 @@
             <div class="col">
               <q-input
                 v-model="guestPhone"
-                label="手机号"
+                label="手机号(可选)"
                 filled
                 dense
                 mask="###-####-####"
                 unmasked-value
                 :rules="[
-                  val => !!val?.trim() || '请输入手机号',
-                  val => val?.length === 11 || '手机号必须为11位数字'
+                  val => !val || val.length === 11 || '手机号必须为11位数字'
                 ]"
               />
             </div>
@@ -179,6 +178,7 @@
               filled
               :rules="singlePriceRules"
               prefix="¥"
+              @update:model-value="userModifiedPrice = true"
             />
           </div>
 
@@ -271,6 +271,8 @@ const newOrderNumber = ref('')
 const paymentMethod = ref('')
 // 可编辑续住单价
 const customUnitPrice = ref(0)
+// 用户是否手动修改了价格
+const userModifiedPrice = ref(false)
 // 多日价格对象 (key=YYYY-MM-DD)
 const dailyPrices = ref({})
 const singlePriceRules = [
@@ -329,7 +331,9 @@ const totalPrice = computed(() => {
 })
 
 const canConfirm = computed(() => {
-  if (!(selectedRoom.value && extendStartDate.value && extendEndDate.value && guestName.value.trim() && guestPhone.value.trim() && newOrderNumber.value.trim() && paymentMethod.value && stayDays.value > 0)) return false
+  // 手机号变为可选，但如果填了必须是11位
+  const phoneValid = !guestPhone.value || guestPhone.value.trim().length === 11
+  if (!(selectedRoom.value && extendStartDate.value && extendEndDate.value && guestName.value.trim() && phoneValid && newOrderNumber.value.trim() && paymentMethod.value && stayDays.value > 0)) return false
   if (stayDays.value === 1) return parseFloat(customUnitPrice.value) > 0
   // 多日：所有 dailyPrices 完整且>0
   const dates = stayDateList.value
@@ -373,11 +377,25 @@ function selectOriginalRoom() {
 // 当选择房间改变时，初始化可编辑单价
 watch(selectedRoomInfo, (info) => {
   if (info) {
-    if (!customUnitPrice.value || customUnitPrice.value <= 0) {
+    // 只在用户未手动修改价格且价格为0或未设置时才自动填充
+    if (!userModifiedPrice.value && (!customUnitPrice.value || customUnitPrice.value <= 0)) {
       customUnitPrice.value = info.price
     }
+    // 同时更新多日续住的每日价格（如果当前价格为0或未设置）
+    if (stayDateList.value.length > 0) {
+      const updated = { ...dailyPrices.value }
+      stayDateList.value.forEach(d => {
+        if (!updated[d] || parseFloat(updated[d]) <= 0) {
+          updated[d] = userModifiedPrice.value ? customUnitPrice.value : info.price
+        }
+      })
+      dailyPrices.value = updated
+    }
   } else {
-    customUnitPrice.value = 0
+    // 只在用户未手动修改且没有输入时才重置为0
+    if (!userModifiedPrice.value && (!customUnitPrice.value || customUnitPrice.value <= 0)) {
+      customUnitPrice.value = 0
+    }
   }
 })
 
@@ -398,8 +416,13 @@ watch(stayDateList, (list) => {
   const current = { ...dailyPrices.value }
   // 删除不存在的
   Object.keys(current).forEach(k => { if (!list.includes(k)) delete current[k] })
-  // 新增的设默认价
-  list.forEach(d => { if (current[d] === undefined) current[d] = parseFloat(customUnitPrice.value) || selectedRoomInfo.value?.price || 0 })
+  // 新增的设默认价：优先使用 selectedRoomInfo 的价格，其次 customUnitPrice
+  const defaultPrice = selectedRoomInfo.value?.price || parseFloat(customUnitPrice.value) || 0
+  list.forEach(d => {
+    if (current[d] === undefined) {
+      current[d] = defaultPrice
+    }
+  })
   dailyPrices.value = current
 }, { immediate: true })
 
@@ -465,6 +488,7 @@ watch(() => props.modelValue, (newVal) => {
     newOrderNumber.value = ''
     paymentMethod.value = ''
     customUnitPrice.value = 0
+    userModifiedPrice.value = false
     dailyPrices.value = {}
   }
 })

@@ -198,7 +198,11 @@ export const useOrderStore = defineStore('order', () => {
 
       const response = await orderApi.addOrder(orderData);
 
+      console.log('🔍 后端返回的原始数据:', response);
+
       const newOrderFromApi = response.order || response;
+      console.log('🔍 提取的订单数据:', newOrderFromApi);
+
       const newOrderMapped = {
         orderNumber: newOrderFromApi.order_id,
         guestName: newOrderFromApi.guest_name,
@@ -216,6 +220,8 @@ export const useOrderStore = defineStore('order', () => {
         source: newOrderFromApi.order_source,
         sourceNumber: newOrderFromApi.id_source,
       };
+
+      console.log('🔍 映射后的订单数据:', newOrderMapped);
       orders.value.unshift(newOrderMapped)
       return newOrderMapped;
     } catch (err) {
