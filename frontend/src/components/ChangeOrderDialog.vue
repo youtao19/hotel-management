@@ -222,18 +222,71 @@ function formatDay(dateStr) {
   }
 }
 
+function getStayDates(checkIn, checkOut) {
+  if (!checkIn) return [];
+
+  const format = (dateObj) => {
+    return (
+      dateObj.getFullYear() + '-' +
+      String(dateObj.getMonth() + 1).padStart(2, '0') + '-' +
+      String(dateObj.getDate()).padStart(2, '0')
+    );
+  };
+
+  const start = new Date(`${checkIn}T00:00:00`);
+  const end = checkOut ? new Date(`${checkOut}T00:00:00`) : null;
+
+  if (Number.isNaN(start.getTime())) return [];
+
+  if (!end || Number.isNaN(end.getTime()) || end <= start) {
+    return [format(start)];
+  }
+
+  const dates = [];
+  const cursor = new Date(start);
+  while (cursor < end) {
+    dates.push(format(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return dates;
+}
+
 watch(() => props.order, async (newOrder) => {
   if (newOrder && newOrder.orderNumber) {
+    console.log('🔍 原始订单数据:', newOrder);
     const clonedOrder = JSON.parse(JSON.stringify(newOrder));
 
     clonedOrder.checkInDate = clonedOrder.checkInDate ? clonedOrder.checkInDate.split('T')[0] : '';
     clonedOrder.checkOutDate = clonedOrder.checkOutDate ? clonedOrder.checkOutDate.split('T')[0] : '';
 
-    // Initialize roomPrice from order's total_price as a fallback
-    const price = Number(clonedOrder.total_price) || 0;
+    // Initialize roomPrice from order's roomPrice field (from orderStore)
+    // 注意：orderStore 将 API 的 total_price 映射为 roomPrice
+    const price = Number(clonedOrder.roomPrice)
+                  || Number(clonedOrder.total_price)
+                  || 0;
+    console.log('💰 订单总房价:', price);
+    console.log('📅 入住日期:', clonedOrder.checkInDate, '离店日期:', clonedOrder.checkOutDate);
+
     clonedOrder.roomPrice = {};
-    if (clonedOrder.checkInDate) {
-      clonedOrder.roomPrice[clonedOrder.checkInDate] = price;
+    const stayDates = getStayDates(clonedOrder.checkInDate, clonedOrder.checkOutDate);
+    console.log('📆 住宿日期列表:', stayDates);
+
+    if (stayDates.length > 0) {
+      const nights = stayDates.length;
+      const average = nights > 0 ? price / nights : price;
+      let cumulated = 0;
+
+      stayDates.forEach((date, index) => {
+        const baseValue = index === nights - 1
+          ? price - cumulated
+          : average;
+        const normalized = Number((baseValue || 0).toFixed(2));
+        clonedOrder.roomPrice[date] = normalized;
+        cumulated += normalized;
+      });
+      console.log('📊 初始房费分配:', clonedOrder.roomPrice);
+    } else {
+      console.warn('⚠️ 没有住宿日期！');
     }
 
     // 初始化支付方式
@@ -249,22 +302,40 @@ watch(() => props.order, async (newOrder) => {
         billData.value = response.data; // 存储账单数据
         const newRoomPrice = {};
         let totalDeposit = 0;
+        let hasValidRoomFee = false; // 标记是否有有效的房费数据
+
         response.data.forEach(bill => {
           // 使用通用日期格式化函数
           const stayDate = formatDateFromDB(bill.stay_date);
           if (stayDate) {
-            newRoomPrice[stayDate] = Number(bill.room_fee) || 0;
+            const roomFee = Number(bill.room_fee) || 0;
+            newRoomPrice[stayDate] = roomFee;
+            if (roomFee > 0) {
+              hasValidRoomFee = true; // 有非零房费
+            }
             console.log(`📅 账单日期处理: ${bill.stay_date} -> ${stayDate}, 房费: ${bill.room_fee}`);
           }
           totalDeposit += Number(bill.deposit) || 0;
         });
 
         if (editableOrder.value) {
-          editableOrder.value.roomPrice = newRoomPrice;
-          editableOrder.value.deposit = totalDeposit;
+          // 只有当账单中有有效的房费数据时，才用账单数据覆盖
+          // 否则保留从订单总房价计算的平均值（适用于待入住订单）
+          if (hasValidRoomFee && Object.keys(newRoomPrice).length > 0) {
+            editableOrder.value.roomPrice = newRoomPrice;
+            console.log('✅ 使用账单中的房费数据');
+          } else {
+            console.log('ℹ️ 账单中无有效房费，保留订单总房价的平均分配');
+          }
+
+          // 押金总是使用账单中的数据
+          if (totalDeposit > 0) {
+            editableOrder.value.deposit = totalDeposit;
+          }
         }
       } else {
         billData.value = []; // 没有账单数据
+        console.log('ℹ️ 无账单数据，使用订单总房价的平均分配');
       }
     } catch (error) {
       console.error('获取账单详情错误:', error);
