@@ -106,8 +106,16 @@ const createExtensionQueries = extentions.map((extension) => {
   return `CREATE EXTENSION IF NOT EXISTS ${extension};`;
 });
 async function enableExtensions() {
+  if (process.env.NODE_ENV === 'test') {
+    console.warn('Skipping Postgres extensions in test environment');
+    return;
+  }
   for (let query of createExtensionQueries) {
-    await pool.query(query);
+    try {
+      await pool.query(query);
+    } catch (err) {
+      console.warn(`跳过扩展 ${query}:`, err.message);
+    }
   }
 }
 
@@ -133,7 +141,12 @@ tables.push(room);
 async function createTables() {
   for (let table of tables) {
     console.log(`create table : ${table.tableName}`);
-    await pool.query(table.createQuery);
+    try {
+      await pool.query(table.createQuery);
+    } catch (err) {
+      console.error(`创建表 ${table.tableName} 失败:`, err);
+      throw err;
+    }
   }
 }
 

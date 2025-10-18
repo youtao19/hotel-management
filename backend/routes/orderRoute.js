@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 // 保险：为该路由挂载 JSON 解析（即使全局已启用）
 router.use(express.json());
+
+console.log('📦 orderRoute.js 模块已加载');
 const { body, validationResult } = require('express-validator');
 const orderModule = require('../modules/orderModule');
 const billModule = require('../modules/billModule');
@@ -384,15 +386,22 @@ router.get('/:order_id/deposit-info', async (req, res) => {
  * 请求体: { deposit: number } - 实际收取的押金金额
  */
 router.post('/:orderId/check-in', async (req, res) => {
+  console.log(`📍 [check-in] 路由被调用: ${req.method} ${req.path}`);
   const { orderId } = req.params;
-  const { deposit } = req.body; // 从请求体获取押金金额
-  const client = await getClient();
+  console.log(`📍 [check-in] orderId=${orderId}, req.body=`, req.body);
+  const { deposit, dailyPrices } = req.body || {}; // 从请求体获取押金金额和每日房价
+  let client;
 
   try {
+    console.log(`🚀 [check-in] 开始办理入住: orderId=${orderId}, deposit=${deposit}`);
+    client = await getClient();
+    console.log('✅ [check-in] 获取数据库连接成功');
     await client.query('BEGIN');
+    console.log('✅ [check-in] 事务开始');
 
     // 1. 获取订单信息
     const orderResult = await client.query('SELECT * FROM orders WHERE order_id = $1', [orderId]);
+    console.log(`📝 [check-in] 查询订单结果: 找到 ${orderResult.rows.length} 条记录`);
 
     if (orderResult.rows.length === 0) {
       await client.query('ROLLBACK');
@@ -425,29 +434,48 @@ router.post('/:orderId/check-in', async (req, res) => {
     const stayDate = formatDate(order.check_in_date);
     const stayType = order.stay_type || '客房'; // 默认值为客房
 
-    // 5. 插入第一天的房费账单
-    const insertRoomFeeBillQuery = `
-      INSERT INTO bills (
-        order_id, room_number, guest_name, change_price, change_type,
-        pay_way, create_time, remarks, stay_type, stay_date
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      RETURNING *
-    `;
+    // 5. 按日期为每一天创建房费账单（可自定义每日价格）
+    const checkInDate = new Date(order.check_in_date);
+    const checkOutDate = new Date(order.check_out_date);
+    const stayDays = Math.ceil((checkOutDate - checkInDate) / (1000 * 60 * 60 * 24));
+    console.log('🧮 [check-in] stayDays:', stayDays, 'total_price:', order.total_price, 'dailyPrices:', dailyPrices);
 
-    const roomFeeBillResult = await client.query(insertRoomFeeBillQuery, [
-      orderId,
-      String(order.room_number).slice(0, 10), // 截断到 10 个字符以适应 bills 表
-      order.guest_name,
-      order.total_price,
-      setup.changeType.roomFee,
-      order.payment_method,
-      new Date(),
-      '办理入住房费',
-      stayType,
-      stayDate
-    ]);
+    // 如果前端提供了每日房价数组，则使用；否则平均分摊
+    const customPrices = Array.isArray(dailyPrices) && dailyPrices.length === stayDays
+      ? dailyPrices.map(Number)
+      : Array(stayDays).fill(stayDays > 0 ? Number((Number(order.total_price) / stayDays).toFixed(2)) : 0);
 
-    const createdBills = [roomFeeBillResult.rows[0]];
+    const createdBills = [];
+
+    for (let i = 0; i < stayDays; i++) {
+      const stayDateEach = new Date(checkInDate);
+      stayDateEach.setDate(checkInDate.getDate() + i);
+
+      const price = customPrices[i]; // 使用自定义或默认价格
+
+      const insertRoomFeeBillQuery = `
+        INSERT INTO bills (
+          order_id, room_number, guest_name, change_price, change_type,
+          pay_way, create_time, remarks, stay_type, stay_date
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        RETURNING *
+      `;
+
+      const roomFeeBillResult = await client.query(insertRoomFeeBillQuery, [
+        orderId,
+        String(order.room_number).slice(0, 10),
+        order.guest_name,
+        price,
+        setup.changeType.roomFee,
+        order.payment_method,
+        new Date(),
+        `第 ${i + 1} 天房费`,
+        stayType,
+        formatDate(stayDateEach)
+      ]);
+
+      createdBills.push(roomFeeBillResult.rows[0]);
+    }
 
     // 6. 如果有押金，插入押金账单（使用实际收取的押金金额）
     if (actualDeposit && Number(actualDeposit) > 0) {
@@ -516,7 +544,9 @@ router.post('/:orderId/check-in', async (req, res) => {
     });
 
   } catch (error) {
-    await client.query('ROLLBACK');
+    if (client) {
+      await client.query('ROLLBACK');
+    }
     console.error('办理入住失败:', error);
     return res.status(500).json({
       success: false,
@@ -524,7 +554,9 @@ router.post('/:orderId/check-in', async (req, res) => {
       error: error.message
     });
   } finally {
-    client.release();
+    if (client) {
+      client.release();
+    }
   }
 });
 

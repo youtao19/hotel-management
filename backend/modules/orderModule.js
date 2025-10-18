@@ -1068,8 +1068,9 @@ async function createCheckedInOrderWithTransaction(orderData, createdBy = 'syste
   dataForCreation.stay_type = stay_type;
   console.log(`🏠 [fastCheckIn] 自动设置住宿类型: ${stay_type}`);
 
-  const client = await getClient();
+  let client;
   try {
+    client = await getClient();
     await client.query('BEGIN');
     console.log('事务开始');
 
@@ -1121,7 +1122,7 @@ async function createCheckedInOrderWithTransaction(orderData, createdBy = 'syste
 
     // 3. 创建订单
     const {
-      order_id, id_source, order_source, guest_name, phone,
+      order_id, id_source, order_source, guest_name, phone, id_number,
       room_type, room_number, check_in_date, check_out_date, status,
       payment_method, total_price, deposit, create_time, remarks
     } = dataForCreation;
@@ -1131,44 +1132,59 @@ async function createCheckedInOrderWithTransaction(orderData, createdBy = 'syste
 
     const insertOrderQuery = `
       INSERT INTO orders (
-        order_id, id_source, order_source, guest_name, phone,
+        order_id, id_source, order_source, guest_name, phone, id_number,
         room_type, room_number, check_in_date, check_out_date, status,
-        payment_method, total_price, deposit, create_time, stay_type, remarks, created_by
+        payment_method, total_price, deposit, create_time, stay_type, remarks
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
       )
       RETURNING *;
     `;
     const orderValues = [
-      order_id, id_source, order_source, guest_name, phone,
+      order_id, id_source, order_source, guest_name, phone || '', id_number || '',
       room_type, room_number, formattedCheckInDate, formattedCheckOutDate, status,
-      payment_method, calculateTotalPrice(total_price), deposit, create_time || new Date(), stay_type, remarks, createdBy
+      payment_method, calculateTotalPrice(total_price), deposit, create_time || new Date(), stay_type, remarks
     ];
 
     const orderResult = await client.query(insertOrderQuery, orderValues);
     const newOrder = orderResult.rows[0];
     console.log('✅ [fastCheckIn] 订单创建成功, order_id:', newOrder.order_id);
 
-    // 4. 创建账单
+    // 4. 创建账单 - 按每日创建房费账单
     const createdBills = [];
-    const stayDate = formatDate(newOrder.check_in_date);
 
-    // 4.1 插入房费账单
-    const roomFeeBillResult = await client.query(
-      `INSERT INTO bills (order_id, room_number, guest_name, change_price, change_type, pay_way, create_time, remarks, stay_type, stay_date, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8, $9, $10) RETURNING *`,
-      [newOrder.order_id, newOrder.room_number, newOrder.guest_name, newOrder.total_price, setup.changeType.roomFee, newOrder.payment_method, '快速入住-房费', newOrder.stay_type, stayDate, createdBy]
-    );
-    createdBills.push(roomFeeBillResult.rows[0]);
-    console.log('✅ [fastCheckIn] 房费账单创建成功');
+    // 4.1 计算住宿天数
+    const checkInDate = new Date(newOrder.check_in_date);
+    const checkOutDate = new Date(newOrder.check_out_date);
+    const stayDays = Math.ceil((checkOutDate - checkInDate) / (1000 * 60 * 60 * 24));
+    console.log(`🧮 [fastCheckIn] stayDays: ${stayDays}, total_price: ${newOrder.total_price}`);
 
-    // 4.2 如果有押金，插入押金账单
+    // 4.2 计算每日房费（平均分摊）
+    const dailyPrice = stayDays > 0 ? Number((Number(newOrder.total_price) / stayDays).toFixed(2)) : 0;
+
+    // 4.3 为每一天创建房费账单
+    for (let i = 0; i < stayDays; i++) {
+      const stayDateEach = new Date(checkInDate);
+      stayDateEach.setDate(checkInDate.getDate() + i);
+      const stayDateStr = formatDate(stayDateEach);
+
+      const roomFeeBillResult = await client.query(
+        `INSERT INTO bills (order_id, room_number, guest_name, change_price, change_type, pay_way, create_time, remarks, stay_type, stay_date)
+         VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8, $9) RETURNING *`,
+        [newOrder.order_id, String(newOrder.room_number).slice(0, 10), newOrder.guest_name, dailyPrice, setup.changeType.roomFee, newOrder.payment_method, `第 ${i + 1} 天房费`, newOrder.stay_type, stayDateStr]
+      );
+      createdBills.push(roomFeeBillResult.rows[0]);
+    }
+    console.log(`✅ [fastCheckIn] 创建了 ${stayDays} 条房费账单`);
+
+    // 4.4 如果有押金，插入押金账单（仅在第一天创建）
     const actualDeposit = Number(newOrder.deposit || 0);
     if (actualDeposit > 0) {
+      const firstDayDate = formatDate(newOrder.check_in_date);
       const depositBillResult = await client.query(
-        `INSERT INTO bills (order_id, room_number, guest_name, change_price, change_type, pay_way, create_time, remarks, stay_type, stay_date, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8, $9, $10) RETURNING *`,
-        [newOrder.order_id, newOrder.room_number, newOrder.guest_name, actualDeposit, setup.changeType.deposit, newOrder.payment_method, '快速入住-押金', newOrder.stay_type, stayDate, createdBy]
+        `INSERT INTO bills (order_id, room_number, guest_name, change_price, change_type, pay_way, create_time, remarks, stay_type, stay_date)
+         VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8, $9) RETURNING *`,
+        [newOrder.order_id, String(newOrder.room_number).slice(0, 10), newOrder.guest_name, actualDeposit, setup.changeType.deposit, newOrder.payment_method, '快速入住-押金', newOrder.stay_type, firstDayDate]
       );
       createdBills.push(depositBillResult.rows[0]);
       console.log('✅ [fastCheckIn] 押金账单创建成功');
@@ -1184,7 +1200,9 @@ async function createCheckedInOrderWithTransaction(orderData, createdBy = 'syste
     return { order: newOrder, bills: createdBills };
 
   } catch (error) {
-    await client.query('ROLLBACK');
+    if (client) {
+      await client.query('ROLLBACK');
+    }
     console.error('❌ [fastCheckIn] 事务回滚:', error.message);
     // 保持与路由层一致的错误抛出格式
     if (!error.statusCode) {
@@ -1200,8 +1218,10 @@ async function createCheckedInOrderWithTransaction(orderData, createdBy = 'syste
     }
     throw error;
   } finally {
-    client.release();
-    console.log('数据库连接已释放');
+    if (client) {
+      client.release();
+      console.log('数据库连接已释放');
+    }
   }
 }
 
@@ -1346,155 +1366,6 @@ async function updateOrderWithBills(orderNumber, updatedData, billUpdates = {}, 
   }
 }
 
-/**
- * 快速入住：使用事务创建订单并办理入住
- * @param {Object} orderData - 订单数据
- * @param {number} depositAmount - 押金金额
- * @returns {Promise<Object>} 创建结果
- */
-async function createCheckedInOrderWithTransaction(orderData, depositAmount = 0) {
-  const client = await getClient();
-
-  try {
-    console.log('🚀 [FastCheckIn] 开始快速入住流程');
-    console.log('📝 [FastCheckIn] 订单数据:', orderData);
-    console.log('💰 [FastCheckIn] 押金金额:', depositAmount);
-
-    await client.query('BEGIN');
-
-    // 1. 计算房费总额
-    let totalRoomFee = 0;
-    if (typeof orderData.total_price === 'object' && orderData.total_price !== null) {
-      totalRoomFee = Object.values(orderData.total_price).reduce((sum, price) => sum + parseFloat(price || 0), 0);
-    } else {
-      totalRoomFee = parseFloat(orderData.total_price) || 0;
-    }
-    console.log('💰 [FastCheckIn] 计算房费总额:', totalRoomFee);
-
-    // 1.5 根据日期计算住宿类型
-    const stay_type = isRestRoom(orderData) ? '休息房' : '客房';
-    console.log(`🏠 [FastCheckIn] 自动设置住宿类型: ${stay_type} (基于日期: ${orderData.check_in_date} -> ${orderData.check_out_date})`);
-
-    // 2. 创建订单（状态为已入住）
-    const orderInsertQuery = `
-      INSERT INTO ${tableName} (
-        order_id, guest_name, id_number, phone, room_type, room_number,
-        check_in_date, check_out_date, status, payment_method,
-        total_price, deposit, remarks, order_source, id_source, stay_type, create_time
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW())
-      RETURNING *
-    `;
-
-    const orderValues = [
-      orderData.order_id,
-      orderData.guest_name,
-      orderData.id_number || '',
-      orderData.phone || '',
-      orderData.room_type,
-      orderData.room_number,
-      orderData.check_in_date,
-      orderData.check_out_date,
-      'checked-in', // 直接设置为已入住
-      orderData.payment_method,
-      totalRoomFee, // 使用计算后的总价
-      depositAmount || 0,
-      orderData.remarks || '',
-      orderData.order_source || 'front_desk',
-      orderData.id_source || '',
-      stay_type // 添加住宿类型
-    ];
-
-    const { rows: [createdOrder] } = await client.query(orderInsertQuery, orderValues);
-    console.log('✅ [FastCheckIn] 订单创建成功:', createdOrder.order_id);
-
-    // 3. 创建账单（使用正确的 bills 表结构）
-    const stayDate = formatDate(createdOrder.check_in_date);
-    const createdBills = [];
-
-    // 3.1 插入房费账单
-    const roomFeeBillQuery = `
-      INSERT INTO bills (
-        order_id, room_number, guest_name, change_price, change_type,
-        pay_way, create_time, remarks, stay_type, stay_date
-      ) VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8, $9)
-      RETURNING *
-    `;
-
-    const roomFeeBillValues = [
-      createdOrder.order_id,
-      String(createdOrder.room_number).slice(0, 10),
-      createdOrder.guest_name,
-      totalRoomFee,
-      setup.changeType.roomFee, // "房费"
-      createdOrder.payment_method,
-      '快速入住房费',
-      createdOrder.stay_type,
-      stayDate
-    ];
-
-    const { rows: [roomFeeBill] } = await client.query(roomFeeBillQuery, roomFeeBillValues);
-    createdBills.push(roomFeeBill);
-    console.log('✅ [FastCheckIn] 房费账单创建成功:', roomFeeBill.bill_id);
-
-    // 3.2 如果有押金，插入押金账单
-    if (depositAmount && Number(depositAmount) > 0) {
-      const depositBillQuery = `
-        INSERT INTO bills (
-          order_id, room_number, guest_name, change_price, change_type,
-          pay_way, create_time, remarks, stay_type, stay_date
-        ) VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8, $9)
-        RETURNING *
-      `;
-
-      const depositBillValues = [
-        createdOrder.order_id,
-        String(createdOrder.room_number).slice(0, 10),
-        createdOrder.guest_name,
-        Number(depositAmount),
-        setup.changeType.deposit, // "收押"
-        createdOrder.payment_method,
-        '快速入住押金',
-        createdOrder.stay_type,
-        stayDate
-      ];
-
-      const { rows: [depositBill] } = await client.query(depositBillQuery, depositBillValues);
-      createdBills.push(depositBill);
-      console.log('✅ [FastCheckIn] 押金账单创建成功:', depositBill.bill_id);
-    } else {
-      console.log('💰 未收取押金，不创建押金账单');
-    }
-
-    // 4. 更新房间状态为已入住
-    const roomUpdateQuery = `
-      UPDATE rooms
-      SET status = 'occupied'
-      WHERE room_number = $1
-      RETURNING *
-    `;
-
-    const { rows: [updatedRoom] } = await client.query(roomUpdateQuery, [createdOrder.room_number]);
-    console.log('✅ [FastCheckIn] 房间状态更新成功:', updatedRoom.room_number);
-
-    await client.query('COMMIT');
-    console.log('✅ [FastCheckIn] 事务提交成功');
-
-    return {
-      success: true,
-      order: createdOrder,
-      bills: createdBills,
-      room: updatedRoom,
-      message: '快速入住成功'
-    };
-
-  } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('❌ [FastCheckIn] 快速入住失败，事务已回滚:', error);
-    throw error;
-  } finally {
-    client.release();
-  }
-}
 
 // 添加新函数到导出对象
 table.updateOrderWithBills = updateOrderWithBills;
