@@ -437,7 +437,20 @@ router.post('/:orderId/check-in', async (req, res) => {
     // 5. 按日期为每一天创建房费账单（可自定义每日价格）
     const checkInDate = new Date(order.check_in_date);
     const checkOutDate = new Date(order.check_out_date);
-    const stayDays = Math.ceil((checkOutDate - checkInDate) / (1000 * 60 * 60 * 24));
+    let stayDays = Math.ceil((checkOutDate - checkInDate) / (1000 * 60 * 60 * 24));
+
+    // 对于休息房等当天退房的情况（stayDays === 0），按1天计算
+    if (stayDays === 0) {
+      console.log(`📝 [check-in] 检测到休息房订单（同日入住退房），按1天计算`);
+      stayDays = 1;
+    } else if (stayDays < 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        message: '退房日期不能早于入住日期'
+      });
+    }
+
     console.log('🧮 [check-in] stayDays:', stayDays, 'total_price:', order.total_price, 'dailyPrices:', dailyPrices);
 
     // 如果前端提供了每日房价数组，则使用；否则平均分摊

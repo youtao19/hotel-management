@@ -254,6 +254,143 @@ describe('POST /api/orders/:orderId/check-in - 办理入住', () => {
       );
       expect(Number(orderResult.rows[0].deposit)).toBe(depositAmount);
     });
+
+    it('应成功办理休息房入住（同日入住退房，有押金）', async () => {
+      // 1. 创建休息房订单（入住和退房同一天）
+      const testOrder = await createTestOrder({
+        room_type: testRoomType.type_code,
+        room_number: testRoom.room_number,
+        check_in_date: '2025-10-15',
+        check_out_date: '2025-10-15', // 同一天，休息房
+        status: 'pending',
+        total_price: 200.00,
+        deposit: 50.00,
+        payment_method: 'cash',
+        stay_type: '休息房'
+      }, { insert: true });
+
+      // 2. 办理入住
+      const res = await request(app)
+        .post(`/api/orders/${testOrder.order_id}/check-in`)
+        .send();
+
+      // 3. 验证响应
+      if (res.status !== 200) {
+        // eslint-disable-next-line no-console
+        console.error('办理入住失败响应（休息房，有押金）:', res.body);
+      }
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        success: true,
+        message: '办理入住成功'
+      });
+      expect(res.body.data).toBeDefined();
+      expect(res.body.data.order).toBeDefined();
+      expect(res.body.data.bills).toBeDefined();
+
+      // 4. 验证订单状态已更新
+      expect(res.body.data.order.status).toBe('checked-in');
+      expect(res.body.data.order.order_id).toBe(testOrder.order_id);
+
+      // 5. 验证生成了 1 条房费账单 + 1 条押金账单（休息房只有1天）
+      const roomFeeBills = res.body.data.bills.filter(bill => bill.change_type === '房费');
+      const depositBills = res.body.data.bills.filter(bill => bill.change_type === '收押');
+      expect(roomFeeBills).toHaveLength(1); // 休息房只有1条房费
+      expect(depositBills).toHaveLength(1);
+
+      // 6. 验证房费账单金额
+      const roomFeeBill = roomFeeBills[0];
+      expect(Number(roomFeeBill.change_price)).toBeCloseTo(200.00, 2);
+      expect(roomFeeBill.order_id).toBe(testOrder.order_id);
+      const stayDateStr = typeof roomFeeBill.stay_date === 'string'
+        ? roomFeeBill.stay_date.split('T')[0]
+        : roomFeeBill.stay_date;
+      expect(stayDateStr).toBe('2025-10-15');
+
+      // 7. 验证押金账单
+      const depositBill = depositBills[0];
+      expect(depositBill.change_type).toBe('收押');
+      expect(Number(depositBill.change_price)).toBe(50.00);
+      expect(depositBill.order_id).toBe(testOrder.order_id);
+
+      // 8. 验证数据库中的订单状态和住宿类型
+      const dbOrderResult = await query(
+        'SELECT * FROM orders WHERE order_id = $1',
+        [testOrder.order_id]
+      );
+      expect(dbOrderResult.rows[0].status).toBe('checked-in');
+      expect(dbOrderResult.rows[0].stay_type).toBe('休息房');
+
+      // 9. 验证数据库中的账单（1条房费 + 1条押金 = 2条）
+      const dbBillsResult = await query(
+        'SELECT * FROM bills WHERE order_id = $1 ORDER BY create_time',
+        [testOrder.order_id]
+      );
+      expect(dbBillsResult.rows).toHaveLength(2);
+      const dbRoomFeeBills = dbBillsResult.rows.filter(row => row.change_type === '房费');
+      const dbDepositBills = dbBillsResult.rows.filter(row => row.change_type === '收押');
+      expect(dbRoomFeeBills).toHaveLength(1);
+      expect(dbDepositBills).toHaveLength(1);
+      expect(Number(dbRoomFeeBills[0].change_price)).toBeCloseTo(200.00, 2);
+      expect(dbRoomFeeBills[0].stay_type).toBe('休息房');
+
+      // 10. 验证房间状态已更新为已入住
+      const dbRoomResult = await query(
+        'SELECT * FROM rooms WHERE room_number = $1',
+        [testRoom.room_number]
+      );
+      expect(dbRoomResult.rows[0].status).toBe('occupied');
+    });
+
+    it('应成功办理休息房入住（同日入住退房，无押金）', async () => {
+      // 1. 创建休息房订单（入住和退房同一天，无押金）
+      const testOrder = await createTestOrder({
+        room_type: testRoomType.type_code,
+        room_number: testRoom.room_number,
+        check_in_date: '2025-10-16',
+        check_out_date: '2025-10-16', // 同一天，休息房
+        status: 'pending',
+        total_price: 180.00,
+        deposit: 0, // 无押金
+        payment_method: 'wechat',
+        stay_type: '休息房'
+      }, { insert: true });
+
+      // 2. 办理入住
+      const res = await request(app)
+        .post(`/api/orders/${testOrder.order_id}/check-in`)
+        .send();
+
+      // 3. 验证响应
+      if (res.status !== 200) {
+        // eslint-disable-next-line no-console
+        console.error('办理入住失败响应（休息房，无押金）:', res.body);
+      }
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        success: true,
+        message: '办理入住成功'
+      });
+
+      // 4. 验证生成了 1 条房费账单（无押金）
+      const roomFeeBills = res.body.data.bills.filter(bill => bill.change_type === '房费');
+      const depositBills = res.body.data.bills.filter(bill => bill.change_type === '收押');
+      expect(roomFeeBills).toHaveLength(1); // 休息房只有1条房费
+      expect(depositBills).toHaveLength(0); // 无押金
+
+      // 5. 验证房费账单金额
+      expect(Number(roomFeeBills[0].change_price)).toBeCloseTo(180.00, 2);
+
+      // 6. 验证数据库中只有 1 条房费账单
+      const dbBillsResult = await query(
+        'SELECT * FROM bills WHERE order_id = $1',
+        [testOrder.order_id]
+      );
+      expect(dbBillsResult.rows).toHaveLength(1);
+      expect(dbBillsResult.rows[0].change_type).toBe('房费');
+      expect(Number(dbBillsResult.rows[0].change_price)).toBeCloseTo(180.00, 2);
+      expect(dbBillsResult.rows[0].stay_type).toBe('休息房');
+    });
   });
 
   describe('❌ 错误场景', () => {

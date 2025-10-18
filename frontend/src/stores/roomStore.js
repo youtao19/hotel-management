@@ -210,21 +210,12 @@ export const useRoomStore = defineStore('room', () => {
         console.log(`房间 ${room.room_number} 状态映射: ${orderStatus} -> ${displayStatus}`)
       }
     } else if (room.guest_name || room.check_out_date || room.order_status) {
-      // 房间直接包含关联订单信息（来自后端getAllRooms合并）
-      console.log(`房间 ${room.room_number} 包含订单信息:`, {
-        guest_name: room.guest_name,
-        check_out_date: room.check_out_date,
-        order_status: room.order_status,
-        order_id: room.order_id
-      })
-
       // 根据订单状态确定房间显示状态
       if (room.order_status) {
         const normalized = normalizeOrderStatus(room.order_status)
         const mappedStatus = ORDER_TO_ROOM_STATE_MAP[normalized]
         if (mappedStatus) {
           displayStatus = mappedStatus
-          console.log(`房间 ${room.room_number} 状态映射(从房间数据): ${room.order_status} -> ${displayStatus}`)
         }
       }
     } else {

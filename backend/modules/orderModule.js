@@ -1156,7 +1156,19 @@ async function createCheckedInOrderWithTransaction(orderData, createdBy = 'syste
     // 4.1 计算住宿天数
     const checkInDate = new Date(newOrder.check_in_date);
     const checkOutDate = new Date(newOrder.check_out_date);
-    const stayDays = Math.ceil((checkOutDate - checkInDate) / (1000 * 60 * 60 * 24));
+    let stayDays = Math.ceil((checkOutDate - checkInDate) / (1000 * 60 * 60 * 24));
+
+    // 对于休息房等当天退房的情况（stayDays === 0），按1天计算
+    if (stayDays === 0) {
+      console.log(`📝 [fastCheckIn] 检测到休息房订单（同日入住退房），按1天计算`);
+      stayDays = 1;
+    } else if (stayDays < 0) {
+      const error = new Error('退房日期不能早于入住日期');
+      error.code = 'INVALID_DATES';
+      error.statusCode = 400;
+      throw error;
+    }
+
     console.log(`🧮 [fastCheckIn] stayDays: ${stayDays}, total_price: ${newOrder.total_price}`);
 
     // 4.2 计算每日房费（平均分摊）
