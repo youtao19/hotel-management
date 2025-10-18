@@ -41,8 +41,6 @@
  * 6. 所有操作在一个事务中执行，失败时回滚
  * 7. 账单的 stay_date 设置为订单的入住日期
  *
- * 作者：AI Assistant
- * 日期：2025-10-14
  */
 
 const request = require('supertest');

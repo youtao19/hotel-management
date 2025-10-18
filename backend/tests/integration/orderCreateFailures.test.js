@@ -67,8 +67,6 @@
  * - 使用真实数据库进行集成测试
  * - 每个测试前清理数据确保独立性
  *
- * 作者：AI Assistant
- * 日期：2025-10-10
  */
 
 const request = require('supertest');

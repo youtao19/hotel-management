@@ -45,8 +45,6 @@
  * 7. 默认状态为 'pending'（待入住）
  * 8. 重复订单（相同order_id）会被拒绝
  *
- * 作者：AI Assistant
- * 日期：2025-10-10
  */
 
 const request = require('supertest');

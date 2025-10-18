@@ -69,8 +69,6 @@
  * - 使用 Promise.allSettled 测试并发场景
  * - 标记已知限制便于后续改进
  *
- * 作者：AI Assistant
- * 日期：2025-10-10
  */
 
 const request = require('supertest');

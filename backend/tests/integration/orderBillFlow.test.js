@@ -76,8 +76,6 @@
  * - 支付方式：现金
  * - 订单状态：已退房
  *
- * 作者：AI Assistant
- * 日期：2025-10-10
  */
 
 const request = require('supertest');

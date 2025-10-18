@@ -26,8 +26,6 @@
  * 🔗 相关测试文件：
  * - backend/tests/integration/auth.test.js - 完整的认证系统集成测试
  *
- * 作者：AI Assistant
- * 日期：2025-10-10
  */
 
 const request = require('supertest');

@@ -91,8 +91,6 @@
  * - 入住日 <= 查询结束日 AND 退房日 > 查询开始日
  * - 排除已取消和已退房的订单
  *
- * 作者：AI Assistant
- * 日期：2025-10-10
  */
 
 const request = require('supertest');

@@ -30,8 +30,6 @@
  * - 覆盖正常情况和边界情况
  * - 测试输入验证和错误处理
  *
- * 作者：AI Assistant
- * 日期：2025-10-10
  */
 
 const orderModule = require('../../modules/orderModule');

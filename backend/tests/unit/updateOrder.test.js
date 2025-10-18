@@ -25,8 +25,6 @@
  * 3. 需要提供 checkInTime 和 checkOutTime 参数
  * 4. 使用 order_id 作为唯一标识符
  *
- * 作者：AI Assistant
- * 日期：2025-10-10
  */
 
 const request = require('supertest');

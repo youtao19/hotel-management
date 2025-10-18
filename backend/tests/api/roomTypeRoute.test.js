@@ -83,8 +83,6 @@
  * - 每个测试前清理数据
  * - 价格范围：0.01 - 99999.99
  *
- * 作者：AI Assistant
- * 日期：2025-10-10
  */
 
 const request = require('supertest');

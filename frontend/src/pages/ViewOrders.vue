@@ -670,8 +670,8 @@ async function handleCheckInConfirm(order) {
 async function performCheckIn(order) {
   loadingOrders.value = true;
   try {
-    // 1. 等待核心入住操作完成
-    await orderStore.checkIn(order.orderNumber);
+    // 1. 等待核心入住操作完成，传入押金金额
+    await orderStore.checkIn(order.orderNumber, order.deposit);
 
     $q.notify({
       type: 'positive',

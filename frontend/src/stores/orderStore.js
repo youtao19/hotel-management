@@ -502,17 +502,22 @@ export const useOrderStore = defineStore('order', () => {
     }
   }
 
-  async function checkIn(orderNumber) {
+  async function checkIn(orderNumber, depositAmount) {
     try {
       loading.value = true;
       error.value = null;
-      console.log(`🚀 开始办理入住，订单号: ${orderNumber}`);
+      console.log(`🚀 开始办理入住，订单号: ${orderNumber}, 押金: ${depositAmount}`);
 
-      const result = await orderApi.checkIn(orderNumber);
+      const checkInData = depositAmount !== undefined ? { deposit: depositAmount } : {};
+      const result = await orderApi.checkIn(orderNumber, checkInData);
 
       const index = orders.value.findIndex(o => o.orderNumber === orderNumber);
       if (index !== -1) {
         orders.value[index].status = 'checked-in';
+        // 如果传入了押金金额，更新订单的押金
+        if (depositAmount !== undefined) {
+          orders.value[index].deposit = depositAmount;
+        }
       }
 
       console.log(`✅ 办理入住成功，订单号: ${orderNumber}`, result);
@@ -522,6 +527,74 @@ export const useOrderStore = defineStore('order', () => {
       const errorMessage = err.response?.data?.message || err.message || '办理入住失败';
       error.value = errorMessage;
       throw new Error(errorMessage);
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function fastCheckIn(order) {
+    try {
+      loading.value = true;
+      error.value = null;
+
+      // Prepare data (similar to addOrder)
+      const orderData = {
+        order_id: order.orderNumber?.toString(),
+        guest_name: order.guestName?.toString(),
+        phone: order.phone?.toString() || '',
+        room_type: order.roomType?.toString(),
+        room_number: order.roomNumber?.toString(),
+        check_in_date: formatOrderDate(order.checkInDate),
+        check_out_date: formatOrderDate(order.checkOutDate),
+        status: 'checked-in', // This is the key for the new API
+        payment_method: viewStore.normalizePaymentMethodForDB(typeof order.paymentMethod === 'object' ? order.paymentMethod.value?.toString() : order.paymentMethod?.toString()),
+        total_price: order.roomPrice,
+        deposit: parseFloat(order.deposit) || 0,
+        remarks: order.remarks?.toString() || '',
+        order_source: order.source?.toString() || 'front_desk',
+        id_source: order.sourceNumber?.toString() || '',
+        create_time: new Date().toISOString(),
+      };
+
+      // Call the new API
+      const response = await orderApi.fastCheckIn(orderData);
+
+      console.log('✅ [fastCheckIn] 后端返回数据:', response);
+
+      // The backend returns { success, message, data: { order, bill, room } }
+      const newOrderFromApi = response.data?.order || response.order;
+
+      // Update local state
+      const newOrderMapped = {
+        orderNumber: newOrderFromApi.order_id,
+        guestName: newOrderFromApi.guest_name,
+        phone: newOrderFromApi.phone,
+        roomType: newOrderFromApi.room_type,
+        roomNumber: newOrderFromApi.room_number,
+        checkInDate: newOrderFromApi.check_in_date,
+        checkOutDate: newOrderFromApi.check_out_date,
+        status: newOrderFromApi.status,
+        paymentMethod: newOrderFromApi.payment_method,
+        roomPrice: newOrderFromApi.total_price,
+        deposit: newOrderFromApi.deposit,
+        createTime: newOrderFromApi.create_time,
+        remarks: newOrderFromApi.remarks,
+        source: newOrderFromApi.order_source,
+        sourceNumber: newOrderFromApi.id_source,
+      };
+
+      orders.value.unshift(newOrderMapped);
+
+      return response; // Return the full { order, bills } object
+
+    } catch (err) {
+      const backend = err.response?.data;
+      console.error('快速入住失败:', backend || err.message);
+      const code = backend?.code;
+      const msg = backend?.message || err.message;
+      const combined = code ? `[${code}] ${msg}` : msg;
+      error.value = combined || '快速入住失败';
+      throw new Error(combined);
     } finally {
       loading.value = false;
     }
@@ -555,6 +628,7 @@ export const useOrderStore = defineStore('order', () => {
     formatOrderDate,
     createOrder: createExtendStayOrder, // 导出续住专用函数
     refundDeposit,
-    checkIn
+    checkIn,
+    fastCheckIn
   }
 })

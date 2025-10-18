@@ -125,6 +125,9 @@ export const orderApi = {
   // 添加新订单
   addOrder: (orderData) => api.post('/orders/new', orderData),
 
+  // 快速入住
+  fastCheckIn: (orderData) => api.post('/orders/fast-check-in', orderData),
+
   // 更新订单状态
   updateOrderStatus: (orderId, statusData) => api.post(`/orders/${orderId}/status`, statusData),
 
@@ -141,8 +144,8 @@ export const orderApi = {
   // 获取押金状态
   getDepositInfo: (order_id) => api.get(`/orders/${order_id}/deposit-info`),
 
-  // 办理入住
-  checkIn: (orderId) => api.post(`/orders/${orderId}/check-in`),
+  // 办理入住（支持传递押金金额）
+  checkIn: (orderId, data = {}) => api.post(`/orders/${orderId}/check-in`, data),
 }
 
 // 用户相关接口

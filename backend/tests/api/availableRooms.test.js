@@ -101,8 +101,6 @@
  * 房间被占用 = (订单入住日 < 查询结束日) AND (订单退房日 > 查询开始日)
  * ```
  *
- * 作者：AI Assistant
- * 日期：2025-10-10
  */
 
 const request = require('supertest');

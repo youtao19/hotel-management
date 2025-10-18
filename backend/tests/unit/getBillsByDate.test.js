@@ -47,8 +47,6 @@
  * - 测试房间：TEST_115、TEST_106
  * - 测试日期：2025-10-07
  *
- * 作者：AI Assistant
- * 日期：2025-10-10
  */
 
 const request = require('supertest');

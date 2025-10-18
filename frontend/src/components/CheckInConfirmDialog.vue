@@ -78,37 +78,77 @@
               </div>
 
 
-              <!-- 押金和支付方式 - 横向排列 -->
-              <div class="row q-col-gutter-xs q-mb-xs">
-
+              <!-- 费用明细卡片 - 横向排列 -->
+              <div class="row q-col-gutter-md q-mb-md">
+                <!-- 房费卡片 -->
                 <div class="col-4">
-                  <div class="bg-white q-pa-xs rounded-borders" style="border: 1px solid #e0e0e0;">
-                    <div class="text-caption text-grey-7">房费</div>
-                    <div class="text-subtitle2 text-weight-bold text-orange">¥{{ order.roomPrice || 0 }}</div>
+                  <div class="fee-card">
+                    <div class="fee-card-label">房费</div>
+                    <div class="fee-card-input">
+                      <q-input
+                        :model-value="'¥' + (totalRoomFee || 0)"
+                        readonly
+                        dense
+                        borderless
+                        class="fee-input readonly-input"
+                        input-class="fee-card-value-text"
+                      />
+                    </div>
                   </div>
                 </div>
 
+                <!-- 押金卡片 -->
                 <div class="col-4">
-                  <div class="bg-white q-pa-xs rounded-borders" style="border: 1px solid #e0e0e0;">
-                    <div class="text-caption text-grey-7">押金</div>
-                    <div class="text-subtitle2 text-weight-bold text-orange">¥{{ order.deposit || 0 }}</div>
+                  <div class="fee-card deposit-card" @click.capture="focusDepositInput">
+                    <div class="fee-card-label">
+                      押金（可修改）
+                      <q-icon name="edit" size="12px" class="q-ml-xs" color="primary" />
+                    </div>
+                    <div class="fee-card-input clickable-area">
+                      <q-input
+                        ref="depositInput"
+                        v-model.number="depositAmount"
+                        type="number"
+                        dense
+                        borderless
+                        prefix="¥"
+                        :rules="[val => val >= 0 || '押金不能为负数']"
+                        class="fee-input editable-input"
+                        input-class="fee-card-value-text"
+                      >
+                        <template v-slot:append>
+                          <q-icon name="edit" size="14px" color="grey-5" class="edit-icon-hint" />
+                        </template>
+                      </q-input>
+                    </div>
                   </div>
                 </div>
+
+                <!-- 支付方式卡片 -->
                 <div class="col-4">
-                  <div class="bg-white q-pa-xs rounded-borders" style="border: 1px solid #e0e0e0;">
-                    <div class="text-caption text-grey-7">支付方式</div>
-                    <div class="text-body2 text-weight-bold text-orange">{{ getPaymentMethodName(order.paymentMethod) }}</div>
+                  <div class="fee-card">
+                    <div class="fee-card-label">支付方式</div>
+                    <div class="fee-card-input">
+                      <q-input
+                        :model-value="getPaymentMethodName(order.paymentMethod)"
+                        readonly
+                        dense
+                        borderless
+                        class="fee-input readonly-input"
+                        input-class="fee-card-value-text"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
 
               <!-- 费用合计 -->
-              <div class="row items-center q-pa-xs bg-blue-1 rounded-borders">
-                <div class="col">
-                  <div class="text-body2 text-weight-bold">应收合计</div>
-                  <div class="text-caption text-grey-7">房费 + 押金</div>
+              <div class="total-amount-card">
+                <div class="total-amount-left">
+                  <div class="text-body2 text-weight-bold text-grey-8">应收合计</div>
+                  <div class="text-caption text-grey-6">房费 + 押金</div>
                 </div>
-                <div class="text-h5 text-primary text-weight-bold">
+                <div class="total-amount-right">
                   ¥{{ totalAmount }}
                 </div>
               </div>
@@ -163,7 +203,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 
 // Props
 const props = defineProps({
@@ -194,6 +234,21 @@ const emit = defineEmits(['update:modelValue', 'confirm'])
 
 // 加载状态
 const loading = ref(false)
+
+// 押金金额（可编辑）
+const depositAmount = ref(0)
+
+// 押金输入框引用
+const depositInput = ref(null)
+
+// 聚焦押金输入框
+function focusDepositInput() {
+  if (depositInput.value) {
+    depositInput.value.focus()
+  }
+}
+
+
 
 // 判断是否为休息房
 const isRestRoom = computed(() => {
@@ -246,7 +301,7 @@ const roomPriceDetails = computed(() => {
 // 房费总计
 const totalRoomFee = computed(() => {
   console.log('🔍 计算房费总计 - roomPrice类型:', typeof props.order?.roomPrice, '值:', props.order?.roomPrice)
-  
+
   // 处理数字类型
   if (typeof props.order?.roomPrice === 'number') {
     console.log('✅ roomPrice是数字:', props.order.roomPrice)
@@ -274,7 +329,7 @@ const totalRoomFee = computed(() => {
 
 // 费用合计
 const totalAmount = computed(() => {
-  const deposit = parseFloat(props.order?.deposit) || 0
+  const deposit = parseFloat(depositAmount.value) || 0
   const roomFee = parseFloat(totalRoomFee.value) || 0
   console.log('计算应收合计 - 房费:', roomFee, '押金:', deposit)
   return (roomFee + deposit).toFixed(2)
@@ -284,7 +339,12 @@ const totalAmount = computed(() => {
 async function confirmCheckIn() {
   loading.value = true
   try {
-    emit('confirm', props.order)
+    // 将修改后的押金金额传递给父组件
+    const orderWithDeposit = {
+      ...props.order,
+      deposit: depositAmount.value
+    }
+    emit('confirm', orderWithDeposit)
   } finally {
     // 等待父组件处理完成后再关闭loading
     setTimeout(() => {
@@ -321,6 +381,252 @@ ul {
 .text-caption {
   font-size: 11px;
   line-height: 1.2;
+}
+
+/* ===== 费用明细卡片样式 ===== */
+.fee-card {
+  background: white;
+  border: 1px solid #e8eaf0;
+  border-radius: 10px;
+  padding: 14px 16px;
+  height: 76px; /* 固定高度确保一致性 */
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  transition: all 0.3s ease;
+  cursor: default; /* 默认光标 */
+}
+
+.fee-card:hover {
+  border-color: #1976d2;
+  box-shadow: 0 4px 12px rgba(25, 118, 210, 0.12);
+  transform: translateY(-2px);
+}
+
+.fee-card-label {
+  font-size: 11px;
+  color: #6b7280;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  line-height: 14px; /* 固定行高 */
+  height: 14px; /* 固定高度确保标题对齐 */
+  margin-bottom: 10px; /* 标题到内容的固定间距 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fee-card-input {
+  height: 24px; /* 与 fee-card-value 相同高度 */
+  display: flex;
+  align-items: center; /* 垂直居中对齐 */
+}
+
+/* 可点击区域样式 */
+.fee-card-input.clickable-area {
+  cursor: text; /* 显示文本光标 */
+  padding: 2px 0; /* 扩大可点击区域 */
+  margin: -2px 0; /* 补偿padding */
+}
+
+/* 押金卡片可点击 */
+.fee-card.deposit-card {
+  cursor: text; /* 整个卡片显示文本光标 */
+}
+
+.fee-card.deposit-card:hover {
+  background-color: rgba(25, 118, 210, 0.01); /* 悬停时轻微背景色 */
+}
+
+/* 押金卡片所有子元素都允许点击穿透 */
+.fee-card.deposit-card * {
+  pointer-events: none; /* 所有子元素不拦截点击 */
+}
+
+/* 但输入框本身需要接收事件 */
+.fee-card.deposit-card .fee-input :deep(input) {
+  pointer-events: auto; /* 输入框可以接收事件 */
+}
+
+/* 统一输入框样式 */
+.fee-input {
+  width: 100%;
+  height: 24px; /* 与其他内容相同高度 */
+}
+
+.fee-input :deep(.q-field__control) {
+  min-height: 24px;
+  height: 24px;
+  padding: 0 0 2px 0; /* 底部留空间给下划线 */
+  border-bottom: 2px solid transparent; /* 默认透明边框 */
+  transition: all 0.3s ease;
+}
+
+/* 只读输入框样式 */
+.fee-input.readonly-input :deep(.q-field__control) {
+  border-bottom-color: #e8eaf0; /* 淡灰色边框 */
+  cursor: default;
+}
+
+.fee-input.readonly-input :deep(.q-field__native) {
+  cursor: default;
+}
+
+/* 可编辑输入框样式 */
+.fee-input.editable-input :deep(.q-field__control) {
+  border-bottom-color: #e0e0e0; /* 可编辑输入框的底部边框 */
+}
+
+.fee-input.editable-input:hover :deep(.q-field__control) {
+  border-bottom-color: #1976d2; /* 悬停时边框变蓝 */
+  background-color: rgba(25, 118, 210, 0.02); /* 轻微背景色提示 */
+}
+
+.fee-input.editable-input :deep(.q-field--focused .q-field__control) {
+  border-bottom-color: #1976d2; /* 聚焦时边框变蓝 */
+  background-color: rgba(25, 118, 210, 0.05); /* 聚焦时背景色 */
+  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.15); /* 聚焦时添加阴影 */
+}
+
+.fee-input :deep(.q-field__control-container) {
+  height: 24px;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.fee-input :deep(.q-field__native) {
+  padding: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #ff6b00;
+  letter-spacing: -0.5px;
+  line-height: 24px; /* 与其他文字同行高 */
+  height: 24px;
+  transition: color 0.3s ease;
+}
+
+/* 可编辑输入框的光标 */
+.fee-input.editable-input :deep(.q-field__native) {
+  cursor: text;
+}
+
+/* 聚焦时数字颜色略微加深 */
+.fee-input.editable-input :deep(.q-field--focused .q-field__native) {
+  color: #ff5500;
+}
+
+.fee-input :deep(.q-field__prefix) {
+  font-size: 18px;
+  font-weight: 700;
+  color: #ff6b00;
+  margin-right: 2px;
+  letter-spacing: -0.5px;
+  line-height: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+}
+
+.fee-input :deep(.q-field__append) {
+  padding-left: 4px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+}
+
+.edit-icon-hint {
+  opacity: 0.5;
+  transition: opacity 0.3s ease;
+}
+
+.fee-input.editable-input:hover .edit-icon-hint,
+.fee-input.editable-input :deep(.q-field--focused) .edit-icon-hint {
+  opacity: 1;
+}
+
+.fee-card-value-text {
+  font-size: 18px !important;
+  font-weight: 700 !important;
+  color: #ff6b00 !important;
+  letter-spacing: -0.5px !important;
+  line-height: 24px !important;
+  height: 24px !important;
+}
+
+/* ===== 总计卡片样式 ===== */
+.total-amount-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, #e3f2fd 0%, #f5f9ff 100%);
+  border: 1px solid #bbdefb;
+  border-radius: 10px;
+  padding: 14px 18px;
+  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.08);
+  transition: all 0.3s ease;
+}
+
+.total-amount-card:hover {
+  box-shadow: 0 4px 12px rgba(25, 118, 210, 0.15);
+}
+
+.total-amount-left {
+  flex: 1;
+}
+
+.total-amount-right {
+  font-size: 26px;
+  font-weight: 700;
+  color: #1976d2;
+  letter-spacing: -0.5px;
+  line-height: 1;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .fee-card {
+    height: 70px;
+    padding: 12px 14px;
+  }
+
+  .fee-card-label {
+    height: 13px;
+    line-height: 13px;
+    margin-bottom: 8px;
+  }
+
+  .fee-card-input {
+    height: 22px;
+    line-height: 22px;
+  }
+
+  .fee-input :deep(.q-field__native),
+  .fee-input :deep(.q-field__prefix) {
+    font-size: 16px;
+    line-height: 22px;
+    height: 22px;
+  }
+
+  .fee-input {
+    height: 22px;
+  }
+
+  .fee-input :deep(.q-field__control) {
+    min-height: 22px;
+    height: 22px;
+  }
+
+  .fee-input :deep(.q-field__control-container) {
+    height: 22px;
+  }
+
+  .fee-input :deep(.q-field__append) {
+    height: 22px;
+  }
+
+  .total-amount-right {
+    font-size: 22px;
+  }
 }
 </style>
 

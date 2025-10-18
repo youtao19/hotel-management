@@ -170,6 +170,63 @@ router.post('/new', async (req, res) => {
 });
 
 /**
+ * 快速入住：创建已入住订单和账单（使用事务）
+ * POST /api/orders/fast-check-in
+ */
+router.post('/fast-check-in', [
+  body('order_id').notEmpty().withMessage('订单号不能为空'),
+  body('guest_name').notEmpty().withMessage('客人姓名不能为空'),
+  body('room_type').notEmpty().withMessage('房间类型不能为空'),
+  body('room_number').notEmpty().withMessage('房间号不能为空'),
+  body('check_in_date').notEmpty().withMessage('入住日期不能为空'),
+  body('check_out_date').notEmpty().withMessage('退房日期不能为空'),
+  body('total_price').notEmpty().withMessage('房间价格不能为空'),
+  body('payment_method').notEmpty().withMessage('支付方式不能为空')
+], async (req, res) => {
+  try {
+    // 验证请求数据
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      console.log('❌ 快速入住验证失败:', errors.array());
+      return res.status(400).json({
+        success: false,
+        message: '数据验证失败',
+        errors: errors.array()
+      });
+    }
+
+    const orderData = req.body;
+    const depositAmount = parseFloat(req.body.deposit) || 0;
+
+    console.log('🚀 收到快速入住请求:', {
+      order_id: orderData.order_id,
+      guest_name: orderData.guest_name,
+      room_number: orderData.room_number,
+      deposit: depositAmount
+    });
+
+    // 调用业务逻辑函数
+    const result = await orderModule.createCheckedInOrderWithTransaction(orderData, depositAmount);
+
+    console.log('✅ 快速入住成功:', result.order.order_id);
+
+    return res.status(200).json({
+      success: true,
+      message: '快速入住成功',
+      data: result
+    });
+
+  } catch (error) {
+    console.error('❌ 快速入住失败:', error);
+    return res.status(500).json({
+      success: false,
+      message: '快速入住失败',
+      error: error.message
+    });
+  }
+});
+
+/**
  * 变更订单：插入新订单并隐藏旧订单
  * POST /api/orders/:orderId/change
  */
@@ -324,9 +381,11 @@ router.get('/:order_id/deposit-info', async (req, res) => {
 /**
  * 办理入住
  * POST /api/orders/:orderId/check-in
+ * 请求体: { deposit: number } - 实际收取的押金金额
  */
 router.post('/:orderId/check-in', async (req, res) => {
   const { orderId } = req.params;
+  const { deposit } = req.body; // 从请求体获取押金金额
   const client = await getClient();
 
   try {
@@ -351,11 +410,22 @@ router.post('/:orderId/check-in', async (req, res) => {
       });
     }
 
-    // 3. 格式化日期（确保是 YYYY-MM-DD 格式）
+    // 3. 更新订单的押金金额（使用前端传入的押金）
+    const actualDeposit = deposit !== undefined ? Number(deposit) : Number(order.deposit || 0);
+
+    if (actualDeposit !== Number(order.deposit)) {
+      await client.query(
+        'UPDATE orders SET deposit = $1 WHERE order_id = $2',
+        [actualDeposit, orderId]
+      );
+      console.log(`📝 更新订单 ${orderId} 押金: ${order.deposit} -> ${actualDeposit}`);
+    }
+
+    // 4. 格式化日期（确保是 YYYY-MM-DD 格式）
     const stayDate = formatDate(order.check_in_date);
     const stayType = order.stay_type || '客房'; // 默认值为客房
 
-    // 4. 插入第一天的房费账单
+    // 5. 插入第一天的房费账单
     const insertRoomFeeBillQuery = `
       INSERT INTO bills (
         order_id, room_number, guest_name, change_price, change_type,
@@ -379,8 +449,8 @@ router.post('/:orderId/check-in', async (req, res) => {
 
     const createdBills = [roomFeeBillResult.rows[0]];
 
-    // 5. 如果有押金，插入押金账单
-    if (order.deposit && Number(order.deposit) > 0) {
+    // 6. 如果有押金，插入押金账单（使用实际收取的押金金额）
+    if (actualDeposit && Number(actualDeposit) > 0) {
       const insertDepositBillQuery = `
         INSERT INTO bills (
           order_id, room_number, guest_name, change_price, change_type,
@@ -393,7 +463,7 @@ router.post('/:orderId/check-in', async (req, res) => {
         orderId,
         String(order.room_number).slice(0, 10), // 截断到 10 个字符以适应 bills 表
         order.guest_name,
-        Number(order.deposit),
+        Number(actualDeposit), // 使用实际收取的押金金额
         setup.changeType.deposit,
         order.payment_method,
         new Date(),
@@ -403,9 +473,12 @@ router.post('/:orderId/check-in', async (req, res) => {
       ]);
 
       createdBills.push(depositBillResult.rows[0]);
+      console.log(`💰 创建押金账单: ¥${actualDeposit}`);
+    } else {
+      console.log('💰 未收取押金，不创建押金账单');
     }
 
-    // 5. 更新订单状态为已入住
+    // 7. 更新订单状态为已入住
     const updateOrderQuery = `
       UPDATE orders
       SET status = 'checked-in'
@@ -415,7 +488,7 @@ router.post('/:orderId/check-in', async (req, res) => {
     const updatedOrderResult = await client.query(updateOrderQuery, [orderId]);
     const updatedOrder = updatedOrderResult.rows[0];
 
-    // 6. 更新房间状态为已入住 (occupied)
+    // 8. 更新房间状态为已入住 (occupied)
     const updateRoomQuery = `
       UPDATE rooms
       SET status = 'occupied'
