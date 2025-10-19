@@ -9,9 +9,24 @@
     <!-- 核对数据卡片 -->
     <q-card v-else flat bordered>
       <q-card-section>
-        <div class="text-h6 q-mb-md">
-          <q-icon name="fact_check" color="primary" class="q-mr-sm" />
-          请核对交接数据
+        <div class="row items-center justify-between q-mb-md q-gutter-sm header-bar">
+          <div class="text-h6 row items-center no-wrap">
+            <q-icon name="fact_check" color="primary" class="q-mr-sm" />
+            <span>请核对交接数据</span>
+          </div>
+          <q-input
+            v-model="selectedDate"
+            type="date"
+            dense
+            outlined
+            label="账单日期"
+            class="date-picker-input"
+            @update:model-value="onDateChange"
+          >
+            <template #prepend>
+              <q-icon name="event" />
+            </template>
+          </q-input>
         </div>
 
         <!-- 客房数据表格 -->
@@ -58,7 +73,7 @@
                     icon="edit"
                     @click="editRow(props.row)"
                   >
-                    <q-tooltip>修改数据</q-tooltip>
+                    <q-tooltip>{{ props.row.isAggregatedRoomFee ? '修改汇总后自动按日平均分配' : '修改数据' }}</q-tooltip>
                   </q-btn>
                 </div>
               </q-td>
@@ -134,7 +149,7 @@
                     icon="edit"
                     @click="editRow(props.row)"
                   >
-                    <q-tooltip>修改数据</q-tooltip>
+                    <q-tooltip>{{ props.row.isAggregatedRoomFee ? '修改汇总后自动按日平均分配' : '修改数据' }}</q-tooltip>
                   </q-btn>
                 </div>
               </q-td>
@@ -195,6 +210,14 @@
           <div class="q-mb-md">
             <strong>订单号：</strong>{{ editDialog.data.orderNo }}
           </div>
+          <q-banner
+            v-if="editDialog.isAggregated"
+            inline-actions
+            dense
+            class="bg-blue-1 text-blue-9 q-pa-sm q-mb-md rounded-borders"
+          >
+            汇总房费修改后，将平均分配到 {{ editDialog.aggregatedBills.length }} 天的原始房费账单。
+          </q-banner>
           <div class="q-mb-md">
             <q-select
               v-model="editDialog.data.changeType"
@@ -203,6 +226,7 @@
               outlined
               emit-value
               map-options
+              :disable="editDialog.isAggregated"
             />
           </div>
           <div class="q-mb-md">
@@ -212,7 +236,7 @@
               label="金额"
               outlined
               prefix="¥"
-              hint="正数表示收入，负数表示支出"
+              :hint="editDialog.isAggregated ? '修改后的总房费将平均分配到各日' : '正数表示收入，负数表示支出'"
             />
           </div>
         </q-card-section>
@@ -258,6 +282,23 @@ const changeTypeOptions = [
   '退款',
   '订单账单'
 ]
+
+const REFUND_CHANGE_TYPES = ['退押', '退押金', '退款']
+
+const formatLocalDate = (date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+const getDefaultHandoverDate = () => {
+  const date = new Date()
+  date.setDate(date.getDate() - 1)
+  return date
+}
+
+const selectedDate = ref(formatLocalDate(getDefaultHandoverDate()))
 
 // 响应式数据
 const isConfirmingData = ref(false)
@@ -345,7 +386,9 @@ const editDialog = ref({
     changeType: '',
     amount: 0
   },
-  originalData: null
+  originalData: null,
+  isAggregated: false,
+  aggregatedBills: []
 })
 
 // 汇总数据对象（按支付方式统计）
@@ -429,6 +472,146 @@ const allDataConfirmed = computed(() => {
 })
 
 // 方法
+const mapBillToRow = (bill, overrides = {}) => {
+  const normalizedAmount = overrides.amount !== undefined ? overrides.amount : (parseFloat(bill.change_price) || 0)
+  const changeType = overrides.changeType || bill.change_type
+  const signedAmount = REFUND_CHANGE_TYPES.includes(changeType) ? -Math.abs(normalizedAmount) : normalizedAmount
+  const normalizedPayWay = overrides.payWay !== undefined ? overrides.payWay : (bill.pay_way || '其他')
+  const row = {
+    billId: overrides.billId !== undefined ? overrides.billId : bill.bill_id,
+    orderNo: bill.order_id,
+    roomNo: bill.room_number || '未知',
+    guestName: bill.guest_name || '未知',
+    changeType,
+    amount: signedAmount,
+    payWay: normalizedPayWay,
+    stayDate: bill.stay_date,
+    createTime: overrides.createTime || bill.create_time,
+    confirmed: false,
+    isAggregatedRoomFee: Boolean(overrides.isAggregatedRoomFee)
+  }
+
+  if (overrides.aggregatedBillIds) {
+    row.aggregatedBillIds = overrides.aggregatedBillIds
+  }
+  if (overrides.aggregatedBills) {
+    row.aggregatedBills = overrides.aggregatedBills.map(item => ({
+      ...item,
+      change_price: parseFloat(item.change_price) || 0
+    }))
+  }
+
+  return row
+}
+
+const extractDatePart = (value = '') => {
+  if (!value) {
+    return ''
+  }
+  if (typeof value !== 'string') {
+    return ''
+  }
+  if (value.includes('T')) {
+    return value.split('T')[0]
+  }
+  if (value.includes(' ')) {
+    return value.split(' ')[0]
+  }
+  return value.slice(0, 10)
+}
+
+const matchesTargetDate = (bill, targetDate) => {
+  const createDate = extractDatePart(bill.create_time)
+  if (createDate) {
+    return createDate === targetDate
+  }
+  return extractDatePart(bill.stay_date) === targetDate
+}
+
+const buildTableRows = (bills = [], targetDate) => {
+  if (!Array.isArray(bills)) {
+    return []
+  }
+
+  const filteredBills = bills.filter(bill => matchesTargetDate(bill, targetDate))
+  const rows = []
+  const aggregateGroups = new Map()
+
+  filteredBills.forEach(bill => {
+    const rawAmount = parseFloat(bill.change_price) || 0
+    const normalizedAmount = REFUND_CHANGE_TYPES.includes(bill.change_type) ? -Math.abs(rawAmount) : rawAmount
+
+    if (bill.change_type === '房费') {
+      const aggregateKey = `${bill.order_id || bill.bill_id}-${targetDate}`
+
+      if (!aggregateGroups.has(aggregateKey)) {
+        aggregateGroups.set(aggregateKey, {
+          firstBill: bill,
+          totalAmount: 0,
+          billIds: [],
+          payWays: new Set(),
+          bills: []
+        })
+
+        rows.push({ __aggregateKey: aggregateKey })
+      }
+
+      const group = aggregateGroups.get(aggregateKey)
+      group.totalAmount += normalizedAmount
+      group.billIds.push(bill.bill_id)
+      group.bills.push({
+        ...bill,
+        change_price: normalizedAmount
+      })
+      if (bill.pay_way) {
+        group.payWays.add(bill.pay_way)
+      }
+    } else {
+      rows.push(mapBillToRow(bill))
+    }
+  })
+
+  return rows.map(row => {
+    if (!row.__aggregateKey) {
+      row.isAggregatedRoomFee = false
+      return row
+    }
+
+    const group = aggregateGroups.get(row.__aggregateKey)
+    if (!group) {
+      return row
+    }
+
+    const { firstBill, totalAmount, billIds, payWays } = group
+    const isAggregated = billIds.length > 1
+    const payWayCount = payWays.size
+    let payWayLabel = '其他'
+
+    if (payWayCount === 1) {
+      payWayLabel = Array.from(payWays)[0]
+    } else if (payWayCount > 1) {
+      payWayLabel = '多渠道'
+    }
+
+    return mapBillToRow(firstBill, {
+      billId: isAggregated ? `ROOMFEE-${firstBill.order_id || firstBill.bill_id}-${targetDate}` : billIds[0],
+      amount: totalAmount,
+      payWay: payWayLabel,
+      createTime: targetDate,
+      isAggregatedRoomFee: isAggregated,
+      aggregatedBillIds: billIds,
+      aggregatedBills: group.bills
+    })
+  })
+}
+
+const onDateChange = (value) => {
+  if (!value) {
+    return
+  }
+  loadBillsData(value)
+}
+
 // 计算并更新汇总数据对象
 const calculateSummaryData = () => {
   // 重置汇总对象
@@ -501,13 +684,18 @@ const confirmRow = (row, type) => {
 
 // 编辑行数据
 const editRow = (row) => {
+  const isAggregated = Boolean(row.isAggregatedRoomFee && Array.isArray(row.aggregatedBillIds) && row.aggregatedBillIds.length > 1)
+  const aggregatedBills = isAggregated ? (row.aggregatedBills || []) : []
+
   editDialog.value.data = {
     billId: row.billId,
     orderNo: row.orderNo,
-    changeType: row.changeType,
+    changeType: isAggregated ? '房费' : row.changeType,
     amount: row.amount
   }
   editDialog.value.originalData = row
+  editDialog.value.isAggregated = isAggregated
+  editDialog.value.aggregatedBills = aggregatedBills.slice()
   editDialog.value.show = true
 }
 
@@ -521,6 +709,148 @@ const cancelEdit = () => {
     amount: 0
   }
   editDialog.value.originalData = null
+  editDialog.value.isAggregated = false
+  editDialog.value.aggregatedBills = []
+}
+
+const toTimestamp = (value, fallback = Number.POSITIVE_INFINITY) => {
+  if (!value) {
+    return fallback
+  }
+
+  if (typeof value === 'string') {
+    let normalized = value.includes('T') ? value : value.replace(' ', 'T')
+    normalized = normalized.replace(/(\.\d{3})\d+$/, '$1')
+    const timestamp = Date.parse(normalized)
+    return Number.isNaN(timestamp) ? fallback : timestamp
+  }
+
+  if (value instanceof Date) {
+    const timestamp = value.getTime()
+    return Number.isNaN(timestamp) ? fallback : timestamp
+  }
+
+  if (typeof value === 'number') {
+    return Number.isNaN(value) ? fallback : value
+  }
+
+  const timestamp = Date.parse(value)
+  return Number.isNaN(timestamp) ? fallback : timestamp
+}
+
+const getBillSortKey = (bill = {}) => {
+  const stayDate = bill.stay_date
+  if (stayDate) {
+    const normalizedStayDate = stayDate.includes('T') ? stayDate : `${stayDate}T00:00:00`
+    const stayTimestamp = toTimestamp(normalizedStayDate)
+    if (Number.isFinite(stayTimestamp)) {
+      return stayTimestamp
+    }
+  }
+  return toTimestamp(bill.create_time)
+}
+
+const sortBillsChronologically = (bills = []) => bills.slice().sort((a, b) => getBillSortKey(a) - getBillSortKey(b))
+
+const distributeAmountEvenly = (totalAmount, count) => {
+  if (count <= 0) {
+    return []
+  }
+
+  const totalCents = Math.round(Number(totalAmount) * 100)
+  const sign = totalCents >= 0 ? 1 : -1
+  const absTotal = Math.abs(totalCents)
+  const baseCents = Math.floor(absTotal / count)
+  let remainder = absTotal - baseCents * count
+  const result = []
+
+  for (let i = 0; i < count; i += 1) {
+    let cents = baseCents
+    if (remainder > 0) {
+      cents += 1
+      remainder -= 1
+    }
+    result.push((cents * sign) / 100)
+  }
+
+  return result
+}
+
+const saveAggregatedRoomFee = async () => {
+  const originalRow = editDialog.value.originalData
+  if (!originalRow) {
+    throw new Error('未找到需要更新的账单记录')
+  }
+
+  const sourceBills = editDialog.value.aggregatedBills.length > 0
+    ? editDialog.value.aggregatedBills
+    : (originalRow.aggregatedBills || [])
+
+  if (!Array.isArray(sourceBills) || sourceBills.length === 0) {
+    throw new Error('未找到原始房费明细，无法更新')
+  }
+
+  const totalAmount = Number(editDialog.value.data.amount)
+  if (Number.isNaN(totalAmount)) {
+    throw new Error('请输入有效的金额')
+  }
+
+  const sortedBills = sortBillsChronologically(sourceBills)
+  const distributedAmounts = distributeAmountEvenly(totalAmount, sortedBills.length)
+
+  const updatedBills = []
+
+  for (let i = 0; i < sortedBills.length; i += 1) {
+    const bill = sortedBills[i]
+    const newAmount = distributedAmounts[i]
+    const payload = {
+      change_type: '房费',
+      change_price: newAmount
+    }
+
+    console.log('🧮 [saveAggregatedRoomFee] 准备更新多日房费账单:', {
+      billId: bill.bill_id,
+      orderNo: bill.order_id,
+      stayDate: bill.stay_date,
+      newAmount
+    })
+
+    const response = await billApi.updateBill(bill.bill_id, payload)
+
+    if (!response.success || !response.data) {
+      throw new Error(response.message || `账单 ${bill.bill_id} 更新失败`)
+    }
+
+    const updatedBill = response.data
+    updatedBills.push({
+      ...bill,
+      ...updatedBill,
+      change_price: parseFloat(updatedBill.change_price) || newAmount,
+      stay_date: updatedBill.stay_date || bill.stay_date,
+      create_time: updatedBill.create_time || bill.create_time,
+      pay_way: updatedBill.pay_way || bill.pay_way
+    })
+  }
+
+  const payWaySet = new Set(updatedBills.map(item => item.pay_way).filter(Boolean))
+  const newPayWay = payWaySet.size === 0 ? '其他' : (payWaySet.size === 1 ? Array.from(payWaySet)[0] : '多渠道')
+
+  originalRow.amount = Number(totalAmount)
+  originalRow.changeType = '房费'
+  originalRow.payWay = newPayWay
+  originalRow.confirmed = false
+  originalRow.aggregatedBills = updatedBills
+  originalRow.aggregatedBillIds = updatedBills.map(item => item.bill_id)
+
+  editDialog.value.aggregatedBills = updatedBills
+
+  dataCheckCompleted.value = false
+  calculateSummaryData()
+
+  return {
+    totalAmount: Number(totalAmount),
+    billCount: updatedBills.length
+  }
 }
 
 // 保存编辑
@@ -532,7 +862,19 @@ const saveEdit = async () => {
   try {
     isSavingEdit.value = true
 
-    // 准备更新数据
+    if (editDialog.value.isAggregated) {
+      const { totalAmount, billCount } = await saveAggregatedRoomFee()
+
+      $q.notify({
+        type: 'positive',
+        message: `汇总房费已更新为 ¥${totalAmount.toFixed(2)}，并平均分配至 ${billCount} 天，记得重新确认数据`,
+        position: 'top'
+      })
+
+      cancelEdit()
+      return
+    }
+
     const updateData = {
       change_type: editDialog.value.data.changeType,
       change_price: editDialog.value.data.amount
@@ -543,40 +885,33 @@ const saveEdit = async () => {
       updateData
     })
 
-    // 调用后端 API 更新账单
     const response = await billApi.updateBill(editDialog.value.data.billId, updateData)
 
     console.log('✅ [saveEdit] API返回数据:', response)
 
-    if (response.success && response.data) {
-      // 用返回的数据更新表格中的对应行
-      const updatedBill = response.data
-      const originalRow = editDialog.value.originalData
-
-      // 更新显示数据
-      originalRow.changeType = updatedBill.change_type
-      originalRow.amount = parseFloat(updatedBill.change_price) || 0
-      originalRow.payWay = updatedBill.pay_way
-      originalRow.confirmed = false // 修改后需要重新确认
-
-      // 数据修改后重置核对完成状态
-      dataCheckCompleted.value = false
-
-      // 重新计算汇总数据
-      calculateSummaryData()
-
-      $q.notify({
-        type: 'positive',
-        message: `账单 ${editDialog.value.data.billId} 更新成功，请重新确认数据`,
-        position: 'top'
-      })
-
-      // 关闭对话框
-      cancelEdit()
-    } else {
+    if (!response.success || !response.data) {
       throw new Error(response.message || '更新失败')
     }
 
+    const updatedBill = response.data
+    const originalRow = editDialog.value.originalData
+
+    originalRow.changeType = updatedBill.change_type
+    originalRow.amount = parseFloat(updatedBill.change_price) || 0
+    originalRow.payWay = updatedBill.pay_way
+    originalRow.confirmed = false // 修改后需要重新确认
+
+    dataCheckCompleted.value = false
+
+    calculateSummaryData()
+
+    $q.notify({
+      type: 'positive',
+      message: `账单 ${editDialog.value.data.billId} 更新成功，请重新确认数据`,
+      position: 'top'
+    })
+
+    cancelEdit()
   } catch (error) {
     console.error('❌ [saveEdit] 更新账单失败:', error)
     $q.notify({
@@ -628,50 +963,25 @@ const confirmDataCheck = async () => {
   }
 }
 
-// 辅助函数：将Date对象转换为本地日期字符串（YYYY-MM-DD）
-const formatLocalDate = (date) => {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
 // 加载账单数据
-const loadBillsData = async () => {
+const loadBillsData = async (targetDate) => {
   try {
     isLoadingData.value = true
 
-    // 交接班业务逻辑：
-    // 1. 营业日从每天8:00开始，到次日8:00结束
-    // 2. 核对的是"前一个营业日"的账单数据
-    const now = new Date()
-    const currentHour = now.getHours()
-
-    // 计算当前营业日
-    let currentBusinessDate = new Date(now)
-    if (currentHour < 8) {
-      // 还没到8点，还在昨天营业日的时间范围内
-      currentBusinessDate.setDate(currentBusinessDate.getDate() - 1)
-    }
-
-    // 计算要核对的营业日（当前营业日的前一天）
-    let checkDate = new Date(currentBusinessDate)
-    checkDate.setDate(checkDate.getDate() - 1)
-    const checkDateStr = formatLocalDate(checkDate)
-
-    console.log('📅 [CheckData] 日期计算:', {
-      currentTime: now.toLocaleString('zh-CN'),
-      currentHour,
-      currentBusinessDate: formatLocalDate(currentBusinessDate),
-      checkDate: checkDateStr,
-      logic: '核对"前一个营业日"的账单数据'
-    })
+    const fallbackDate = targetDate || selectedDate.value || formatLocalDate(new Date())
+    const checkDateStr = fallbackDate || formatLocalDate(new Date())
+    selectedDate.value = checkDateStr
+    dataCheckCompleted.value = false
 
     // 调用API获取指定日期的账单数据
     const response = await billApi.getBillsByDate(checkDateStr)
 
     if (response.success) {
-      const { hotelBills, restBills, totalCount } = response.data
+      const {
+        hotelBills = [],
+        restBills = [],
+        totalCount = 0
+      } = response.data || {}
 
       console.log('📊 [CheckData] API返回数据:', {
         hotelBills: hotelBills.length,
@@ -681,39 +991,19 @@ const loadBillsData = async () => {
         restBillsData: restBills
       })
 
-      // 转换客房数据格式 - 每条账单一行
-      hotelRoomData.value = hotelBills.map(bill => ({
-        billId: bill.bill_id,
-        orderNo: bill.order_id,
-        roomNo: bill.room_number || '未知',
-        guestName: bill.guest_name || '未知',
-        changeType: bill.change_type,
-        amount: parseFloat(bill.change_price) || 0,
-        payWay: bill.pay_way,
-        stayDate: bill.stay_date,
-        createTime: bill.create_time,
-        confirmed: false
-      }))
+      const hotelRows = buildTableRows(hotelBills, checkDateStr)
+      const restRows = buildTableRows(restBills, checkDateStr)
 
-      // 转换休息房数据格式 - 每条账单一行
-      restRoomData.value = restBills.map(bill => ({
-        billId: bill.bill_id,
-        orderNo: bill.order_id,
-        roomNo: bill.room_number || '未知',
-        guestName: bill.guest_name || '未知',
-        changeType: bill.change_type,
-        amount: parseFloat(bill.change_price) || 0,
-        payWay: bill.pay_way,
-        stayDate: bill.stay_date,
-        createTime: bill.create_time,
-        confirmed: false
-      }))
+      hotelRoomData.value = hotelRows
+      restRoomData.value = restRows
 
       console.log('✅ [CheckData] 数据转换完成:', {
         checkDate: checkDateStr,
         hotelCount: hotelRoomData.value.length,
         restCount: restRoomData.value.length,
-        totalCount
+        totalCount,
+        hotelAggregatedCount: hotelRows.filter(item => item.isAggregatedRoomFee).length,
+        restAggregatedCount: restRows.filter(item => item.isAggregatedRoomFee).length
       })
 
       // 加载数据后初始计算汇总数据
@@ -736,7 +1026,7 @@ const loadBillsData = async () => {
 
 // 生命周期
 onMounted(() => {
-  // 自动加载当天的账单数据
+  // 默认加载当前选择日期（当天）的账单数据
   loadBillsData()
 })
 
@@ -748,7 +1038,9 @@ defineExpose({
   restSummary,
   dataCheckCompleted,
   allDataConfirmed,
-  summaryDataObject  // 暴露汇总数据对象给步骤4使用
+  summaryDataObject,  // 暴露汇总数据对象给步骤4使用
+  selectedDate,
+  loadBillsData
 })
 </script>
 
@@ -802,6 +1094,14 @@ defineExpose({
   vertical-align: middle; /* 确保垂直居中 */
 }
 
+.header-bar {
+  flex-wrap: wrap;
+}
+
+.date-picker-input {
+  min-width: 180px;
+}
+
 /* 汇总行样式 */
 .summary-row {
   border-radius: 0 0 8px 8px;
@@ -845,6 +1145,10 @@ defineExpose({
 
   .action-buttons {
     gap: 2px; /* 移动端减小按钮间距 */
+  }
+
+  .date-picker-input {
+    width: 100%;
   }
 
   .summary-row .row > div {

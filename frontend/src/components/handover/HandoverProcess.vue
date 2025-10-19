@@ -178,7 +178,8 @@
           <div class="q-mb-lg">
             <ShiftHandoverPaymentTable
               :paymentData="confirmationData.paymentData"
-              :readOnly="true"
+              :readOnly="false"
+              @update-retained="handleRetainedAmountUpdate"
             />
           </div>
 
@@ -191,18 +192,13 @@
               :cashierName="confirmationData.cashierName"
               :notes="confirmationData.notes"
               :goodReview="confirmationData.goodReview"
-              :readOnly="true"
+              :readOnly="false"
+              @update:vip-cards="value => handleSpecialStatsUpdate('vipCards', value)"
+              @update:notes="value => handleSpecialStatsUpdate('notes', value)"
             />
           </div>
 
-          <!-- 备忘录 -->
-          <div class="q-mb-lg">
-            <ShiftHandoverMemoList
-              :taskList="confirmationData.taskList"
-              :newTaskTitle="confirmationData.newTaskTitle"
-              :readOnly="true"
-            />
-          </div>
+          <!-- 步骤四不展示备忘录 -->
         </q-card-section>
       </q-card>
     </div>
@@ -293,7 +289,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, reactive } from 'vue'
 import { useQuasar } from 'quasar'
 import { shiftHandoverApi } from '../../api/index.js'
 import { useShiftHandoverStore } from '../../stores/shiftHandoverStore.js'
@@ -301,7 +297,6 @@ import { useUserStore } from '../../stores/userStore.js'
 import CheckData from './CheckData.vue'
 import ShiftHandoverPaymentTable from './ShiftHandoverPaymentTable.vue'
 import ShiftHandoverSpecialStats from './ShiftHandoverSpecialStats.vue'
-import ShiftHandoverMemoList from './ShiftHandoverMemoList.vue'
 import HandoverComplete from './HandoverComplete.vue'
 
 // 定义 props
@@ -413,6 +408,8 @@ const pettyCashColumns = [
   }
 ]
 
+const PAY_WAY_KEYS = ['现金', '微信', '微邮付', '其他']
+
 const pettyCashRows = ref([
   {
     id: 1,
@@ -425,6 +422,55 @@ const pettyCashRows = ref([
   }
 ])
 
+const retainedInitialized = ref(false)
+const retainedAmounts = ref({
+  '现金': 0,
+  '微信': 0,
+  '微邮付': 0,
+  '其他': 0
+})
+
+const specialStatsState = reactive({
+  vipCards: 0,
+  notes: '',
+  goodReview: ''
+})
+
+const specialStatsInitialized = ref(false)
+
+const mapReserveRowToBuckets = () => {
+  const reserveCash = pettyCashRows.value[0] || { cash: 0, wechat: 0, weyoufu: 0, other: 0 }
+  return {
+    '现金': Number(reserveCash.cash) || 0,
+    '微信': Number(reserveCash.wechat) || 0,
+    '微邮付': Number(reserveCash.weyoufu) || 0,
+    '其他': Number(reserveCash.other) || 0
+  }
+}
+
+const initializeRetainedAmounts = () => {
+  const reserveBuckets = mapReserveRowToBuckets()
+  retainedAmounts.value = {
+    '现金': Number(reserveBuckets['现金'].toFixed(2)),
+    '微信': Number(reserveBuckets['微信'].toFixed(2)),
+    '微邮付': Number(reserveBuckets['微邮付'].toFixed(2)),
+    '其他': Number(reserveBuckets['其他'].toFixed(2))
+  }
+  retainedInitialized.value = true
+}
+
+const countRoomNights = (rows = []) => {
+  return rows.reduce((sum, row) => {
+    if (row.changeType !== '房费') {
+      return sum
+    }
+    if (row.isAggregatedRoomFee && Array.isArray(row.aggregatedBillIds) && row.aggregatedBillIds.length > 0) {
+      return sum + row.aggregatedBillIds.length
+    }
+    return sum + 1
+  }, 0)
+}
+
 // 计算确认数据（从步骤3的汇总数据对象中获取）
 const confirmationData = computed(() => {
   // 优先使用保存的汇总数据对象
@@ -435,46 +481,78 @@ const confirmationData = computed(() => {
   console.log('📦 [步骤4] 休息退押:', summaryData.restRefundDeposit)
 
   // 获取备用金（来自步骤2）
-  const reserveCash = pettyCashRows.value[0] || { cash: 0, wechat: 0, weyoufu: 0, other: 0 }
-  const reserve = {
-    '现金': reserveCash.cash || 0,
-    '微信': reserveCash.wechat || 0,
-    '微邮付': reserveCash.weyoufu || 0,
-    '其他': reserveCash.other || 0
-  }
-
-  // 计算总收入（客房收入 + 休息房收入）
-  const totalIncome = { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
-  Object.keys(totalIncome).forEach(key => {
-    totalIncome[key] = (summaryData.hotelIncome[key] || 0) + (summaryData.restIncome[key] || 0)
-  })
+  const reserve = mapReserveRowToBuckets()
 
   // 计算总退押（客房退押 + 休息房退押）- 已包含退押金和退款
   const totalRefundDeposit = { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
-  Object.keys(totalRefundDeposit).forEach(key => {
+  PAY_WAY_KEYS.forEach(key => {
     totalRefundDeposit[key] = (summaryData.hotelRefundDeposit[key] || 0) + (summaryData.restRefundDeposit[key] || 0)
   })
 
-  // 计算交接款（备用金 + 总收入 - 总退押）
+  if (!retainedInitialized.value) {
+    initializeRetainedAmounts()
+  }
+
+  const currentRetained = { ...retainedAmounts.value }
+
+  // 计算合计与交接款
+  const totalAmount = { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
   const handoverAmount = { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
-  Object.keys(handoverAmount).forEach(key => {
-    handoverAmount[key] = (reserve[key] || 0) + (totalIncome[key] || 0) - (totalRefundDeposit[key] || 0)
+
+  PAY_WAY_KEYS.forEach(key => {
+    const reserveValue = reserve[key] || 0
+    const hotelIncomeValue = summaryData.hotelIncome[key] || 0
+    const restIncomeValue = summaryData.restIncome[key] || 0
+    const carIncomeValue = 0 // 暂无租车收入数据
+
+    const rowTotal = reserveValue + hotelIncomeValue + restIncomeValue + carIncomeValue
+    const roundedRowTotal = Number(rowTotal.toFixed(2))
+    totalAmount[key] = roundedRowTotal
+
+    if (currentRetained[key] === undefined || currentRetained[key] === null) {
+      currentRetained[key] = Number(reserveValue.toFixed(2))
+    } else {
+      const numericRetained = Number(currentRetained[key])
+      currentRetained[key] = Number.isNaN(numericRetained) ? 0 : Number(numericRetained.toFixed(2))
+    }
+
+    const refundTotal = Number((totalRefundDeposit[key] || 0).toFixed(2))
+    const computedHandover = roundedRowTotal - refundTotal - currentRetained[key]
+    handoverAmount[key] = Number(computedHandover.toFixed(2))
   })
 
-  // 获取房间统计数据（优先使用特殊统计API的数据）
-  let totalRooms = savedSpecialStats.value.openCount || 0
-  let restRooms = savedSpecialStats.value.restCount || 0
+  const retainedChanged = PAY_WAY_KEYS.some(key => currentRetained[key] !== retainedAmounts.value[key])
+  if (retainedChanged) {
+    retainedAmounts.value = { ...currentRetained }
+  }
 
-  // 如果没有特殊统计数据，使用核对数据的账单数量
-  if (totalRooms === 0 && restRooms === 0) {
-    if (savedCheckData.value.hotelRoomData.length > 0 || savedCheckData.value.restRoomData.length > 0) {
-      totalRooms = savedCheckData.value.hotelRoomData.length
-      restRooms = savedCheckData.value.restRoomData.length
-    }
+  // 获取房间统计数据（优先使用特殊统计API的数据）
+  const hotelRoomRows = savedCheckData.value.hotelRoomData || []
+  const restRoomRows = savedCheckData.value.restRoomData || []
+
+  let totalRooms = countRoomNights(hotelRoomRows)
+  let restRooms = countRoomNights(restRoomRows)
+
+  if (totalRooms === 0 && savedSpecialStats.value.openCount) {
+    totalRooms = savedSpecialStats.value.openCount
+  }
+  if (restRooms === 0 && savedSpecialStats.value.restCount) {
+    restRooms = savedSpecialStats.value.restCount
   }
 
   // 格式化好评数据为 "邀X得Y"
-  const goodReview = `邀${savedSpecialStats.value.invited}得${savedSpecialStats.value.positive}`
+  const derivedGoodReview = `邀${savedSpecialStats.value.invited || 0}得${savedSpecialStats.value.positive || 0}`
+
+  if (!specialStatsInitialized.value) {
+    specialStatsState.vipCards = Number(savedSpecialStats.value.vipCards || 0)
+    specialStatsState.notes = ''
+    specialStatsState.goodReview = derivedGoodReview
+    specialStatsInitialized.value = true
+  }
+
+  if (!specialStatsState.goodReview) {
+    specialStatsState.goodReview = derivedGoodReview
+  }
 
   const result = {
     paymentData: {
@@ -482,19 +560,19 @@ const confirmationData = computed(() => {
       hotelIncome: summaryData.hotelIncome,
       restIncome: summaryData.restIncome,
       carRentIncome: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }, // 暂无数据
-      totalIncome,
+      totalIncome: totalAmount,
       hotelRefundDeposit: summaryData.hotelRefundDeposit,
       restRefundDeposit: summaryData.restRefundDeposit,
       totalRefundDeposit, // 总退押（已包含退押金和退款）
-      retainedAmount: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }, // 暂无数据
+      retainedAmount: currentRetained,
       handoverAmount
     },
     totalRooms,
     restRooms,
-    vipCards: 0, // 暂无数据
-    cashierName: '', // 需要从用户信息获取
-    notes: '',
-    goodReview,
+    vipCards: specialStatsState.vipCards,
+    cashierName: userStore.user.username || '交班人',
+    notes: specialStatsState.notes,
+    goodReview: specialStatsState.goodReview,
     taskList: [],
     newTaskTitle: ''
   }
@@ -525,6 +603,25 @@ const updateTotal = () => {
   row.total = (row.cash || 0) + (row.wechat || 0) + (row.weyoufu || 0) + (row.other || 0)
 }
 
+const handleRetainedAmountUpdate = ({ payWay, value }) => {
+  if (!PAY_WAY_KEYS.includes(payWay)) {
+    return
+  }
+  const numericValue = Number(value)
+  retainedAmounts.value = {
+    ...retainedAmounts.value,
+    [payWay]: Number.isNaN(numericValue) ? 0 : Number(numericValue.toFixed(2))
+  }
+}
+
+const handleSpecialStatsUpdate = (field, value) => {
+  if (field === 'vipCards') {
+    specialStatsState.vipCards = Number(value) || 0
+  } else if (field === 'notes') {
+    specialStatsState.notes = value || ''
+  }
+}
+
 // 确认备用金
 const confirmReserveCash = async () => {
   try {
@@ -544,6 +641,9 @@ const confirmReserveCash = async () => {
       message: `备用金确认完成，总计: ¥${total.toFixed(2)}`,
       position: 'top'
     })
+
+    retainedInitialized.value = false
+    initializeRetainedAmounts()
 
   } catch (error) {
     console.error('确认备用金失败:', error)
@@ -598,6 +698,8 @@ const fetchSpecialStatsData = async () => {
         positive: response.data.positive || 0
       }
 
+      specialStatsInitialized.value = false
+
       console.log('✅ [获取特殊统计] 数据获取成功:', savedSpecialStats.value)
 
       $q.notify({
@@ -619,6 +721,8 @@ const fetchSpecialStatsData = async () => {
       invited: 0,
       positive: 0
     }
+
+    specialStatsInitialized.value = false
 
     $q.notify({
       type: 'warning',
@@ -866,6 +970,10 @@ const nextStep = async () => {
 
       // 调用后端API获取特殊统计数据
       await fetchSpecialStatsData()
+
+      if (!retainedInitialized.value) {
+        initializeRetainedAmounts()
+      }
     }
 
     if (props.currentStep < 6) {
@@ -950,6 +1058,7 @@ const completeHandover = async () => {
       totalIncome: confirmationData.value.paymentData.totalIncome,
       hotelDeposit: confirmationData.value.paymentData.hotelRefundDeposit,  // 字段名转换
       restDeposit: confirmationData.value.paymentData.restRefundDeposit,    // 字段名转换
+      totalRefundDeposit: confirmationData.value.paymentData.totalRefundDeposit,
       retainedAmount: confirmationData.value.paymentData.retainedAmount,
       handoverAmount: confirmationData.value.paymentData.handoverAmount
     }

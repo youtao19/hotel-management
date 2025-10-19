@@ -5,7 +5,14 @@
         <tr>
           <td class="stats-label">好评</td>
           <td colspan="2" class="stats-value">
-            <q-input v-model="localGoodReview" dense borderless class="text-center" placeholder="邀0得0" readonly />
+            <q-input
+              v-model="localGoodReview"
+              dense
+              borderless
+              class="text-center"
+              placeholder="邀0得0"
+              readonly
+            />
           </td>
           <td class="stats-label">开房</td>
           <td colspan="2" class="stats-number">
@@ -13,7 +20,7 @@
           </td>
           <td class="stats-label">收银员</td>
           <td class="cashier-name">
-            <q-input v-model="localCashierName" dense borderless class="text-center" placeholder="张" :readonly="readOnly" />
+            <q-input v-model="localCashierName" dense borderless class="text-center" placeholder="张" readonly />
           </td>
         </tr>
         <tr>
@@ -58,33 +65,27 @@ const props = defineProps({
 
 const emit = defineEmits([
   // 使用 kebab-case 事件名以匹配父组件监听（Vue3 事件名区分大小写）
-  'update:cashier-name',
   'update:notes',
-  'update:total-rooms',
-  'update:rest-rooms',
   'update:vip-cards',
   'update:good-review',
   'save-vip-cards' // 新增：VipCard保存事件
 ])
 
-const localCashierName = ref(props.cashierName)
 const localNotes = ref(props.notes)
-const localTotalRooms = ref(props.totalRooms)
-const localRestRooms = ref(props.restRooms)
 const localVipCards = ref(Number(props.vipCards) || 0)
 const localGoodReview = ref(props.goodReview)
+const localCashierName = ref(props.cashierName)
+const localTotalRooms = ref(props.totalRooms)
+const localRestRooms = ref(props.restRooms)
 
-watch(() => props.cashierName, v => { localCashierName.value = v })
 watch(() => props.notes, v => { localNotes.value = v })
+watch(() => props.cashierName, v => { localCashierName.value = v })
 watch(() => props.totalRooms, v => { localTotalRooms.value = v })
 watch(() => props.restRooms, v => { localRestRooms.value = v })
 watch(() => props.vipCards, v => { localVipCards.value = Number(v) || 0 })
 watch(() => props.goodReview, v => { localGoodReview.value = v })
 
-watch(localCashierName, v => emit('update:cashier-name', v))
 watch(localNotes, v => emit('update:notes', v))
-watch(localTotalRooms, v => emit('update:total-rooms', v))
-watch(localRestRooms, v => emit('update:rest-rooms', v))
 watch(localVipCards, v => emit('update:vip-cards', v))
 watch(localGoodReview, v => emit('update:good-review', v))
 

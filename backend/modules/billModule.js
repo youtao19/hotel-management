@@ -2,6 +2,8 @@
 
 const { query } = require('../database/postgreDB/pg');
 
+const REFUND_TYPES = new Set(['退押', '退押金', '退款']);
+
 // 创建账单
 async function createBill(order_id, room_number, guest_name, deposit, refund_deposit, room_fee, total_income, pay_way, remarks) {
     // 计算 stay_date & 业务类型 (休息房 / 客房)
@@ -360,6 +362,27 @@ async function updateBill(billId, updateData) {
 
         const originalBill = originalResult.rows[0];
 
+        // 1.1 根据类型规范金额符号
+        const nextChangeType = Object.prototype.hasOwnProperty.call(updateData, 'change_type')
+            ? updateData.change_type
+            : originalBill.change_type;
+
+        if (REFUND_TYPES.has(nextChangeType)) {
+            const priceSource = Object.prototype.hasOwnProperty.call(updateData, 'change_price')
+                ? updateData.change_price
+                : originalBill.change_price;
+            const normalizedPrice = -Math.abs(Number(priceSource) || 0);
+            if (!Object.prototype.hasOwnProperty.call(updateData, 'change_price') || normalizedPrice !== priceSource) {
+                updateData = {
+                    ...updateData,
+                    change_price: normalizedPrice
+                };
+            }
+        } else if (Object.prototype.hasOwnProperty.call(updateData, 'change_price')) {
+            const parsed = Number(updateData.change_price);
+            updateData.change_price = Number.isNaN(parsed) ? 0 : parsed;
+        }
+
         // 2. 对比数据，构建需要更新的字段
         const updateFields = [];
         const values = [];
@@ -409,6 +432,24 @@ async function updateBill(billId, updateData) {
 // 根据订单号、日期和类型更新账单（新版本：需要指定 change_type）
 async function updateBillByOrderAndDate(orderNumber, stayDate, updateData) {
     try {
+        const normalizedData = { ...updateData };
+        const explicitPriceProvided = Object.prototype.hasOwnProperty.call(normalizedData, 'change_price');
+
+        if (explicitPriceProvided) {
+            const parsed = Number(normalizedData.change_price);
+            normalizedData.change_price = Number.isNaN(parsed) ? 0 : parsed;
+        }
+
+        const effectiveType = Object.prototype.hasOwnProperty.call(normalizedData, 'change_type')
+            ? normalizedData.change_type
+            : normalizedData.target_change_type;
+
+        const shouldForceNegative = REFUND_TYPES.has(effectiveType || '');
+
+        if (shouldForceNegative && explicitPriceProvided) {
+            normalizedData.change_price = -Math.abs(Number(normalizedData.change_price) || 0);
+        }
+
         const updateFields = [];
         const values = [];
         let paramIndex = 1;
@@ -417,12 +458,16 @@ async function updateBillByOrderAndDate(orderNumber, stayDate, updateData) {
         const allowedFields = ['change_price', 'change_type', 'pay_way', 'remarks'];
 
         allowedFields.forEach(field => {
-            if (updateData[field] !== undefined) {
+            if (normalizedData[field] !== undefined) {
                 updateFields.push(`${field} = $${paramIndex}`);
-                values.push(updateData[field]);
+                values.push(normalizedData[field]);
                 paramIndex++;
             }
         });
+
+        if (shouldForceNegative && !explicitPriceProvided) {
+            updateFields.push('change_price = -ABS(change_price)');
+        }
 
         if (updateFields.length === 0) {
             throw new Error('没有要更新的字段');
@@ -433,10 +478,10 @@ async function updateBillByOrderAndDate(orderNumber, stayDate, updateData) {
         let whereClause = `order_id = $${paramIndex} AND DATE(stay_date) = DATE($${paramIndex + 1})`;
         values.push(orderNumber, stayDate);
 
-        if (updateData.target_change_type) {
+        if (normalizedData.target_change_type) {
             // 如果指定了目标类型，则只更新该类型的账单
             whereClause += ` AND change_type = $${paramIndex + 2}`;
-            values.push(updateData.target_change_type);
+            values.push(normalizedData.target_change_type);
         }
 
         const updateQuery = `

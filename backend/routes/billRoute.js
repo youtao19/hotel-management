@@ -81,9 +81,7 @@ router.get('/by-date/:date', async (req, res) => {
 
   try {
     // 查询指定日期的所有账单，关联订单信息
-    // 规则：
-    // - 房费、收押、订单账单：按 stay_date 过滤
-    // - 退押、退款、补收：按 create_time 过滤
+    // 规则：全部账单统一按 create_time 的日期过滤
     const sql = `
       SELECT
         b.bill_id,
@@ -100,13 +98,7 @@ router.get('/by-date/:date', async (req, res) => {
         o.status as order_status
       FROM bills b
       LEFT JOIN orders o ON b.order_id = o.order_id
-      WHERE (
-        -- 房费、收押按入住日期过滤
-        (b.stay_date::date = $1::date AND b.change_type IN ('房费', '收押', '订单账单'))
-        OR
-        -- 退押、退款、补收按创建日期过滤
-        (DATE(b.create_time) = $1::date AND b.change_type IN ('退押', '退款', '补收'))
-      )
+      WHERE DATE(b.create_time) = $1::date
       ORDER BY o.stay_type, b.order_id, b.bill_id ASC
     `;
 
