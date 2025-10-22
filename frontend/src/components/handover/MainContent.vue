@@ -272,6 +272,7 @@ import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useQuasar } from 'quasar'
 import { useRouter } from 'vue-router'
 import { shiftHandoverApi } from '../../api/index.js'
+import { useUserStore } from 'src/stores/userStore'
 import HandoverProcess from './HandoverProcess.vue'
 import ShiftHandoverPaymentTable from './ShiftHandoverPaymentTable.vue'
 import ShiftHandoverSpecialStats from './ShiftHandoverSpecialStats.vue'
@@ -288,6 +289,7 @@ const props = defineProps({
 // 主内容组件 - 组合式函数
 const $q = useQuasar()
 const router = useRouter()
+const userStore = useUserStore()
 
 // 响应式状态
 const isHandoverInProgress = ref(false)
@@ -386,9 +388,7 @@ const handleLogout = async () => {
     // 这里可以调用后端API来记录交接完成
     // await api.completeHandover(handoverData)
 
-    // 清除本地存储的用户信息
-    localStorage.removeItem('userToken')
-    localStorage.removeItem('userInfo')
+    await userStore.logout()
 
     // 清除其他可能的本地数据
     localStorage.removeItem('handoverData')

@@ -50,7 +50,6 @@ CREATE TABLE IF NOT EXISTS orders (
     order_source VARCHAR(20) NOT NULL,
     guest_name VARCHAR(50) NOT NULL,
     phone VARCHAR(20) NOT NULL,
-    id_number VARCHAR(30) NOT NULL,
     room_type VARCHAR(20) NOT NULL,
     room_number VARCHAR(20) NOT NULL,
     check_in_date DATE NOT NULL,

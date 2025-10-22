@@ -150,12 +150,9 @@ export const useUserStore = defineStore('user', () => {
 
   // 检查是否已登录
   async function checkAuth() {
-    // session认证下，直接尝试获取用户信息来验证session
-    if (!user.value.isLoggedIn) {
-      const userData = await fetchCurrentUser()
-      return !!userData
-    }
-    return user.value.isLoggedIn
+    // 始终向后端确认一次，避免依赖可能过期的本地状态
+    const userData = await fetchCurrentUser()
+    return !!userData
   }
 
   // 初始化 - 检查用户是否已登录（静默模式）

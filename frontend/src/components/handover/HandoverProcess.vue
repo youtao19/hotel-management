@@ -289,7 +289,7 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, watch } from 'vue'
 import { useQuasar } from 'quasar'
 import { shiftHandoverApi } from '../../api/index.js'
 import { useShiftHandoverStore } from '../../stores/shiftHandoverStore.js'
@@ -345,11 +345,30 @@ const savedSpecialStats = ref({
 })
 
 // 步骤相关数据
+const formatDateTimeLocal = (date) => {
+  const pad = (value) => String(value).padStart(2, '0')
+  const year = date.getFullYear()
+  const month = pad(date.getMonth() + 1)
+  const day = pad(date.getDate())
+  const hours = pad(date.getHours())
+  const minutes = pad(date.getMinutes())
+  return `${year}-${month}-${day}T${hours}:${minutes}`
+}
+
 const handoverInfo = ref({
   nextOperator: '',
-  handoverTime: new Date().toISOString().slice(0, 16),
+  handoverTime: formatDateTimeLocal(new Date()),
   notes: ''
 })
+
+watch(
+  () => props.currentStep,
+  (newStep) => {
+    if (newStep === 5) {
+      handoverInfo.value.handoverTime = formatDateTimeLocal(new Date())
+    }
+  }
+)
 
 // 昨日记录检查相关数据
 const isCheckingRecord = ref(false)
@@ -626,13 +645,6 @@ const handleSpecialStatsUpdate = (field, value) => {
 const confirmReserveCash = async () => {
   try {
     isConfirmingCash.value = true
-
-    $q.notify({
-      type: 'info',
-      message: '正在确认备用金...',
-      position: 'top'
-    })
-
 
     const total = pettyCashRows.value[0].total
 
@@ -911,8 +923,16 @@ const nextStep = async () => {
       // 检查数据（defineExpose 会自动解包，直接访问即可）
       const hotelData = checkDataRef.value.hotelRoomData || []
       const restData = checkDataRef.value.restRoomData || []
-      const allConfirmed = checkDataRef.value.allDataConfirmed
-      const dataCheckCompleted = checkDataRef.value.dataCheckCompleted
+
+      const unwrap = (candidate) => {
+        if (candidate && typeof candidate === 'object' && 'value' in candidate) {
+          return candidate.value
+        }
+        return candidate
+      }
+
+      const allConfirmed = unwrap(checkDataRef.value.allDataConfirmed)
+      const dataCheckCompleted = unwrap(checkDataRef.value.dataCheckCompleted)
 
       console.log('🔍 [步骤验证] 数据核对状态:', {
         hotelDataCount: hotelData.length,
@@ -923,17 +943,9 @@ const nextStep = async () => {
         restConfirmedStatus: restData.map(item => ({ orderNo: item.orderNo, confirmed: item.confirmed }))
       })
 
-      // 如果没有数据，也不能进入下一步
-      if (hotelData.length === 0 && restData.length === 0) {
-        $q.notify({
-          type: 'warning',
-          message: '当前没有账单数据，请确认是否已加载数据',
-          position: 'top'
-        })
-        return
-      }
+      const hasAnyData = hotelData.length > 0 || restData.length > 0
 
-      if (!allConfirmed) {
+      if (hasAnyData && !allConfirmed) {
         $q.notify({
           type: 'warning',
           message: '请确认所有账单数据后再进入下一步',
@@ -946,7 +958,9 @@ const nextStep = async () => {
       if (!dataCheckCompleted) {
         $q.notify({
           type: 'warning',
-          message: '请点击"确认核对"按钮完成数据核对',
+          message: hasAnyData
+            ? '请点击"确认核对"按钮完成数据核对'
+            : '今日暂无账单数据，请先点击"确认核对"后继续',
           position: 'top'
         })
         return
