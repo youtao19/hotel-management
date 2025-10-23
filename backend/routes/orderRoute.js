@@ -2,8 +2,6 @@ const express = require('express');
 const router = express.Router();
 // 保险：为该路由挂载 JSON 解析（即使全局已启用）
 router.use(express.json());
-
-console.log('📦 orderRoute.js 模块已加载');
 const { body, validationResult } = require('express-validator');
 const orderModule = require('../modules/orderModule');
 const billModule = require('../modules/billModule');

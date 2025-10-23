@@ -6,11 +6,14 @@ let emailTransport = nodemailer.createTransport({
   host: setup.email.host,
   port: setup.email.port,
   //for port 587, secure set to false, true for port 465
-  secure: setup.email.port === 465,
+  secure: true,
   auth: {
     user: setup.email.user,
     pass: setup.email.pw,
   },
+  tls: {
+    rejectUnauthorized: false
+  }
 });
 
 async function testConnection() {
