@@ -1,7 +1,6 @@
 "use strict";
 
 const { query } = require('../database/postgreDB/pg');
-
 const REFUND_TYPES = new Set(['退押', '退押金', '退款']);
 
 // 创建账单
@@ -217,7 +216,6 @@ async function getAllBills() {
 
 // 添加账单（新版本：使用 change_price + change_type）
 async function addBill(billData){
-
   const {
     order_id,
     change_price,
@@ -242,45 +240,45 @@ async function addBill(billData){
 
     const o = orderRes.rows[0];
 
-        // 新版表结构：使用 change_price 和 change_type 统一管理所有金额
-        // change_type 可选值：房费、收押、退押、补收、退款
-        const insertQuery = `
-            INSERT INTO bills (
-                order_id,
-                room_number,
-                guest_name,
-                change_price,
-                change_type,
-                pay_way,
-                create_time,
-                remarks,
-                stay_type,
-                stay_date
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-            RETURNING *
-        `;
+    // 新版表结构：使用 change_price 和 change_type 统一管理所有金额
+    // change_type 可选值：房费、收押、退押、补收、退款
+    const insertQuery = `
+        INSERT INTO bills (
+            order_id,
+            room_number,
+            guest_name,
+            change_price,
+            change_type,
+            pay_way,
+            create_time,
+            remarks,
+            stay_type,
+            stay_date
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        RETURNING *
+    `;
 
-        const numericChangePrice = Number(change_price);
-        if (isNaN(numericChangePrice)) {
-            throw new Error('[addBill] change_price 必须为数字');
-        }
+    const numericChangePrice = Number(change_price);
+    if (isNaN(numericChangePrice)) {
+        throw new Error('[addBill] change_price 必须为数字');
+    }
 
-        // 处理日期字段，确保正确格式
-        const createTimeDate = refundTime ? (typeof refundTime === 'string' ? new Date(refundTime) : refundTime) : new Date();
-        const stayDateString = createTimeDate.toISOString().split('T')[0];
+    // 处理日期字段，确保正确格式
+    const createTimeDate = refundTime ? (typeof refundTime === 'string' ? new Date(refundTime) : refundTime) : new Date();
+    const stayDateString = createTimeDate.toISOString().split('T')[0];
 
-        const values = [
-        order_id,                // $1 order_id
-        String(o.room_number).slice(0,10), // $2 room_number (bills 表限制 10)
-        o.guest_name,            // $3 guest_name
-        numericChangePrice,      // $4 change_price (正数表示收入，负数表示支出)
-        billData.change_type,    // $5 change_type (房费/收押/退押/补收/退款)
-        method || o.payment_method, // $6 pay_way
-        createTimeDate,          // $7 create_time
-        notes,                   // $8 remarks
-        o.stay_type,             // $9 stay_type
-        stayDateString           // $10 stay_date
-        ];
+    const values = [
+      order_id,                // $1 order_id
+      String(o.room_number).slice(0,10), // $2 room_number (bills 表限制 10)
+      o.guest_name,            // $3 guest_name
+      numericChangePrice,      // $4 change_price (正数表示收入，负数表示支出)
+      billData.change_type,    // $5 change_type (房费/收押/退押/补收/退款)
+      method || o.payment_method, // $6 pay_way
+      createTimeDate,          // $7 create_time
+      notes,                   // $8 remarks
+      o.stay_type,             // $9 stay_type
+      stayDateString           // $10 stay_date
+    ];
 
     const result = await query(insertQuery, values);
     newbill = result.rows[0];
@@ -350,7 +348,7 @@ async function getOrderBillDetails(order_id) {
     }
 }
 
-// 更新账单（新版本：使用 change_price + change_type）
+// 更新账单
 async function updateBill(billId, updateData) {
     try {
         // 1. 先获取原始账单数据
@@ -429,82 +427,6 @@ async function updateBill(billId, updateData) {
     }
 }
 
-// 根据订单号、日期和类型更新账单（新版本：需要指定 change_type）
-async function updateBillByOrderAndDate(orderNumber, stayDate, updateData) {
-    try {
-        const normalizedData = { ...updateData };
-        const explicitPriceProvided = Object.prototype.hasOwnProperty.call(normalizedData, 'change_price');
-
-        if (explicitPriceProvided) {
-            const parsed = Number(normalizedData.change_price);
-            normalizedData.change_price = Number.isNaN(parsed) ? 0 : parsed;
-        }
-
-        const effectiveType = Object.prototype.hasOwnProperty.call(normalizedData, 'change_type')
-            ? normalizedData.change_type
-            : normalizedData.target_change_type;
-
-        const shouldForceNegative = REFUND_TYPES.has(effectiveType || '');
-
-        if (shouldForceNegative && explicitPriceProvided) {
-            normalizedData.change_price = -Math.abs(Number(normalizedData.change_price) || 0);
-        }
-
-        const updateFields = [];
-        const values = [];
-        let paramIndex = 1;
-
-        // 可更新的字段（移除了 room_fee, deposit, refund_deposit, total_income）
-        const allowedFields = ['change_price', 'change_type', 'pay_way', 'remarks'];
-
-        allowedFields.forEach(field => {
-            if (normalizedData[field] !== undefined) {
-                updateFields.push(`${field} = $${paramIndex}`);
-                values.push(normalizedData[field]);
-                paramIndex++;
-            }
-        });
-
-        if (shouldForceNegative && !explicitPriceProvided) {
-            updateFields.push('change_price = -ABS(change_price)');
-        }
-
-        if (updateFields.length === 0) {
-            throw new Error('没有要更新的字段');
-        }
-
-        // 如果指定了 change_type，则根据类型更新特定的账单
-        // 否则更新该日期的所有账单（兼容旧接口）
-        let whereClause = `order_id = $${paramIndex} AND DATE(stay_date) = DATE($${paramIndex + 1})`;
-        values.push(orderNumber, stayDate);
-
-        if (normalizedData.target_change_type) {
-            // 如果指定了目标类型，则只更新该类型的账单
-            whereClause += ` AND change_type = $${paramIndex + 2}`;
-            values.push(normalizedData.target_change_type);
-        }
-
-        const updateQuery = `
-            UPDATE bills
-            SET ${updateFields.join(', ')}
-            WHERE ${whereClause}
-            RETURNING *
-        `;
-
-        const result = await query(updateQuery, values);
-
-        if (result.rows.length === 0) {
-            console.warn(`未找到订单 ${orderNumber} 日期 ${stayDate} 的账单记录`);
-            return null;
-        }
-
-        return result.rows;
-    } catch (error) {
-        console.error('根据订单号和日期更新账单失败:', error);
-        throw error;
-    }
-}
-
 module.exports = {
     createBill,
     getBillByOrderId,
@@ -514,5 +436,4 @@ module.exports = {
     addBill,
     getOrderBillDetails,
     updateBill,
-    updateBillByOrderAndDate
 };

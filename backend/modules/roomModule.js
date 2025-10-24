@@ -108,20 +108,6 @@ async function getAllRooms(queryDate = null) {
   }
 }
 
-/**
- * 根据ID获取房间
- * @param {number} id - 房间ID
- * @returns {Promise<Object|null>} 房间对象或null
- */
-async function getRoomById(id) {
-  try {
-    const { rows } = await query('SELECT * FROM rooms WHERE room_id = $1', [id]);
-    return rows.length > 0 ? rows[0] : null;
-  } catch (error) {
-    console.error(`获取房间(ID: ${id})失败:`, error);
-    throw error;
-  }
-}
 
 /**
  * 根据房间号获取房间
@@ -140,40 +126,40 @@ async function getRoomByNumber(number) {
 
 /**
  * 更新房间状态并自动处理房间可用性
- * @param {number} id - 房间ID
+ * @param {number} number - 房间ID
  * @param {string} status - 新状态
  * @returns {Promise<Object|null>} 更新后的房间对象或null
  */
-async function updateRoomStatus(id, status) {
+async function updateRoomStatus(number, status) {
   try {
-    console.log(`更新房间(ID: ${id})状态为: ${status}`);
+    console.log(`更新房间(Number: ${number})状态为: ${status}`);
 
     // 直接使用传入的状态值，不做转换
     let isClosed = false;
 
     // 根据状态自动设置房间的is_closed字段
     if (status === 'repair') {
-      console.log(`设置房间 ${id} 为关闭状态(is_closed=true)`);
+      console.log(`设置房间 ${number} 为关闭状态(is_closed=true)`);
       isClosed = true; // 维修中或清洁中的房间设为关闭状态
     } else {
-      console.log(`设置房间 ${id} 为开放状态(is_closed=false)`);
+      console.log(`设置房间 ${number} 为开放状态(is_closed=false)`);
     }
 
     // 执行房间状态更新，同时更新is_closed字段
-    console.log(`执行SQL: UPDATE rooms SET status = '${status}', is_closed = ${isClosed} WHERE room_id = ${id}`);
+    console.log(`执行SQL: UPDATE rooms SET status = '${status}', is_closed = ${isClosed} WHERE room_number = '${number}'`);
     const { rows } = await query(
-      'UPDATE rooms SET status = $1, is_closed = $2 WHERE room_id = $3 RETURNING *',
-      [status, isClosed, id]
+      'UPDATE rooms SET status = $1, is_closed = $2 WHERE room_number = $3 RETURNING *',
+      [status, isClosed, number]
     );
 
     if (rows.length > 0) {
       console.log(`更新成功，结果:`, rows[0]);
     } else {
-      console.log(`未找到ID为 ${id} 的房间`);
+      console.log(`未找到Number为 ${number} 的房间`);
     }
     return rows.length > 0 ? rows[0] : null;
   } catch (error) {
-    console.error(`更新房间(ID: ${id})状态失败:`, error);
+    console.error(`更新房间(Number: ${number})状态失败:`, error);
     throw error;
   }
 }
@@ -193,14 +179,11 @@ async function addRoom(roomData) {
       throw new Error('房间号已存在');
     }
 
-    // 获取新ID
-    const idResult = await query('SELECT MAX(room_id) as max_id FROM rooms');
-    const newId = (idResult.rows[0].max_id || 0) + 1;
 
     // 插入新房间
     const { rows } = await query(
-      'INSERT INTO rooms (room_id, room_number, type_code, status, price) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [newId, room_number, type_code, status, price]
+      'INSERT INTO rooms (room_number, type_code, status, price) VALUES ($1, $2, $3, $4) RETURNING *',
+      [room_number, type_code, status, price]
     );
 
     return rows[0];
@@ -493,7 +476,6 @@ async function changeOrderRoom(orderNumber, oldRoomNumber, newRoomNumber) {
 // 导出表定义和功能函数
 module.exports = {
   getAllRooms,
-  getRoomById,
   getRoomByNumber,
   updateRoomStatus,
   addRoom,

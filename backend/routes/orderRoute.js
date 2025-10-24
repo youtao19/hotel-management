@@ -10,10 +10,50 @@ const { authenticationMiddleware } = require('../modules/authentication');
 const { query, getClient } = require('../database/postgreDB/pg');
 const setup = require('../appSettings/setup');
 const { formatDate } = require('../modules/tools');
+const Ajv = require('ajv');
+const ajv = new Ajv();
+const addFormats = require("ajv-formats");
+addFormats(ajv);
 
+const VALID_ORDER_STATES = ['pending', 'checked-in', 'checked-out', 'cancelled'];
+
+
+const createOrderSchema = {
+  type: 'object',
+  properties: {
+    order_id: { type: 'string' },
+    id_source: { type: 'string' },
+    order_source: { type: 'string' },
+    guest_name: { type: 'string' },
+    room_type: { type: 'string' },
+    room_number: { type: 'string' },
+    check_in_date: { type: 'string', format: 'date' },
+    check_out_date: { type: 'string', format: 'date' },
+    status: { type: 'string', enum: VALID_ORDER_STATES },
+    payment_method: { type: 'string' },
+    phone: { type: 'string' ,format: 'phone' },
+    total_price: { type: 'number', },
+    deposit: { type: 'number' },
+    stay_type: { type: 'string' , enum: ['客房', '休息房'] },
+    create_time: { type: 'string', format: 'date-time' },
+    remarks: { type: 'string' }
+  },
+  required: ['order_id', 'order_source', 'guest_name', 'room_type', 'room_number', 'check_in_date', 'check_out_date', 'status', 'payment_method', 'total_price'],
+  additionalProperties: false
+};
+
+const updateOrderStatusSchema = {
+  type: 'object',
+  properties: {
+    newStatus: { type: 'string', enum: VALID_ORDER_STATES },
+    checkInTime: { type: 'string', format: 'date-time' },
+    checkOutTime: { type: 'string', format: 'date-time' }
+  },
+  required: ['newStatus'],
+  additionalProperties: false
+};
 
 // 定义有效的订单状态
-const VALID_ORDER_STATES = ['pending', 'checked-in', 'checked-out', 'cancelled'];
 
 /**
  * 获取所有订单
@@ -81,17 +121,14 @@ router.post('/new', async (req, res) => {
   console.log('收到订单创建请求，请求体:', JSON.stringify(req.body, null, 2));
 
   // 请求参数验证
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    const validationErrors = errors.array();
-    console.log('订单验证失败，具体错误:');
-    validationErrors.forEach((err, i) => {
-      console.log(`${i+1}. 字段 ${err.path}: ${err.msg}`);
-    });
+  const validate = ajv.compile(createOrderSchema);
+  const valid = validate(req.body);
+  if (!valid) {
+    console.error('订单创建请求参数验证失败:', validate.errors);
     return res.status(400).json({
       success: false,
-      message: '订单数据验证失败',
-      errors: validationErrors
+      message: '请求参数验证失败',
+      errors: validate.errors
     });
   }
 
@@ -173,25 +210,17 @@ router.post('/new', async (req, res) => {
  * 快速入住：创建已入住订单和账单（使用事务）
  * POST /api/orders/fast-check-in
  */
-router.post('/fast-check-in', [
-  body('order_id').notEmpty().withMessage('订单号不能为空'),
-  body('guest_name').notEmpty().withMessage('客人姓名不能为空'),
-  body('room_type').notEmpty().withMessage('房间类型不能为空'),
-  body('room_number').notEmpty().withMessage('房间号不能为空'),
-  body('check_in_date').notEmpty().withMessage('入住日期不能为空'),
-  body('check_out_date').notEmpty().withMessage('退房日期不能为空'),
-  body('total_price').notEmpty().withMessage('房间价格不能为空'),
-  body('payment_method').notEmpty().withMessage('支付方式不能为空')
-], async (req, res) => {
+router.post('/fast-check-in', async (req, res) => {
   try {
     // 验证请求数据
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      console.log('❌ 快速入住验证失败:', errors.array());
+    const validate = ajv.compile(createOrderSchema);
+    const valid = validate(req.body);
+    if (!valid) {
+      console.error('快速入住请求参数验证失败:', validate.errors);
       return res.status(400).json({
         success: false,
-        message: '数据验证失败',
-        errors: errors.array()
+        message: '请求参数验证失败',
+        errors: validate.errors
       });
     }
 
@@ -227,57 +256,21 @@ router.post('/fast-check-in', [
 });
 
 /**
- * 变更订单：插入新订单并隐藏旧订单
- * POST /api/orders/:orderId/change
- */
-router.post('/:orderId/change', authenticationMiddleware, async (req, res) => {
-  const { orderId } = req.params;
-  const patch = req.body || {};
-  try {
-    const newOrder = await orderModule.changeOrder(orderId, patch);
-    res.status(201).json({
-      success: true,
-      message: '订单修改成功',
-      data: { order: newOrder }
-    });
-  } catch (error) {
-    console.error('变更订单失败:', error.code || 'NO_CODE', error.message);
-    if (error.code === 'ORDER_NOT_FOUND') {
-      return res.status(404).json({ success: false, message: '原订单不存在' });
-    }
-    if (error.code === 'DUPLICATE_ORDER') {
-      return res.status(409).json({ success: false, message: '相同条件的有效订单已存在', details: error.message });
-    }
-    if (error.code === 'ORDER_VALIDATION_ERROR' || error.code === 'INVALID_ORDER_STATUS' || error.code === 'INVALID_DATE_FORMAT' || error.code === 'INVALID_DATE_RANGE' || error.code === 'INVALID_PHONE_FORMAT' || error.code === 'INVALID_PRICE' || error.code === 'INVALID_PRICE_EMPTY' || error.code === 'INVALID_PRICE_JSON' || error.code === 'INVALID_PRICE_DATE_FORMAT' || error.code === 'INVALID_PRICE_DATE_RANGE' || error.code === 'INVALID_DEPOSIT' || error.code === 'INVALID_ROOM_TYPE' || error.code === 'INVALID_ROOM_NUMBER' || error.code === 'ROOM_CLOSED' || error.code === 'ROOM_ALREADY_BOOKED') {
-      return res.status(400).json({ success: false, message: error.message, code: error.code });
-    }
-    if (error.code === '23505') {
-      return res.status(409).json({ success: false, message: '订单变更失败：数据唯一约束冲突', details: error.detail });
-    }
-    res.status(500).json({ success: false, message: '订单变更失败', error: { code: error.code || 'UNKNOWN', details: error.message } });
-  }
-});
-
-/**
  * 更新订单状态
  * POST /api/orders/:/status
  */
-router.post('/:orderNumber/status', authenticationMiddleware, [
-    body('newStatus')
-        .notEmpty().withMessage('新状态不能为空')
-        .isString()
-        .custom(value => {
-            if (!VALID_ORDER_STATES.includes(value)) {
-                throw new Error(`无效的订单状态。有效状态: ${VALID_ORDER_STATES.join(', ')}`);
-            }
-            return true;
-        }),
-    body('checkInTime').optional({ checkFalsy: true }).isISO8601().withMessage('入住时间格式无效').toDate(),
-    body('checkOutTime').optional({ checkFalsy: true }).isISO8601().withMessage('退房时间格式无效').toDate(),
-], async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
+router.post('/:orderNumber/status', async (req, res) => {
+
+    // 请求参数验证
+    const validate = ajv.compile(updateOrderStatusSchema);
+    const valid = validate(req.body);
+    if (!valid) {
+      console.error('更新订单状态请求参数验证失败:', validate.errors);
+      return res.status(400).json({
+        success: false,
+        message: '请求参数验证失败',
+        errors: validate.errors
+      });
     }
 
     const { orderNumber } = req.params;

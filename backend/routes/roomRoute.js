@@ -1,10 +1,26 @@
 const express = require('express');
 const router = express.Router();
-const { body, validationResult } = require('express-validator');
 const roomModule = require('../modules/roomModule');
-const { authenticationMiddleware } = require('../modules/authentication');
+const Ajv = require('ajv');
+const ajv = new Ajv();
+const addFormats = require('ajv-formats');
+addFormats(ajv);
+const { query } = require('../database/postgreDB/pg');
+
 
 const VALID_ROOM_STATES = ['available', 'occupied', 'cleaning', 'repair', 'reserved'];
+
+const RoomSchema = {
+  type: 'object',
+  properties: {
+    room_number: { type: 'string' },
+    type_code: { type: 'string' },
+    status: { type: 'string', enum: VALID_ROOM_STATES },
+    price: { type: 'number' }
+  },
+  required: ['room_number', 'type_code', 'status', 'price'],
+  additionalProperties: false
+};
 
 // 获取所有房间
 router.get('/', async (req, res) => {
@@ -124,37 +140,14 @@ router.get('/number/:number', async (req, res) => {
   }
 });
 
-// 测试维修端点
-router.get('/test-repair/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    console.log(`尝试设置房间 ${id} 为维修状态`);
-
-    // 直接执行SQL更新，同时更新is_closed字段
-    const room = await roomModule.updateRoomStatus(id, 'repair');
-
-    if (!room) {
-      return res.status(404).json({ message: '未找到房间' });
-    }
-
-    return res.json({
-      message: '房间状态已更新为维修',
-      data: room
-    });
-  } catch (err) {
-    console.error('测试维修功能出错:', err);
-    return res.status(500).json({ message: '服务器错误', error: err.message });
-  }
-});
-
 // 更新房间状态
-router.post('/:id/status', async (req, res) => {
+router.patch('/:number/status', async (req, res) => {
   try {
-    const { id } = req.params;
+    const { number } = req.params;
 
     // 详细日志
     console.log('====== 房间状态更新请求 ======');
-    console.log('请求参数ID:', id);
+    console.log('请求参数房间号:', number);
     console.log('请求体:', req.body);
     console.log('Content-Type:', req.get('Content-Type'));
 
@@ -187,11 +180,9 @@ router.post('/:id/status', async (req, res) => {
     }
 
     // 这里改用尝试导入房间表模块的updateRoomStatus方法，绕过直接SQL查询
-    console.log('尝试使用房间模块的updateRoomStatus方法');
-    const result = await roomModule.updateRoomStatus(id, status);
+    const result = await roomModule.updateRoomStatus(number, status);
 
     if (!result) {
-      console.log('房间未找到:', id);
       return res.status(404).json({ message: '未找到房间' });
     }
 
@@ -209,8 +200,10 @@ router.post('/', async (req, res) => {
     const { room_number, type_code, status, price } = req.body;
 
     // 验证必要字段
-    if (!room_number || !type_code || !status || !price) {
-      return res.status(400).json({ message: '缺少必要字段' });
+    const validate = ajv.compile(RoomSchema);
+    const valid = validate(req.body);
+    if (!valid) {
+      return res.status(400).json({ message: '请求数据格式错误', errors: validate.errors });
     }
 
     // 使用roomModule的addRoom方法
@@ -227,40 +220,29 @@ router.post('/', async (req, res) => {
 });
 
 // 更新房间信息
-router.put('/:id', async (req, res) => {
+router.put('/:room_number', async (req, res) => {
   try {
-    const { id } = req.params;
-    const { room_number, type_code, status, price } = req.body;
+    const { room_number } = req.params;
+    const { type_code, status, price } = req.body;
 
     // 验证必要字段
-    if (!room_number || !type_code || !status || price === undefined) {
-      return res.status(400).json({ message: '缺少必要字段' });
+    const validate = ajv.compile(RoomSchema);
+    const valid = validate(req.body);
+    if (!valid) {
+      return res.status(400).json({ message: '请求数据格式错误', errors: validate.errors });
     }
 
     // 检查房间是否存在
-    const existingRoom = await roomModule.getRoomById(id);
+    const existingRoom = await roomModule.getRoomByNumber(room_number);
     if (!existingRoom) {
       return res.status(404).json({ message: '房间不存在' });
     }
 
-    // 如果房间号发生变化，检查新房间号是否已存在
-    if (room_number !== existingRoom.room_number) {
-      const checkResult = await roomModule.getRoomByNumber(room_number);
-      if (checkResult) {
-        return res.status(400).json({ message: '房间号已存在' });
-      }
-    }
-
     // 更新房间信息
-    const { query } = require('../database/postgreDB/pg');
     const { rows } = await query(
-      'UPDATE rooms SET room_number = $1, type_code = $2, status = $3, price = $4 WHERE room_id = $5 RETURNING *',
-      [room_number, type_code, status, price, id]
+      'UPDATE rooms SET type_code = $1, status = $2, price = $3 WHERE room_number = $4 RETURNING *',
+      [type_code, status, price, room_number]
     );
-
-    if (rows.length === 0) {
-      return res.status(404).json({ message: '房间不存在' });
-    }
 
     console.log('成功更新房间:', rows[0]);
     res.json({ data: rows[0] });
@@ -303,12 +285,6 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// 测试路由
-router.post('/test-change-room', async (req, res) => {
-  console.log('=== 测试更换房间路由 ===');
-  console.log('请求到达了路由处理器');
-  res.json({ message: '路由正常工作', timestamp: new Date().toISOString() });
-});
 
 // 更换房间
 router.post('/change-room', async (req, res) => {

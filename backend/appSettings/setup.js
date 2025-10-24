@@ -2,7 +2,6 @@
 const fs = require('fs');
 const path = require('path');
 
-
 //check if there is any missing env
 const requiredEnv = [
   "APP_NAME",

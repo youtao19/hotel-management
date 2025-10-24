@@ -2,6 +2,22 @@ const express = require('express');
 const router = express.Router();
 // 使用统一的数据库连接模块
 const { query } = require('../database/postgreDB/pg');
+const Ajv = require('ajv');
+const ajv = new Ajv();
+const addFormats = require('ajv-formats');
+addFormats(ajv);
+
+const RoomTypeSchema = {
+  type: 'object',
+  properties: {
+    type_code: { type: 'string' },
+    type_name: { type: 'string' },
+    base_price: { type: 'number' },
+    description: { type: 'string' }
+  },
+  required: ['type_code', 'type_name', 'base_price'],
+  additionalProperties: false
+};
 
 // 获取所有房型
 router.get('/', async (req, res) => {
@@ -77,8 +93,10 @@ router.post('/', async (req, res) => {
     const { type_code, type_name, base_price, description } = req.body;
 
     // 验证必要字段
-    if (!type_code || !type_name || !base_price) {
-      return res.status(400).json({ message: '缺少必要字段: type_code, type_name, base_price' });
+    const validate = ajv.compile(RoomTypeSchema);
+    const valid = validate(req.body);
+    if (!valid) {
+      return res.status(400).json({ message: '请求数据格式错误', errors: validate.errors });
     }
 
     // 检查房型代码是否已存在
@@ -111,8 +129,10 @@ router.put('/:code', async (req, res) => {
     const { type_name, base_price, description } = req.body;
 
     // 验证必要字段
-    if (!type_name || !base_price) {
-      return res.status(400).json({ message: '缺少必要字段: type_name, base_price' });
+    const validate = ajv.compile(RoomTypeSchema);
+    const valid = validate(req.body);
+    if (!valid) {
+      return res.status(400).json({ message: '请求数据格式错误', errors: validate.errors });
     }
 
     // 检查房型是否存在
@@ -128,7 +148,7 @@ router.put('/:code', async (req, res) => {
     );
 
     console.log('成功更新房型:', rows[0]);
-    res.json({ data: rows[0] });
+    res.status(200).json({ data: rows[0] });
   } catch (err) {
     console.error('更新房型错误:', err);
     res.status(500).json({
@@ -159,7 +179,7 @@ router.delete('/:code', async (req, res) => {
     await query('DELETE FROM room_types WHERE type_code = $1', [code]);
 
     console.log('成功删除房型:', code);
-    res.json({ message: '房型删除成功' });
+    res.status(200).json({ message: '房型删除成功' });
   } catch (err) {
     console.error('删除房型错误:', err);
     res.status(500).json({

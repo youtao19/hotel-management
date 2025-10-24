@@ -2,6 +2,23 @@ const express = require('express');
 const router = express.Router();
 router.use(express.json());
 const billModule = require('../modules/billModule');
+const Ajv = require('ajv');
+const ajv = new Ajv();
+const addFormats = require("ajv-formats");
+addFormats(ajv);
+
+const addBillSchema = {
+  type: 'object',
+  properties: {
+    order_id: { type: 'string' },
+    change_price: { type: 'number' },
+    method: { type: 'string' },
+    notes: { type: 'string' },
+    refundTime: { type: 'string', format: 'date-time' }
+  },
+  required: ['order_id', 'change_price', 'method'],
+  additionalProperties: false
+};
 
 // 获取所有账单
 router.get('/', async (req, res) => {
@@ -13,9 +30,14 @@ router.get('/', async (req, res) => {
   }
 });
 
-
 // 添加账单
 router.post('/add', async (req, res) => {
+  const validate = ajv.compile(addBillSchema);
+  const valid = validate(req.body);
+  if (!valid) {
+    return res.status(400).json({ message: '请求数据格式不正确', errors: validate.errors });
+  }
+
   try {
     const newBill = await billModule.addBill(req.body);
     res.status(201).json({ success: true, data: newBill });
@@ -55,20 +77,6 @@ router.put('/:billId', async (req, res) => {
       return res.status(404).json({ message: '账单不存在' });
     }
     res.json({ success: true, data: updatedBill });
-  } catch (err) {
-    res.status(500).json({ message: '更新账单失败', error: err.message });
-  }
-});
-
-// 按订单ID和日期更新账单
-router.put('/order/:orderId/date/:stayDate', async (req, res) => {
-  const { orderId, stayDate } = req.params;
-  try {
-    const updatedBills = await billModule.updateBillByOrderAndDate(orderId, stayDate, req.body);
-    if (!updatedBills || updatedBills.length === 0) {
-      return res.status(404).json({ message: '指定日期的账单不存在' });
-    }
-    res.json({ success: true, data: updatedBills });
   } catch (err) {
     res.status(500).json({ message: '更新账单失败', error: err.message });
   }

@@ -83,7 +83,7 @@ export const roomApi = {
   // 更新房间状态
   updateRoomStatus: (id, status) => {
     console.log(`前端发送更新房间状态请求: ID=${id}, 状态=${status}`);
-    return api.post(`/rooms/${id}/status`, { status });
+    return api.patch(`/rooms/${id}/status`, { status });
   },
 
   // 添加新房间
@@ -195,23 +195,6 @@ export const billApi = {
   // 更新账单
   updateBill: (billId, updateData) => api.put(`/bills/${billId}`, updateData),
 
-  // 根据订单号和日期更新账单
-  updateBillByOrderAndDate: (orderId, stayDate, updateData) => api.put(`/bills/order/${orderId}/date/${stayDate}`, updateData),
-
-  // 邀请客户好评
-  inviteReview: (orderId) => api.post(`/bills/${orderId}/invite-review`),
-
-  // 更新好评状态
-  updateReviewStatus: (orderId, positive_review) => api.put(`/bills/${orderId}/review-status`, { positive_review }),
-
-  // 获取待邀请好评的账单
-  getPendingInvitations: () => api.get('/bills/pending-invitations'),
-
-  // 获取已邀请但未设置好评状态的账单
-  getPendingReviews: () => api.get('/bills/pending-reviews'),
-
-  // 获取指定日期的所有账单（用于交接班核对数据）
-  getBillsByDate: (date) => api.get(`/bills/by-date/${date}`),
 }
 
 // 好评相关接口
@@ -267,7 +250,6 @@ export const revenueApi = {
 
 // 交接班相关接口
 export const shiftHandoverApi = {
-
 
   // 获取交接班表格（计算版本）
   getShiftTable: (params) => api.get('/handover/table', { params }),

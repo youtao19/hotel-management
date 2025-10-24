@@ -362,11 +362,6 @@ function validateOrderData(orderData) {
  */
 async function createOrder(orderData) {
   try {
-  console.log('🛠️ [createOrder] 输入原始数据:', JSON.stringify(orderData, null, 2));
-    // 1. 数据验证
-    validateOrderData(orderData);
-  console.log('✅ [createOrder] 基础验证通过');
-
     // 2. 检查是否存在重复订单
     const existingOrder = await checkExistingOrder(orderData);
     if (existingOrder) {
@@ -620,10 +615,6 @@ async function getOrderById(orderId) {
  * @returns {Promise<Object|null>} 更新后的订单对象或null
  */
 async function updateOrderStatus(orderId, newStatus) {
-  // 验证订单状态
-  if (!isValidOrderStatus(newStatus)) {
-    throw new Error(`无效的订单状态: ${newStatus}。有效状态: ${VALID_ORDER_STATES.join(', ')}`);
-  }
 
   const updateQuery = `UPDATE ${tableName} SET status = $1 WHERE order_id = $2 RETURNING *`;
   const queryParams = [newStatus, orderId];
