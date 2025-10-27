@@ -563,8 +563,8 @@ async function performCheckOut(order) {
 
     // 获取房间并将状态更改为清洁中
     const room = roomStore.getRoomByNumber(order.roomNumber);
-    if (room && room.room_id) {
-      const roomUpdateSuccess = await roomStore.checkOutRoom(room.room_id);
+    if (room && room.room_number) {
+      const roomUpdateSuccess = await roomStore.checkOutRoom(room.room_number);
       if (!roomUpdateSuccess) {
         $q.notify({
           type: 'warning',
@@ -996,7 +996,7 @@ async function handleCheckInCompleted(checkInData) {
 
     // 3. 更新房间状态为 'occupied'
     const room = roomStore.getRoomByNumber(checkInData.room_number);
-    const updatedRoomFromApi = await roomStore.updateRoomStatus(room.room_id, 'occupied');
+    const updatedRoomFromApi = room ? await roomStore.updateRoomStatus(room.room_number, 'occupied') : false;
     if (!updatedRoomFromApi) {
       console.log('更新房间状态失败',updatedRoomFromApi)
       $q.notify({

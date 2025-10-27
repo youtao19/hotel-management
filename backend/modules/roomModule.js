@@ -231,7 +231,7 @@ async function getAvailableRooms(startDate, endDate, typeCode = null) {
     if (isRestRoomQuery) {
       // 休息房查询：检查当天是否有冲突
       sqlQuery = `
-        SELECT r.room_id, r.room_number, r.type_code, r.status, r.price, r.is_closed
+        SELECT r.room_number, r.type_code, r.status, r.price, r.is_closed
         FROM rooms r
         WHERE r.is_closed = FALSE
           AND r.status != 'repair'
@@ -250,7 +250,7 @@ async function getAvailableRooms(startDate, endDate, typeCode = null) {
     } else {
       // 普通订单查询：标准的日期区间冲突检查
       sqlQuery = `
-        SELECT r.room_id, r.room_number, r.type_code, r.status, r.price, r.is_closed
+        SELECT r.room_number, r.type_code, r.status, r.price, r.is_closed
         FROM rooms r
         WHERE r.is_closed = FALSE
           AND r.status != 'repair'

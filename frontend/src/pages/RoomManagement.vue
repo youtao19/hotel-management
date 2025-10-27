@@ -93,7 +93,7 @@
           <q-table
             :rows="filteredRooms"
             :columns="roomColumns"
-            row-key="room_id"
+            row-key="room_number"
             :loading="loading"
             :pagination="roomPagination"
             flat
@@ -517,7 +517,7 @@ async function saveRoom() {
 
     if (isEditingRoom.value) {
       // 更新房间
-      await roomApi.updateRoom(roomForm.value.room_id, roomForm.value)
+      await roomApi.updateRoom(roomForm.value.room_number, roomForm.value)
       $q.notify({
         type: 'positive',
         message: '房间更新成功'
@@ -558,7 +558,7 @@ function closeRoomDialog() {
 
 async function setRoomMaintenance(room) {
   try {
-    await roomStore.updateRoomStatus(room.room_id, 'repair')
+    await roomStore.updateRoomStatus(room.room_number, 'repair')
     $q.notify({
       type: 'positive',
       message: `房间${room.room_number}已设为维修状态`
@@ -594,7 +594,7 @@ function deleteRoom(room) {
     cardStyle: 'border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);'
   }).onOk(async () => {
     try {
-      await roomApi.deleteRoom(room.room_id)
+      await roomApi.deleteRoom(room.room_number)
       $q.notify({
         type: 'positive',
         message: '房间删除成功'

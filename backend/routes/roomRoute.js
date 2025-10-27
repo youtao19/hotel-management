@@ -106,22 +106,6 @@ router.get('/available', async (req, res) => {
   }
 });
 
-// 获取特定ID的房间
-router.get('/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const room = await roomModule.getRoomById(id);
-
-    if (!room) {
-      return res.status(404).json({ message: '未找到房间' });
-    }
-
-    res.json({ data: room });
-  } catch (err) {
-    console.error('获取房间数据错误:', err);
-    res.status(500).json({ message: '服务器错误' });
-  }
-});
 
 // 获取特定房间号的房间
 router.get('/number/:number', async (req, res) => {
@@ -253,21 +237,20 @@ router.put('/:room_number', async (req, res) => {
 });
 
 // 删除房间
-router.delete('/:id', async (req, res) => {
+router.delete('/:room_number', async (req, res) => {
   try {
-    const { id } = req.params;
+    const { room_number } = req.params;
 
     // 检查房间是否存在
-    const existingRoom = await roomModule.getRoomById(id);
+    const existingRoom = await roomModule.getRoomByNumber(room_number);
     if (!existingRoom) {
       return res.status(404).json({ message: '房间不存在' });
     }
 
     // 检查房间是否有活跃订单
-    const { query } = require('../database/postgreDB/pg');
     const orderCheck = await query(
       'SELECT COUNT(*) as count FROM orders WHERE room_number = $1 AND status IN ($2, $3)',
-      [existingRoom.room_number, 'pending', 'checked-in']
+      [room_number, 'pending', 'checked-in']
     );
 
     if (parseInt(orderCheck.rows[0].count) > 0) {
@@ -275,7 +258,7 @@ router.delete('/:id', async (req, res) => {
     }
 
     // 删除房间
-    await query('DELETE FROM rooms WHERE room_id = $1', [id]);
+    await query('DELETE FROM rooms WHERE room_number = $1', [room_number]);
 
     console.log('成功删除房间:', existingRoom.room_number);
     res.json({ message: '房间删除成功' });

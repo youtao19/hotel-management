@@ -135,3 +135,224 @@ describe('更新房间状态' , () => {
     expect(response.body.data).toHaveProperty('status', 'available');
   });
 });
+
+describe('获取可用房间列表', () => {
+  const AVAILABLE_TYPE = 'TEST_TYPE_AVAILABLE';
+  const AVAILABLE_ROOMS = ['A201', 'A202', 'A203', 'A204'];
+
+  const resetTestRooms = async () => {
+    await query('DELETE FROM orders WHERE room_number = ANY($1::text[])', [AVAILABLE_ROOMS]);
+    await query('DELETE FROM rooms WHERE room_number = ANY($1::text[])', [AVAILABLE_ROOMS]);
+    await query(`
+      INSERT INTO rooms (room_number, type_code, status, price, is_closed)
+      VALUES
+        ('A201', $1, 'available', 200, FALSE),
+        ('A202', $1, 'available', 220, FALSE),
+        ('A203', $1, 'available', 240, FALSE),
+        ('A204', $1, 'available', 260, FALSE)
+      ON CONFLICT (room_number) DO UPDATE
+        SET type_code = EXCLUDED.type_code,
+            status = EXCLUDED.status,
+            price = EXCLUDED.price,
+            is_closed = FALSE;
+    `, [AVAILABLE_TYPE]);
+  };
+
+  const insertTestOrder = async ({
+    orderId,
+    roomNumber,
+    checkInDate,
+    checkOutDate,
+    status = 'pending'
+  }) => {
+    const guestName = `测试客人-${orderId}`;
+    const params = [
+      orderId,
+      guestName,
+      AVAILABLE_TYPE,
+      roomNumber,
+      checkInDate,
+      checkOutDate,
+      status ?? 'pending'
+    ];
+
+    if (params.some(value => value === undefined)) {
+      throw new Error(`insertTestOrder 缺少必填字段: ${JSON.stringify({
+        orderId,
+        roomNumber,
+        checkInDate,
+        checkOutDate,
+        status
+      })}`);
+    }
+
+    await query(`
+      INSERT INTO orders (
+        order_id, order_source, guest_name, room_type, room_number,
+        check_in_date, check_out_date, status, payment_method,
+        total_price, deposit, create_time, stay_type
+      ) VALUES (
+        $1, 'test', $2, $3, $4,
+        $5::date, $6::date, $7, 'cash',
+        100, 50, NOW(), 'test-stay'
+      )
+      ON CONFLICT (order_id) DO UPDATE
+        SET check_in_date = EXCLUDED.check_in_date,
+            check_out_date = EXCLUDED.check_out_date,
+            status = EXCLUDED.status;
+    `, params);
+  };
+
+  beforeAll(async () => {
+    await query(`
+      INSERT INTO room_types (type_code, type_name, base_price)
+      VALUES ($1, '可用房间测试房型', 150)
+      ON CONFLICT (type_code) DO NOTHING;
+    `, [AVAILABLE_TYPE]);
+  });
+
+  beforeEach(async () => {
+    await resetTestRooms();
+  });
+
+  afterAll(async () => {
+    await query('DELETE FROM orders WHERE order_id LIKE $1', ['TEST_AVAIL_%']);
+    await query('DELETE FROM rooms WHERE room_number = ANY($1::text[])', [AVAILABLE_ROOMS]);
+    await query('DELETE FROM room_types WHERE type_code = $1', [AVAILABLE_TYPE]);
+  });
+
+  test('同一天入住退房时，已被占用的房间不会在可用列表中', async () => {
+    await insertTestOrder({
+      orderId: 'TEST_AVAIL_REST_1',
+      roomNumber: 'A201',
+      checkInDate: '2024-12-01',
+      checkOutDate: '2024-12-01'
+    });
+
+    const response = await request(app)
+      .get('/api/rooms/available')
+      .query({ startDate: '2024-12-01', endDate: '2024-12-01' });
+
+    expect(response.statusCode).toBe(200);
+    const availableNumbers = response.body.data.map(room => room.room_number);
+    expect(availableNumbers).not.toContain('A201');
+    expect(availableNumbers).toEqual(expect.arrayContaining(['A202', 'A203', 'A204']));
+  });
+
+  test('多日订单会阻止覆盖区间内的房间出现在可用列表中', async () => {
+    await insertTestOrder({
+      orderId: 'TEST_AVAIL_MULTI_1',
+      roomNumber: 'A202',
+      checkInDate: '2024-12-10',
+      checkOutDate: '2024-12-15'
+    });
+    await insertTestOrder({
+      orderId: 'TEST_AVAIL_MULTI_2',
+      roomNumber: 'A203',
+      checkInDate: '2024-12-11',
+      checkOutDate: '2024-12-13'
+    });
+
+    const response = await request(app)
+      .get('/api/rooms/available')
+      .query({ startDate: '2024-12-12', endDate: '2024-12-14' });
+
+    expect(response.statusCode).toBe(200);
+    const availableNumbers = response.body.data.map(room => room.room_number);
+    expect(availableNumbers).not.toContain('A202');
+    expect(availableNumbers).not.toContain('A203');
+    expect(availableNumbers).toEqual(expect.arrayContaining(['A201', 'A204']));
+  });
+
+  test('创建 2025-10-10 至 2025-10-15 的 1 个订单，检查可用房间列表', async () => {
+    await insertTestOrder({
+      orderId: 'TEST_AVAIL_FUTURE_1',
+      roomNumber: 'A204',
+      checkInDate: '2025-10-10',
+      checkOutDate: '2025-10-15'
+    });
+
+    const response = await request(app)
+      .get('/api/rooms/available')
+      .query({ startDate: '2025-10-10', endDate: '2025-10-15' });
+
+    expect(response.statusCode).toBe(200);
+    const availableNumbers = response.body.data.map(room => room.room_number);
+    expect(availableNumbers).not.toContain('A204');
+    expect(availableNumbers).toEqual(expect.arrayContaining(['A201', 'A202', 'A203']));
+
+
+    const response2 = await request(app)
+      .get('/api/rooms/available')
+      .query({ startDate: '2025-10-07', endDate: '2025-10-13' });
+
+    expect(response2.statusCode).toBe(200);
+    const availableNumbers2 = response2.body.data.map(room => room.room_number);
+    expect(availableNumbers2).not.toContain('A204');
+    expect(availableNumbers2).toEqual(expect.arrayContaining(['A201', 'A202', 'A203']));
+
+    const response3 = await request(app)
+      .get('/api/rooms/available')
+      .query({ startDate: '2025-10-11', endDate: '2025-10-14' });
+
+    expect(response3.statusCode).toBe(200);
+    const availableNumbers3 = response3.body.data.map(room => room.room_number);
+    expect(availableNumbers3).not.toContain('A204');
+    expect(availableNumbers3).toEqual(expect.arrayContaining(['A201', 'A202', 'A203']));
+
+    const response4 = await request(app)
+      .get('/api/rooms/available')
+      .query({ startDate: '2025-10-13', endDate: '2025-10-20' });
+    expect(response4.statusCode).toBe(200);
+    const availableNumbers4 = response4.body.data.map(room => room.room_number);
+    expect(availableNumbers4).not.toContain('A204');
+    expect(availableNumbers4).toEqual(expect.arrayContaining(['A201', 'A202', 'A203']));
+
+
+  });
+
+  test('创建多个订单，检查部分重叠日期的可用房间列表', async () => {
+    await insertTestOrder({
+      orderId: 'TEST_AVAIL_MULTI_ORD_1',
+      roomNumber: 'A201',
+      checkInDate: '2025-11-01',
+      checkOutDate: '2025-11-05'
+    });
+    await insertTestOrder({
+      orderId: 'TEST_AVAIL_MULTI_ORD_2',
+      roomNumber: 'A202',
+      checkInDate: '2025-11-03',
+      checkOutDate: '2025-11-07'
+    });
+    await insertTestOrder({
+      orderId: 'TEST_AVAIL_MULTI_ORD_3',
+      roomNumber: 'A203',
+      checkInDate: '2025-11-06',
+      checkOutDate: '2025-11-10'
+    });
+
+    const response = await request(app)
+      .get('/api/rooms/available')
+      .query({ startDate: '2025-11-04', endDate: '2025-11-08' });
+
+    expect(response.statusCode).toBe(200);
+    const availableNumbers = response.body.data.map(room => room.room_number);
+    expect(availableNumbers).not.toContain('A201');
+    expect(availableNumbers).not.toContain('A202');
+    expect(availableNumbers).not.toContain('A203');
+    expect(availableNumbers).toEqual(expect.arrayContaining(['A204']));
+
+    const response2 = await request(app)
+      .get('/api/rooms/available')
+      .query({ startDate: '2025-11-05', endDate: '2025-11-06' });
+
+    expect(response2.statusCode).toBe(200);
+    const availableNumbers2 = response2.body.data.map(room => room.room_number);
+    expect(availableNumbers2).not.toContain('A202');
+    expect(availableNumbers2).toEqual(expect.arrayContaining(['A201', 'A203', 'A204']));
+
+  });
+
+
+
+});

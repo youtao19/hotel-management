@@ -680,7 +680,6 @@ const availableRoomOptions = computed(() => {
         value: room.room_number,
         type: room.type_code,
         price: room.price,
-        id: room.room_id,
         status: room.status
       };
     });

@@ -74,26 +74,23 @@ export const roomApi = {
     return api.get(finalUrl);
   },
 
-  // 根据ID获取房间
-  getRoomById: (id) => api.get(`/rooms/${id}`),
-
   // 根据房间号获取房间
   getRoomByNumber: (number) => api.get(`/rooms/number/${number}`),
 
   // 更新房间状态
-  updateRoomStatus: (id, status) => {
-    console.log(`前端发送更新房间状态请求: ID=${id}, 状态=${status}`);
-    return api.patch(`/rooms/${id}/status`, { status });
+  updateRoomStatus: (roomNumber, status) => {
+    console.log(`前端发送更新房间状态请求: 房间号=${roomNumber}, 状态=${status}`);
+    return api.patch(`/rooms/${roomNumber}/status`, { status });
   },
 
   // 添加新房间
   addRoom: (roomData) => api.post('/rooms', roomData),
 
   // 更新房间信息
-  updateRoom: (id, roomData) => api.put(`/rooms/${id}`, roomData),
+  updateRoom: (roomNumber, roomData) => api.put(`/rooms/${roomNumber}`, roomData),
 
   // 删除房间
-  deleteRoom: (id) => api.delete(`/rooms/${id}`),
+  deleteRoom: (roomNumber) => api.delete(`/rooms/${roomNumber}`),
 
   // 获取房间类型
   getRoomTypes: () => api.get('/room-types'),

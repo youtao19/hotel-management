@@ -7,7 +7,7 @@ const tableName = "rooms";
 // 创建表的SQL语句
 const createQuery = `
   CREATE TABLE IF NOT EXISTS ${tableName} (
-    room_number VARCHAR(20) NOT NULL UNIQUE PRIMARY KEY,
+    room_number VARCHAR(20) NOT NULL PRIMARY KEY,
     type_code VARCHAR(20) NOT NULL,
     status VARCHAR(20) NOT NULL,
     price DECIMAL(10,2) NOT NULL,

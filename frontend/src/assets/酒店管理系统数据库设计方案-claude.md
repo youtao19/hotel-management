@@ -16,7 +16,7 @@
 | check_in_date   | date     | 入住日期                          |
 | check_out_date  | date     | 退房日期                          |
 | room_type_id    | int      | 房型ID (外键)                     |
-| room_id         | int      | 分配的房间号 (外键)               |
+| room_number     | varchar  | 分配的房间号 (外键)               |
 | order_status    | varchar  | 订单状态 (已确认/已入住/已退房等) |
 | payment_method  | varchar  | 支付方式 (平台支付/现金/微信等)   |
 | total_amount    | decimal  | 订单总金额                        |
@@ -37,8 +37,7 @@
 
 | 字段名       | 数据类型 | 描述                                 |
 | ------------ | -------- | ------------------------------------ |
-| room_id      | int      | 房间ID (主键)                        |
-| room_number  | varchar  | 房间号码                             |
+| room_number  | varchar  | 房间号 (主键)                        |
 | room_type_id | int      | 房型ID (外键)                        |
 | floor        | int      | 楼层                                 |
 | status       | varchar  | 房间状态 (空闲/已预订/已入住/维修中) |
@@ -68,4 +67,3 @@
 | related_order_id | int      | 关联订单ID (外键)          |
 | operator         | varchar  | 操作人                     |
 | remark           | text     | 备注                       |
-

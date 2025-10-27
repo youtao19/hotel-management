@@ -196,7 +196,7 @@
         <!-- 遍历过滤后的房间列表 -->
         <div
           v-for="room in filteredRooms"
-          :key="room.room_id"
+          :key="room.room_number"
           class="col-lg-3 col-md-4 col-sm-6 col-xs-12"
         >
           <!-- 房间卡片，根据状态设置不同背景色 -->
@@ -340,7 +340,7 @@
                   icon="book_online"
                   label="预订"
                   size="sm"
-                  @click.stop="bookRoom(room.room_id)"
+                  @click.stop="bookRoom(room.room_number)"
                 />
                 <!-- 待入住房间可办理入住 -->
                 <q-btn
@@ -358,7 +358,7 @@
                   icon="logout"
                   label="退房"
                   size="sm"
-                  @click.stop="checkOut(room.room_id)"
+                  @click.stop="checkOut(room.room_number)"
                 />
                 <!-- 所有非清洁中和非维修中的房间都可以设置为清理状态 -->
                 <q-btn
@@ -367,7 +367,7 @@
                   icon="cleaning_services"
                   label="清理"
                   size="sm"
-                  @click.stop="setRoomCleaning(room.room_id)"
+                  @click.stop="setRoomCleaning(room.room_number)"
                 />
                 <!-- 非维修中房间可设为维修 -->
                 <q-btn
@@ -376,7 +376,7 @@
                   icon="build"
                   label="维修"
                   size="sm"
-                  @click.stop="setMaintenance(room.room_id)"
+                  @click.stop="setMaintenance(room.room_number)"
                 />
                 <!-- 维修中房间可完成维修 -->
                 <q-btn
@@ -385,7 +385,7 @@
                   icon="check"
                   label="完成维修"
                   size="sm"
-                  @click.stop="clearMaintenance(room.room_id)"
+                  @click.stop="clearMaintenance(room.room_number)"
                 />
                 <!-- 清扫中房间可完成清洁 -->
                 <q-btn
@@ -394,7 +394,7 @@
                   icon="check"
                   label="完成清洁"
                   size="sm"
-                  @click.stop="clearCleaning(room.room_id)"
+                  @click.stop="clearCleaning(room.room_number)"
                 />
               </q-btn-group>
             </q-card-actions>
@@ -610,7 +610,7 @@ const previousMonth = async () => {
   if (selectedRoom.value) {
     const startDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).toISOString().substr(0, 10)
     const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).toISOString().substr(0, 10)
-    await fetchRoomBookingData(selectedRoom.value.room_id, startDate, endDate)
+    await fetchRoomBookingData(selectedRoom.value.room_number, startDate, endDate)
   }
 }
 
@@ -630,7 +630,7 @@ const nextMonth = async () => {
   if (selectedRoom.value) {
     const startDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).toISOString().substr(0, 10)
     const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).toISOString().substr(0, 10)
-    await fetchRoomBookingData(selectedRoom.value.room_id, startDate, endDate)
+    await fetchRoomBookingData(selectedRoom.value.room_number, startDate, endDate)
   }
 }
 
@@ -1018,7 +1018,7 @@ async function onCalendarNavigation(view) {
     if (selectedRoom.value) {
       const startDate = new Date(view.year, view.month - 1, 1).toISOString().substr(0, 10)
       const endDate = new Date(view.year, view.month, 0).toISOString().substr(0, 10)
-      await fetchRoomBookingData(selectedRoom.value.room_id, startDate, endDate)
+      await fetchRoomBookingData(selectedRoom.value.room_number, startDate, endDate)
     }
   }
 }
@@ -1197,7 +1197,7 @@ async function showRoomCalendar(room) {
     console.log('日期范围:', startDate, '到', endDate)
 
     // 获取该房间在当月的预订数据
-    await fetchRoomBookingData(room.room_id, startDate, endDate)
+    await fetchRoomBookingData(room.room_number, startDate, endDate)
 
     console.log('日历已显示，所有日期都应该有颜色标识')
 
@@ -1214,9 +1214,9 @@ async function showRoomCalendar(room) {
 /**
  * 获取房间预订数据
  */
-async function fetchRoomBookingData(roomId, startDate, endDate) {
+async function fetchRoomBookingData(roomNumber, startDate, endDate) {
   try {
-    console.log(`获取房间 ${roomId} 在 ${startDate} 到 ${endDate} 的预订数据`);
+    console.log(`获取房间 ${roomNumber} 在 ${startDate} 到 ${endDate} 的预订数据`);
     roomBookingData.value = []; // 清空之前的数据
 
     // 首先尝试从订单store中获取数据
@@ -1597,13 +1597,13 @@ async function setToday() {
  * 房间操作方法
  */
 // 预订房间
-async function bookRoom(roomId) {
+async function bookRoom(roomNumber) {
   try {
-    console.log('预订房间:', roomId)
+    console.log('预订房间:', roomNumber)
     // 跳转到创建订单页面，并传递房间ID
     router.push({
       path: '/CreateOrder',
-      query: { roomId }
+      query: { roomNumber }
     })
   } catch (error) {
     console.error('预订房间失败:', error)
@@ -1682,7 +1682,7 @@ async function performCheckIn(order) {
       return
     }
 
-    // 获取房间信息 (主要为了拿到 room_id)
+    // 获取房间信息 (主要为了拿到房间号)
     const room = roomStore.getRoomByNumber(order.roomNumber)
     if (!room) {
       console.error('预订房间未找到:', order.roomNumber)
@@ -1754,12 +1754,12 @@ async function handleBillCreated() {
 }
 
 // 退房
-async function checkOut(roomId) {
+async function checkOut(roomNumber) {
   try {
-    console.log('退房操作:', roomId)
+    console.log('退房操作:', roomNumber)
 
-    // 根据roomId找到对应的房间信息
-    const room = roomStore.rooms.find(r => r.room_id === roomId)
+    // 根据房间号找到对应的房间信息
+    const room = roomStore.rooms.find(r => r.room_number === roomNumber)
     if (!room) {
       $q.notify({
         type: 'negative',
@@ -1791,7 +1791,7 @@ async function checkOut(roomId) {
       persistent: true
     }).onOk(async () => {
       // 用户点击确定，执行退房操作
-      await performRoomCheckOut(roomId, orderInfo);
+      await performRoomCheckOut(roomNumber, orderInfo);
     }).onCancel(() => {
       // 用户点击取消，什么也不做
       console.log('用户取消了退房操作');
@@ -1807,9 +1807,9 @@ async function checkOut(roomId) {
 }
 
 // 执行退房操作
-async function performRoomCheckOut(roomId, orderInfo) {
+async function performRoomCheckOut(roomNumber, orderInfo) {
   try {
-    console.log('执行退房操作:', roomId, orderInfo)
+    console.log('执行退房操作:', roomNumber, orderInfo)
 
     // 如果有订单信息，先更新订单状态
     if (orderInfo) {
@@ -1825,7 +1825,7 @@ async function performRoomCheckOut(roomId, orderInfo) {
     }
 
     // 更新房间状态为清扫中
-    const success = await roomStore.checkOutRoom(roomId)
+    const success = await roomStore.checkOutRoom(roomNumber)
     if (success) {
       $q.notify({
         type: 'positive',
@@ -1854,10 +1854,10 @@ async function performRoomCheckOut(roomId, orderInfo) {
 }
 
 // 设置房间为清洁状态
-async function setRoomCleaning(roomId) {
+async function setRoomCleaning(roomNumber) {
   try {
-    console.log('设置房间清洁:', roomId)
-    const success = await roomStore.updateRoomStatus(roomId, 'cleaning')
+    console.log('设置房间清洁:', roomNumber)
+    const success = await roomStore.updateRoomStatus(roomNumber, 'cleaning')
     if (success) {
       $q.notify({
         type: 'positive',
@@ -1884,10 +1884,10 @@ async function setRoomCleaning(roomId) {
 }
 
 // 设置房间为维修状态
-async function setMaintenance(roomId) {
+async function setMaintenance(roomNumber) {
   try {
-    console.log('设置房间维修:', roomId)
-    const success = await roomStore.setMaintenance(roomId)
+    console.log('设置房间维修:', roomNumber)
+    const success = await roomStore.setMaintenance(roomNumber)
     if (success) {
       $q.notify({
         type: 'positive',
@@ -1914,10 +1914,10 @@ async function setMaintenance(roomId) {
 }
 
 // 完成维修
-async function clearMaintenance(roomId) {
+async function clearMaintenance(roomNumber) {
   try {
-    console.log('完成维修:', roomId)
-    const success = await roomStore.clearMaintenance(roomId)
+    console.log('完成维修:', roomNumber)
+    const success = await roomStore.clearMaintenance(roomNumber)
     if (success) {
       $q.notify({
         type: 'positive',
@@ -1944,10 +1944,10 @@ async function clearMaintenance(roomId) {
 }
 
 // 完成清洁
-async function clearCleaning(roomId) {
+async function clearCleaning(roomNumber) {
   try {
-    console.log('完成清洁:', roomId)
-    const success = await roomStore.clearCleaning(roomId)
+    console.log('完成清洁:', roomNumber)
+    const success = await roomStore.clearCleaning(roomNumber)
     if (success) {
       $q.notify({
         type: 'positive',
