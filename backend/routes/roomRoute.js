@@ -45,9 +45,9 @@ router.get('/', async (req, res) => {
     const rooms = await roomModule.getAllRooms(date);
 
     if (rooms.length === 0) {
-      res.json({ data: [], message: '没有查询到房间数据' });
+      res.status(204).json({ data: [], message: '没有查询到房间数据' });
     } else {
-      res.json({
+      res.status(200).json({
         data: rooms,
         queryDate: date || null,
         message: date ? `查询到 ${date} 的房间状态` : '查询到当前房间状态'
@@ -267,7 +267,6 @@ router.delete('/:room_number', async (req, res) => {
     res.status(500).json({ message: '服务器错误', error: err.message });
   }
 });
-
 
 // 更换房间
 router.post('/change-room', async (req, res) => {

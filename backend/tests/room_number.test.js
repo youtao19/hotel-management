@@ -1,8 +1,60 @@
 const app = require('../app');
 const request = require('supertest');
 const { query } = require('../database/postgreDB/pg');
+const {rooms, addRoom, roomTypes, addRoomType} = require('./tools');
 
 const VALID_ROOM_STATES = ['available', 'occupied', 'cleaning', 'repair', 'reserved'];
+
+
+describe('房间参数验证', () => {
+  test('POST /api/rooms 缺少必填字段时返回 400', async () => {
+    const invalidPayload = { room_number: 'PARAM_101' };
+
+    const response = await request(app)
+      .post('/api/rooms')
+      .send(invalidPayload);
+
+    expect(response.statusCode).toBe(400);
+    expect(response.body.message).toBe('请求数据格式错误');
+    expect(Array.isArray(response.body.errors)).toBe(true);
+  });
+
+  test('POST /api/rooms status 非法时返回 400', async () => {
+    const invalidPayload = {
+      room_number: 'PARAM_102',
+      type_code: 'TEST_TYPE',
+      status: 'invalid-status',
+      price: 180
+    };
+
+    const response = await request(app)
+      .post('/api/rooms')
+      .send(invalidPayload);
+
+    expect(response.statusCode).toBe(400);
+    expect(response.body.message).toBe('请求数据格式错误');
+    expect(Array.isArray(response.body.errors)).toBe(true);
+  });
+
+  test('PATCH /api/rooms/:number/status 请求体为空时返回 400', async () => {
+    const response = await request(app)
+      .patch('/api/rooms/PARAM_103/status')
+      .send({});
+
+    expect(response.statusCode).toBe(400);
+    expect(response.body.message).toBe('请求体为空');
+  });
+
+  test('PATCH /api/rooms/:number/status 状态非法时返回 400', async () => {
+    const response = await request(app)
+      .patch('/api/rooms/PARAM_104/status')
+      .send({ status: 'invalid-status' });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.body.message).toBe('无效的房间状态');
+    expect(response.body.validStatuses).toEqual(VALID_ROOM_STATES);
+  });
+});
 
 describe('房间接口测试', () => {
 
@@ -355,4 +407,27 @@ describe('获取可用房间列表', () => {
 
 
 
+});
+
+describe('获取房间', () => {
+  test('获取房间列表，确保响应正确', async () => {
+
+    await addRoomType(roomTypes);
+    await addRoom(rooms);
+
+    const response = await request(app)
+      .get('/api/rooms/');
+
+    expect(response.statusCode).toBe(200);
+    expect(Array.isArray(response.body.data)).toBe(true);
+    expect(response.body.data.length).toBeGreaterThanOrEqual(rooms.length);
+  });
+
+  test('根据房间号获取房间信息', async () => {
+    const response = await request(app)
+      .get('/api/rooms/number/101');
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.data).toHaveProperty('room_number', '101');
+  });
 });

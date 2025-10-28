@@ -1,12 +1,6 @@
 const db = require('../database/postgreDB/pg');
 const redisDB = require('../database/redis/redis');
 const app = require('../app');
-const dotenv = require('dotenv');
-const path = require('path');
-
-// 加载环境变量（兼容 monorepo 后的路径）
-const dotenvPath = path.resolve(__dirname, '../../.env.test');
-dotenv.config({ path: dotenvPath });
 
 // 所有测试表，统一管理
 const tables = [

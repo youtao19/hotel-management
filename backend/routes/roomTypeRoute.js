@@ -39,7 +39,7 @@ router.get('/', async (req, res) => {
 
     const { rows } = await query('SELECT * FROM room_types ORDER BY type_code');
     console.log(`成功获取 ${rows.length} 条房型数据`);
-    res.json({ data: rows });
+    res.status(200).json({ data: rows });
   } catch (err) {
     console.error('获取房型数据错误:', err);
     res.status(500).json({
@@ -76,7 +76,7 @@ router.get('/:code', async (req, res) => {
       return res.status(404).json({ message: '未找到房型' });
     }
 
-    res.json({ data: rows[0] });
+    res.status(200).json({ data: rows[0] });
   } catch (err) {
     console.error('获取房型数据错误:', err);
     res.status(500).json({

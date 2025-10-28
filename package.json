@@ -18,6 +18,9 @@
         "db:init": "npm --workspace backend run db:init",
         "db:migrate": "npm --workspace backend run db:migrate"
     },
+    "devDependencies": {
+        "concurrently": "^8.2.0"
+    },
     "workspaces": [
         "frontend",
         "backend"
