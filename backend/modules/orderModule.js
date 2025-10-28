@@ -1141,7 +1141,7 @@ async function createCheckedInOrderWithTransaction(orderData, createdBy = 'syste
 
     // 3. 创建订单
     const {
-      order_id, id_source, order_source, guest_name, phone, id_number,
+      order_id, id_source, order_source, guest_name, phone,
       room_type, room_number, check_in_date, check_out_date, status,
       payment_method, total_price, deposit, create_time, remarks
     } = dataForCreation;
@@ -1151,16 +1151,16 @@ async function createCheckedInOrderWithTransaction(orderData, createdBy = 'syste
 
     const insertOrderQuery = `
       INSERT INTO orders (
-        order_id, id_source, order_source, guest_name, phone, id_number,
+        order_id, id_source, order_source, guest_name, phone,
         room_type, room_number, check_in_date, check_out_date, status,
         payment_method, total_price, deposit, create_time, stay_type, remarks
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
       )
       RETURNING *;
     `;
     const orderValues = [
-      order_id, id_source, order_source, guest_name, phone || '', id_number || '',
+      order_id, id_source, order_source, guest_name, phone || '',
       room_type, room_number, formattedCheckInDate, formattedCheckOutDate, status,
       payment_method, calculateTotalPrice(total_price), deposit, create_time || new Date(), stay_type, remarks
     ];
