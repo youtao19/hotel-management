@@ -1,11 +1,7 @@
 const express = require('express');
 const router = express.Router();
-// 保险：为该路由挂载 JSON 解析（即使全局已启用）
 router.use(express.json());
-const { body, validationResult } = require('express-validator');
 const orderModule = require('../modules/orderModule');
-const billModule = require('../modules/billModule');
-const roomModule = require('../modules/roomModule');
 const { authenticationMiddleware } = require('../modules/authentication');
 const { query, getClient } = require('../database/postgreDB/pg');
 const setup = require('../appSettings/setup');
@@ -15,7 +11,8 @@ const ajv = new Ajv();
 const addFormats = require("ajv-formats");
 addFormats(ajv);
 
-const VALID_ORDER_STATES = ['pending', 'checked-in', 'checked-out', 'cancelled'];
+// 定义有效的订单状态
+const VALID_ORDER_STATES = ['pending', 'reserved', 'checked-in', 'checked-out', 'occupied', 'cancelled'];
 
 
 const createOrderSchema = {
@@ -31,8 +28,21 @@ const createOrderSchema = {
     check_out_date: { type: 'string', format: 'date' },
     status: { type: 'string', enum: VALID_ORDER_STATES },
     payment_method: { type: 'string' },
-    phone: { type: 'string' ,format: 'phone' },
-    total_price: { type: 'number', },
+    phone: {
+      type: 'string',
+      pattern: '^$|^1[3-9]\\d{9}$'
+     },
+    total_price: {
+      type: 'object',
+      minProperties: 1,
+      propertyNames: { type: 'string', format: 'date' },
+      additionalProperties: {
+        anyOf: [
+          { type: 'number', exclusiveMinimum: 0 },
+          { type: 'string', pattern: '^(0|[1-9]\\d*)(\\.\\d+)?$', not: { const: '0' } }
+        ]
+      }
+    },
     deposit: { type: 'number' },
     stay_type: { type: 'string' , enum: ['客房', '休息房'] },
     create_time: { type: 'string', format: 'date-time' },
@@ -53,7 +63,6 @@ const updateOrderStatusSchema = {
   additionalProperties: false
 };
 
-// 定义有效的订单状态
 
 /**
  * 获取所有订单
@@ -72,11 +81,9 @@ router.get('/', async (req, res) => {
         console.warn('检查orders表存在失败(忽略):', e.message);
       }
     }
-
-  // 查询所有订单（仅展示 show = TRUE）
-  const orders = await orderModule.getAllOrders();
+    const orders = await orderModule.getAllOrders();
     console.log(`成功获取 ${orders.length} 条订单数据`);
-    res.json({ data: orders });
+    res.status(200).json({ data: orders });
   } catch (err) {
     console.error('获取订单数据错误:', err);
     res.status(500).json({

@@ -6,7 +6,7 @@ const { formatDate } = require('./tools');
 const tableName = "orders";
 
 // 定义有效的订单状态
-const VALID_ORDER_STATES = ['pending', 'checked-in', 'checked-out', 'cancelled'];
+const VALID_ORDER_STATES = ['pending', 'reserved', 'checked-in', 'checked-out', 'occupied', 'cancelled'];
 
 /**
  * 检查orders表是否存在
@@ -371,11 +371,33 @@ async function createOrder(orderData) {
       throw error;
     }
 
-    // 3. 验证房型是否存在
+    // 3. 验证房型是否存在（兼容传入房型编码或房型名称）
+    const requestedRoomType = orderData.room_type;
     const roomTypeQuery = 'SELECT * FROM room_types WHERE type_code = $1';
-    const roomTypeResult = await query(roomTypeQuery, [orderData.room_type]);
+    let roomTypeResult = await query(roomTypeQuery, [requestedRoomType]);
+
     if (roomTypeResult.rows.length === 0) {
-      const error = new Error(`房型 '${orderData.room_type}' 不存在`);
+      const roomTypeByNameResult = await query(
+        'SELECT * FROM room_types WHERE type_name = $1',
+        [requestedRoomType]
+      );
+
+      if (roomTypeByNameResult.rows.length === 0) {
+        const error = new Error(`房型 '${requestedRoomType}' 不存在`);
+        error.code = 'INVALID_ROOM_TYPE';
+        throw error;
+      }
+
+      // 使用房型名称匹配到的编码继续后续流程
+      roomTypeResult = roomTypeByNameResult;
+      orderData = {
+        ...orderData,
+        room_type: roomTypeResult.rows[0].type_code
+      };
+    }
+
+    if (!orderData.room_type) {
+      const error = new Error(`房型 '${requestedRoomType}' 无法解析`);
       error.code = 'INVALID_ROOM_TYPE';
       throw error;
     }
@@ -386,6 +408,12 @@ async function createOrder(orderData) {
     if (roomResult.rows.length === 0) {
       const error = new Error(`房间号 '${orderData.room_number}' 不存在`);
       error.code = 'INVALID_ROOM_NUMBER';
+      throw error;
+    }
+
+    if (roomResult.rows[0].type_code && roomResult.rows[0].type_code !== orderData.room_type) {
+      const error = new Error(`房间 '${orderData.room_number}' 与房型 '${requestedRoomType}' 不匹配`);
+      error.code = 'INVALID_ROOM_TYPE';
       throw error;
     }
 
