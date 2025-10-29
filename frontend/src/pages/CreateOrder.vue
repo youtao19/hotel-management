@@ -379,6 +379,8 @@ const pendingRouteSelection = ref({
 const isDataInitialized = ref(false)
 let suppressRoomTypeWatcher = false
 let isApplyingPreselectedRoom = false
+let shouldAutoSelectRoom = false
+let pendingRoomTypeChange = null
 
 // 检查是否为开发环境
 const isDev = ref(process.env.NODE_ENV === 'development')
@@ -547,14 +549,45 @@ async function updateAvailableRooms(preserveSelection = true) {
     availableRoomsByDate.value = rooms;
 
     if (preserveSelection && previousRoomNumber) {
-      const stillAvailable = rooms.some(room => room.room_number === previousRoomNumber);
+      const stillAvailable = rooms.some(room => String(room.room_number) === String(previousRoomNumber));
       if (!stillAvailable) {
         orderData.value.roomNumber = null;
+        shouldAutoSelectRoom = true;
       }
     } else if (!preserveSelection) {
       orderData.value.roomNumber = null;
+      shouldAutoSelectRoom = true;
     } else if (!previousRoomNumber) {
       orderData.value.roomNumber = null;
+      shouldAutoSelectRoom = true;
+    }
+
+    if (pendingRoomTypeChange && pendingRoomTypeChange === orderData.value.roomType) {
+      const roomTypeText = viewStore.getRoomTypeName(orderData.value.roomType);
+      const countForType = rooms.filter(room => room.type_code === orderData.value.roomType).length;
+      if (countForType === 0) {
+        $q.notify({
+          type: 'warning',
+          message: `当前没有可用的${roomTypeText}，请联系管理员。`,
+          position: 'top'
+        });
+      }
+      pendingRoomTypeChange = null;
+    } else if (pendingRoomTypeChange) {
+      pendingRoomTypeChange = null;
+    }
+
+    const canAutoAssign = !isApplyingPreselectedRoom && !pendingRouteSelection.value.roomNumber;
+    if (!canAutoAssign) {
+      shouldAutoSelectRoom = false;
+      return;
+    }
+
+    await nextTick();
+
+    if (shouldAutoSelectRoom || !orderData.value.roomNumber) {
+      autoSelectFirstAvailableRoom();
+      shouldAutoSelectRoom = false;
     }
   } catch (error) {
     console.error('获取可用房间失败:', error);
@@ -624,9 +657,7 @@ watch(() => orderData.value.checkInDate, async () => {
 
   // 如果有房间选择，重新初始化价格（适用于单日和多日）
   if (orderData.value.roomNumber) {
-    const selectedRoom = availableRoomsByDate.value.find(
-      room => room.room_number === orderData.value.roomNumber
-    );
+    const selectedRoom = findAvailableRoomByNumber(orderData.value.roomNumber);
     if (selectedRoom) {
       const basePrice = Number(selectedRoom.price);
       const finalPrice = orderData.value.isRestRoom ? Math.round(basePrice / 2) : basePrice;
@@ -641,9 +672,7 @@ watch(() => orderData.value.checkOutDate, async () => {
 
   // 如果有房间选择，重新初始化价格（适用于单日和多日）
   if (orderData.value.roomNumber) {
-    const selectedRoom = availableRoomsByDate.value.find(
-      room => room.room_number === orderData.value.roomNumber
-    );
+    const selectedRoom = findAvailableRoomByNumber(orderData.value.roomNumber);
     if (selectedRoom) {
       const basePrice = Number(selectedRoom.price);
       const finalPrice = orderData.value.isRestRoom ? Math.round(basePrice / 2) : basePrice;
@@ -732,6 +761,44 @@ const availableRoomCount = computed(() => {
   ).length;
 })
 
+function findAvailableRoomByNumber(roomNumber) {
+  if (!roomNumber && roomNumber !== 0) return null;
+  const normalized = String(roomNumber);
+  return availableRoomsByDate.value.find(room => String(room.room_number) === normalized) || null;
+}
+
+function applyRoomSelection(room, { resetPricing = true } = {}) {
+  if (!room) return false;
+
+  const roomNumber = room.room_number ?? room.value;
+  if (roomNumber === undefined || roomNumber === null) return false;
+
+  orderData.value.roomNumber = roomNumber;
+  shouldAutoSelectRoom = false;
+
+  if (resetPricing) {
+    dailyPrices.value = {};
+    const basePrice = Number(room.price || 0);
+    const finalPrice = orderData.value.isRestRoom ? Math.round(basePrice / 2) : basePrice;
+    if (finalPrice > 0) {
+      initializeDailyPrices(finalPrice);
+    } else {
+      totalPriceInput.value = 0;
+    }
+  }
+
+  return true;
+}
+
+function autoSelectFirstAvailableRoom() {
+  if (!orderData.value.roomType) return false;
+  if (!Array.isArray(availableRoomOptions.value) || availableRoomOptions.value.length === 0) return false;
+  const firstOption = availableRoomOptions.value[0];
+  const candidate = findAvailableRoomByNumber(firstOption.value);
+  if (!candidate) return false;
+  return applyRoomSelection(candidate);
+}
+
 /**
  * 根据路由参数预选房间
  */
@@ -743,10 +810,9 @@ async function applyPreselectedRoom() {
   if (!targetNumber) return;
 
   const normalizedNumber = String(targetNumber);
-  const matchedRoom = availableRoomsByDate.value.find(
-    room => String(room.room_number) === normalizedNumber
-  );
+  const matchedRoom = findAvailableRoomByNumber(normalizedNumber);
 
+  pendingRoomTypeChange = null;
   if (!matchedRoom) {
     console.warn(`房间 ${normalizedNumber} 在当前日期不可预订，已忽略预选`);
     $q.notify({
@@ -767,6 +833,7 @@ async function applyPreselectedRoom() {
 
   isApplyingPreselectedRoom = true;
   suppressRoomTypeWatcher = true;
+  shouldAutoSelectRoom = false;
 
   orderData.value.roomType = targetTypeCode;
   await nextTick();
@@ -785,17 +852,7 @@ async function applyPreselectedRoom() {
     return;
   }
 
-  orderData.value.roomNumber = normalizedNumber;
-
-  // 重置价格，并根据房间价格初始化每日价格
-  dailyPrices.value = {};
-  const basePrice = Number(matchedRoom.price || 0);
-  const finalPrice = orderData.value.isRestRoom ? Math.round(basePrice / 2) : basePrice;
-  if (finalPrice > 0) {
-    initializeDailyPrices(finalPrice);
-  } else {
-    totalPriceInput.value = 0;
-  }
+  applyRoomSelection(matchedRoom);
 
   pendingRouteSelection.value = { roomNumber: null, roomType: null };
   suppressRoomTypeWatcher = false;
@@ -809,6 +866,8 @@ watch(
       roomNumber: normalizeQueryParam(roomNumberParam),
       roomType: normalizeQueryParam(roomTypeParam)
     };
+    shouldAutoSelectRoom = false;
+    pendingRoomTypeChange = null;
     applyPreselectedRoom();
   }
 );
@@ -833,33 +892,8 @@ function onRoomTypeChange(value) {
   // 清空多日价格数据
   dailyPrices.value = {};
 
-  nextTick(() => {
-    const roomTypeText = viewStore.getRoomTypeName(value);
-    const count = availableRoomCount.value;
-    if (count === 0) {
-      $q.notify({
-        type: 'warning',
-        message: `当前没有可用的${roomTypeText}，请联系管理员。`,
-        position: 'top'
-      });
-    } else {
-      if (availableRoomOptions.value.length > 0) {
-        orderData.value.roomNumber = availableRoomOptions.value[0].value;
-        const selectedRoom = availableRoomsByDate.value.find(
-          room => room.room_number === orderData.value.roomNumber
-        );
-        if (selectedRoom) {
-          // 计算基础价格
-          const basePrice = Number(selectedRoom.price);
-          const finalPrice = orderData.value.isRestRoom ?
-            Math.round(basePrice / 2) : basePrice;
-
-          // 统一使用 dailyPrices 初始化（单日和多日）
-          initializeDailyPrices(finalPrice);
-        }
-      }
-    }
-  });
+  shouldAutoSelectRoom = true;
+  pendingRoomTypeChange = value;
 }
 
 
