@@ -1280,12 +1280,6 @@ async function handleRefundDeposit(refundData) {
     const order = await orderStore.getOrderByNumber(refundData.order_id);
     if (order) await computeRefundable(order);
 
-    $q.notify({
-      type: 'positive',
-      message: `退押金成功！实际退款：¥${refundData.change_price}，已自动记录到交接班系统`,
-      position: 'top'
-    })
-
   } catch (error) {
     console.error('退押金处理失败:', error)
     $q.notify({

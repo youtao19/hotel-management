@@ -1,7 +1,7 @@
 const request = require('supertest');
 const app = require('../app');
 const { query } = require('../database/postgreDB/pg');
-const { addRoomType, addRoom } = require('./tools');
+const { addRoomType, addRoom, createOrder } = require('./tools');
 
 describe('账单金额调整接口', () => {
   const TEST_ROOM_TYPE = {
@@ -241,5 +241,147 @@ describe('账单金额调整接口', () => {
       expect(parseFloat(stored.rows[0].change_price)).toBeCloseTo(-payload.change_price);
       expect(Math.sign(parseFloat(stored.rows[0].change_price))).toBe(-1);
     });
+  });
+});
+
+describe('退押金接口', () => {
+  const REFUND_ROOM_TYPE = {
+    type_code: 'BILL_REFUND_TYPE',
+    type_name: '退押金测试房型',
+    base_price: 180.00,
+    description: '用于退押金测试的房型',
+    is_closed: false
+  };
+
+  const REFUND_ROOM = {
+    room_number: 'BILL_REFUND_ROOM_01',
+    type_code: REFUND_ROOM_TYPE.type_code,
+    status: 'available',
+    price: 180.00,
+    is_closed: false
+  };
+
+  const REFUND_PREFIX = 'BILL_REFUND_';
+
+  const buildCheckedOutOrder = ({ orderId, deposit = 200.0, overrides = {} }) => ({
+    order_id: orderId,
+    id_source: 'web',
+    order_source: '退押金测试',
+    guest_name: '退押金客人',
+    room_type: REFUND_ROOM_TYPE.type_code,
+    room_number: REFUND_ROOM.room_number,
+    check_in_date: '2025-12-10',
+    check_out_date: '2025-12-12',
+    status: 'checked-out',
+    payment_method: '支付宝',
+    phone: '13955557777',
+    total_price: 360.00,
+    deposit,
+    stay_type: '客房',
+    create_time: '2025-12-08T08:00:00Z',
+    remarks: '退押金测试订单',
+    ...overrides
+  });
+
+  beforeAll(async () => {
+    await query('DELETE FROM bills WHERE order_id LIKE $1', [`${REFUND_PREFIX}%`]);
+    await query('DELETE FROM orders WHERE order_id LIKE $1', [`${REFUND_PREFIX}%`]);
+    await query('DELETE FROM rooms WHERE room_number = $1', [REFUND_ROOM.room_number]);
+    await query('DELETE FROM room_types WHERE type_code = $1', [REFUND_ROOM_TYPE.type_code]);
+
+    await addRoomType([REFUND_ROOM_TYPE]);
+    await addRoom([REFUND_ROOM]);
+  });
+
+  afterEach(async () => {
+    await query('DELETE FROM bills WHERE order_id LIKE $1', [`${REFUND_PREFIX}%`]);
+    await query('DELETE FROM orders WHERE order_id LIKE $1', [`${REFUND_PREFIX}%`]);
+  });
+
+  afterAll(async () => {
+    await query('DELETE FROM bills WHERE order_id LIKE $1', [`${REFUND_PREFIX}%`]);
+    await query('DELETE FROM orders WHERE order_id LIKE $1', [`${REFUND_PREFIX}%`]);
+    await query('DELETE FROM rooms WHERE room_number = $1', [REFUND_ROOM.room_number]);
+    await query('DELETE FROM room_types WHERE type_code = $1', [REFUND_ROOM_TYPE.type_code]);
+  });
+
+  test('部分退押金成功', async () => {
+    const orderId = `${REFUND_PREFIX}PART_${Date.now()}`;
+    await createOrder([buildCheckedOutOrder({ orderId, deposit: 300.0 })]);
+
+    const payload = {
+      order_id: orderId,
+      change_price: 120,
+      method: '微信',
+      notes: '部分退押金',
+      refundTime: '2025-12-12T12:00:00Z'
+    };
+
+    const response = await request(app)
+      .post(`/api/orders/${orderId}/refund-deposit`)
+      .send(payload);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.message).toBe('退押金处理成功');
+    expect(response.body.order).toBeDefined();
+    expect(response.body.order.change_type).toBe('退押');
+    expect(Number(response.body.order.change_price)).toBeCloseTo(-payload.change_price, 5);
+
+    const bills = await query(
+      `SELECT change_price, change_type, pay_way FROM bills WHERE order_id = $1`,
+      [orderId]
+    );
+    expect(bills.rows.length).toBe(1);
+    expect(bills.rows[0].change_type).toBe('退押');
+    expect(Number(bills.rows[0].change_price)).toBeCloseTo(-payload.change_price, 5);
+    expect(bills.rows[0].pay_way).toBe(payload.method);
+
+    const depositInfo = await request(app)
+      .get(`/api/orders/${orderId}/deposit-info`);
+
+    expect(depositInfo.statusCode).toBe(200);
+    expect(depositInfo.body.success).toBe(true);
+    expect(Number(depositInfo.body.data.deposit)).toBeCloseTo(300, 5);
+    expect(Number(depositInfo.body.data.refunded)).toBeCloseTo(payload.change_price, 5);
+    expect(Number(depositInfo.body.data.remaining)).toBeCloseTo(180, 5);
+  });
+
+  test('退还全部押金成功', async () => {
+    const orderId = `${REFUND_PREFIX}FULL_${Date.now()}`;
+    const depositAmount = 150;
+    await createOrder([buildCheckedOutOrder({ orderId, deposit: depositAmount })]);
+
+    const payload = {
+      order_id: orderId,
+      change_price: depositAmount,
+      method: '现金',
+      notes: '全额退押金',
+      refundTime: '2025-12-12T18:30:00Z'
+    };
+
+    const response = await request(app)
+      .post(`/api/orders/${orderId}/refund-deposit`)
+      .send(payload);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.order).toBeDefined();
+    expect(response.body.order.change_type).toBe('退押');
+    expect(Number(response.body.order.change_price)).toBeCloseTo(-depositAmount, 5);
+
+    const bills = await query(
+      `SELECT change_price FROM bills WHERE order_id = $1`,
+      [orderId]
+    );
+    expect(bills.rows.length).toBe(1);
+    expect(Number(bills.rows[0].change_price)).toBeCloseTo(-depositAmount, 5);
+
+    const depositInfo = await request(app)
+      .get(`/api/orders/${orderId}/deposit-info`);
+
+    expect(depositInfo.statusCode).toBe(200);
+    expect(depositInfo.body.success).toBe(true);
+    expect(Number(depositInfo.body.data.deposit)).toBeCloseTo(depositAmount, 5);
+    expect(Number(depositInfo.body.data.refunded)).toBeCloseTo(depositAmount, 5);
+    expect(Number(depositInfo.body.data.remaining)).toBeCloseTo(0, 5);
   });
 });
