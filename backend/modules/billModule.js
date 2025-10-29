@@ -258,9 +258,16 @@ async function addBill(billData){
         RETURNING *
     `;
 
-    const numericChangePrice = Number(change_price);
+    let numericChangePrice = Number(change_price);
     if (isNaN(numericChangePrice)) {
-        throw new Error('[addBill] change_price 必须为数字');
+      throw new Error('[addBill] change_price 必须为数字');
+    }
+
+    // 退款和退押必须为负数，补收与收押必须为正数
+    if (billData.change_type === '退款' || billData.change_type === '退押') {
+      numericChangePrice = -Math.abs(numericChangePrice);
+    } else if (billData.change_type === '补收' || billData.change_type === '收押') {
+      numericChangePrice = Math.abs(numericChangePrice);
     }
 
     // 处理日期字段，确保正确格式

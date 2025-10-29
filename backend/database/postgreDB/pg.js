@@ -127,6 +127,7 @@ const order = require("./tables/order");
 const review_invitation = require("./tables/review_invitation");
 const room_type = require("./tables/room_type");
 const room = require("./tables/room");
+const order_change = require("./tables/change_order");
 
 //table order here is important
 //since we have foreign key reference other table
@@ -137,6 +138,7 @@ tables.push(bill);
 tables.push(handover);
 tables.push(review_invitation);
 tables.push(account);
+tables.push(order_change);
 
 async function createTables() {
   for (let table of tables) {

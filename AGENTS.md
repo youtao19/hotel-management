@@ -1,25 +1,42 @@
 # Repository Guidelines
 
+This workspace houses a Quasar frontend and an Express backend maintained via npm workspaces. Use this guide as your quick-start checklist when contributing features or fixes.
+
 ## Project Structure & Module Organization
-The root uses npm workspaces for `frontend/` (Quasar SPA) and `backend/` (Express API). Frontend code lives in `frontend/src` with project settings in `quasar.config.js`. Backend logic sits in `backend/modules`, routing in `backend/routes`, and runtime config in `backend/appSettings`. Persistence code lands in `backend/database/postgreDB` with Redis helpers nearby, and all automated tests reside under `backend/tests`. Environment templates (`dev.env.template`, `docker.dev.env`) and container config (`compose.yaml`) stay at the top level.
+
+- `frontend/src` holds SPA views, components, and assets; adjust `quasar.config.js` for UI build settings.
+- `backend/modules` contains domain logic, while `backend/routes` maps incoming requests.
+- `backend/appSettings` stores runtime configuration helpers; persistence lives in `backend/database/postgreDB` with Redis utilities alongside.
+- Tests belong in `backend/tests` (unit/api/integration), and environment templates (`dev.env.template`, `docker.dev.env`) plus `compose.yaml` sit at the repository root.
 
 ## Build, Test, and Development Commands
-- `npm install` — install workspace dependencies.
-- `npm start` — run backend (3000) and frontend (9000) together via concurrently.
-- `npm run dev` — backend hot reload; combine with `npm --workspace frontend run dev` to split work.
-- `npm run build` — compile frontend production bundle in `frontend/dist`.
-- `npm test` / `npm run test:watch` — execute the Jest suite once or in watch mode.
-- `npm run db:init` / `npm run db:migrate` — bootstrap PostgreSQL schema; ensure `dev.env` is populated.
-- `docker compose up -d --build` — launch app + services in containers for parity checks.
+
+- `npm install` installs all workspace dependencies.
+- `npm start` runs backend (port 3000) and frontend (port 9000) together via `concurrently`.
+- `npm run dev` starts the backend with hot reload; pair with `npm --workspace frontend run dev` for split sessions.
+- `npm run build` outputs the production bundle to `frontend/dist`.
+- `npm test` or `npm run test:watch` executes the Jest suite; `npm test -- --coverage` reports coverage.
+- `npm run db:init` / `npm run db:migrate` bootstrap and evolve the PostgreSQL schema.
 
 ## Coding Style & Naming Conventions
-Use two-space indentation and keep backend modules on CommonJS (`require`/`module.exports`) with double-quoted strings. Vue single-file components stay PascalCase, helpers stay camelCase, and reuse the aliases defined in `jsconfig.json`. `.env` keys remain UPPER_SNAKE_CASE. With no formal linter, rely on IDE or Quasar formatting before committing.
+
+- Keep two-space indentation; backend stays CommonJS with double-quoted strings.
+- Vue components use PascalCase; helpers and utilities stay camelCase; reuse paths from `jsconfig.json`.
+- Run the Quasar formatter or IDE defaults before committing.
 
 ## Testing Guidelines
-`jest.config.js` wires tests to `backend/tests/setup.js`. Put unit specs in `backend/tests/unit`, endpoint checks in `backend/tests/api`, and multi-step scenarios in `backend/tests/integration`, using the existing `.test.js` or `.spec.js` suffixes. Share fixtures through `backend/tests/__mocks__`. Cover success and failure paths for new APIs, and run `npm test -- --coverage` before submitting substantial changes.
+
+- Jest is configured via `backend/tests/setup.js`. Place specs in `backend/tests/unit`, endpoint checks in `backend/tests/api`, and flows in `backend/tests/integration`.
+- Name files with `.test.js` or `.spec.js`; share fixtures through `backend/tests/__mocks__`.
+- Ensure both success and failure paths are covered; confirm coverage with `npm test -- --coverage`.
 
 ## Commit & Pull Request Guidelines
-Write commits with an imperative summary (≤72 chars); English or Chinese is fine. Name the touched area when helpful (e.g. `backend/orders: fix deposit balance`) and keep each commit focused. Pull requests should explain impact, list manual test notes, attach UI screenshots when relevant, and link issues or follow-up tasks. Run `npm test` and mention any paired database script.
+
+- Write imperative commit subjects (≤72 chars) and prefix with scope when useful, e.g., `backend/orders: fix deposit balance`.
+- Pull requests should describe impact, include manual test notes, attach UI screenshots if applicable, and link related issues.
+- Run `npm test` (and relevant DB scripts) before opening a PR; note any skipped checks in the description.
 
 ## Environment & Security Notes
-Copy `dev.env.template` to `dev.env` (and `docker.dev.env` when containerizing) before starting services; never commit filled secrets. Scrub personal data from SQL exports or cookies before sharing and rotate credentials immediately if they leak.
+
+- Copy `dev.env.template` to `dev.env` (and `docker.dev.env` when containerizing) before running services.
+- Never commit secrets or personal data; rotate any exposed credentials immediately.

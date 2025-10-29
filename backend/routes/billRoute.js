@@ -12,11 +12,15 @@ const addBillSchema = {
   properties: {
     order_id: { type: 'string' },
     change_price: { type: 'number' },
+    change_type: {
+      type: 'string',
+      enum: ['房费', '收押', '退押', '补收', '退款']
+    },
     method: { type: 'string' },
     notes: { type: 'string' },
     refundTime: { type: 'string', format: 'date-time' }
   },
-  required: ['order_id', 'change_price', 'method'],
+  required: ['order_id', 'change_price', 'change_type', 'method'],
   additionalProperties: false
 };
 
