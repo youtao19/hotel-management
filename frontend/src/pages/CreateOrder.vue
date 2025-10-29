@@ -343,7 +343,7 @@
 <script setup>
 import { ref, onMounted, computed, nextTick, watch } from 'vue'
 import { date, useQuasar } from 'quasar'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useOrderStore } from '../stores/orderStore' // 导入订单 store
 import { useRoomStore } from '../stores/roomStore' // 导入房间 store
 import { useViewStore } from '../stores/viewStore' // 导入视图 store
@@ -352,10 +352,33 @@ import CheckInConfirmDialog from '../components/CheckInConfirmDialog.vue' // 导
 
 // 获取路由和store
 const router = useRouter()
+const route = useRoute()
 const orderStore = useOrderStore()
 const roomStore = useRoomStore()
 const viewStore = useViewStore()
 const $q = useQuasar() // For notifications
+
+// 规范化路由查询参数，支持数组与空值
+function normalizeQueryParam(param) {
+  if (Array.isArray(param)) {
+    param = param[0]
+  }
+  if (param === undefined || param === null) {
+    return null
+  }
+  const str = String(param).trim()
+  return str === '' ? null : str
+}
+
+// 路由传递的待预选房间信息
+const pendingRouteSelection = ref({
+  roomNumber: normalizeQueryParam(route.query.roomNumber),
+  roomType: normalizeQueryParam(route.query.roomType)
+})
+
+const isDataInitialized = ref(false)
+let suppressRoomTypeWatcher = false
+let isApplyingPreselectedRoom = false
 
 // 检查是否为开发环境
 const isDev = ref(process.env.NODE_ENV === 'development')
@@ -506,21 +529,33 @@ const dateOptions = (dateStr) => {
 /**
  * 更新可用房间列表
  */
-async function updateAvailableRooms() {
+async function updateAvailableRooms(preserveSelection = true) {
   try {
-  if (!isValidFullDate(orderData.value.checkInDate) || !isValidFullDate(orderData.value.checkOutDate)) {
+    if (!isValidFullDate(orderData.value.checkInDate) || !isValidFullDate(orderData.value.checkOutDate)) {
       return;
     }
     // 强制格式化
     const startDate = date.formatDate(orderData.value.checkInDate, 'YYYY-MM-DD');
     const endDate = date.formatDate(orderData.value.checkOutDate, 'YYYY-MM-DD');
-    orderData.value.roomNumber = null;
+
+    const previousRoomNumber = preserveSelection ? orderData.value.roomNumber : null;
 
     const rooms = await roomStore.getAvailableRoomsByDate(
       startDate,
       endDate
     );
     availableRoomsByDate.value = rooms;
+
+    if (preserveSelection && previousRoomNumber) {
+      const stillAvailable = rooms.some(room => room.room_number === previousRoomNumber);
+      if (!stillAvailable) {
+        orderData.value.roomNumber = null;
+      }
+    } else if (!preserveSelection) {
+      orderData.value.roomNumber = null;
+    } else if (!previousRoomNumber) {
+      orderData.value.roomNumber = null;
+    }
   } catch (error) {
     console.error('获取可用房间失败:', error);
     $q.notify({
@@ -619,6 +654,9 @@ watch(() => orderData.value.checkOutDate, async () => {
 
 // 监听房型变化
 watch(() => orderData.value.roomType, async () => {
+  if (suppressRoomTypeWatcher) {
+    return;
+  }
   await updateAvailableRooms();
 });
 
@@ -693,6 +731,87 @@ const availableRoomCount = computed(() => {
     room => room.type_code === orderData.value.roomType
   ).length;
 })
+
+/**
+ * 根据路由参数预选房间
+ */
+async function applyPreselectedRoom() {
+  if (!isDataInitialized.value) return;
+  if (isApplyingPreselectedRoom) return;
+
+  const targetNumber = pendingRouteSelection.value.roomNumber;
+  if (!targetNumber) return;
+
+  const normalizedNumber = String(targetNumber);
+  const matchedRoom = availableRoomsByDate.value.find(
+    room => String(room.room_number) === normalizedNumber
+  );
+
+  if (!matchedRoom) {
+    console.warn(`房间 ${normalizedNumber} 在当前日期不可预订，已忽略预选`);
+    $q.notify({
+      type: 'warning',
+      message: `房间 ${normalizedNumber} 当前不可预订`,
+      position: 'top'
+    });
+    pendingRouteSelection.value = { roomNumber: null, roomType: null };
+    return;
+  }
+
+  const targetTypeCode = pendingRouteSelection.value.roomType || matchedRoom.type_code;
+  if (!targetTypeCode) {
+    console.warn(`未找到房间 ${normalizedNumber} 对应的房型信息`);
+    pendingRouteSelection.value = { roomNumber: null, roomType: null };
+    return;
+  }
+
+  isApplyingPreselectedRoom = true;
+  suppressRoomTypeWatcher = true;
+
+  orderData.value.roomType = targetTypeCode;
+  await nextTick();
+
+  const optionExists = availableRoomOptions.value.some(option => String(option.value) === normalizedNumber);
+  if (!optionExists) {
+    console.warn(`房间 ${normalizedNumber} 未出现在当前房型的可选列表中`);
+    $q.notify({
+      type: 'warning',
+      message: `房间 ${normalizedNumber} 当前不可预订`,
+      position: 'top'
+    });
+    suppressRoomTypeWatcher = false;
+    isApplyingPreselectedRoom = false;
+    pendingRouteSelection.value = { roomNumber: null, roomType: null };
+    return;
+  }
+
+  orderData.value.roomNumber = normalizedNumber;
+
+  // 重置价格，并根据房间价格初始化每日价格
+  dailyPrices.value = {};
+  const basePrice = Number(matchedRoom.price || 0);
+  const finalPrice = orderData.value.isRestRoom ? Math.round(basePrice / 2) : basePrice;
+  if (finalPrice > 0) {
+    initializeDailyPrices(finalPrice);
+  } else {
+    totalPriceInput.value = 0;
+  }
+
+  pendingRouteSelection.value = { roomNumber: null, roomType: null };
+  suppressRoomTypeWatcher = false;
+  isApplyingPreselectedRoom = false;
+}
+
+watch(
+  () => [route.query.roomNumber, route.query.roomType],
+  ([roomNumberParam, roomTypeParam]) => {
+    pendingRouteSelection.value = {
+      roomNumber: normalizeQueryParam(roomNumberParam),
+      roomType: normalizeQueryParam(roomTypeParam)
+    };
+    applyPreselectedRoom();
+  }
+);
 // // 从roomStore获取房间类型选项数组和可用房间数量
 // const roomTypeOptionsWithCountFromStore = computed(
 //   () => roomStore.getRoomTypeOptionsWithCount()
@@ -1070,6 +1189,9 @@ onMounted(async () => {
 
   // 页面加载时，主动拉取一次可用房间，保证房型数量能显示
   await updateAvailableRooms()
+
+  isDataInitialized.value = true
+  await applyPreselectedRoom()
 
   console.log('CreateOrder组件数据初始化完成')
 });

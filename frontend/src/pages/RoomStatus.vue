@@ -340,7 +340,7 @@
                   icon="book_online"
                   label="预订"
                   size="sm"
-                  @click.stop="bookRoom(room.room_number)"
+                  @click.stop="bookRoom(room)"
                 />
                 <!-- 待入住房间可办理入住 -->
                 <q-btn
@@ -1597,13 +1597,32 @@ async function setToday() {
  * 房间操作方法
  */
 // 预订房间
-async function bookRoom(roomNumber) {
+async function bookRoom(room) {
   try {
-    console.log('预订房间:', roomNumber)
-    // 跳转到创建订单页面，并传递房间ID
+    if (!room || !room.room_number) {
+      console.warn('预订房间时缺少房间信息', room)
+      $q.notify({
+        type: 'warning',
+        message: '未找到房间信息，无法预订',
+        position: 'top'
+      })
+      return
+    }
+
+    const roomNumber = room.room_number
+    const roomType = room.type_code || room.typeCode
+
+    console.log('预订房间:', { roomNumber, roomType })
+
+    // 构建查询参数，传递房间号及房型，便于创建订单页预选
+    const query = { roomNumber: roomNumber }
+    if (roomType) {
+      query.roomType = roomType
+    }
+
     router.push({
       path: '/CreateOrder',
-      query: { roomNumber }
+      query
     })
   } catch (error) {
     console.error('预订房间失败:', error)
