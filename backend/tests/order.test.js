@@ -62,3 +62,80 @@ describe('创建订单后更换房间接口', () => {
     await query('TRUNCATE orders, rooms, room_types RESTART IDENTITY CASCADE');
   });
 });
+
+describe('办理退房接口', () => {
+  const CHECKOUT_PREFIX = 'TEST_CHECKOUT_';
+  const buildOrderId = (label) => `${CHECKOUT_PREFIX}${label}_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+
+  const createCheckedInOrder = async (orderId, overrides = {}) => {
+    const orderTemplate = {
+      ...mockOrders[1],
+      order_id: orderId,
+      status: 'checked-in',
+      deposit: overrides.deposit ?? 200.00,
+      ...overrides
+    };
+    await createOrder([orderTemplate]);
+  };
+
+  beforeAll(async () => {
+    await query('TRUNCATE bills, orders, rooms, room_types RESTART IDENTITY CASCADE');
+    await addRoomType(roomTypes);
+    await addRoom(rooms);
+  });
+
+  afterEach(async () => {
+    await query('DELETE FROM bills WHERE order_id LIKE $1', [`${CHECKOUT_PREFIX}%`]);
+    await query('DELETE FROM orders WHERE order_id LIKE $1', [`${CHECKOUT_PREFIX}%`]);
+  });
+
+  afterAll(async () => {
+    await query('TRUNCATE bills, orders, rooms, room_types RESTART IDENTITY CASCADE');
+  });
+
+  test('已入住订单可办理退房', async () => {
+    const orderId = buildOrderId('SUCCESS');
+    await createCheckedInOrder(orderId, { deposit: 180, payment_method: '现金' });
+
+    const response = await request(app)
+      .post(`/api/orders/${orderId}/status`)
+      .send({ newStatus: 'checked-out', checkOutTime: new Date().toISOString() });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.message).toBe('订单状态更新成功');
+    expect(response.body.order).toBeDefined();
+    expect(response.body.order.status).toBe('checked-out');
+
+    const storedOrder = await query('SELECT status, deposit FROM orders WHERE order_id = $1', [orderId]);
+    expect(storedOrder.rows.length).toBe(1);
+    expect(storedOrder.rows[0].status).toBe('checked-out');
+    expect(Number(storedOrder.rows[0].deposit)).toBeCloseTo(180, 5);
+  });
+
+  test('订单不存在时返回 404', async () => {
+    const response = await request(app)
+      .post(`/api/orders/${CHECKOUT_PREFIX}MISSING/status`)
+      .send({ newStatus: 'checked-out' });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.body.message).toBe('未找到订单或更新失败');
+  });
+
+  test('非法状态更新请求返回 400 并保持原状态', async () => {
+    const orderId = buildOrderId('INVALID');
+    await createCheckedInOrder(orderId);
+
+    const response = await request(app)
+      .post(`/api/orders/${orderId}/status`)
+      .send({ newStatus: 'invalid-status' });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.body.success).toBe(false);
+    expect(response.body.message).toBe('请求参数验证失败');
+    expect(Array.isArray(response.body.errors)).toBe(true);
+
+    const storedOrder = await query('SELECT status FROM orders WHERE order_id = $1', [orderId]);
+    expect(storedOrder.rows.length).toBe(1);
+    expect(storedOrder.rows[0].status).toBe('checked-in');
+  });
+});

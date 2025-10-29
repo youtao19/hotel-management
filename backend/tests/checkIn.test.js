@@ -98,7 +98,7 @@ afterAll(async () => {
 });
 
 describe('办理入住接口', () => {
-  test('成功办理入住并生成账单', async () => {
+  test('收取押金办理入住会生成押金账单', async () => {
     const orderId = `${ORDER_PREFIX}SUCCESS`;
     const depositAmount = 300;
 
@@ -114,11 +114,13 @@ describe('办理入住接口', () => {
     expect(response.body.data.order.status).toBe('checked-in');
     expect(Number(response.body.data.order.deposit)).toBeCloseTo(depositAmount, 5);
     expect(response.body.data.bills.length).toBe(3);
+    expect(response.body.data.bills.filter(bill => bill.change_type === '收押').length).toBe(1);
 
     const bills = await query('SELECT change_type, change_price FROM bills WHERE order_id = $1', [orderId]);
     expect(bills.rows.length).toBe(3);
     expect(bills.rows.filter(row => row.change_type === '收押').length).toBe(1);
     expect(bills.rows.filter(row => row.change_type === '房费').length).toBe(2);
+    expect(Number(bills.rows.find(row => row.change_type === '收押').change_price)).toBeCloseTo(depositAmount, 5);
 
     const updatedOrder = await query('SELECT status, deposit FROM orders WHERE order_id = $1', [orderId]);
     expect(updatedOrder.rows[0].status).toBe('checked-in');
@@ -126,6 +128,58 @@ describe('办理入住接口', () => {
 
     const roomStatus = await query('SELECT status FROM rooms WHERE room_number = $1', [TEST_ROOM.room_number]);
     expect(roomStatus.rows[0].status).toBe('occupied');
+  });
+
+  test('未收取押金办理入住仅生成房费账单', async () => {
+    const orderId = `${ORDER_PREFIX}NO_DEPOSIT`;
+
+    await insertOrder({ orderId, deposit: 0 });
+
+    const response = await request(app)
+      .post(`/api/orders/${orderId}/check-in`)
+      .send({});
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.order.status).toBe('checked-in');
+    expect(Number(response.body.data.order.deposit || 0)).toBeCloseTo(0, 5);
+    expect(response.body.data.bills.length).toBe(2);
+    expect(response.body.data.bills.every(bill => bill.change_type === '房费')).toBe(true);
+
+    const bills = await query('SELECT change_type, change_price FROM bills WHERE order_id = $1', [orderId]);
+    expect(bills.rows.length).toBe(2);
+    expect(bills.rows.every(row => row.change_type === '房费')).toBe(true);
+    expect(bills.rows.every(row => Number(row.change_price) > 0)).toBe(true);
+
+    const updatedOrder = await query('SELECT status, deposit FROM orders WHERE order_id = $1', [orderId]);
+    expect(updatedOrder.rows[0].status).toBe('checked-in');
+    expect(Number(updatedOrder.rows[0].deposit || 0)).toBeCloseTo(0, 5);
+  });
+
+  test('未传押金字段时使用订单原有押金金额', async () => {
+    const orderId = `${ORDER_PREFIX}KEEP_DEPOSIT`;
+    const originalDeposit = 180;
+
+    await insertOrder({ orderId, deposit: originalDeposit });
+
+    const response = await request(app)
+      .post(`/api/orders/${orderId}/check-in`)
+      .send({});
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(Number(response.body.data.order.deposit)).toBeCloseTo(originalDeposit, 5);
+    expect(response.body.data.bills.length).toBe(3);
+    expect(response.body.data.bills.filter(bill => bill.change_type === '收押').length).toBe(1);
+
+    const bills = await query('SELECT change_type, change_price FROM bills WHERE order_id = $1', [orderId]);
+    expect(bills.rows.length).toBe(3);
+    expect(bills.rows.filter(row => row.change_type === '收押').length).toBe(1);
+    expect(Number(bills.rows.find(row => row.change_type === '收押').change_price)).toBeCloseTo(originalDeposit, 5);
+
+    const updatedOrder = await query('SELECT status, deposit FROM orders WHERE order_id = $1', [orderId]);
+    expect(updatedOrder.rows[0].status).toBe('checked-in');
+    expect(Number(updatedOrder.rows[0].deposit)).toBeCloseTo(originalDeposit, 5);
   });
 
   test('订单不存在时返回 404', async () => {
