@@ -1097,6 +1097,19 @@ async function handleExtendStay(extendStayData) {
     const uniqueId = String(timestamp).slice(-4);
     const extendStayGuestName = `${extendStayData.guestName}[续${uniqueId}]`;
 
+    const normalizedRoomPrice = (() => {
+      const priceData = extendStayData.roomPrice;
+      if (priceData && typeof priceData === 'object' && !Array.isArray(priceData)) {
+        return { ...priceData };
+      }
+      const nightlyTotal = typeof priceData === 'number' ? Number(priceData) : Number(extendStayData.totalPrice);
+      const checkInDate = extendStayData.checkInDate;
+      if (checkInDate && !Number.isNaN(nightlyTotal) && nightlyTotal > 0) {
+        return { [checkInDate]: nightlyTotal };
+      }
+      return {};
+    })();
+
     // 创建新订单数据，使用 addOrder 期望的格式
     const newOrderData = {
       orderNumber: newOrderNumber,
@@ -1108,7 +1121,7 @@ async function handleExtendStay(extendStayData) {
       checkOutDate: extendStayData.checkOutDate,
       status: 'pending', // 新订单默认为待入住状态
       paymentMethod: extendStayData.paymentMethod || 'cash', // 使用用户选择的支付方式
-      roomPrice: extendStayData.totalPrice, // 使用总价而不是roomPrice
+      roomPrice: normalizedRoomPrice,
       deposit: 0, // 续住默认押金为0
       remarks: `续住订单，原客人：${extendStayData.guestName}，原订单号：${extendStayData.originalOrderNumber}。${extendStayData.notes || ''}`.trim(),
       source: 'extend_stay', // 标记为续住来源

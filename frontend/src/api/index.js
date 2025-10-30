@@ -183,6 +183,9 @@ export const billApi = {
   // 获取订单的所有账单（支持多账单）
   getBillsByOrderId: (orderId) => api.get(`/bills/order/${orderId}`),
 
+  // 按日期获取账单（交接班核对用）
+  getBillsByDate: (date) => api.get(`/bills/by-date/${date}`),
+
   // 获取所有账单
   getAllBills: () => api.get('/bills'),
 
