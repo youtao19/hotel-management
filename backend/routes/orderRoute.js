@@ -384,14 +384,11 @@ router.get('/:order_id/deposit-info', async (req, res) => {
  * 请求体: { deposit: number } - 实际收取的押金金额
  */
 router.post('/:orderId/check-in', async (req, res) => {
-  console.log(`📍 [check-in] 路由被调用: ${req.method} ${req.path}`);
   const { orderId } = req.params;
-  console.log(`📍 [check-in] orderId=${orderId}, req.body=`, req.body);
   const { deposit, dailyPrices } = req.body || {}; // 从请求体获取押金金额和每日房价
   let client;
 
   try {
-    console.log(`🚀 [check-in] 开始办理入住: orderId=${orderId}, deposit=${deposit}`);
     client = await getClient();
     console.log('✅ [check-in] 获取数据库连接成功');
     await client.query('BEGIN');

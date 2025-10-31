@@ -245,10 +245,15 @@ export const useOrderStore = defineStore('order', () => {
     try {
       loading.value = true;
       error.value = null;
+      const targetOrderId = orderNumber || ''
+      if (!targetOrderId) {
+        throw new Error('订单号无效，无法更新状态');
+      }
       const statusData = { newStatus };
-      const response = await orderApi.updateOrderStatus(orderNumber, statusData);
+      const response = await orderApi.updateOrderStatus(targetOrderId, statusData);
       const updatedOrderFromApi = response.order || response;
-      const index = orders.value.findIndex(o => o.orderNumber === orderNumber);
+      const normalizedOrderId = updatedOrderFromApi.order_id || updatedOrderFromApi.orderNumber || targetOrderId;
+      const index = orders.value.findIndex(o => o.orderNumber === normalizedOrderId);
       if (index !== -1) {
         orders.value[index] = {
           ...orders.value[index],

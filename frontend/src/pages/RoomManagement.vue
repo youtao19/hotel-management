@@ -614,7 +614,16 @@ function deleteRoom(room) {
 // 房型操作
 function editRoomType(roomType) {
   console.log('点击编辑房型按钮:', roomType)
-  roomTypeForm.value = { ...roomType }
+  const parsedBasePrice = typeof roomType.base_price === 'number'
+    ? roomType.base_price
+    : parseFloat(roomType.base_price || 0)
+
+  roomTypeForm.value = {
+    type_code: roomType.type_code || '',
+    type_name: roomType.type_name || '',
+    base_price: Number.isFinite(parsedBasePrice) ? parsedBasePrice : 0,
+    description: roomType.description || ''
+  }
   isEditingRoomType.value = true
   showAddRoomTypeDialog.value = true
 }
@@ -622,17 +631,27 @@ function editRoomType(roomType) {
 async function saveRoomType() {
   try {
     saving.value = true
+    const basePriceNumber = typeof roomTypeForm.value.base_price === 'number'
+      ? roomTypeForm.value.base_price
+      : parseFloat(roomTypeForm.value.base_price || 0)
+
+    const sanitizedRoomType = {
+      type_code: roomTypeForm.value.type_code?.trim() || '',
+      type_name: roomTypeForm.value.type_name?.trim() || '',
+      base_price: Number.isFinite(basePriceNumber) ? basePriceNumber : 0,
+      description: roomTypeForm.value.description?.trim() || ''
+    }
 
     if (isEditingRoomType.value) {
       // 更新房型
-      await roomApi.updateRoomType(roomTypeForm.value.type_code, roomTypeForm.value)
+      await roomApi.updateRoomType(sanitizedRoomType.type_code, sanitizedRoomType)
       $q.notify({
         type: 'positive',
         message: '房型更新成功'
       })
     } else {
       // 添加房型
-      await roomApi.addRoomType(roomTypeForm.value)
+      await roomApi.addRoomType(sanitizedRoomType)
       $q.notify({
         type: 'positive',
         message: '房型添加成功'

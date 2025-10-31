@@ -105,6 +105,7 @@ export const roomApi = {
   deleteRoomType: (code) => api.delete(`/room-types/${code}`),
 
   getAvailableRooms: (params) => api.get(`/rooms/available?${params}`),
+  
   changePendingRoom: (data) => api.post(`/rooms/change-room`, data),
 }
 

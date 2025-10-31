@@ -524,11 +524,14 @@
       </q-card>
     </q-dialog>
 
-    <!-- 账单对话框 -->
+    <!-- 入住确认对话框 -->
     <CheckInConfirmDialog
-      v-model="showBillDialog"
-      :currentOrder="billOrder"
-      @bill-created="handleBillCreated"
+      v-model="showCheckInConfirmDialog"
+      :order="pendingCheckInOrder"
+      :get-room-type-name="getRoomTypeName"
+      :get-payment-method-name="getPaymentMethodName"
+      :format-date="formatDateForDialog"
+      @confirm="handleCheckInConfirm"
     />
   </q-page>
 </template>
@@ -577,9 +580,17 @@ const currentCalendarView = ref({ // 跟踪日历当前显示的月份
   month: new Date().getMonth() + 1
 })
 
-// 账单相关变量
-const showBillDialog = ref(false)
-const billOrder = ref(null)
+// 入住确认对话框
+const showCheckInConfirmDialog = ref(false)
+const pendingCheckInOrder = ref(null)
+const getPaymentMethodName = viewStore.getPaymentMethodName
+const formatDateForDialog = (dateString) => viewStore.formatDate(dateString)
+
+watch(showCheckInConfirmDialog, (isOpen) => {
+  if (!isOpen) {
+    pendingCheckInOrder.value = null
+  }
+})
 
 // 日期选项函数 - 允许所有日期可选
 const dateOptions = (date) => {
@@ -1640,7 +1651,8 @@ async function checkInRoom(room) {
     console.log('办理入住:', room)
 
     // 获取房间对应的订单信息
-    const orderNumber = room.order_id || room.orderId
+    const rawOrderNumber = room.order_id || room.orderId
+    const orderNumber = typeof rawOrderNumber === 'string' ? rawOrderNumber : rawOrderNumber?.toString()
     if (!orderNumber) {
       $q.notify({
         type: 'warning',
@@ -1651,7 +1663,7 @@ async function checkInRoom(room) {
     }
 
     // 获取完整的订单信息
-    const order = orderStore.getOrderByNumber(orderNumber)
+    const order = await orderStore.getOrderByNumber(orderNumber)
     if (!order) {
       $q.notify({
         type: 'negative',
@@ -1661,19 +1673,21 @@ async function checkInRoom(room) {
       return
     }
 
-    // 使用 Quasar Dialog 显示确认对话框
-    $q.dialog({
-      title: '确认办理入住',
-      message: `确定要为订单 ${order.orderNumber} (客人: ${order.guestName}, 房间: ${order.roomNumber}) 办理入住吗？\n\n办理入住后将自动创建账单。`,
-      cancel: true,
-      persistent: true
-    }).onOk(async () => {
-      // 用户点击确定，执行入住操作
-      await performCheckIn(order)
-    }).onCancel(() => {
-      // 用户点击取消，什么也不做
-      console.log('用户取消了入住操作')
-    })
+    const normalizedOrderNumber = order.orderNumber || order.order_id || order.orderId || order.order_number
+    if (!normalizedOrderNumber) {
+      $q.notify({
+        type: 'warning',
+        message: '订单信息不完整，无法办理入住',
+        position: 'top'
+      })
+      return
+    }
+
+    pendingCheckInOrder.value = {
+      ...order,
+      orderNumber: normalizedOrderNumber
+    }
+    showCheckInConfirmDialog.value = true
   } catch (error) {
     console.error('办理入住失败:', error)
     $q.notify({
@@ -1687,48 +1701,26 @@ async function checkInRoom(room) {
 // 执行入住操作
 async function performCheckIn(order) {
   try {
-    console.log('办理入住:', order.orderNumber, '房间:', order.roomNumber)
-
-    // 调用订单store更新订单状态
-    const updatedOrderFromApi = await orderStore.updateOrderStatusViaApi(order.orderNumber, 'checked-in')
-
-    if (!updatedOrderFromApi) {
-      $q.notify({
-        type: 'negative',
-        message: '办理入住失败，API未返回更新后的订单',
-        position: 'top'
-      })
-      return
+    const normalizedOrderNumber = order.orderNumber || order.order_id || order.orderId || order.order_number
+    if (!normalizedOrderNumber) {
+      throw new Error('订单号缺失')
     }
 
-    // 获取房间信息 (主要为了拿到房间号)
-    const room = roomStore.getRoomByNumber(order.roomNumber)
-    if (!room) {
-      console.error('预订房间未找到:', order.roomNumber)
-      $q.notify({
-        type: 'warning',
-        message: '订单已更新为入住，但预订的房间信息未找到，请检查房间状态！',
-        position: 'top',
-        multiLine: true
-      })
-      await loadRoomDataForDate(selectedDate.value)
-      return
-    }
-
-    // 入住成功后刷新房间列表，确保房间状态页面能显示最新的客人信息
-    await roomStore.fetchAllRooms()
-
-    // 办理入住成功后，显示账单创建对话框
-    showBillDialog.value = true
-    billOrder.value = { ...orderStore.getOrderByNumber(order.orderNumber) }
+    console.log('办理入住:', normalizedOrderNumber, '房间:', order.roomNumber)
+    await orderStore.checkIn(normalizedOrderNumber, order.deposit)
 
     $q.notify({
       type: 'positive',
-      message: '入住成功，请完成账单创建',
+      message: '入住成功',
       position: 'top'
     })
 
+    // 更新本地状态
+    pendingCheckInOrder.value = null
+    showCheckInConfirmDialog.value = false
+
     // 刷新房间数据
+    await roomStore.fetchAllRooms()
     await loadRoomDataForDate(selectedDate.value)
 
   } catch (error) {
@@ -1744,30 +1736,22 @@ async function performCheckIn(order) {
 }
 
 // 处理账单创建成功
-async function handleBillCreated() {
+async function handleCheckInConfirm(orderWithDeposit) {
   try {
-    if (!billOrder.value || !billOrder.value.orderNumber) {
-      console.error('订单信息无效')
-      return
+    showCheckInConfirmDialog.value = false
+    if (!orderWithDeposit?.orderNumber) {
+      throw new Error('订单信息无效')
     }
 
-    console.log('账单创建成功，订单:', billOrder.value.orderNumber)
-
-    // 刷新房间数据
-    await loadRoomDataForDate(selectedDate.value)
-
-    $q.notify({
-      type: 'positive',
-      message: '账单创建成功，入住手续已完成',
-      position: 'top'
-    })
-
+    await performCheckIn(orderWithDeposit)
   } catch (error) {
-    console.error('处理账单创建成功事件失败:', error)
+    console.error('办理入住操作失败:', error)
+    pendingCheckInOrder.value = null
     $q.notify({
       type: 'negative',
-      message: '账单创建成功，但更新界面失败，请刷新页面',
-      position: 'top'
+      message: error.message || '办理入住失败',
+      position: 'top',
+      multiLine: true
     })
   }
 }
