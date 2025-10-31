@@ -506,25 +506,52 @@ async function loadRoomTypes() {
 
 // 房间操作
 function editRoom(room) {
-  roomForm.value = { ...room }
+  if (!room) {
+    return
+  }
+
+  const parsedPrice = typeof room.price === 'number'
+    ? room.price
+    : parseFloat(room.price || 0)
+
+  roomForm.value = {
+    room_number: room.room_number || '',
+    type_code: room.type_code || '',
+    status: room.status || 'available',
+    price: Number.isFinite(parsedPrice) ? parsedPrice : 0
+  }
   isEditingRoom.value = true
   showAddRoomDialog.value = true
+}
+
+function sanitizeRoomPayload() {
+  const parsedPrice = typeof roomForm.value.price === 'number'
+    ? roomForm.value.price
+    : parseFloat(roomForm.value.price || 0)
+
+  return {
+    room_number: String(roomForm.value.room_number || '').trim(),
+    type_code: String(roomForm.value.type_code || '').trim(),
+    status: String(roomForm.value.status || '').trim(),
+    price: Number.isFinite(parsedPrice) ? parsedPrice : 0
+  }
 }
 
 async function saveRoom() {
   try {
     saving.value = true
+    const sanitizedRoom = sanitizeRoomPayload()
 
     if (isEditingRoom.value) {
       // 更新房间
-      await roomApi.updateRoom(roomForm.value.room_number, roomForm.value)
+      await roomApi.updateRoom(sanitizedRoom.room_number, sanitizedRoom)
       $q.notify({
         type: 'positive',
         message: '房间更新成功'
       })
     } else {
       // 添加房间
-      await roomApi.addRoom(roomForm.value)
+      await roomApi.addRoom(sanitizedRoom)
       $q.notify({
         type: 'positive',
         message: '房间添加成功'
@@ -660,8 +687,10 @@ async function saveRoomType() {
 
     closeRoomTypeDialog()
     await loadRoomTypes()
+    await loadRooms()
     // 刷新roomStore中的房型数据，确保其他页面能获取到最新的房型
     await roomStore.fetchRoomTypes()
+    await roomStore.refreshData()
   } catch (error) {
     console.error('保存房型失败:', error)
     $q.notify({

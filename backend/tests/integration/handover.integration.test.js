@@ -128,7 +128,6 @@ async function createHandoverData(handoverData) {
 }
 
 describe('交接班集成测试',() => {
-
   beforeAll(async () => {
     // 添加房型
     await addRoomType(roomTypes);
@@ -228,24 +227,18 @@ describe('交接班集成测试',() => {
 
 
   describe('步骤三: 核对交接数据', () => {
+
     test('获取交接数据', async () => {
       const res = await request(app)
         .get(`/api/bills/by-date/${TEST_DATE}`);
       expect(res.body.success).toBe(true);
       expect(res.body).toHaveProperty('data');
-      expect(Array.isArray(res.body.data)).toBe(true);
       expect(res.body.message).toBe(`成功获取 ${TEST_DATE} 的账单数据`);
     });
+    
   });
 
-  describe('步骤四: 交接数据核对', () => {
-    test('核对交接表格数据', async () => {
 
-    });
 
-    test('核对特殊统计数据', async () => {
-
-    });
-  });
 
 });

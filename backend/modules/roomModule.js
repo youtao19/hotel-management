@@ -1,5 +1,5 @@
 "use strict";
-const { query } = require('../database/postgreDB/pg');
+const { query, getClient } = require('../database/postgreDB/pg');
 /**
  * 获取所有房间
  * @param {string} [queryDate] - 查询日期 YYYY-MM-DD，如果不提供则查询当前活跃订单
@@ -172,24 +172,90 @@ async function updateRoomStatus(number, status) {
 async function addRoom(roomData) {
   const { room_number, type_code, status, price } = roomData;
 
+  let client;
   try {
+    client = await getClient();
+    await client.query('BEGIN');
+
     // 检查房间号是否已存在
-    const checkResult = await query('SELECT * FROM rooms WHERE room_number = $1', [room_number]);
+    const checkResult = await client.query('SELECT 1 FROM rooms WHERE room_number = $1', [room_number]);
     if (checkResult.rows.length > 0) {
-      throw new Error('房间号已存在');
+      const err = new Error('房间号已存在');
+      err.code = 'ROOM_EXISTS';
+      throw err;
     }
 
+    // 验证房型是否存在，并获取默认价格
+    const roomTypeResult = await client.query('SELECT base_price FROM room_types WHERE type_code = $1', [type_code]);
+    if (roomTypeResult.rows.length === 0) {
+      const err = new Error('房型不存在');
+      err.code = 'ROOM_TYPE_NOT_FOUND';
+      throw err;
+    }
+
+    const basePriceRaw = roomTypeResult.rows[0].base_price;
+    const basePrice = Number(basePriceRaw);
+    const finalPrice = typeof price === 'number' && Number.isFinite(price) && price > 0
+      ? price
+      : (Number.isFinite(basePrice) ? basePrice : 0);
+
+    // 检查是否存在 room_id 列且需要手动赋值
+    const roomIdColumnInfo = await client.query(
+      `
+        SELECT column_default, is_nullable
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'rooms'
+          AND column_name = 'room_id'
+      `
+    );
+
+    let insertQueryText = 'INSERT INTO rooms (room_number, type_code, status, price) VALUES ($1, $2, $3, $4) RETURNING *';
+    let insertParams = [room_number, type_code, status, finalPrice];
+
+    if (roomIdColumnInfo.rows.length > 0) {
+      const { column_default: columnDefault, is_nullable: isNullable } = roomIdColumnInfo.rows[0];
+      const needsExplicitRoomId = isNullable === 'NO' && columnDefault === null;
+
+      if (needsExplicitRoomId) {
+        // 优先尝试使用序列
+        const seqResult = await client.query('SELECT pg_get_serial_sequence($1, $2) AS seq_name', ['rooms', 'room_id']);
+        let nextRoomId;
+        const seqRow = seqResult.rows && seqResult.rows[0];
+
+        if (seqRow && seqRow.seq_name) {
+          const nextValResult = await client.query('SELECT nextval($1) AS next_id', [seqRow.seq_name]);
+          nextRoomId = Number(nextValResult.rows[0].next_id);
+        } else {
+          const nextIdResult = await client.query('SELECT COALESCE(MAX(room_id), 0) + 1 AS next_id FROM rooms');
+          nextRoomId = Number(nextIdResult.rows[0].next_id || 1);
+        }
+
+        insertQueryText = 'INSERT INTO rooms (room_id, room_number, type_code, status, price) VALUES ($1, $2, $3, $4, $5) RETURNING *';
+        insertParams = [nextRoomId, room_number, type_code, status, finalPrice];
+      }
+    }
 
     // 插入新房间
-    const { rows } = await query(
-      'INSERT INTO rooms (room_number, type_code, status, price) VALUES ($1, $2, $3, $4) RETURNING *',
-      [room_number, type_code, status, price]
-    );
+    const { rows } = await client.query(insertQueryText, insertParams);
+
+    await client.query('COMMIT');
 
     return rows[0];
   } catch (error) {
+    if (client) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackErr) {
+        console.error('添加房间回滚失败:', rollbackErr);
+      }
+    }
     console.error('添加房间失败:', error);
     throw error;
+  } finally {
+    if (client) {
+      client.release();
+    }
   }
 }
 

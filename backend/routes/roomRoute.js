@@ -196,8 +196,20 @@ router.post('/', async (req, res) => {
     res.status(201).json({ data: newRoom });
   } catch (err) {
     console.error('添加房间错误:', err);
-    if (err.message === '房间号已存在') {
+    if (err.code === 'ROOM_EXISTS' || err.message === '房间号已存在') {
       return res.status(400).json({ message: err.message });
+    }
+    if (err.code === 'ROOM_TYPE_NOT_FOUND') {
+      return res.status(400).json({ message: err.message });
+    }
+    if (err.code === '23505') {
+      return res.status(400).json({ message: '房间号已存在' });
+    }
+    if (err.code === '23503') {
+      return res.status(400).json({ message: '关联的房型不存在或已删除' });
+    }
+    if (err.code === '23502' && err.column === 'room_id') {
+      return res.status(500).json({ message: '房间表缺少 room_id 默认值，请联系管理员配置数据库' });
     }
     res.status(500).json({ message: '服务器错误', error: err.message });
   }

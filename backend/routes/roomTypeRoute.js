@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 // 使用统一的数据库连接模块
-const { query } = require('../database/postgreDB/pg');
+const { query, getClient } = require('../database/postgreDB/pg');
 const Ajv = require('ajv');
 const ajv = new Ajv();
 const addFormats = require('ajv-formats');
@@ -124,6 +124,7 @@ router.post('/', async (req, res) => {
 
 // 更新房型
 router.put('/:code', async (req, res) => {
+  let client;
   try {
     const { code } = req.params;
     const { type_name, base_price, description } = req.body;
@@ -135,26 +136,62 @@ router.put('/:code', async (req, res) => {
       return res.status(400).json({ message: '请求数据格式错误', errors: validate.errors });
     }
 
+    client = await getClient();
+    await client.query('BEGIN');
+
     // 检查房型是否存在
-    const checkResult = await query('SELECT * FROM room_types WHERE type_code = $1', [code]);
+    const checkResult = await client.query('SELECT * FROM room_types WHERE type_code = $1 FOR UPDATE', [code]);
     if (checkResult.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ message: '房型不存在' });
     }
 
     // 更新房型
-    const { rows } = await query(
+    const updatedRoomTypeResult = await client.query(
       'UPDATE room_types SET type_name = $1, base_price = $2, description = $3 WHERE type_code = $4 RETURNING *',
       [type_name, base_price, description || null, code]
     );
 
-    console.log('成功更新房型:', rows[0]);
-    res.status(200).json({ data: rows[0] });
+    const updatedRoomType = updatedRoomTypeResult.rows[0];
+
+    // 同步更新对应房间的价格
+    const syncRoomsResult = await client.query(
+      'UPDATE rooms SET price = $1 WHERE type_code = $2',
+      [base_price, code]
+    );
+
+    await client.query('COMMIT');
+
+    console.log('成功更新房型并同步房价:', {
+      roomType: updatedRoomType,
+      affectedRooms: syncRoomsResult.rowCount
+    });
+
+    res.status(200).json({
+      data: updatedRoomType,
+      syncedRooms: syncRoomsResult.rowCount
+    });
   } catch (err) {
+    if (client) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackErr) {
+        console.error('更新房型回滚失败:', rollbackErr);
+      } finally {
+        client.release();
+        client = null;
+      }
+    }
     console.error('更新房型错误:', err);
     res.status(500).json({
       message: '服务器错误',
       error: err.message
     });
+    return;
+  } finally {
+    if (client) {
+      client.release();
+    }
   }
 });
 
