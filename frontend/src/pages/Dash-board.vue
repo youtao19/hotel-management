@@ -138,49 +138,94 @@
               备忘录
             </div>
           </q-card-section>
-          <q-list separator>
-            <q-item v-for="(task, index) in todayTasks" :key="index" clickable v-ripple>
-              <q-item-section avatar>
-                <q-checkbox v-model="task.completed" color="primary" />
-              </q-item-section>
-              <q-item-section>
-                <q-item-label :class="{ 'text-strike': task.completed }">{{ task.title }}</q-item-label>
-                <q-item-label caption>{{ task.time }}</q-item-label>
-              </q-item-section>
-              <q-item-section side>
-                <q-select
-                  v-model="task.priority"
-                  :options="priorityOptions"
+
+          <q-card-section class="q-pb-none">
+            <div class="row items-center q-col-gutter-sm">
+              <div class="col">
+                <q-input
+                  v-model="selectedDate"
+                  type="date"
                   dense
-                  options-dense
-                  emit-value
-                  map-options
-                  style="min-width: 80px"
-                >
-                  <template v-slot:selected>
-                    <q-badge :color="task.priority === 'high' ? 'negative' : (task.priority === 'medium' ? 'warning' : 'positive')">
-                      {{ task.priority === 'high' ? '高' : (task.priority === 'medium' ? '中' : '低') }}
-                    </q-badge>
-                  </template>
-                  <template v-slot:option="scope">
-                    <q-item v-bind="scope.itemProps">
-                      <q-item-section>
-                        <q-badge :color="scope.opt.color">
-                          {{ scope.opt.label }}
-                        </q-badge>
-                      </q-item-section>
-                    </q-item>
-                  </template>
-                </q-select>
-              </q-item-section>
-              <q-item-section side>
-                <q-btn round dense flat icon="delete" color="grey-7" @click="deleteTask(index)" />
+                  stack-label
+                  label="选择日期"
+                />
+              </div>
+              <div class="col-auto">
+                <q-btn dense flat icon="today" label="今天" @click="resetToToday" />
+              </div>
+            </div>
+          </q-card-section>
+
+          <q-list separator class="relative-position">
+            <q-inner-loading :showing="memoLoading">
+              <q-spinner color="primary" size="32px" />
+            </q-inner-loading>
+
+            <template v-if="!memoLoading && memoItems.length">
+              <q-item v-for="task in memoItems" :key="task.id" clickable v-ripple>
+                <q-item-section avatar>
+                  <q-checkbox
+                    :model-value="task.completed"
+                    color="primary"
+                    @update:model-value="val => toggleTaskCompletion(task, val)"
+                  />
+                </q-item-section>
+                <q-item-section>
+                  <q-item-label :class="{ 'text-strike': task.completed }">{{ task.title }}</q-item-label>
+                  <q-item-label caption>{{ task.time }}</q-item-label>
+                </q-item-section>
+                <q-item-section side>
+                  <q-select
+                    :model-value="task.priority"
+                    :options="priorityOptions"
+                    dense
+                    options-dense
+                    emit-value
+                    map-options
+                    style="min-width: 80px"
+                    @update:model-value="val => updateTaskPriority(task, val)"
+                  >
+                    <template v-slot:selected>
+                      <q-badge :color="task.priority === 'high' ? 'negative' : (task.priority === 'medium' ? 'warning' : 'positive')">
+                        {{ task.priority === 'high' ? '高' : (task.priority === 'medium' ? '中' : '低') }}
+                      </q-badge>
+                    </template>
+                    <template v-slot:option="scope">
+                      <q-item v-bind="scope.itemProps">
+                        <q-item-section>
+                          <q-badge :color="scope.opt.color">
+                            {{ scope.opt.label }}
+                          </q-badge>
+                        </q-item-section>
+                      </q-item>
+                    </template>
+                  </q-select>
+                </q-item-section>
+                <q-item-section side>
+                  <q-btn round dense flat icon="delete" color="grey-7" @click.stop="deleteTask(task)" />
+                </q-item-section>
+              </q-item>
+            </template>
+
+            <q-item v-if="!memoLoading && memoItems.length === 0">
+              <q-item-section>
+                <q-item-label class="text-center text-grey">
+                  当天暂无备忘录
+                </q-item-label>
               </q-item-section>
             </q-item>
+
             <q-separator />
+
             <q-item>
               <q-item-section>
-                <q-input v-model="newTaskForm.title" dense placeholder="添加新备忘录..." @keyup.enter="addTask">
+                <q-input
+                  v-model="newTaskForm.title"
+                  dense
+                  placeholder="添加新备忘录..."
+                  @keyup.enter="addTask"
+                  :disable="memoLoading"
+                >
                   <template v-slot:after>
                     <q-select
                       v-model="newTaskForm.priority"
@@ -190,6 +235,7 @@
                       emit-value
                       map-options
                       style="min-width: 80px"
+                      :disable="memoLoading"
                     >
                       <template v-slot:selected>
                         <q-badge :color="newTaskForm.priority === 'high' ? 'negative' : (newTaskForm.priority === 'medium' ? 'warning' : 'positive')">
@@ -206,7 +252,7 @@
                         </q-item>
                       </template>
                     </q-select>
-                    <q-btn round dense flat icon="add" @click="addTask" />
+                    <q-btn round dense flat icon="add" @click="addTask" :disable="memoLoading" />
                   </template>
                 </q-input>
               </q-item-section>
@@ -220,18 +266,24 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { date } from 'quasar'
+import { ref, computed, onMounted, watch } from 'vue'
+import { date, useQuasar } from 'quasar'
 import { useRouter } from 'vue-router'
 import { useRoomStore } from '../stores/roomStore'
 import { useOrderStore } from '../stores/orderStore'
 import { useViewStore } from '../stores/viewStore'
+import { memoApi } from '../api/index.js'
 
 // 初始化路由和 stores
 const router = useRouter()
 const roomStore = useRoomStore()
 const orderStore = useOrderStore()
 const viewStore = useViewStore()
+const $q = useQuasar()
+
+const selectedDate = ref(date.formatDate(new Date(), 'YYYY-MM-DD'))
+const memoLoading = ref(false)
+const memoItems = ref([])
 
 
 /**
@@ -327,10 +379,6 @@ const roomTypeDistribution = computed(() => {
   })
 })
 
-// 备忘录
-const todayTasks = ref([
-])
-
 // 新备忘录输入
 const newTaskForm = ref({
   title: '',
@@ -344,24 +392,152 @@ const priorityOptions = ref([
   { label: '低', value: 'low', color: 'positive' }
 ])
 
-// 添加新备忘录
-function addTask() {
-  if (newTaskForm.value.title.trim()) {
-    todayTasks.value.push({
-      title: newTaskForm.value.title,
-      time: date.formatDate(new Date(), 'HH:mm'),
-      priority: newTaskForm.value.priority,
-      completed: false
-    })
-    newTaskForm.value.title = ''
-    newTaskForm.value.priority = 'medium'
+function getErrorMessage(error, fallbackMessage) {
+  return error?.response?.data?.message || fallbackMessage || '操作失败'
+}
+
+function transformMemo(memo) {
+  if (!memo) return null
+  const createdAt = memo.created_at || memo.createdAt || memo.updated_at || memo.updatedAt
+  return {
+    id: memo.memo_id ?? memo.id,
+    title: memo.title,
+    priority: memo.priority || 'medium',
+    completed: memo.completed === true,
+    memoDate: memo.memo_date || memo.memoDate,
+    createdAt,
+    updatedAt: memo.updated_at || memo.updatedAt,
+    time: createdAt ? date.formatDate(createdAt, 'HH:mm') : ''
   }
 }
 
-// 删除备忘录
-function deleteTask(index) {
-  todayTasks.value.splice(index, 1)
+async function fetchMemos(targetDate = selectedDate.value) {
+  if (!targetDate) {
+    memoItems.value = []
+    return
+  }
+  memoLoading.value = true
+  try {
+    const response = await memoApi.getMemos(targetDate)
+    const items = Array.isArray(response.data) ? response.data : []
+    memoItems.value = items.map(transformMemo).filter(item => item !== null)
+  } catch (error) {
+    console.error('获取备忘录失败:', error)
+    memoItems.value = []
+    $q.notify({
+      type: 'negative',
+      message: getErrorMessage(error, '获取备忘录失败')
+    })
+  } finally {
+    memoLoading.value = false
+  }
 }
+
+function resetToToday() {
+  const today = date.formatDate(new Date(), 'YYYY-MM-DD')
+  if (selectedDate.value !== today) {
+    selectedDate.value = today
+  } else {
+    fetchMemos(today)
+  }
+}
+
+async function addTask() {
+  const title = newTaskForm.value.title.trim()
+  if (!title) {
+    return
+  }
+  if (!selectedDate.value) {
+    $q.notify({
+      type: 'warning',
+      message: '请选择日期后再添加备忘录'
+    })
+    return
+  }
+
+  try {
+    const response = await memoApi.addMemo({
+      memo_date: selectedDate.value,
+      title,
+      priority: newTaskForm.value.priority,
+      completed: false
+    })
+    const newMemo = transformMemo(response.data)
+    if (newMemo) {
+      memoItems.value.push(newMemo)
+    }
+    newTaskForm.value.title = ''
+    newTaskForm.value.priority = 'medium'
+  } catch (error) {
+    console.error('添加备忘录失败:', error)
+    $q.notify({
+      type: 'negative',
+      message: getErrorMessage(error, '添加备忘录失败')
+    })
+  }
+}
+
+async function deleteTask(task) {
+  if (!task || !task.id) return
+  const originalItems = [...memoItems.value]
+  memoItems.value = memoItems.value.filter(item => item.id !== task.id)
+  try {
+    await memoApi.deleteMemo(task.id)
+  } catch (error) {
+    console.error('删除备忘录失败:', error)
+    memoItems.value = originalItems
+    $q.notify({
+      type: 'negative',
+      message: getErrorMessage(error, '删除备忘录失败')
+    })
+  }
+}
+
+async function toggleTaskCompletion(task, completed) {
+  if (!task || !task.id) return
+  const originalCompleted = task.completed
+  task.completed = completed
+  try {
+    const response = await memoApi.updateMemo(task.id, { completed })
+    const updatedMemo = transformMemo(response.data)
+    if (updatedMemo) {
+      Object.assign(task, updatedMemo)
+    }
+  } catch (error) {
+    console.error('更新备忘录状态失败:', error)
+    task.completed = originalCompleted
+    $q.notify({
+      type: 'negative',
+      message: getErrorMessage(error, '更新备忘录状态失败')
+    })
+  }
+}
+
+async function updateTaskPriority(task, priority) {
+  if (!task || !task.id) return
+  const originalPriority = task.priority
+  task.priority = priority
+  try {
+    const response = await memoApi.updateMemo(task.id, { priority })
+    const updatedMemo = transformMemo(response.data)
+    if (updatedMemo) {
+      Object.assign(task, updatedMemo)
+    }
+  } catch (error) {
+    console.error('更新备忘录优先级失败:', error)
+    task.priority = originalPriority
+    $q.notify({
+      type: 'negative',
+      message: getErrorMessage(error, '更新备忘录优先级失败')
+    })
+  }
+}
+
+watch(selectedDate, (newDate, oldDate) => {
+  if (newDate && newDate !== oldDate) {
+    fetchMemos(newDate)
+  }
+})
 
 // 最近入住客人表格列定义
 const guestColumns = [
@@ -405,7 +581,7 @@ const recentGuests = computed(() => {
 })
 
 // 组件挂载时初始化
-onMounted(() => {
+onMounted(async () => {
   // 这里可以加载实际数据或执行其他初始化操作
   console.log('仪表盘初始化，房间数据:', {
     总房间数: roomStore.rooms.length,
@@ -418,8 +594,18 @@ onMounted(() => {
 
   // 获取“当前实时状态”而非“指定日期状态”（传日期会把已退房映射成清洁中，造成统计偏高）
   roomStore.fetchAllRooms();
+  fetchMemos(selectedDate.value);
   // 同步加载房型映射，确保房型分布显示中文名称
   roomStore.fetchRoomTypes();
+  try {
+    await orderStore.fetchAllOrders();
+  } catch (err) {
+    console.error('仪表盘加载订单数据失败:', err);
+    $q.notify({
+      type: 'negative',
+      message: getErrorMessage(err, '加载最近入住数据失败')
+    });
+  }
 })
 
 // 跳转到房间状态页面并带上相应的状态筛选参数

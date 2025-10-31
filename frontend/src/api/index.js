@@ -198,6 +198,20 @@ export const billApi = {
 
 }
 
+// 仪表盘备忘录相关接口
+export const memoApi = {
+  getMemos: (memoDate) => {
+    const query = memoDate ? `?date=${memoDate}` : ''
+    return api.get(`/dashboard/memos${query}`)
+  },
+
+  addMemo: (memoData) => api.post('/dashboard/memos', memoData),
+
+  updateMemo: (memoId, memoData) => api.put(`/dashboard/memos/${memoId}`, memoData),
+
+  deleteMemo: (memoId) => api.delete(`/dashboard/memos/${memoId}`)
+}
+
 // 好评相关接口
 export const reviewApi = {
   // 邀请客户好评
