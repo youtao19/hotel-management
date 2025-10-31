@@ -358,7 +358,7 @@
                   icon="logout"
                   label="退房"
                   size="sm"
-                  @click.stop="checkOut(room.room_number)"
+                  @click.stop="checkOut(room)"
                 />
                 <!-- 所有非清洁中和非维修中的房间都可以设置为清理状态 -->
                 <q-btn
@@ -1757,13 +1757,10 @@ async function handleCheckInConfirm(orderWithDeposit) {
 }
 
 // 退房
-async function checkOut(roomNumber) {
+async function checkOut(room) {
   try {
-    console.log('退房操作:', roomNumber)
-
-    // 根据房间号找到对应的房间信息
-    const room = roomStore.rooms.find(r => r.room_number === roomNumber)
-    if (!room) {
+    if (!room || !room.room_number) {
+      console.warn('退房时缺少房间信息', room)
       $q.notify({
         type: 'negative',
         message: '未找到房间信息',
@@ -1773,18 +1770,16 @@ async function checkOut(roomNumber) {
     }
 
     // 获取房间对应的订单信息
-    const orderNumber = room.order_id || room.orderId
-    let orderInfo = null
-    if (orderNumber) {
-      orderInfo = orderStore.getOrderByNumber(orderNumber)
-    }
+    const rawOrderNumber = room.order_id || room.orderId
+    const orderInfo = rawOrderNumber
+      ? await orderStore.getOrderByNumber(rawOrderNumber)
+      : null
 
-    // 构建确认信息
-    let confirmMessage = `确定要为房间 ${room.room_number} 办理退房吗？`
-    if (orderInfo) {
-      confirmMessage = `确定要为订单 ${orderInfo.orderNumber} (客人: ${orderInfo.guestName}, 房间: ${room.room_number}) 办理退房吗？`
-    }
-    confirmMessage += '\n\n办理退房后房间将设置为清扫中状态。'
+    const orderNumber = orderInfo?.orderNumber || rawOrderNumber
+    const guestName = orderInfo?.guestName || room.currentGuest || room.guest_name || '未知客人'
+    const confirmMessage = orderNumber
+      ? `确定要为订单 ${orderNumber} (客人: ${guestName}, 房间: ${room.room_number}) 办理退房吗？\n\n办理退房后房间将设置为清扫中状态。`
+      : `确定要为房间 ${room.room_number} 办理退房吗？\n\n办理退房后房间将设置为清扫中状态。`
 
     // 使用 Quasar Dialog 显示确认对话框
     $q.dialog({
@@ -1794,7 +1789,7 @@ async function checkOut(roomNumber) {
       persistent: true
     }).onOk(async () => {
       // 用户点击确定，执行退房操作
-      await performRoomCheckOut(roomNumber, orderInfo);
+      await performRoomCheckOut(room, orderInfo || (orderNumber ? { orderNumber, roomNumber: room.room_number } : null));
     }).onCancel(() => {
       // 用户点击取消，什么也不做
       console.log('用户取消了退房操作');
@@ -1810,17 +1805,19 @@ async function checkOut(roomNumber) {
 }
 
 // 执行退房操作
-async function performRoomCheckOut(roomNumber, orderInfo) {
+async function performRoomCheckOut(room, orderInfo) {
   try {
-    console.log('执行退房操作:', roomNumber, orderInfo)
+    const roomNumber = typeof room === 'string' ? room : room?.room_number
+    const targetOrderNumber = orderInfo?.orderNumber || orderInfo?.order_id || orderInfo?.orderId
+    console.log('执行退房操作:', roomNumber, targetOrderNumber)
 
     // 如果有订单信息，先更新订单状态
-    if (orderInfo) {
-      const updatedOrder = await orderStore.updateOrderStatusViaApi(orderInfo.orderNumber, 'checked-out')
+    if (targetOrderNumber) {
+      const updatedOrder = await orderStore.updateOrderStatusViaApi(targetOrderNumber, 'checked-out')
       if (!updatedOrder) {
         $q.notify({
           type: 'negative',
-          message: '更新订单状态失败，退房操作取消',
+          message: '办理退房失败，请重试',
           position: 'top'
         })
         return
@@ -1828,22 +1825,41 @@ async function performRoomCheckOut(roomNumber, orderInfo) {
     }
 
     // 更新房间状态为清扫中
-    const success = await roomStore.checkOutRoom(roomNumber)
-    if (success) {
-      $q.notify({
-        type: 'positive',
-        message: '退房成功',
-        position: 'top'
-      })
-      // 刷新房间数据
-      await loadRoomDataForDate(selectedDate.value)
-    } else {
+    let roomUpdateSuccess = false
+    if (roomNumber) {
+      roomUpdateSuccess = await roomStore.checkOutRoom(roomNumber)
+      if (!roomUpdateSuccess) {
+        $q.notify({
+          type: 'warning',
+          message: '订单已退房，但更新房间状态为清扫中失败，请检查房间状态！',
+          position: 'top',
+          multiLine: true
+        })
+      } else {
+        await roomStore.fetchAllRooms()
+      }
+    }
+
+    // 刷新订单数据，保持列表同步
+    await orderStore.fetchAllOrders()
+
+    if (!roomUpdateSuccess && !targetOrderNumber) {
       $q.notify({
         type: 'negative',
         message: '退房失败',
         position: 'top'
       })
+      return
     }
+
+    $q.notify({
+      type: 'positive',
+      message: '退房成功',
+      position: 'top'
+    })
+
+    // 刷新房间数据
+    await loadRoomDataForDate(selectedDate.value)
   } catch (error) {
     console.error('执行退房操作失败:', error)
     const errorMessage = error.response?.data?.message || error.message || '未知错误'
