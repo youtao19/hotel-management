@@ -612,15 +612,19 @@ const previousMonth = async () => {
   calendarDate.value = currentDate.toISOString().substr(0, 10)
 
   // 更新当前视图
+  const year = currentDate.getFullYear()
+  const month = currentDate.getMonth()
+
   currentCalendarView.value = {
-    year: currentDate.getFullYear(),
-    month: currentDate.getMonth() + 1
+    year: year,
+    month: month + 1
   }
 
   // 重新获取数据
   if (selectedRoom.value) {
-    const startDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).toISOString().substr(0, 10)
-    const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).toISOString().substr(0, 10)
+    const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`
+    const lastDay = new Date(year, month + 1, 0).getDate()
+    const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
     await fetchRoomBookingData(selectedRoom.value.room_number, startDate, endDate)
   }
 }
@@ -632,15 +636,19 @@ const nextMonth = async () => {
   calendarDate.value = currentDate.toISOString().substr(0, 10)
 
   // 更新当前视图
+  const year = currentDate.getFullYear()
+  const month = currentDate.getMonth()
+
   currentCalendarView.value = {
-    year: currentDate.getFullYear(),
-    month: currentDate.getMonth() + 1
+    year: year,
+    month: month + 1
   }
 
   // 重新获取数据
   if (selectedRoom.value) {
-    const startDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).toISOString().substr(0, 10)
-    const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).toISOString().substr(0, 10)
+    const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`
+    const lastDay = new Date(year, month + 1, 0).getDate()
+    const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
     await fetchRoomBookingData(selectedRoom.value.room_number, startDate, endDate)
   }
 }
@@ -957,6 +965,13 @@ const roomCalendarEvents = computed(() => {
     return [];
   }
 
+  // 添加对 roomBookingData 的依赖，确保当数据变化时重新计算
+  const bookingDataLength = roomBookingData.value?.length || 0;
+
+  if (bookingDataLength > 0) {
+    console.log(`🔄 roomCalendarEvents 重新计算 (预订数据: ${bookingDataLength} 条)`);
+  }
+
   const events = [];
 
   // 使用当前日历视图的年月
@@ -979,13 +994,26 @@ const roomCalendarEvents = computed(() => {
  */
 const getEventColor = (timestamp) => {
   if (!timestamp) {
-    console.log('getEventColor: 无效的时间戳');
     return 'grey';
   }
 
   // timestamp 格式：YYYY/MM/DD，转换为 YYYY-MM-DD 格式
   const dateStr = timestamp.replace ? timestamp.replace(/\//g, '-') : timestamp;
+
+  // 检查是否有预订数据
+  if (!roomBookingData.value || roomBookingData.value.length === 0) {
+    // 只在第一次打印警告
+    if (dateStr.endsWith('-01')) {
+      console.warn(`⚠️ getEventColor: ${dateStr} 时没有预订数据`);
+    }
+  }
+
   const status = getRoomDateStatus(dateStr);
+
+  // 添加调试日志 - 只在月初几天打印
+  if (dateStr.endsWith('-01') || dateStr.endsWith('-02') || dateStr.endsWith('-30')) {
+    console.log(`🎨 getEventColor: ${dateStr} -> status: ${status} (数据条数: ${roomBookingData.value?.length || 0})`);
+  }
 
   let color;
   switch (status) {
@@ -993,10 +1021,10 @@ const getEventColor = (timestamp) => {
       color = 'red'; // 已入住显示红色
       break;
     case 'reserved':
-      color = 'orange'; // 已预订显示橙色
+      color = 'blue'; // 已预订显示蓝色
       break;
     case 'available':
-      color = ''; // 可入住不显示特殊颜色
+      color = 'green'; // 可入住显示绿色
       break;
     default:
       color = 'grey'; // 默认灰色
@@ -1027,8 +1055,13 @@ async function onCalendarNavigation(view) {
 
     // 如果有选中的房间，重新获取新月份的预订数据
     if (selectedRoom.value) {
-      const startDate = new Date(view.year, view.month - 1, 1).toISOString().substr(0, 10)
-      const endDate = new Date(view.year, view.month, 0).toISOString().substr(0, 10)
+      const year = view.year
+      const month = view.month - 1 // view.month 是 1-12，需要转换为 0-11
+
+      const startDate = `${year}-${String(view.month).padStart(2, '0')}-01`
+      const lastDay = new Date(year, view.month, 0).getDate()
+      const endDate = `${year}-${String(view.month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+
       await fetchRoomBookingData(selectedRoom.value.room_number, startDate, endDate)
     }
   }
@@ -1186,7 +1219,9 @@ const resetAllFilters = async () => {
  */
 async function showRoomCalendar(room) {
   try {
-    console.log('点击房间卡片:', room)
+    console.log('=== 打开房间日历 ===')
+    console.log('房间信息:', { roomNumber: room.room_number, roomType: room.room_type })
+
     selectedRoom.value = room
 
     // 初始化日历视图为当前月份
@@ -1196,21 +1231,26 @@ async function showRoomCalendar(room) {
       month: currentDate.getMonth() + 1
     }
 
-    showCalendarDialog.value = true
-
     // 获取当前月份的开始和结束日期
-    const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
-    const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
+    const year = currentDate.getFullYear()
+    const month = currentDate.getMonth() // 0-11
 
-    const startDate = startOfMonth.toISOString().substr(0, 10)
-    const endDate = endOfMonth.toISOString().substr(0, 10)
+    // 使用本地时间构建日期字符串，避免时区问题
+    const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`
 
-    console.log('日期范围:', startDate, '到', endDate)
+    // 获取当月最后一天
+    const lastDay = new Date(year, month + 1, 0).getDate()
+    const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 
-    // 获取该房间在当月的预订数据
+    console.log('查询日期范围:', startDate, '到', endDate, `(共 ${lastDay} 天)`)
+
+    // 先获取该房间在当月的预订数据，再显示对话框
     await fetchRoomBookingData(room.room_number, startDate, endDate)
 
-    console.log('日历已显示，所有日期都应该有颜色标识')
+    // 数据获取完成后再显示对话框
+    showCalendarDialog.value = true
+
+    console.log('=== 日历对话框已打开，预订数据已加载 ===')
 
   } catch (error) {
     console.error('显示房间日历失败:', error)
@@ -1234,19 +1274,36 @@ async function fetchRoomBookingData(roomNumber, startDate, endDate) {
     const room = selectedRoom.value;
     if (room && room.room_number) {
       const orders = orderStore.orders || [];
+      console.log('=== 开始获取房间预订数据 ===');
       console.log('所有订单数据:', orders.length, '个订单');
       console.log('查找房间号:', room.room_number);
+      console.log('查询日期范围:', startDate, '到', endDate);
 
       const roomOrders = orders.filter(order => {
         // orderStore中的字段是roomNumber，不是room_number
         const matches = order.roomNumber === room.room_number;
         if (matches) {
-          console.log('找到匹配订单:', order.orderNumber, order.roomNumber, order.status);
+          console.log('找到匹配订单:', {
+            orderNumber: order.orderNumber,
+            roomNumber: order.roomNumber,
+            status: order.status,
+            checkInDate: order.checkInDate,
+            checkOutDate: order.checkOutDate,
+            guestName: order.guestName
+          });
         }
         return matches;
       });
 
       console.log(`找到房间 ${room.room_number} 的订单:`, roomOrders.length);
+
+      // 打印所有找到的订单详情
+      if (roomOrders.length > 0) {
+        console.log('房间订单详情:');
+        roomOrders.forEach(order => {
+          console.log(`  - 订单号: ${order.orderNumber}, 状态: ${order.status}, 入住: ${order.checkInDate}, 退房: ${order.checkOutDate}`);
+        });
+      }
 
       // 筛选在指定日期范围内的订单
       const filteredOrders = roomOrders.filter(order => {
@@ -1266,22 +1323,57 @@ async function fetchRoomBookingData(roomNumber, startDate, endDate) {
                           (checkOut >= start && checkOut <= end) ||
                           (checkIn <= start && checkOut >= end);
 
-        if (hasOverlap) {
-          console.log(`订单 ${order.orderNumber} 在日期范围内:`, order.checkInDate, '到', order.checkOutDate);
-        }
+        console.log(`📅 订单 ${order.orderNumber}:`, {
+          状态: order.status,
+          入住日期: order.checkInDate,
+          退房日期: order.checkOutDate,
+          查询范围: `${startDate} ~ ${endDate}`,
+          日期对象: {
+            checkIn: checkIn.toISOString().substr(0, 10),
+            checkOut: checkOut.toISOString().substr(0, 10),
+            start: start.toISOString().substr(0, 10),
+            end: end.toISOString().substr(0, 10)
+          },
+          是否重叠: hasOverlap
+        });
 
         return hasOverlap;
       });
 
       if (filteredOrders.length > 0) {
-        roomBookingData.value = filteredOrders.map(order => ({
-          check_in_date: order.checkInDate,
-          check_out_date: order.checkOutDate,
-          status: order.status,
-          guest_name: order.guestName
-        }));
+        console.log(`✅ 找到 ${filteredOrders.length} 个符合条件的订单，开始映射...`);
 
-        console.log('处理后的预订数据:', roomBookingData.value);
+        roomBookingData.value = filteredOrders.map(order => {
+          // 规范化状态值
+          let normalizedStatus = order.status;
+          const originalStatus = order.status;
+
+          if (normalizedStatus === '待入住') {
+            normalizedStatus = 'pending';
+          } else if (normalizedStatus === '已入住') {
+            normalizedStatus = 'checked-in';
+          } else if (normalizedStatus === '已退房') {
+            normalizedStatus = 'checked-out';
+          } else if (normalizedStatus === '已取消') {
+            normalizedStatus = 'cancelled';
+          }
+
+          console.log(`🔄 订单 ${order.orderNumber} 状态转换: "${originalStatus}" -> "${normalizedStatus}"`);
+
+          const mappedData = {
+            check_in_date: order.checkInDate,
+            check_out_date: order.checkOutDate,
+            status: normalizedStatus,
+            guest_name: order.guestName
+          };
+
+          console.log(`   映射结果:`, mappedData);
+
+          return mappedData;
+        });
+
+        console.log('✅ 处理后的预订数据总数:', roomBookingData.value.length);
+        console.log('预订数据内容:', JSON.stringify(roomBookingData.value, null, 2));
         return; // 找到真实数据，不需要生成示例数据
       } else {
         console.log('没有找到在指定日期范围内的订单');
@@ -1291,6 +1383,11 @@ async function fetchRoomBookingData(roomNumber, startDate, endDate) {
     // 如果没有找到真实的预订数据，保持空数组
     if (roomBookingData.value.length === 0) {
       console.log('没有找到该房间的预订数据，房间状态将显示为可用');
+    } else {
+      console.log(`=== 最终预订数据 (${roomBookingData.value.length}条) ===`);
+      roomBookingData.value.forEach(booking => {
+        console.log(`- 入住: ${booking.check_in_date}, 退房: ${booking.check_out_date}, 状态: ${booking.status}, 客人: ${booking.guest_name}`);
+      });
     }
 
   } catch (error) {
@@ -1463,13 +1560,31 @@ function getRoomDateStatus(dateInput) {
 
   // 检查是否有预订数据
   if (!roomBookingData.value || roomBookingData.value.length === 0) {
+    if (dateStr.endsWith('-01') || dateStr.endsWith('-30') || dateStr.endsWith('-31')) {
+      console.log(`⚠️ getRoomDateStatus: ${dateStr} -> 无预订数据 (roomBookingData为空) -> available`);
+    }
     return 'available';
+  }
+
+  // 在月初打印预订数据状态
+  if (dateStr.endsWith('-01')) {
+    console.log(`📊 getRoomDateStatus 当前预订数据 (${dateStr}):`, {
+      数据条数: roomBookingData.value.length,
+      数据内容: roomBookingData.value.map(b => ({
+        入住: b.check_in_date,
+        退房: b.check_out_date,
+        状态: b.status
+      }))
+    });
   }
 
   // 检查日期是否在任何预订范围内
   for (const booking of roomBookingData.value) {
     // 确保有效的日期值
-    if (!booking.check_in_date || !booking.check_out_date) continue;
+    if (!booking.check_in_date || !booking.check_out_date) {
+      console.log(`getRoomDateStatus: ${dateStr} -> 订单缺少日期信息，跳过`);
+      continue;
+    }
 
     // 转换日期格式以便比较
     const checkIn = new Date(booking.check_in_date).toISOString().substr(0, 10);
@@ -1485,6 +1600,17 @@ function getRoomDateStatus(dateInput) {
       ? (dateStr === checkIn)
       : (dateStr >= checkIn && dateStr < checkOut);
 
+    // 添加详细的日志以调试（仅在月初打印以减少日志量）
+    if ((dateStr >= checkIn && dateStr <= checkOut) && (dateStr.endsWith('-01') || dateStr.endsWith('-02'))) {
+      console.log(`getRoomDateStatus: 检查 ${dateStr}:`, {
+        订单范围: `${checkIn}~${checkOut}`,
+        状态: booking.status,
+        客人: booking.guest_name,
+        是否休息房: isRestRoom,
+        是否在范围内: isInRange
+      });
+    }
+
     if (isInRange) {
       // 如果是已取消的订单，整个期间都显示为可用
       if (booking.status === 'cancelled') {
@@ -1496,25 +1622,17 @@ function getRoomDateStatus(dateInput) {
 
       // 正常的入住期间状态判断
       if (booking.status === 'checked-in') {
-        if (dateStr.endsWith('-01') || dateStr.endsWith('-02')) {
-          console.log(`getRoomDateStatus: ${dateStr} -> 入住期间 (${checkIn} 到 ${checkOut}前) -> 状态: ${booking.status} -> occupied`);
-        }
+        console.log(`getRoomDateStatus: ${dateStr} -> ✅ 已入住 (${checkIn}~${checkOut}) -> occupied`);
         return 'occupied'; // 已入住
       } else if (booking.status === 'pending') {
-        if (dateStr.endsWith('-01') || dateStr.endsWith('-02')) {
-          console.log(`getRoomDateStatus: ${dateStr} -> 预订期间 (${checkIn} 到 ${checkOut}前) -> 状态: ${booking.status} -> reserved`);
-        }
+        console.log(`getRoomDateStatus: ${dateStr} -> 📅 已预订 (${checkIn}~${checkOut}) -> reserved`);
         return 'reserved'; // 待入住（已预订）
       } else if (booking.status === 'checked-out') {
         // 入住期间但已退房，这些日期曾经被占用
-        if (dateStr.endsWith('-01') || dateStr.endsWith('-02')) {
-          console.log(`getRoomDateStatus: ${dateStr} -> 入住期间但已退房 (${checkIn} 到 ${checkOut}前) -> occupied`);
-        }
+        console.log(`getRoomDateStatus: ${dateStr} -> ✅ 已退房但曾入住 (${checkIn}~${checkOut}) -> occupied`);
         return 'occupied'; // 入住期间（虽然已退房，但这些日期曾经被占用）
       } else {
-        if (dateStr.endsWith('-01') || dateStr.endsWith('-02')) {
-          console.log(`getRoomDateStatus: ${dateStr} -> 未知状态 (${checkIn} 到 ${checkOut}前) -> 状态: ${booking.status} -> reserved`);
-        }
+        console.log(`getRoomDateStatus: ${dateStr} -> ⚠️ 未知状态 (${checkIn}~${checkOut}) 状态: ${booking.status} -> reserved`);
         return 'reserved'; // 未知状态默认为预订
       }
     }
