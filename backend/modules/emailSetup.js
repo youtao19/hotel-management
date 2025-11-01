@@ -37,7 +37,7 @@ async function sendResetPWEmail(code, to, lan) {
     subject = `${setup.appName} password reset`
   }
   const message = {
-    from: `support <${setup.adminEmail}>`,
+    from: `古城云阙酒店 <${setup.adminEmail}>`,
     to,
     subject,
     text
@@ -57,7 +57,7 @@ async function sendEmailVerification(code, to, lan) {
     subject = `${setup.appName} verify your email address`
   }
   const message = {
-    from: `support <${setup.adminEmail}>`,
+    from: `古城云阙酒店 <${setup.adminEmail}>`,
     to,
     subject,
     text
