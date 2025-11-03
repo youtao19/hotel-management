@@ -95,15 +95,14 @@ router.post('/:orderId/invite', async (req, res) => {
  * PUT /api/reviews/:orderId/status
  */
 router.put('/:orderId/status', async (req, res) => {
-  const isValid = validatePositiveReview(req.body);
-  if (!isValid) {
-    return res.status(400).json({
-      message: "请求数据验证失败",
-      errors: formatAjvErrors(validatePositiveReview.errors)
-    });
-  }
-
   try {
+    const isValid = validatePositiveReview(req.body);
+    if (!isValid) {
+      return res.status(400).json({
+        message: "请求数据验证失败",
+        errors: formatAjvErrors(validatePositiveReview.errors)
+      });
+    }
     const { orderId } = req.params;
     const { positive_review } = req.body;
 

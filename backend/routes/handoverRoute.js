@@ -167,19 +167,19 @@ const {
 
 // 获取交接班表格数据（计算版本）
 router.get('/table', async (req, res) => {
-  const queryData = sanitizeQuery(req.query);
-  const isValid = validateOptionalDateQuery(queryData);
-
-  if (!isValid) {
-    return res.status(400).json({
-      success: false,
-      message: "请求参数格式错误",
-      errors: formatAjvErrors(validateOptionalDateQuery.errors)
-    });
-  }
-
-  const { date } = queryData;
   try {
+    const queryData = sanitizeQuery(req.query);
+    const isValid = validateOptionalDateQuery(queryData);
+
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        message: "请求参数格式错误",
+        errors: formatAjvErrors(validateOptionalDateQuery.errors)
+      });
+    }
+
+    const { date } = queryData;
     const tableData = await getShiftTable(date);
     res.json({ success: true, data: tableData });
   } catch (error) {
@@ -190,19 +190,19 @@ router.get('/table', async (req, res) => {
 
 // 获取交接班表格数据（从handover表查询）
 router.get('/handover-table', async (req, res) => {
-  const queryData = sanitizeQuery(req.query);
-  const isValid = validateRequiredDateQuery(queryData);
-
-  if (!isValid) {
-    return res.status(400).json({
-      success: false,
-      message: "缺少必需的日期参数",
-      errors: formatAjvErrors(validateRequiredDateQuery.errors)
-    });
-  }
-
-  const { date } = queryData;
   try {
+    const queryData = sanitizeQuery(req.query);
+    const isValid = validateRequiredDateQuery(queryData);
+
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        message: "缺少必需的日期参数",
+        errors: formatAjvErrors(validateRequiredDateQuery.errors)
+      });
+    }
+
+    const { date } = queryData;
     const tableData = await getHandoverTableData(date);
     res.json({ success: true, data: tableData });
   } catch (error) {
@@ -216,20 +216,20 @@ router.get('/handover-table', async (req, res) => {
 
 // 获取备忘录数据
 router.get('/remarks', async (req, res) => {
-  console.log('开始获取备忘录数据')
-
-  const queryData = sanitizeQuery(req.query);
-  const isValid = validateRequiredDateQuery(queryData);
-
-  if (!isValid) {
-    return res.status(400).json({
-      success: false,
-      message: "缺少必需的日期参数",
-      errors: formatAjvErrors(validateRequiredDateQuery.errors)
-    });
-  }
 
   try {
+    console.log('开始获取备忘录数据')
+
+    const queryData = sanitizeQuery(req.query);
+    const isValid = validateRequiredDateQuery(queryData);
+
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        message: "缺少必需的日期参数",
+        errors: formatAjvErrors(validateRequiredDateQuery.errors)
+      });
+    }
     const { date } = queryData;
     const data = await getRemarks({ date });
     res.json({ success: true, data });
@@ -241,18 +241,18 @@ router.get('/remarks', async (req, res) => {
 
 // 获取交接班页面特殊统计（开房数、休息房数、好评邀/得）
 router.get('/special-stats', async (req, res) => {
-  const queryData = sanitizeQuery(req.query);
-  const isValid = validateRequiredDateQuery(queryData);
-
-  if (!isValid) {
-    return res.status(400).json({
-      success: false,
-      message: "缺少必需的日期参数",
-      errors: formatAjvErrors(validateRequiredDateQuery.errors)
-    });
-  }
 
   try {
+    const queryData = sanitizeQuery(req.query);
+    const isValid = validateRequiredDateQuery(queryData);
+
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        message: "缺少必需的日期参数",
+        errors: formatAjvErrors(validateRequiredDateQuery.errors)
+      });
+    }
     const { date } = queryData;
     const data = await getShiftSpecialStats(date);
     res.json({ success: true, data });
@@ -264,18 +264,18 @@ router.get('/special-stats', async (req, res) => {
 
 // 获取交接班表中的管理员备忘录
 router.get('/admin-memos', async (req, res) => {
-  const queryData = sanitizeQuery(req.query);
-  const isValid = validateRequiredDateQuery(queryData);
-
-  if (!isValid) {
-    return res.status(400).json({
-      success: false,
-      message: "缺少必需的日期参数",
-      errors: formatAjvErrors(validateRequiredDateQuery.errors)
-    });
-  }
 
   try {
+    const queryData = sanitizeQuery(req.query);
+    const isValid = validateRequiredDateQuery(queryData);
+
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        message: "缺少必需的日期参数",
+        errors: formatAjvErrors(validateRequiredDateQuery.errors)
+      });
+    }
     const { date } = queryData;
 
     const memos = await getAdminMemosFromHandover(date);
@@ -351,18 +351,18 @@ router.post('/save-admin-memo', async (req, res) => {
 
 
 router.get('/check-yesterday', async (req, res) => {
-  const queryData = sanitizeQuery(req.query);
-  const isValid = validateRequiredDateQuery(queryData);
-
-  if (!isValid) {
-    return res.status(400).json({
-      success: false,
-      message: '缺少必需的日期参数',
-      errors: formatAjvErrors(validateRequiredDateQuery.errors)
-    });
-  }
 
   try {
+    const queryData = sanitizeQuery(req.query);
+    const isValid = validateRequiredDateQuery(queryData);
+
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        message: '缺少必需的日期参数',
+        errors: formatAjvErrors(validateRequiredDateQuery.errors)
+      });
+    }
     const { date } = queryData;
 
     console.log('检查交接记录，查询日期:', date);
@@ -521,18 +521,18 @@ router.get('/query', async (req, res) => {
 
 // 根据日期范围查询交接班记录
 router.get('/query-by-range', async (req, res) => {
-  const queryData = sanitizeQuery(req.query);
-  const isValid = validateDateRangeQuery(queryData);
-
-  if (!isValid) {
-    return res.status(400).json({
-      success: false,
-      message: "请求参数格式错误",
-      errors: formatAjvErrors(validateDateRangeQuery.errors)
-    });
-  }
 
   try {
+    const queryData = sanitizeQuery(req.query);
+    const isValid = validateDateRangeQuery(queryData);
+
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        message: "请求参数格式错误",
+        errors: formatAjvErrors(validateDateRangeQuery.errors)
+      });
+    }
     const { startDate, endDate } = queryData;
 
     console.log('开始按日期范围查询交接班记录:', { startDate, endDate });

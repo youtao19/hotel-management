@@ -1,5 +1,45 @@
 const { query, getClient } = require('../database/postgreDB/pg');
 
+const PAY_WAY_KEYS = ['现金', '微信', '微邮付', '其他'];
+
+function createPaywayBuckets() {
+  return PAY_WAY_KEYS.reduce((acc, key) => {
+    acc[key] = 0;
+    return acc;
+  }, {});
+}
+
+function amountToCents(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) {
+    return 0;
+  }
+  return Math.round(num * 100);
+}
+
+function centsToAmount(cents) {
+  return Number((cents / 100).toFixed(2));
+}
+
+function convertBucketsToAmounts(bucket) {
+  const result = {};
+  for (const key of PAY_WAY_KEYS) {
+    result[key] = centsToAmount(bucket[key] || 0);
+  }
+  return result;
+}
+
+function convertBucketsToCents(bucket) {
+  const result = createPaywayBuckets();
+  if (!bucket) {
+    return result;
+  }
+  for (const key of PAY_WAY_KEYS) {
+    result[key] = amountToCents(bucket[key] || 0);
+  }
+  return result;
+}
+
 /**
  * 获取表格数据
  * @param {date} date - 查询日期
@@ -11,34 +51,27 @@ async function getShiftTable(date) {
     const predate = getPreviousDateString(date)
 
     // 创建对象
-    const initPaywayBuckets = () => ({
-      '现金': 0,
-      '微信': 0,
-      '微邮付': 0,
-      '其他': 0,
-    })
-
     const pay_ways = { 1:'现金', 2:'微信', 3:'微邮付', 4:'其他' }
 
-    let reserve = initPaywayBuckets() // 备用金
-    let hotelIncome = initPaywayBuckets() // 客房收入
-    let restIncome = initPaywayBuckets() // 休息房收入
-    let carRentIncome = initPaywayBuckets() // 租车收入
-    let totalIncome = initPaywayBuckets() // 合计
-    let hotelDeposit = initPaywayBuckets() // 客房退押
-    let restDeposit = initPaywayBuckets() // 休息房退押
-    let retainedAmount = initPaywayBuckets() // 留存款
-    let handoverAmount = initPaywayBuckets() // 交接款
+    let reserve = createPaywayBuckets(); // 备用金（存储为分）
+    let hotelIncome = createPaywayBuckets(); // 客房收入（分）
+    let restIncome = createPaywayBuckets(); // 休息房收入（分）
+    let carRentIncome = createPaywayBuckets(); // 租车收入（分）
+    let totalIncome = createPaywayBuckets(); // 合计（分）
+    let hotelDeposit = createPaywayBuckets(); // 客房退押（分）
+    let restDeposit = createPaywayBuckets(); // 休息房退押（分）
+    let retainedAmount = createPaywayBuckets(); // 留存款（分）
+    let handoverAmount = createPaywayBuckets(); // 交接款（分）
 
     // 使用备用金函数：某日备用金 = 前一日各支付方式交接款
     const reserveFromPrev = await getReserveCash(predate)
     console.log('前一日交接款:', reserveFromPrev)
 
     if (reserveFromPrev) {
-      reserve = reserveFromPrev
+      reserve = convertBucketsToCents(reserveFromPrev)
     }
 
-    console.log('备用金:', reserve)
+    console.log('备用金:', convertBucketsToAmounts(reserve))
 
 
     const billSql = `
@@ -54,7 +87,7 @@ async function getShiftTable(date) {
     // 遍历账单记录，根据 change_type 分类统计
     for (const row of billRes.rows) {
       const { pay_way: rawPayWay, change_price, change_type, stay_type } = row
-      const amount = Number(change_price) || 0;
+      const amountCents = amountToCents(change_price);
 
       // 支付方式映射：将账单中的支付方式映射到交接班统计的支付方式
       // '平台' 和其他未知支付方式映射到 '其他'
@@ -69,22 +102,22 @@ async function getShiftTable(date) {
       // 房费收入统计（正数）
       if (change_type === '房费') {
         if (stay_type === '客房'){
-          hotelIncome[pay_way] += amount;
+          hotelIncome[pay_way] += amountCents;
         } else if (stay_type === '休息房'){
-          restIncome[pay_way] += amount;
+          restIncome[pay_way] += amountCents;
         }
       }
       // 收押金统计（正数）
       else if (change_type === '收押') {
         if (stay_type === '客房'){
-          hotelIncome[pay_way] += amount;
+          hotelIncome[pay_way] += amountCents;
         } else if (stay_type === '休息房'){
-          restIncome[pay_way] += amount;
+          restIncome[pay_way] += amountCents;
         }
       }
       // 退押金统计（负数，需要转为绝对值）
       else if (change_type === '退押'){
-        const refundAmount = Math.abs(amount); // change_price 是负数，取绝对值
+        const refundAmount = Math.abs(amountCents); // change_price 是负数，取绝对值（分）
         if (stay_type === '客房'){
           hotelDeposit[pay_way] += refundAmount;
         } else if (stay_type === '休息房'){
@@ -94,9 +127,9 @@ async function getShiftTable(date) {
       // 兼容旧格式的"订单账单"类型
       else if (change_type === '订单账单'){
         if (stay_type === '客房'){
-          hotelIncome[pay_way] += amount;
+          hotelIncome[pay_way] += amountCents;
         } else if (stay_type === '休息房'){
-          restIncome[pay_way] += amount;
+          restIncome[pay_way] += amountCents;
         }
       }
     }
@@ -108,24 +141,27 @@ async function getShiftTable(date) {
     }
 
     // 现金留存款 320
-    retainedAmount['现金'] = 320
-    handoverAmount['现金'] -= 320
+    retainedAmount['现金'] = amountToCents(320)
+    handoverAmount['现金'] -= retainedAmount['现金']
 
-    return {
-      reserve,
-      hotelIncome,
-      restIncome,
-      carRentIncome,
-      totalIncome,
-      hotelDeposit,
-      restDeposit,
-      hotelRefund: hotelDeposit, // 添加别名以兼容测试
-      restRefund: restDeposit,   // 添加别名以兼容测试
-      hotelRefundDeposit: hotelDeposit, // 前端组件使用的字段名
-      restRefundDeposit: restDeposit,   // 前端组件使用的字段名
-      retainedAmount,
-      handoverAmount
-    }
+    const response = {
+      reserve: convertBucketsToAmounts(reserve),
+      hotelIncome: convertBucketsToAmounts(hotelIncome),
+      restIncome: convertBucketsToAmounts(restIncome),
+      carRentIncome: convertBucketsToAmounts(carRentIncome),
+      totalIncome: convertBucketsToAmounts(totalIncome),
+      hotelDeposit: convertBucketsToAmounts(hotelDeposit),
+      restDeposit: convertBucketsToAmounts(restDeposit),
+      retainedAmount: convertBucketsToAmounts(retainedAmount),
+      handoverAmount: convertBucketsToAmounts(handoverAmount)
+    };
+
+    response.hotelRefund = response.hotelDeposit; // 添加别名以兼容测试
+    response.restRefund = response.restDeposit;   // 添加别名以兼容测试
+    response.hotelRefundDeposit = response.hotelDeposit; // 前端组件使用的字段名
+    response.restRefundDeposit = response.restDeposit;   // 前端组件使用的字段名
+
+    return response;
   } catch (error) {
     console.error('获取交接班表格数据失败:', error);
     throw error;
@@ -478,12 +514,7 @@ async function getReserveCash(date) {
     if (result.rows.length === 0) {
       return null; // 前一日无记录，返回 null
     }
-    const reserveCash = {
-      '现金': 0,
-      '微信': 0,
-      '微邮付': 0,
-      '其他': 0,
-    };
+    const reserveCash = createPaywayBuckets();
     const pay_way_reverse_mapping = {
       1: '现金',
       2: '微信',
@@ -493,7 +524,10 @@ async function getReserveCash(date) {
     for (const row of result.rows) {
       const method = pay_way_reverse_mapping[row.payment_type];
       if (method) {
-        reserveCash[method] = Number(row.handover) || 0;
+        const amount = Number(row.handover);
+        reserveCash[method] = Number.isFinite(amount)
+          ? Number(amount.toFixed(2))
+          : 0;
       }
     }
     return reserveCash;

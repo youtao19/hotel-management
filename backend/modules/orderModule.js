@@ -1364,18 +1364,6 @@ async function updateOrderWithBills(orderNumber, updatedData, billUpdates = {}, 
         updatedOrder = orderResult;
 
         console.log(`📝 [updateOrderWithBills] 订单更新成功:`, changes);
-
-        // 记录变更到 order_changes 表
-        try {
-          const { query } = require('../database/postgreDB/pg');
-          await query(
-            `INSERT INTO order_changes (order_id, changed_by, changes, reason) VALUES ($1, $2, $3, $4)`,
-            [orderNumber, changedBy, JSON.stringify(changes), updatedData.reason || '订单和账单联合更新']
-          );
-          console.log(`📝 [updateOrderWithBills] 变更记录已保存到 order_changes 表`);
-        } catch (changeLogError) {
-          console.warn(`⚠️ [updateOrderWithBills] 保存变更记录失败，但订单更新成功:`, changeLogError.message);
-        }
       }
     }
 

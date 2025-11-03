@@ -125,21 +125,21 @@ router.get('/:id', async (req, res) => {
  * POST /api/orders/new
  */
 router.post('/new', async (req, res) => {
-  console.log('收到订单创建请求，请求体:', JSON.stringify(req.body, null, 2));
-
-  // 请求参数验证
-  const validate = ajv.compile(createOrderSchema);
-  const valid = validate(req.body);
-  if (!valid) {
-    console.error('订单创建请求参数验证失败:', validate.errors);
-    return res.status(400).json({
-      success: false,
-      message: '请求参数验证失败',
-      errors: validate.errors
-    });
-  }
 
   try {
+    console.log('收到订单创建请求，请求体:', JSON.stringify(req.body, null, 2));
+
+    // 请求参数验证
+    const validate = ajv.compile(createOrderSchema);
+    const valid = validate(req.body);
+    if (!valid) {
+      console.error('订单创建请求参数验证失败:', validate.errors);
+      return res.status(400).json({
+        success: false,
+        message: '请求参数验证失败',
+        errors: validate.errors
+      });
+    }
     const newOrder = await orderModule.createOrder(req.body);
 
     res.status(201).json({
@@ -267,23 +267,21 @@ router.post('/fast-check-in', async (req, res) => {
  * POST /api/orders/:/status
  */
 router.post('/:orderNumber/status', async (req, res) => {
+  try {
+        // 请求参数验证
+        const validate = ajv.compile(updateOrderStatusSchema);
+        const valid = validate(req.body);
+        if (!valid) {
+          console.error('更新订单状态请求参数验证失败:', validate.errors);
+          return res.status(400).json({
+            success: false,
+            message: '请求参数验证失败',
+            errors: validate.errors
+          });
+        }
 
-    // 请求参数验证
-    const validate = ajv.compile(updateOrderStatusSchema);
-    const valid = validate(req.body);
-    if (!valid) {
-      console.error('更新订单状态请求参数验证失败:', validate.errors);
-      return res.status(400).json({
-        success: false,
-        message: '请求参数验证失败',
-        errors: validate.errors
-      });
-    }
-
-    const { orderNumber } = req.params;
-    const { newStatus, checkInTime, checkOutTime } = req.body;
-
-    try {
+        const { orderNumber } = req.params;
+        const { newStatus, checkInTime, checkOutTime } = req.body;
         const updatedOrder = await orderModule.updateOrderStatus(orderNumber, newStatus, { checkInTime, checkOutTime });
         if (!updatedOrder) {
             return res.status(404).json({ message: '未找到订单或更新失败' });
@@ -300,15 +298,15 @@ router.post('/:orderNumber/status', async (req, res) => {
  * PUT /api/orders/:orderNumber
  */
 router.put('/:orderNumber', authenticationMiddleware, async (req, res) => {
-    const { orderNumber } = req.params;
-    const updatedFields = req.body;
 
-    try {
-        const updatedOrder = await orderModule.updateOrder(orderNumber, updatedFields);
-        res.json({ success: true, message: '订单更新成功', data: updatedOrder });
+  try {
+      const { orderNumber } = req.params;
+      const updatedFields = req.body;
+      const updatedOrder = await orderModule.updateOrder(orderNumber, updatedFields);
+      res.json({ success: true, message: '订单更新成功', data: updatedOrder });
     } catch (error) {
-        console.error(`更新订单 ${orderNumber} 失败:`, error);
-        res.status(500).json({ success: false, message: '更新订单失败', error: error.message });
+      console.error(`更新订单 ${orderNumber} 失败:`, error);
+      res.status(500).json({ success: false, message: '更新订单失败', error: error.message });
     }
 });
 
@@ -317,15 +315,15 @@ router.put('/:orderNumber', authenticationMiddleware, async (req, res) => {
  * PUT /api/orders/:orderNumber/with-bills
  */
 router.put('/:orderNumber/with-bills', authenticationMiddleware, async (req, res) => {
-    const { orderNumber } = req.params;
-    const { orderData, billUpdates, changedBy } = req.body;
 
-    try {
-        const result = await orderModule.updateOrderWithBills(orderNumber, orderData, billUpdates, changedBy);
-        res.json(result);
+  try {
+      const { orderNumber } = req.params;
+      const { orderData, billUpdates, changedBy } = req.body;
+      const result = await orderModule.updateOrderWithBills(orderNumber, orderData, billUpdates, changedBy);
+      res.json(result);
     } catch (error) {
-        console.error(`联合更新订单 ${orderNumber} 失败:`, error);
-        res.status(500).json({ success: false, message: '联合更新失败', error: error.message });
+      console.error(`联合更新订单 ${orderNumber} 失败:`, error);
+      res.status(500).json({ success: false, message: '联合更新失败', error: error.message });
     }
 });
 
@@ -384,11 +382,10 @@ router.get('/:order_id/deposit-info', async (req, res) => {
  * 请求体: { deposit: number } - 实际收取的押金金额
  */
 router.post('/:orderId/check-in', async (req, res) => {
-  const { orderId } = req.params;
-  const { deposit, dailyPrices } = req.body || {}; // 从请求体获取押金金额和每日房价
   let client;
-
   try {
+    const { orderId } = req.params;
+    const { deposit, dailyPrices } = req.body || {}; // 从请求体获取押金金额和每日房价
     client = await getClient();
     console.log('✅ [check-in] 获取数据库连接成功');
     await client.query('BEGIN');
