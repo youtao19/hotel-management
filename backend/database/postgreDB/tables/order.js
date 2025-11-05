@@ -21,10 +21,9 @@ const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
     prepaid_at TIMESTAMP, -- 预收房费时间
     create_time TIMESTAMP NOT NULL, -- 创建时间
     stay_type TEXT, -- 住宿类型
-    remarks TEXT, -- 备注
+    remarks TEXT,
     FOREIGN KEY (room_type) REFERENCES room_types(type_code),
-    FOREIGN KEY (room_number) REFERENCES rooms(room_number),
-    CONSTRAINT unique_order_constraint UNIQUE (guest_name, check_in_date, check_out_date, room_number)
+    FOREIGN KEY (room_number) REFERENCES rooms(room_number)
 )`;
 
 
@@ -34,7 +33,7 @@ const createIndexQueryStrings = [
     `CREATE INDEX IF NOT EXISTS idx_orders_status ON ${tableName}(status)`,
     `CREATE INDEX IF NOT EXISTS idx_orders_check_dates ON ${tableName}(check_in_date, check_out_date)`,
   `CREATE INDEX IF NOT EXISTS idx_orders_create_time ON ${tableName}(create_time DESC)`,
-  // 仅对活跃订单做唯一约束，避免历史订单冲突
+  // 活跃订单唯一约束：过滤掉已取消或已退房的记录
   `CREATE UNIQUE INDEX IF NOT EXISTS uniq_orders_active ON ${tableName} (guest_name, check_in_date, check_out_date, room_number) WHERE status NOT IN ('cancelled', 'checked-out')`
 ];
 
