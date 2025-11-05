@@ -546,15 +546,30 @@ async function getReserveCash(date) {
 async function getShiftSpecialStats(date) {
   const targetDate = date || new Date().toISOString().split('T')[0]
 
-  // 统计开房/休息房数量：使用 stay_type 字段
+  // 统计开房/休息房数量
   const roomCountSql = `
+    WITH pending_orders AS (
+      SELECT order_id, stay_type
+      FROM orders
+      WHERE status = 'pending'
+        AND check_in_date::date = $1::date
+    ),
+    active_orders AS (
+      SELECT
+        o.order_id,
+        o.stay_type,
+        MIN(b.stay_date::date) AS first_stay_date
+      FROM orders o
+      LEFT JOIN bills b ON b.order_id = o.order_id
+      WHERE o.status IN ('checked-in', 'checked-out')
+      GROUP BY o.order_id, o.stay_type
+    )
     SELECT
-      COUNT(*) FILTER (WHERE stay_type = '客房') AS open_count,
-      COUNT(*) FILTER (WHERE stay_type = '休息房') AS rest_count
-    FROM orders
-    WHERE check_in_date::date = $1::date
-      AND status IN ('checked-in', 'checked-out', 'pending')
-  `
+      COALESCE((SELECT COUNT(*) FROM pending_orders WHERE stay_type = '客房'), 0) +
+      COALESCE((SELECT COUNT(*) FROM active_orders WHERE stay_type = '客房' AND first_stay_date = $1::date), 0) AS open_count,
+      COALESCE((SELECT COUNT(*) FROM pending_orders WHERE stay_type = '休息房'), 0) +
+      COALESCE((SELECT COUNT(*) FROM active_orders WHERE stay_type = '休息房' AND first_stay_date = $1::date), 0) AS rest_count
+  `;
 
   // 统计好评邀请/得到数量 - 使用正确的字段名
   const reviewSql = `

@@ -115,6 +115,27 @@ function isRestRoom(orderData) {
 }
 
 /**
+ * 将日期时间格式化为数据库友好的本地时间字符串
+ * @param {string|Date|number} [input] - 日期时间输入
+ * @returns {string} 形如 YYYY-MM-DD HH:mm:ss.SSS000 的本地时间
+ */
+function formatDateTimeForDB(input) {
+  const date = input ? new Date(input) : new Date();
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`无效的日期时间格式: ${input}`);
+  }
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  const millis = String(date.getMilliseconds()).padStart(3, '0');
+  const micros = `${millis}000`; // 与数据库中6位小数保持一致
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${micros}`;
+}
+
+/**
  * 计算订单房间总价格
  * @param {Object|number} roomPriceData - 房间价格数据（JSONB对象或数字）
  * @returns {number} 房间总价格
@@ -586,7 +607,7 @@ async function createOrder(orderData) {
     const values = [
       order_id, id_source, order_source, guest_name, phone,
       room_type, room_number, formattedCheckInDate, formattedCheckOutDate, status,
-      payment_method, calculateTotalPrice(processedTotalPrice), deposit, create_time || new Date(), stay_type, processedRemarks
+      payment_method, calculateTotalPrice(processedTotalPrice), deposit, formatDateTimeForDB(create_time), stay_type, processedRemarks
     ];
 
   console.log('🗃️ [createOrder] 即将插入 values:', values.map(v => (typeof v === 'string' && v.length > 120 ? v.slice(0,120)+'…' : v)));
@@ -963,7 +984,7 @@ async function checkInOrder(orderId) {
         change_price: averageDailyRate,
         change_type: '房费',
         pay_way: order.payment_method,
-        create_time: new Date(),
+        create_time: formatDateTimeForDB(),
         remarks: '办理入住创建',
         stay_type: order.stay_type,
         stay_date: stayDateStr
@@ -998,7 +1019,7 @@ async function checkInOrder(orderId) {
           change_price: Number(order.deposit),
           change_type: '收押',
           pay_way: order.payment_method,
-          create_time: new Date(),
+          create_time: formatDateTimeForDB(),
           remarks: '办理入住收押金',
           stay_type: order.stay_type,
           stay_date: stayDateStr
@@ -1162,7 +1183,7 @@ async function createCheckedInOrderWithTransaction(orderData, createdBy = 'syste
     const orderValues = [
       order_id, id_source, order_source, guest_name, phone || '',
       room_type, room_number, formattedCheckInDate, formattedCheckOutDate, status,
-      payment_method, calculateTotalPrice(total_price), deposit, create_time || new Date(), stay_type, remarks
+      payment_method, calculateTotalPrice(total_price), deposit, formatDateTimeForDB(create_time), stay_type, remarks
     ];
 
     const orderResult = await client.query(insertOrderQuery, orderValues);
@@ -1201,8 +1222,19 @@ async function createCheckedInOrderWithTransaction(orderData, createdBy = 'syste
 
       const roomFeeBillResult = await client.query(
         `INSERT INTO bills (order_id, room_number, guest_name, change_price, change_type, pay_way, create_time, remarks, stay_type, stay_date)
-         VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8, $9) RETURNING *`,
-        [newOrder.order_id, String(newOrder.room_number).slice(0, 10), newOrder.guest_name, dailyPrice, setup.changeType.roomFee, newOrder.payment_method, `第 ${i + 1} 天房费`, newOrder.stay_type, stayDateStr]
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+        [
+          newOrder.order_id,
+          String(newOrder.room_number).slice(0, 10),
+          newOrder.guest_name,
+          dailyPrice,
+          setup.changeType.roomFee,
+          newOrder.payment_method,
+          formatDateTimeForDB(),
+          `第 ${i + 1} 天房费`,
+          newOrder.stay_type,
+          stayDateStr
+        ]
       );
       createdBills.push(roomFeeBillResult.rows[0]);
     }
@@ -1214,8 +1246,19 @@ async function createCheckedInOrderWithTransaction(orderData, createdBy = 'syste
       const firstDayDate = formatDate(newOrder.check_in_date);
       const depositBillResult = await client.query(
         `INSERT INTO bills (order_id, room_number, guest_name, change_price, change_type, pay_way, create_time, remarks, stay_type, stay_date)
-         VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8, $9) RETURNING *`,
-        [newOrder.order_id, String(newOrder.room_number).slice(0, 10), newOrder.guest_name, actualDeposit, setup.changeType.deposit, newOrder.payment_method, '快速入住-押金', newOrder.stay_type, firstDayDate]
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+        [
+          newOrder.order_id,
+          String(newOrder.room_number).slice(0, 10),
+          newOrder.guest_name,
+          actualDeposit,
+          setup.changeType.deposit,
+          newOrder.payment_method,
+          formatDateTimeForDB(),
+          '快速入住-押金',
+          newOrder.stay_type,
+          firstDayDate
+        ]
       );
       createdBills.push(depositBillResult.rows[0]);
       console.log('✅ [fastCheckIn] 押金账单创建成功');

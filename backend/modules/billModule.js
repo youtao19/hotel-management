@@ -3,6 +3,22 @@
 const { query } = require('../database/postgreDB/pg');
 const REFUND_TYPES = new Set(['退押', '退押金', '退款']);
 
+function formatDateTimeForDB(input) {
+    const date = input ? new Date(input) : new Date();
+    if (Number.isNaN(date.getTime())) {
+        throw new Error(`无效的日期时间格式: ${input}`);
+    }
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    const millis = String(date.getMilliseconds()).padStart(3, '0');
+    const micros = `${millis}000`;
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${micros}`;
+}
+
 // 创建账单
 async function createBill(order_id, room_number, guest_name, deposit, refund_deposit, room_fee, total_income, pay_way, remarks) {
     // 计算 stay_date & 业务类型 (休息房 / 客房)
@@ -95,7 +111,7 @@ async function createBill(order_id, room_number, guest_name, deposit, refund_dep
 
         // 创建时间
         if (cols.includes('create_time')) {
-            pushCol('create_time', new Date());
+            pushCol('create_time', formatDateTimeForDB());
         }
 
         // stay_date 与 remarks
@@ -173,8 +189,9 @@ async function applyDepositRefund(order_id, actualRefundAmount, refundMethod, re
             VALUES ($1, $2, $3, $4, '退押', $5, $6, $7, $8)
             RETURNING *
         `;
-        const createTime = refundTime ? new Date(refundTime) : new Date();
-        const stayDate = createTime.toISOString().slice(0,10);
+        const createTimeDate = refundTime ? new Date(refundTime) : new Date();
+        const createTime = formatDateTimeForDB(createTimeDate);
+        const stayDate = new Date(createTimeDate).toISOString().slice(0,10);
         const remarks = '退押';
         const result = await query(insertSql, [
             order_id,
@@ -272,7 +289,8 @@ async function addBill(billData){
 
     // 处理日期字段，确保正确格式
     const createTimeDate = refundTime ? (typeof refundTime === 'string' ? new Date(refundTime) : refundTime) : new Date();
-    const stayDateString = createTimeDate.toISOString().split('T')[0];
+    const createTime = formatDateTimeForDB(createTimeDate);
+    const stayDateString = new Date(createTimeDate).toISOString().split('T')[0];
 
     const values = [
       order_id,                // $1 order_id
@@ -281,7 +299,7 @@ async function addBill(billData){
       numericChangePrice,      // $4 change_price (正数表示收入，负数表示支出)
       billData.change_type,    // $5 change_type (房费/收押/退押/补收/退款)
       method || o.payment_method, // $6 pay_way
-      createTimeDate,          // $7 create_time
+      createTime,              // $7 create_time
       notes,                   // $8 remarks
       o.stay_type,             // $9 stay_type
       stayDateString           // $10 stay_date
