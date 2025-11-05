@@ -5,7 +5,8 @@ const {
     getWeeklyRevenue,
     getMonthlyRevenue,
     getRevenueOverview,
-    getRoomTypeRevenue
+    getRoomTypeRevenue,
+    getRevenueBillDetails
 } = require('../modules/revenueModule');
 
 /**
@@ -297,6 +298,44 @@ router.get('/quick-stats', async (req, res) => {
         console.error('❌ 获取快速统计数据失败:', error);
         res.status(500).json({
             message: '获取快速统计数据失败',
+            error: error.message
+        });
+    }
+});
+
+/**
+ * 获取账单明细（支持日期、房间号过滤）
+ * GET /api/revenue/bills?date=YYYY-MM-DD&roomNumber=101
+ */
+router.get('/bills', async (req, res) => {
+    try {
+        const { date: queryDate, roomNumber } = req.query;
+
+        if (queryDate) {
+            const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+            if (!dateRegex.test(queryDate)) {
+                return res.status(400).json({
+                    success: false,
+                    message: '日期格式错误，请使用YYYY-MM-DD'
+                });
+            }
+        }
+
+        const sanitizedRoomNumber = roomNumber ? String(roomNumber).trim() : undefined;
+        const bills = await getRevenueBillDetails({
+            date: queryDate || undefined,
+            roomNumber: sanitizedRoomNumber || undefined
+        });
+
+        res.json({
+            success: true,
+            data: bills
+        });
+    } catch (error) {
+        console.error('获取收入账单明细失败:', error);
+        res.status(500).json({
+            success: false,
+            message: '获取收入账单明细失败',
             error: error.message
         });
     }
