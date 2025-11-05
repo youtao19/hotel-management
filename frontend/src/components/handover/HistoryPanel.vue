@@ -127,6 +127,7 @@ onMounted(() => {
   console.log('HistoryPanel mounted')
   // 组件挂载时自动加载可用日期
   loadAvailableDates()
+  handleSearchHistory()
 })
 </script>
 

@@ -670,11 +670,51 @@ const fetchBillDetails = async () => {
     const response = await revenueApi.getRevenueBills(params)
     const list = extractBillList(response)
 
-    billRows.value = list.map(item => ({
+    const hasDateFilter = !!billFilters.value.date
+    const roomFilter = (billFilters.value.roomNumber || '').trim()
+    const hasRoomFilter = roomFilter.length > 0
+
+    const normalizeTime = (value) => {
+      if (!value) return 0
+      const time = new Date(value).getTime()
+      return Number.isFinite(time) ? time : 0
+    }
+
+    const mapped = list.map(item => ({
       ...item,
       change_price: Number(item.change_price || 0),
-      create_time: item.create_time
+      create_time: item.create_time,
+      stay_date: item.stay_date || item.create_time
     }))
+
+    mapped.sort((a, b) => {
+      const createDiff = normalizeTime(b.create_time) - normalizeTime(a.create_time)
+      if (createDiff !== 0) {
+        return createDiff
+      }
+
+      if (hasRoomFilter) {
+        const roomA = a.room_number ? String(a.room_number) : ''
+        const roomB = b.room_number ? String(b.room_number) : ''
+        const roomCompare = roomA.localeCompare(roomB, 'zh-Hans-CN', { numeric: true, sensitivity: 'base' })
+        if (roomCompare !== 0) {
+          return roomCompare
+        }
+      }
+
+      if (hasDateFilter) {
+        const dateDiff = normalizeTime(a.stay_date) - normalizeTime(b.stay_date)
+        if (dateDiff !== 0) {
+          return dateDiff
+        }
+      }
+
+      const billIdA = Number(a.bill_id) || 0
+      const billIdB = Number(b.bill_id) || 0
+      return billIdB - billIdA
+    })
+
+    billRows.value = mapped
   } catch (error) {
     console.error('获取收入账单明细失败:', error)
     $q.notify({
