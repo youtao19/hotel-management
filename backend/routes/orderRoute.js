@@ -301,16 +301,15 @@ router.post('/:orderNumber/status', async (req, res) => {
  * PUT /api/orders/:orderNumber
  */
 router.put('/:orderNumber', authenticationMiddleware, async (req, res) => {
-
+  const { orderNumber } = req.params;
   try {
-      const { orderNumber } = req.params;
-      const updatedFields = req.body;
-      const updatedOrder = await orderModule.updateOrder(orderNumber, updatedFields);
-      res.json({ success: true, message: '订单更新成功', data: updatedOrder });
-    } catch (error) {
-      console.error(`更新订单 ${orderNumber} 失败:`, error);
-      res.status(500).json({ success: false, message: '更新订单失败', error: error.message });
-    }
+    const updatedFields = req.body;
+    const updatedOrder = await orderModule.updateOrder(orderNumber, updatedFields);
+    res.json({ success: true, message: '订单更新成功', data: updatedOrder });
+  } catch (error) {
+    console.error(`更新订单 ${orderNumber} 失败:`, error);
+    res.status(500).json({ success: false, message: '更新订单失败', error: error.message });
+  }
 });
 
 /**
@@ -318,16 +317,15 @@ router.put('/:orderNumber', authenticationMiddleware, async (req, res) => {
  * PUT /api/orders/:orderNumber/with-bills
  */
 router.put('/:orderNumber/with-bills', authenticationMiddleware, async (req, res) => {
-
+  const { orderNumber } = req.params;
   try {
-      const { orderNumber } = req.params;
-      const { orderData, billUpdates, changedBy } = req.body;
-      const result = await orderModule.updateOrderWithBills(orderNumber, orderData, billUpdates, changedBy);
-      res.json(result);
-    } catch (error) {
-      console.error(`联合更新订单 ${orderNumber} 失败:`, error);
-      res.status(500).json({ success: false, message: '联合更新失败', error: error.message });
-    }
+    const { orderData, billUpdates, changedBy } = req.body;
+    const result = await orderModule.updateOrderWithBills(orderNumber, orderData, billUpdates, changedBy);
+    res.json(result);
+  } catch (error) {
+    console.error(`联合更新订单 ${orderNumber} 失败:`, error);
+    res.status(500).json({ success: false, message: '联合更新失败', error: error.message });
+  }
 });
 
 /**

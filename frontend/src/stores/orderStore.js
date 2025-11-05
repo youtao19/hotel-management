@@ -256,8 +256,15 @@ export const useOrderStore = defineStore('order', () => {
       const code = backend?.error?.code || backend?.error?.details || backend?.code;
       const msg = backend?.message || backend?.error?.details || backend?.error?.message || err.message;
       const combined = code ? `[${code}] ${msg}` : msg;
-      error.value = combined || '添加订单失败';
-      throw new Error(combined);
+      const userMessage = combined || '添加订单失败';
+      error.value = userMessage;
+
+      if (err.isAxiosError && err.response) {
+        err.userFacingMessage = userMessage;
+        throw err;
+      }
+
+      throw new Error(userMessage);
     } finally {
       loading.value = false
     }

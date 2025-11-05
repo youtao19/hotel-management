@@ -1237,23 +1237,30 @@ async function submitOrder() {
     router.push('/ViewOrders');
   } catch (error) {
     console.error('订单创建失败:', error);
-    let errorMessage = '订单创建失败，请稍后再试。';
+    const defaultMessage = '订单创建失败，请稍后再试。';
+    let errorMessage = defaultMessage;
 
-    if (error.response) {
-      if (error.response.data) {
-        console.log('服务器返回的详细错误:', error.response.data);
+    if (error.response?.data) {
+      console.log('服务器返回的详细错误:', error.response.data);
 
-        if (error.response.data.errors) {
-          if (Array.isArray(error.response.data.errors)) {
-            error.response.data.errors.forEach((err, index) => {
-              console.log(`错误 ${index + 1}:`, err);
-            });
+      if (error.response.data.errors && Array.isArray(error.response.data.errors)) {
+        error.response.data.errors.forEach((err, index) => {
+          console.log(`错误 ${index + 1}:`, err);
+        });
+        errorMessage = '表单验证失败：\n' +
+          error.response.data.errors.map(e => `- ${e.msg}`).join('\n');
+      } else if (error.response.data.message) {
+        errorMessage = error.response.data.message;
+      }
+    }
 
-            errorMessage = '表单验证失败：\n' +
-              error.response.data.errors.map(e => `- ${e.msg}`).join('\n');
-          }
-        } else if (error.response.data.message) {
-          errorMessage = error.response.data.message;
+    if (errorMessage === defaultMessage) {
+      const fallbackMessage = error.userFacingMessage || error.message;
+      if (typeof fallbackMessage === 'string') {
+        const trimmed = fallbackMessage.trim();
+        if (trimmed && trimmed !== 'Error') {
+          const match = trimmed.match(/^\[(.+?)\]\s*(.*)$/);
+          errorMessage = match && match[2] ? match[2] : trimmed;
         }
       }
     }

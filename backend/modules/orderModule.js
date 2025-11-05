@@ -1438,6 +1438,24 @@ async function updateOrderWithBills(orderNumber, updatedData, billUpdates = {}, 
       throw new Error(`订单 ${orderNumber} 不存在`);
     }
 
+    const { rows: billColumnRows } = await client.query(
+      `SELECT column_name
+         FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'bills'`
+    );
+    const existingBillColumns = new Set(billColumnRows.map(row => row.column_name));
+    const hasChangePriceColumn = existingBillColumns.has('change_price');
+    const billFieldMap = {
+      room_fee: existingBillColumns.has('room_fee') ? 'room_fee' : (hasChangePriceColumn ? 'change_price' : null),
+      deposit: existingBillColumns.has('deposit') ? 'deposit' : null,
+      refund_deposit: existingBillColumns.has('refund_deposit') ? 'refund_deposit' : null,
+      total_income: existingBillColumns.has('total_income') ? 'total_income' : null,
+      pay_way: existingBillColumns.has('pay_way') ? 'pay_way' : null,
+      remarks: existingBillColumns.has('remarks') ? 'remarks' : null,
+      change_price: hasChangePriceColumn ? 'change_price' : null
+    };
+
     // 1. 更新账单表
     const billUpdateResults = [];
     for (const [stayDate, billData] of Object.entries(billUpdates)) {
@@ -1446,17 +1464,36 @@ async function updateOrderWithBills(orderNumber, updatedData, billUpdates = {}, 
 
         const updateFields = [];
         const values = [];
+        const skippedFields = [];
         let paramIndex = 1;
 
-        // 可更新的账单字段
-        const allowedBillFields = ['room_fee', 'deposit', 'refund_deposit', 'total_income', 'pay_way', 'remarks'];
+        Object.entries(billData).forEach(([field, rawValue]) => {
+          const normalizedField = typeof field === 'string' ? field.trim() : field;
+          let targetColumn = billFieldMap[normalizedField];
 
-        allowedBillFields.forEach(field => {
-          if (billData[field] !== undefined) {
-            updateFields.push(`${field} = $${paramIndex}`);
-            values.push(billData[field]);
-            paramIndex++;
+          if (!targetColumn && existingBillColumns.has(normalizedField)) {
+            targetColumn = normalizedField;
           }
+
+          if (!targetColumn) {
+            skippedFields.push(normalizedField);
+            console.warn(`⚠️ [updateOrderWithBills] 字段 ${normalizedField} 在 bills 表中不存在，已跳过`);
+            return;
+          }
+
+          let value = rawValue;
+          if (['room_fee', 'change_price', 'deposit', 'refund_deposit', 'total_income'].includes(targetColumn)) {
+            const parsed = Number(rawValue);
+            value = Number.isFinite(parsed) ? parsed : 0;
+          }
+
+          if (normalizedField === 'room_fee' && targetColumn === 'change_price') {
+            console.log('ℹ️ [updateOrderWithBills] 将 room_fee 映射为 change_price 字段');
+          }
+
+          updateFields.push(`${targetColumn} = $${paramIndex}`);
+          values.push(value);
+          paramIndex++;
         });
 
         if (updateFields.length > 0) {
@@ -1472,7 +1509,8 @@ async function updateOrderWithBills(orderNumber, updatedData, billUpdates = {}, 
           billUpdateResults.push({
             date: stayDate,
             updated: billResult.rows.length > 0,
-            data: billResult.rows[0] || null
+            data: billResult.rows[0] || null,
+            skippedFields
           });
 
           if (billResult.rows.length === 0) {
@@ -1480,6 +1518,14 @@ async function updateOrderWithBills(orderNumber, updatedData, billUpdates = {}, 
           } else {
             console.log(`✅ [updateOrderWithBills] 成功更新日期 ${stayDate} 的账单`);
           }
+        } else {
+          billUpdateResults.push({
+            date: stayDate,
+            updated: false,
+            data: null,
+            skippedFields
+          });
+          console.warn(`⚠️ [updateOrderWithBills] 日期 ${stayDate} 没有可更新字段，已跳过`);
         }
       }
     }
