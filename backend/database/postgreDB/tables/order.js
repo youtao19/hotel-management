@@ -16,6 +16,9 @@ const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
     payment_method VARCHAR(20), -- 支付方式
     total_price NUMERIC(10, 2), -- 房间价格
     deposit DECIMAL(10,2), -- 押金
+    is_prepaid BOOLEAN NOT NULL DEFAULT FALSE, -- 是否在下单时已收房费
+    prepaid_amount NUMERIC(10,2) DEFAULT 0, -- 预收房费金额
+    prepaid_at TIMESTAMP, -- 预收房费时间
     create_time TIMESTAMP NOT NULL, -- 创建时间
     stay_type TEXT, -- 住宿类型
     remarks TEXT, -- 备注

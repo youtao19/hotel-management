@@ -50,7 +50,10 @@ export const useOrderStore = defineStore('order', () => {
           createTime: order.create_time,
           remarks: order.remarks,
           source: order.order_source,
-          sourceNumber: order.id_source
+          sourceNumber: order.id_source,
+          isPrepaid: Boolean(order.is_prepaid),
+          prepaidAmount: parseFloat(order.prepaid_amount) || 0,
+          prepaidAt: order.prepaid_at
         }))
 
         return orders.value
@@ -151,6 +154,21 @@ export const useOrderStore = defineStore('order', () => {
         assertValidDate(checkOutDateISO, '退房日期');
       }
 
+      const isPrepaid = Boolean(order.isPrepaid);
+      const prepaidAmount = isPrepaid ? parseFloat(order.prepaidAmount) || 0 : 0;
+      if (isPrepaid && !(prepaidAmount > 0)) {
+        throw new Error('预收房费金额必须大于0');
+      }
+      let prepaidAtISO;
+      if (isPrepaid) {
+        const rawPrepaidAt = order.prepaidAt || new Date().toISOString();
+        const parsedPrepaidAt = new Date(rawPrepaidAt);
+        if (Number.isNaN(parsedPrepaidAt.getTime())) {
+          throw new Error('预收房费时间无效');
+        }
+        prepaidAtISO = parsedPrepaidAt.toISOString();
+      }
+
       const orderData = {
         order_id: order.orderNumber?.toString(),
         guest_name: order.guestName?.toString(),
@@ -167,6 +185,11 @@ export const useOrderStore = defineStore('order', () => {
         order_source: order.source?.toString() || 'front_desk',
         id_source: order.sourceNumber?.toString() || '',
         create_time: new Date().toISOString(),
+        is_prepaid: isPrepaid,
+        prepaid_amount: prepaidAmount,
+      }
+      if (prepaidAtISO) {
+        orderData.prepaid_at = prepaidAtISO;
       }
 
       const requiredFields = ['order_id', 'guest_name', 'room_type', 'room_number', 'check_in_date', 'check_out_date', 'total_price'];
@@ -219,6 +242,9 @@ export const useOrderStore = defineStore('order', () => {
         remarks: newOrderFromApi.remarks,
         source: newOrderFromApi.order_source,
         sourceNumber: newOrderFromApi.id_source,
+        isPrepaid: Boolean(newOrderFromApi.is_prepaid),
+        prepaidAmount: parseFloat(newOrderFromApi.prepaid_amount) || 0,
+        prepaidAt: newOrderFromApi.prepaid_at
       };
 
       console.log('🔍 映射后的订单数据:', newOrderMapped);
@@ -337,7 +363,10 @@ export const useOrderStore = defineStore('order', () => {
           createTime: orderData.create_time,
           remarks: orderData.remarks,
           source: orderData.order_source,
-          sourceNumber: orderData.id_source
+          sourceNumber: orderData.id_source,
+          isPrepaid: Boolean(orderData.is_prepaid),
+          prepaidAmount: parseFloat(orderData.prepaid_amount) || 0,
+          prepaidAt: orderData.prepaid_at
         }
 
         const index = orders.value.findIndex(o => o.orderNumber === orderNumber)
@@ -413,6 +442,9 @@ export const useOrderStore = defineStore('order', () => {
           roomPrice: updated.total_price ?? orders.value[idx].roomPrice,
           deposit: updated.deposit ?? orders.value[idx].deposit,
           remarks: updated.remarks ?? orders.value[idx].remarks,
+          isPrepaid: updated.is_prepaid ?? orders.value[idx].isPrepaid,
+          prepaidAmount: updated.prepaid_amount !== undefined ? (parseFloat(updated.prepaid_amount) || 0) : orders.value[idx].prepaidAmount,
+          prepaidAt: updated.prepaid_at ?? orders.value[idx].prepaidAt
         };
         orders.value[idx] = merged;
       }

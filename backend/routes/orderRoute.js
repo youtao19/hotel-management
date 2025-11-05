@@ -44,6 +44,9 @@ const createOrderSchema = {
       }
     },
     deposit: { type: 'number' },
+    is_prepaid: { type: 'boolean' },
+    prepaid_amount: { type: 'number', minimum: 0 },
+    prepaid_at: { type: 'string', format: 'date-time' },
     stay_type: { type: 'string' , enum: ['客房', '休息房'] },
     create_time: { type: 'string', format: 'date-time' },
     remarks: { type: 'string' }
@@ -426,6 +429,17 @@ router.post('/:orderId/check-in', async (req, res) => {
     const stayDate = formatDate(order.check_in_date);
     const stayType = order.stay_type || '客房'; // 默认值为客房
 
+    const totalRoomFee = Number(order.total_price) || 0;
+    const existingRoomFeeResult = await client.query(
+      `SELECT COALESCE(SUM(change_price), 0) AS total_room_fee
+         FROM bills
+        WHERE order_id = $1
+          AND change_type = $2`,
+      [orderId, setup.changeType.roomFee]
+    );
+    const alreadyCollectedRoomFee = parseFloat(existingRoomFeeResult.rows[0]?.total_room_fee) || 0;
+    const remainingRoomFee = Math.max(0, Number((totalRoomFee - alreadyCollectedRoomFee).toFixed(2)));
+
     // 5. 按日期为每一天创建房费账单（可自定义每日价格）
     const checkInDate = new Date(order.check_in_date);
     const checkOutDate = new Date(order.check_out_date);
@@ -443,20 +457,45 @@ router.post('/:orderId/check-in', async (req, res) => {
       });
     }
 
-    console.log('🧮 [check-in] stayDays:', stayDays, 'total_price:', order.total_price, 'dailyPrices:', dailyPrices);
+    console.log('🧮 [check-in] stayDays:', stayDays, 'total_price:', order.total_price, 'dailyPrices:', dailyPrices, 'alreadyCollectedRoomFee:', alreadyCollectedRoomFee, 'remainingRoomFee:', remainingRoomFee);
 
-    // 如果前端提供了每日房价数组，则使用；否则平均分摊
-    const customPrices = Array.isArray(dailyPrices) && dailyPrices.length === stayDays
-      ? dailyPrices.map(Number)
-      : Array(stayDays).fill(stayDays > 0 ? Number((Number(order.total_price) / stayDays).toFixed(2)) : 0);
+    // 如果前端提供了每日房价数组，则使用；否则平均分摊剩余房费
+    let customPrices = [];
+    if (stayDays > 0 && remainingRoomFee > 0) {
+      if (Array.isArray(dailyPrices) && dailyPrices.length === stayDays) {
+        customPrices = dailyPrices.map(price => Number(price) || 0);
+        const providedTotal = customPrices.reduce((sum, val) => sum + val, 0);
+        const diff = Number((remainingRoomFee - providedTotal).toFixed(2));
+
+        if (Math.abs(diff) > 0.01) {
+          if (diff < 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({
+              success: false,
+              message: '提供的房费总额超过未结算房费'
+            });
+          }
+          customPrices[0] = Number((customPrices[0] + diff).toFixed(2));
+        }
+      } else {
+        const averagePrice = Number((remainingRoomFee / stayDays).toFixed(2));
+        customPrices = Array(stayDays).fill(averagePrice);
+        const distributedTotal = customPrices.reduce((sum, val) => sum + val, 0);
+        const adjustDiff = Number((remainingRoomFee - distributedTotal).toFixed(2));
+        if (Math.abs(adjustDiff) > 0.01) {
+          customPrices[0] = Number((customPrices[0] + adjustDiff).toFixed(2));
+        }
+      }
+    }
 
     const createdBills = [];
 
-    for (let i = 0; i < stayDays; i++) {
+    for (let i = 0; i < stayDays && customPrices.length; i++) {
+      const price = customPrices[i];
+      if (!price || price <= 0) continue;
+
       const stayDateEach = new Date(checkInDate);
       stayDateEach.setDate(checkInDate.getDate() + i);
-
-      const price = customPrices[i]; // 使用自定义或默认价格
 
       const insertRoomFeeBillQuery = `
         INSERT INTO bills (
@@ -544,7 +583,12 @@ router.post('/:orderId/check-in', async (req, res) => {
       message: '办理入住成功',
       data: {
         order: updatedOrder,
-        bills: formattedBills
+        bills: formattedBills,
+        totals: {
+          totalRoomFee,
+          alreadyCollectedRoomFee,
+          remainingRoomFee
+        }
       }
     });
 

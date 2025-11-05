@@ -1,7 +1,7 @@
 const { query, getClient } = require('../database/postgreDB/pg');
 const billModule = require('./billModule');
 const setup = require('../appSettings/setup');
-const { formatDate } = require('./tools');
+const { formatDate, formatDateTimeForDB} = require('./tools');
 
 const tableName = "orders";
 
@@ -112,27 +112,6 @@ function isRestRoom(orderData) {
   const checkInDateStr = toLocalYMD(orderData.check_in_date);
   const checkOutDateStr = toLocalYMD(orderData.check_out_date);
   return checkInDateStr === checkOutDateStr;
-}
-
-/**
- * 将日期时间格式化为数据库友好的本地时间字符串
- * @param {string|Date|number} [input] - 日期时间输入
- * @returns {string} 形如 YYYY-MM-DD HH:mm:ss.SSS000 的本地时间
- */
-function formatDateTimeForDB(input) {
-  const date = input ? new Date(input) : new Date();
-  if (Number.isNaN(date.getTime())) {
-    throw new Error(`无效的日期时间格式: ${input}`);
-  }
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  const seconds = String(date.getSeconds()).padStart(2, '0');
-  const millis = String(date.getMilliseconds()).padStart(3, '0');
-  const micros = `${millis}000`; // 与数据库中6位小数保持一致
-  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${micros}`;
 }
 
 /**
@@ -506,7 +485,8 @@ async function createOrder(orderData) {
     const {
       order_id, id_source, order_source, guest_name, phone,
       room_type, room_number, check_in_date, check_out_date, status,
-      payment_method, total_price, deposit, create_time, remarks
+      payment_method, total_price, deposit, create_time, remarks,
+      is_prepaid, prepaid_amount, prepaid_at
     } = orderData;
 
     // 6.1. 根据入住退房日期自动设置住宿类型
@@ -565,41 +545,102 @@ async function createOrder(orderData) {
       }
     }
 
-    // 9. 处理日期格式，确保正确存储到数据库
-    // 将日期字符串转换为标准的 YYYY-MM-DD 格式，避免时区问题
-    const formatDateForDB = (dateInput) => {
-      if (!dateInput) return null;
+    const formattedCheckInDate = formatDate(check_in_date);
+    const formattedCheckOutDate = formatDate(check_out_date);
 
-      // 如果已经是 YYYY-MM-DD 格式，直接返回
-      if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
-        return dateInput;
-      }
-
-      // 如果是其他格式，转换为本地日期字符串
-      const date = new Date(dateInput);
-      if (isNaN(date.getTime())) {
-        throw new Error(`无效的日期格式: ${dateInput}`);
-      }
-
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    };
-
-    const formattedCheckInDate = formatDateForDB(check_in_date);
-    const formattedCheckOutDate = formatDateForDB(check_out_date);
+    // 提取每日房费明细（按日期排序），支持多日订单按日记账
+    const dailyPriceEntries = [];
+    if (processedTotalPrice && typeof processedTotalPrice === 'object' && !Array.isArray(processedTotalPrice)) {
+      Object.entries(processedTotalPrice).forEach(([dateKey, amountValue]) => {
+        if (!dateKey) return;
+        try {
+          const stayDate = formatDate(dateKey);
+          const amountNum = Number(amountValue);
+          if (!Number.isFinite(amountNum) || amountNum <= 0) return;
+          dailyPriceEntries.push({
+            stayDate,
+            amount: Number(amountNum.toFixed(2))
+          });
+        } catch (e) {
+          console.warn(`⚠️ [createOrder] 无法解析每日房价日期 '${dateKey}':`, e.message);
+        }
+      });
+      dailyPriceEntries.sort((a, b) => new Date(a.stayDate).getTime() - new Date(b.stayDate).getTime());
+    }
 
     console.log(`📅 [createOrder] 日期格式化: 入住 ${check_in_date} -> ${formattedCheckInDate}, 退房 ${check_out_date} -> ${formattedCheckOutDate}`);
+
+    const normalizeBoolean = (value) => {
+      if (typeof value === 'boolean') return value;
+      if (typeof value === 'number') return value !== 0;
+      if (typeof value === 'string') {
+        const normalized = value.trim().toLowerCase();
+        if (['true', '1', 'yes', 'y', 'on'].includes(normalized)) return true;
+        if (['false', '0', 'no', 'n', 'off', ''].includes(normalized)) return false;
+      }
+      return false;
+    };
+
+    const totalPriceValue = calculateTotalPrice(processedTotalPrice);
+
+    const normalizedDeposit = (deposit === undefined || deposit === null || deposit === '')
+      ? 0
+      : Number(deposit);
+    if (Number.isNaN(normalizedDeposit) || normalizedDeposit < 0) {
+      const err = new Error('押金金额无效');
+      err.code = 'INVALID_DEPOSIT';
+      throw err;
+    }
+
+    const prepaidFlag = normalizeBoolean(is_prepaid);
+    let prepaidAmountValue = 0;
+    let prepaidAtDate = null;
+    let prepaidAtForDB = null;
+    let prepaidStayDate = null;
+
+    if (prepaidFlag) {
+      const resolvedAmount = (prepaid_amount === undefined || prepaid_amount === null || prepaid_amount === '')
+        ? totalPriceValue
+        : Number(prepaid_amount);
+
+      if (!Number.isFinite(resolvedAmount) || resolvedAmount <= 0) {
+        const err = new Error('预收房费金额必须大于0');
+        err.code = 'INVALID_PREPAID_AMOUNT';
+        throw err;
+      }
+
+      if (totalPriceValue > 0 && resolvedAmount - totalPriceValue > 0.01) {
+        const err = new Error('预收房费金额不能超过总房费');
+        err.code = 'INVALID_PREPAID_AMOUNT';
+        throw err;
+      }
+
+      prepaidAmountValue = Number(resolvedAmount.toFixed(2));
+
+      const candidateDate = prepaid_at || create_time || new Date();
+      prepaidAtDate = new Date(candidateDate);
+      if (Number.isNaN(prepaidAtDate.getTime())) {
+        const err = new Error(`预收时间格式无效: ${candidateDate}`);
+        err.code = 'INVALID_PREPAID_AT';
+        throw err;
+      }
+
+      prepaidAtForDB = formatDateTimeForDB(prepaidAtDate);
+      prepaidStayDate = formatDate(prepaidAtDate);
+    }
+
+    const createTimeForDB = formatDateTimeForDB(create_time);
 
     // 10. 执行数据库插入操作
     const insertQuery = `
       INSERT INTO orders (
         order_id, id_source, order_source, guest_name, phone,
         room_type, room_number, check_in_date, check_out_date, status,
-        payment_method, total_price, deposit, create_time, stay_type, remarks
+        payment_method, total_price, deposit, create_time, stay_type, remarks,
+        is_prepaid, prepaid_amount, prepaid_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+        $17, $18, $19
       )
       RETURNING *;
     `;
@@ -607,13 +648,88 @@ async function createOrder(orderData) {
     const values = [
       order_id, id_source, order_source, guest_name, phone,
       room_type, room_number, formattedCheckInDate, formattedCheckOutDate, status,
-      payment_method, calculateTotalPrice(processedTotalPrice), deposit, formatDateTimeForDB(create_time), stay_type, processedRemarks
+      payment_method, totalPriceValue, normalizedDeposit, createTimeForDB, stay_type, processedRemarks,
+      prepaidFlag, prepaidAmountValue, prepaidAtForDB
     ];
 
-  console.log('🗃️ [createOrder] 即将插入 values:', values.map(v => (typeof v === 'string' && v.length > 120 ? v.slice(0,120)+'…' : v)));
-  const result = await query(insertQuery, values);
-  console.log('✅ [createOrder] 插入成功 order_id=', result.rows[0]?.order_id);
-    return result.rows[0];
+    console.log('🗃️ [createOrder] 即将插入 values:', values.map(v => (typeof v === 'string' && v.length > 120 ? v.slice(0, 120) + '…' : v)));
+
+    const client = await getClient();
+    let insertedOrder;
+    try {
+      await client.query('BEGIN');
+
+      const result = await client.query(insertQuery, values);
+      insertedOrder = result.rows[0];
+
+      if (prepaidFlag && prepaidAmountValue > 0) {
+        const billInsertQuery = `
+          INSERT INTO bills (
+            order_id, room_number, guest_name, change_price, change_type,
+            pay_way, create_time, remarks, stay_type, stay_date
+          ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+          )
+          RETURNING *;
+        `;
+
+        const fallbackStayDate = prepaidStayDate || formattedCheckInDate;
+        const entriesForBilling = dailyPriceEntries.length > 0
+          ? dailyPriceEntries
+          : [{ stayDate: fallbackStayDate, amount: prepaidAmountValue }];
+
+        let remaining = prepaidAmountValue;
+        let lastStayDateUsed = fallbackStayDate;
+
+        for (const entry of entriesForBilling) {
+          if (remaining <= 0) break;
+          const stayDate = entry.stayDate || fallbackStayDate;
+          lastStayDateUsed = stayDate;
+          const plannedAmount = Number(entry.amount) || 0;
+          if (plannedAmount <= 0) continue;
+          const amountForThisBill = Math.min(plannedAmount, remaining);
+
+          await client.query(billInsertQuery, [
+            order_id,
+            String(room_number || '').slice(0, 10),
+            guest_name,
+            Number(amountForThisBill.toFixed(2)),
+            setup.changeType.roomFee,
+            payment_method,
+            prepaidAtForDB || createTimeForDB,
+            '创建订单预收房费',
+            stay_type,
+            stayDate
+          ]);
+
+          remaining = Number((remaining - amountForThisBill).toFixed(2));
+        }
+
+        if (remaining > 0.009) {
+          await client.query(billInsertQuery, [
+            order_id,
+            String(room_number || '').slice(0, 10),
+            guest_name,
+            Number(remaining.toFixed(2)),
+            setup.changeType.roomFee,
+            payment_method,
+            prepaidAtForDB || createTimeForDB,
+            '创建订单预收房费(余款)',
+            stay_type,
+            lastStayDateUsed
+          ]);
+        }
+      }
+
+      await client.query('COMMIT');
+      console.log('✅ [createOrder] 插入成功 order_id=', insertedOrder?.order_id);
+      return insertedOrder;
+    } catch (txnError) {
+      await client.query('ROLLBACK');
+      throw txnError;
+    } finally {
+      client.release();
+    }
 
   } catch (error) {
   console.error('❌ [createOrder] 失败:', error.message);

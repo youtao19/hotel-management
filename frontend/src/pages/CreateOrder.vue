@@ -290,6 +290,31 @@
                     </div>
                   </div>
 
+                  <!-- 预收房费选项 -->
+                  <div class="row q-col-gutter-md q-mt-md">
+                    <div class="col-md-4 col-xs-12">
+                      <div class="text-body2 text-grey-7 q-mb-xs">当前是否收房费</div>
+                      <q-option-group
+                        v-model="orderData.isPrepaid"
+                        :options="prepayOptions"
+                        type="radio"
+                        inline
+                        color="primary"
+                      />
+                    </div>
+                    <div class="col-md-4 col-xs-12" v-if="orderData.isPrepaid">
+                      <q-input
+                        v-model.number="orderData.prepaidAmount"
+                        label="已收房费金额"
+                        filled
+                        type="number"
+                        prefix="¥"
+                        :rules="[val => val > 0 || '金额必须大于0']"
+                        hint="请输入已收取的房费金额"
+                      />
+                    </div>
+                  </div>
+
                   <!-- 总计显示（仅多日显示） -->
                   <div class="row q-mt-md" v-if="isMultiDay">
                     <div class="col-12">
@@ -357,6 +382,11 @@ const orderStore = useOrderStore()
 const roomStore = useRoomStore()
 const viewStore = useViewStore()
 const $q = useQuasar() // For notifications
+
+const prepayOptions = [
+  { label: '否', value: false },
+  { label: '是', value: true }
+]
 
 // 规范化路由查询参数，支持数组与空值
 function normalizeQueryParam(param) {
@@ -459,6 +489,8 @@ const orderData = ref({
   remarks: '',                         // 备注信息（可选）
   createTime: date.formatDate(getCurrentTimeToMinute(), 'YYYY-MM-DD HH:mm:ss'), // 创建时间
   isRestRoom: false,                   // 是否为休息房
+  isPrepaid: false,                    // 是否在创建时收房费
+  prepaidAmount: 0                     // 预收房费金额
 })
 
 // 多日价格管理
@@ -1102,6 +1134,27 @@ async function submitOrder() {
 
   console.log(`📅 ${dateList.value.length === 1 ? '单日' : '多日'}订单价格数据：`, roomPriceData);
 
+  if (orderData.value.isPrepaid) {
+    const totalPriceValue = Number(totalPrice.value) || 0;
+    const prepaidAmount = Number(orderData.value.prepaidAmount) || 0;
+    if (!(prepaidAmount > 0)) {
+      $q.notify({
+        type: 'negative',
+        message: '请输入有效的预收房费金额',
+        position: 'top'
+      });
+      return;
+    }
+    if (totalPriceValue > 0 && prepaidAmount - totalPriceValue > 0.01) {
+      $q.notify({
+        type: 'negative',
+        message: '预收房费金额不能超过房费总额',
+        position: 'top'
+      });
+      return;
+    }
+  }
+
   // 获取选择的房间 (client-side check before API call)
   const selectedRoom = roomStore.getRoomByNumber(orderData.value.roomNumber)
 
@@ -1129,6 +1182,7 @@ async function submitOrder() {
   // 冲突检测将由后端API处理，确保不会创建真正冲突的订单
 
   // 构建要提交的订单数据
+  const prepaidAtISO = orderData.value.isPrepaid ? new Date().toISOString() : null;
   const submitData = {
     ...orderData.value,
     createTime: date.formatDate(now, 'YYYY-MM-DD HH:mm:ss'),
@@ -1136,7 +1190,10 @@ async function submitOrder() {
       orderData.value.paymentMethod.value :
       orderData.value.paymentMethod,
     roomPrice: roomPriceData, // 发送JSON格式的价格数据
-    deposit: Number(orderData.value.deposit)
+    deposit: Number(orderData.value.deposit),
+    isPrepaid: orderData.value.isPrepaid,
+    prepaidAmount: orderData.value.isPrepaid ? Number(orderData.value.prepaidAmount) : 0,
+    ...(orderData.value.isPrepaid && prepaidAtISO ? { prepaidAt: prepaidAtISO } : {})
   };
 
   // 如果订单状态是"已入住"，需要先确认入住信息
@@ -1295,6 +1352,21 @@ const totalPrice = computed(() => {
   return dateList.value.reduce((sum, date) => {
     return sum + (dailyPrices.value[date] || 0)
   }, 0)
+});
+
+watch(() => orderData.value.isPrepaid, (now) => {
+  if (now) {
+    const total = Number(totalPrice.value) || 0;
+    orderData.value.prepaidAmount = total > 0 ? Number(total.toFixed(2)) : 0;
+  } else {
+    orderData.value.prepaidAmount = 0;
+  }
+});
+
+watch(totalPrice, (val) => {
+  if (!orderData.value.isPrepaid) return;
+  const total = Number(val) || 0;
+  orderData.value.prepaidAmount = total > 0 ? Number(total.toFixed(2)) : 0;
 });
 
 // 监听休息房状态变化，自动处理价格和备注

@@ -81,7 +81,7 @@
               <!-- 费用明细卡片 - 横向排列 -->
               <div class="row q-col-gutter-md q-mb-md">
                 <!-- 房费卡片 -->
-                <div class="col-4">
+                <div class="col-sm-6 col-md-3 col-xs-12">
                   <div class="fee-card">
                     <div class="fee-card-label">房费</div>
                     <div class="fee-card-input">
@@ -97,8 +97,42 @@
                   </div>
                 </div>
 
+                <!-- 已收房费卡片 -->
+                <div class="col-sm-6 col-md-3 col-xs-12">
+                  <div class="fee-card">
+                    <div class="fee-card-label">已收房费</div>
+                    <div class="fee-card-input">
+                      <q-input
+                        :model-value="'¥' + prepaidRoomFee"
+                        readonly
+                        dense
+                        borderless
+                        class="fee-input readonly-input"
+                        input-class="fee-card-value-text"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 本次需收房费 -->
+                <div class="col-sm-6 col-md-3 col-xs-12">
+                  <div class="fee-card">
+                    <div class="fee-card-label">需收房费</div>
+                    <div class="fee-card-input">
+                      <q-input
+                        :model-value="'¥' + remainingRoomFee"
+                        readonly
+                        dense
+                        borderless
+                        class="fee-input readonly-input"
+                        input-class="fee-card-value-text"
+                      />
+                    </div>
+                  </div>
+                </div>
+
                 <!-- 押金卡片 -->
-                <div class="col-4">
+                <div class="col-sm-6 col-md-3 col-xs-12">
                   <div class="fee-card deposit-card" @click.capture="focusDepositInput">
                     <div class="fee-card-label">
                       押金（可修改）
@@ -125,7 +159,7 @@
                 </div>
 
                 <!-- 支付方式卡片 -->
-                <div class="col-4">
+                <div class="col-sm-6 col-md-3 col-xs-12">
                   <div class="fee-card">
                     <div class="fee-card-label">支付方式</div>
                     <div class="fee-card-input">
@@ -145,8 +179,8 @@
               <!-- 费用合计 -->
               <div class="total-amount-card">
                 <div class="total-amount-left">
-                  <div class="text-body2 text-weight-bold text-grey-8">应收合计</div>
-                  <div class="text-caption text-grey-6">房费 + 押金</div>
+                  <div class="text-body2 text-weight-bold text-grey-8">本次应收</div>
+                  <div class="text-caption text-grey-6">未结房费 + 押金</div>
                 </div>
                 <div class="total-amount-right">
                   ¥{{ totalAmount }}
@@ -241,6 +275,10 @@ const depositAmount = ref(0)
 // 押金输入框引用
 const depositInput = ref(null)
 
+watch(() => props.order, (newOrder) => {
+  depositAmount.value = newOrder ? (parseFloat(newOrder.deposit) || 0) : 0
+}, { immediate: true })
+
 // 聚焦押金输入框
 function focusDepositInput() {
   if (depositInput.value) {
@@ -327,11 +365,25 @@ const totalRoomFee = computed(() => {
   return 0
 })
 
+const prepaidRoomFee = computed(() => {
+  if (!props.order) return 0
+  const raw = props.order.prepaidAmount ?? props.order.prepaid_amount ?? 0
+  const amount = Number(raw) || 0
+  return amount > 0 ? Number(amount.toFixed(2)) : 0
+})
+
+const remainingRoomFee = computed(() => {
+  const roomFee = Number(totalRoomFee.value) || 0
+  const prepaid = Number(prepaidRoomFee.value) || 0
+  const diff = Number((roomFee - prepaid).toFixed(2))
+  return diff > 0 ? diff : 0
+})
+
 // 费用合计
 const totalAmount = computed(() => {
   const deposit = parseFloat(depositAmount.value) || 0
-  const roomFee = parseFloat(totalRoomFee.value) || 0
-  console.log('计算应收合计 - 房费:', roomFee, '押金:', deposit)
+  const roomFee = remainingRoomFee.value
+  console.log('计算应收合计 - 待收房费:', roomFee, '押金:', deposit)
   return (roomFee + deposit).toFixed(2)
 })
 
@@ -629,4 +681,3 @@ ul {
   }
 }
 </style>
-
