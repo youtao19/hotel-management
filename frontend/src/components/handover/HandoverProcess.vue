@@ -868,17 +868,20 @@ const nextStep = async () => {
       // 如果有昨日记录，自动填入昨日交接款作为备用金
       if (recordCheckResult.value.hasRecord) {
         const amounts = shiftHandoverStore.yesterdayHandoverAmounts
-        pettyCashRows.value[0].cash = amounts.cash || 0
+        pettyCashRows.value[0].cash = DEFAULT_CASH_RESERVE
         pettyCashRows.value[0].wechat = amounts.wechat || 0
         pettyCashRows.value[0].weyoufu = amounts.weyoufu || 0
         pettyCashRows.value[0].other = amounts.other || 0
         updateTotal()
 
-        console.log('✅ [步骤1→2] 自动填入昨日交接款作为备用金:', amounts)
+        console.log('✅ [步骤1→2] 自动填入昨日交接款作为备用金（现金使用默认）:', {
+          ...amounts,
+          cash: DEFAULT_CASH_RESERVE
+        })
 
         $q.notify({
           type: 'positive',
-          message: '已自动填入昨日交接款作为今日备用金',
+          message: `已自动填入昨日交接款作为今日备用金（现金默认 ¥${DEFAULT_CASH_RESERVE}）`,
           position: 'top',
           timeout: 2000
         })
