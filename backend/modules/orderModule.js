@@ -819,6 +819,8 @@ async function updateOrder(orderNumber, updatedData, changedBy = 'system') {
     const values = [];
     const changes = {}; // 记录变更
     let paramIndex = 1;
+    let paymentMethodUpdated = false;
+    let newPaymentMethod = null;
 
     // 处理可更新字段
     const updateableFields = ['guest_name', 'phone', 'room_type',
@@ -849,12 +851,20 @@ async function updateOrder(orderNumber, updatedData, changedBy = 'system') {
 
     updateableFields.forEach(field => {
       if (updatedData[field] !== undefined) {
+        const nextValue = updatedData[field];
         updates.push(`${field} = $${paramIndex}`);
-        values.push(updatedData[field]);
+        values.push(nextValue);
         changes[field] = {
           old: oldOrder[field],
-          new: updatedData[field]
+          new: nextValue
         };
+        if (field === 'payment_method') {
+          const oldPaymentMethod = oldOrder[field];
+          if (nextValue !== oldPaymentMethod) {
+            paymentMethodUpdated = true;
+            newPaymentMethod = nextValue;
+          }
+        }
         paramIndex++;
       }
     });
@@ -886,6 +896,21 @@ async function updateOrder(orderNumber, updatedData, changedBy = 'system') {
 
     values.push(orderNumber);
     const { rows: [updatedOrder] } = await client.query(updateQuery, values);
+
+    if (paymentMethodUpdated) {
+      const { rowCount: syncedCount } = await client.query(
+        `UPDATE bills
+            SET pay_way = $1
+          WHERE order_id = $2
+            AND change_type = '房费'`,
+        [newPaymentMethod, orderNumber]
+      );
+      if (syncedCount > 0) {
+        console.log(`🧾 [updateOrder] 同步更新 ${syncedCount} 条房费账单支付方式 -> ${newPaymentMethod}`);
+      } else {
+        console.log('ℹ️ [updateOrder] 未找到需要同步支付方式的房费账单');
+      }
+    }
 
     await client.query('COMMIT');
 
@@ -995,6 +1020,203 @@ async function getDepositStatus(orderId) {
   } catch (error) {
     console.error('获取押金状态失败:', error);
     throw new Error('获取押金状态失败');
+  }
+}
+
+/**
+ * 提前退房
+ * @param {string} orderNumber - 订单号
+ * @param {Object} options - 提前退房参数
+ * @param {string|Date} [options.actualCheckoutTime] - 实际退房时间
+ * @param {number|string} [options.refundAmount] - 操作员确定的退款金额
+ * @param {string} [options.refundMethod] - 退款方式
+ * @param {string} [options.changedBy='system'] - 操作人
+ * @param {string} [options.remarks] - 备注
+ * @returns {Promise<Object>} 提前退房结果
+ */
+async function earlyCheckout(orderNumber, options = {}) {
+  const {
+    actualCheckoutTime,
+    refundAmount,
+    refundMethod,
+    changedBy = 'system',
+    remarks
+  } = options;
+
+  const client = await getClient();
+
+  try {
+    await client.query('BEGIN');
+
+    const { rows: orderRows } = await client.query(
+      `SELECT * FROM ${tableName} WHERE order_id = $1 FOR UPDATE`,
+      [orderNumber]
+    );
+
+    const order = orderRows[0];
+    if (!order) {
+      const err = new Error(`订单 ${orderNumber} 不存在`);
+      err.code = 'ORDER_NOT_FOUND';
+      err.statusCode = 404;
+      throw err;
+    }
+
+    if (!['checked-in', 'occupied'].includes(order.status)) {
+      const err = new Error(`订单状态为 '${order.status}'，无法提前退房`);
+      err.code = 'EARLY_CHECKOUT_INVALID_STATE';
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const originalCheckoutDateStr = formatDate(order.check_out_date);
+    const actualCheckoutDateStr = formatDate(actualCheckoutTime || new Date());
+
+    const originalCheckoutDate = new Date(originalCheckoutDateStr);
+    const actualCheckoutDate = new Date(actualCheckoutDateStr);
+
+    if (!(actualCheckoutDate < originalCheckoutDate)) {
+      const err = new Error('实际退房日期未早于原退房日期，无法执行提前退房');
+      err.code = 'EARLY_CHECKOUT_NOT_EARLY';
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const { rows: roomFeeBills } = await client.query(
+      `SELECT bill_id, stay_date, change_price
+         FROM bills
+        WHERE order_id = $1
+          AND change_type = $2
+          AND stay_date >= $3
+        ORDER BY stay_date`,
+      [orderNumber, '房费', actualCheckoutDateStr]
+    );
+
+    const recommendedRefundRaw = roomFeeBills.reduce(
+      (sum, bill) => sum + Number(bill.change_price || 0),
+      0
+    );
+    const recommendedRefund = Number(recommendedRefundRaw.toFixed(2));
+
+    const parsedRefund = refundAmount !== undefined && refundAmount !== null && refundAmount !== ''
+      ? Number(refundAmount)
+      : recommendedRefund;
+
+    if (!Number.isFinite(parsedRefund) || parsedRefund < 0) {
+      const err = new Error('退房退款金额无效');
+      err.code = 'EARLY_CHECKOUT_INVALID_REFUND';
+      err.statusCode = 400;
+      throw err;
+    }
+
+    if (parsedRefund - recommendedRefund > 0.01) {
+      const err = new Error('退款金额不能超过可退房费');
+      err.code = 'EARLY_CHECKOUT_REFUND_TOO_HIGH';
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const finalRefund = Number(parsedRefund.toFixed(2));
+    const refundPayWay = refundMethod || order.payment_method || '现金';
+
+    const originalTotalPrice = Number(order.total_price) || 0;
+    const updatedTotalPrice = Math.max(0, Number((originalTotalPrice - finalRefund).toFixed(2)));
+
+    const { rows: [updatedOrder] } = await client.query(
+      `UPDATE ${tableName}
+          SET check_out_date = $1,
+              status = 'checked-out',
+              total_price = $2
+        WHERE order_id = $3
+        RETURNING *`,
+      [actualCheckoutDateStr, updatedTotalPrice, orderNumber]
+    );
+
+    let refundBillRow = null;
+    if (finalRefund > 0) {
+      const refundRemark = remarks || `提前退房退款（原退房日: ${originalCheckoutDateStr}）`;
+      const refundResult = await client.query(
+        `INSERT INTO bills (
+            order_id, room_number, guest_name, change_price, change_type,
+            pay_way, create_time, remarks, stay_type, stay_date
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+         RETURNING *`,
+        [
+          orderNumber,
+          String(order.room_number || '').slice(0, 10),
+          order.guest_name,
+          Number((-finalRefund).toFixed(2)),
+          '房费',
+          refundPayWay,
+          formatDateTimeForDB(),
+          refundRemark,
+          order.stay_type,
+          actualCheckoutDateStr
+        ]
+      );
+      refundBillRow = refundResult.rows[0];
+    }
+
+    await client.query(
+      `UPDATE rooms SET status = $1 WHERE room_number = $2`,
+      ['cleaning', order.room_number]
+    );
+
+    await client.query('COMMIT');
+
+    const refundedStayDates = roomFeeBills.map(bill => formatDate(bill.stay_date));
+    const changeDetails = {
+      action: 'early_checkout',
+      previous_check_out_date: originalCheckoutDateStr,
+      new_check_out_date: actualCheckoutDateStr,
+      previous_status: order.status,
+      new_status: 'checked-out',
+      recommended_refund: recommendedRefund,
+      actual_refund: finalRefund,
+      refund_method: refundPayWay,
+      refunded_stay_dates: refundedStayDates
+    };
+
+    if (originalTotalPrice !== updatedTotalPrice) {
+      changeDetails.total_price = {
+        old: originalTotalPrice,
+        new: updatedTotalPrice
+      };
+    }
+
+    try {
+      await query(
+        `INSERT INTO order_changes
+           (order_id, changed_by, changes, reason)
+         VALUES ($1, $2, $3, $4)`,
+        [
+          orderNumber,
+          changedBy,
+          JSON.stringify(changeDetails),
+          remarks || '提前退房办理'
+        ]
+      );
+      console.log(`📝 [earlyCheckout] 变更记录已保存到 order_changes 表`);
+    } catch (logError) {
+      console.warn(`⚠️ [earlyCheckout] 保存变更记录失败，但提前退房已完成:`, logError.message);
+    }
+
+    return {
+      success: true,
+      order: updatedOrder,
+      refund: {
+        recommended: recommendedRefund,
+        actual: finalRefund,
+        method: refundPayWay,
+        bill: refundBillRow
+      },
+      refundedStayDates
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error(`❌ [earlyCheckout] 提前退房失败:`, error);
+    throw error;
+  } finally {
+    client.release();
   }
 }
 
@@ -1532,6 +1754,9 @@ async function updateOrderWithBills(orderNumber, updatedData, billUpdates = {}, 
 
     // 2. 更新订单表
     let updatedOrder = oldOrder;
+    let paymentMethodUpdated = false;
+    let newPaymentMethod = null;
+
     if (updatedData && Object.keys(updatedData).length > 0) {
       const updates = [];
       const orderValues = [];
@@ -1545,12 +1770,17 @@ async function updateOrderWithBills(orderNumber, updatedData, billUpdates = {}, 
 
       updateableFields.forEach(field => {
         if (updatedData[field] !== undefined) {
+          const nextValue = updatedData[field];
           updates.push(`${field} = $${paramIndex}`);
-          orderValues.push(updatedData[field]);
+          orderValues.push(nextValue);
           changes[field] = {
             old: oldOrder[field],
-            new: updatedData[field]
+            new: nextValue
           };
+          if (field === 'payment_method' && nextValue !== oldOrder[field]) {
+            paymentMethodUpdated = true;
+            newPaymentMethod = nextValue;
+          }
           paramIndex++;
         }
       });
@@ -1569,6 +1799,21 @@ async function updateOrderWithBills(orderNumber, updatedData, billUpdates = {}, 
         updatedOrder = orderResult;
 
         console.log(`📝 [updateOrderWithBills] 订单更新成功:`, changes);
+      }
+    }
+
+    if (paymentMethodUpdated) {
+      const { rowCount: syncedCount } = await client.query(
+        `UPDATE bills
+            SET pay_way = $1
+          WHERE order_id = $2
+            AND change_type = '房费'`,
+        [newPaymentMethod, orderNumber]
+      );
+      if (syncedCount > 0) {
+        console.log(`🧾 [updateOrderWithBills] 同步更新 ${syncedCount} 条房费账单支付方式 -> ${newPaymentMethod}`);
+      } else {
+        console.log('ℹ️ [updateOrderWithBills] 未找到需要同步支付方式的房费账单');
       }
     }
 
@@ -1594,5 +1839,6 @@ async function updateOrderWithBills(orderNumber, updatedData, billUpdates = {}, 
 // 添加新函数到导出对象
 table.updateOrderWithBills = updateOrderWithBills;
 table.createCheckedInOrderWithTransaction = createCheckedInOrderWithTransaction;
+table.earlyCheckout = earlyCheckout;
 
 module.exports = table;
