@@ -144,6 +144,9 @@ export const orderApi = {
 
   // 办理入住（支持传递押金金额）
   checkIn: (orderId, data = {}) => api.post(`/orders/${orderId}/check-in`, data),
+
+  // 提前退房
+  earlyCheckout: (orderId, payload) => api.post(`/orders/${orderId}/early-checkout`, payload),
 }
 
 // 用户相关接口

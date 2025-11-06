@@ -66,6 +66,24 @@ const updateOrderStatusSchema = {
   additionalProperties: false
 };
 
+const earlyCheckoutSchema = {
+  type: 'object',
+  properties: {
+    actualCheckoutTime: { type: 'string', format: 'date-time' },
+    refundAmount: {
+      anyOf: [
+        { type: 'number', minimum: 0 },
+        { type: 'string', pattern: '^(0|[1-9]\\d*)(\\.\\d{1,2})?$' }
+      ]
+    },
+    refundMethod: { type: 'string' },
+    operator: { type: 'string' },
+    remarks: { type: 'string' }
+  },
+  required: ['refundAmount'],
+  additionalProperties: false
+};
+
 
 /**
  * 获取所有订单
@@ -325,6 +343,52 @@ router.put('/:orderNumber/with-bills', authenticationMiddleware, async (req, res
   } catch (error) {
     console.error(`联合更新订单 ${orderNumber} 失败:`, error);
     res.status(500).json({ success: false, message: '联合更新失败', error: error.message });
+  }
+});
+
+/**
+ * 提前退房
+ * POST /api/orders/:orderNumber/early-checkout
+ */
+router.post('/:orderNumber/early-checkout', authenticationMiddleware, async (req, res) => {
+  const { orderNumber } = req.params;
+  try {
+    const validate = ajv.compile(earlyCheckoutSchema);
+    const valid = validate(req.body);
+    if (!valid) {
+      console.error('提前退房请求参数验证失败:', validate.errors);
+      return res.status(400).json({
+        success: false,
+        message: '请求参数验证失败',
+        errors: validate.errors
+      });
+    }
+
+    const { actualCheckoutTime, refundAmount, refundMethod, operator, remarks } = req.body;
+    const changedBy = operator || req.user?.username || 'system';
+
+    const result = await orderModule.earlyCheckout(orderNumber, {
+      actualCheckoutTime,
+      refundAmount,
+      refundMethod,
+      changedBy,
+      remarks
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: '提前退房办理成功',
+      data: result
+    });
+  } catch (error) {
+    console.error(`提前退房 ${orderNumber} 失败:`, error);
+    const statusCode = error.statusCode || (error.code && error.code.startsWith('EARLY_CHECKOUT') ? 400 : 500);
+    return res.status(statusCode).json({
+      success: false,
+      message: statusCode >= 500 ? '提前退房办理失败' : error.message,
+      error: error.message,
+      code: error.code || 'EARLY_CHECKOUT_ERROR'
+    });
   }
 });
 

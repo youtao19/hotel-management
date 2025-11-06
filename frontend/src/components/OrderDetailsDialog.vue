@@ -223,6 +223,14 @@
           @click="emitCheckout"
         />
         <q-btn
+          v-if="currentOrder && currentOrder.status === 'checked-in'"
+          flat
+          label="提前退房"
+          color="warning"
+          icon="logout"
+          @click="emitEarlyCheckout"
+        />
+        <q-btn
           v-if="currentOrder && canRefundDeposit(currentOrder)"
           flat
           label="退押金"
@@ -259,7 +267,7 @@ const props = defineProps({
   formatDateTime: Function
 });
 
-const emit = defineEmits(['update:modelValue', 'check-in', 'change-room', 'checkout', 'refund-deposit', 'change-order', 'refresh']);
+const emit = defineEmits(['update:modelValue', 'check-in', 'change-room', 'checkout', 'refund-deposit', 'change-order', 'early-checkout', 'refresh']);
 
 // 2. 添加控制对话框显示的状态
 const showAdjustmentDialog = ref(false);
@@ -281,6 +289,10 @@ function emitChangeRoom() {
 }
 function emitCheckout() {
   emit('checkout');
+}
+
+function emitEarlyCheckout() {
+  emit('early-checkout');
 }
 
 function emitRefundDeposit() {

@@ -644,6 +644,55 @@ export const useOrderStore = defineStore('order', () => {
     }
   }
 
+  async function earlyCheckout(orderNumber, payload) {
+    if (!orderNumber) {
+      throw new Error('订单号无效，无法提前退房');
+    }
+    try {
+      loading.value = true;
+      error.value = null;
+      const response = await orderApi.earlyCheckout(orderNumber, payload);
+      const result = response?.data || response;
+      const updatedOrderFromApi = result?.order || result?.data?.order;
+      if (!updatedOrderFromApi) {
+        throw new Error('提前退房成功，但未返回订单信息');
+      }
+      const index = orders.value.findIndex(o => o.orderNumber === orderNumber);
+      const mappedOrder = {
+        orderNumber: updatedOrderFromApi.order_id,
+        guestName: updatedOrderFromApi.guest_name,
+        phone: updatedOrderFromApi.phone,
+        roomType: updatedOrderFromApi.room_type,
+        roomNumber: updatedOrderFromApi.room_number,
+        checkInDate: updatedOrderFromApi.check_in_date ? formatOrderDate(updatedOrderFromApi.check_in_date) : null,
+        checkOutDate: updatedOrderFromApi.check_out_date ? formatOrderDate(updatedOrderFromApi.check_out_date) : null,
+        status: updatedOrderFromApi.status,
+        paymentMethod: updatedOrderFromApi.payment_method,
+        roomPrice: updatedOrderFromApi.total_price,
+        deposit: updatedOrderFromApi.deposit,
+        refundedDeposit: updatedOrderFromApi.refunded_deposit || 0,
+        refundRecords: [],
+        createTime: updatedOrderFromApi.create_time,
+        remarks: updatedOrderFromApi.remarks,
+        source: updatedOrderFromApi.order_source,
+        sourceNumber: updatedOrderFromApi.id_source,
+        isPrepaid: Boolean(updatedOrderFromApi.is_prepaid),
+        prepaidAmount: parseFloat(updatedOrderFromApi.prepaid_amount) || 0,
+        prepaidAt: updatedOrderFromApi.prepaid_at
+      };
+      if (index !== -1) {
+        orders.value[index] = { ...orders.value[index], ...mappedOrder };
+      }
+      return result;
+    } catch (err) {
+      console.error('提前退房失败:', err.response?.data || err.message);
+      error.value = err.response?.data?.message || err.message || '提前退房失败';
+      throw err;
+    } finally {
+      loading.value = false;
+    }
+  }
+
   function initialize() {
     console.log('开始初始化订单数据...')
     fetchAllOrders()
@@ -673,6 +722,7 @@ export const useOrderStore = defineStore('order', () => {
     createOrder: createExtendStayOrder, // 导出续住专用函数
     refundDeposit,
     checkIn,
-    fastCheckIn
+    fastCheckIn,
+    earlyCheckout
   }
 })

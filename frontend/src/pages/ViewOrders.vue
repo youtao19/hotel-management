@@ -89,6 +89,10 @@
                   v-if="props.row.status === 'checked-in'">
                   <q-tooltip>办理退房</q-tooltip>
                 </q-btn>
+                <q-btn flat round dense color="warning" icon="logout" @click="openEarlyCheckoutDialog(props.row)"
+                  v-if="props.row.status === 'checked-in'">
+                  <q-tooltip>提前退房</q-tooltip>
+                </q-btn>
                 <q-btn flat round dense color="orange" icon="hotel_class" @click="openExtendStayDialog(props.row)"
                   v-if="props.row.status === 'checked-out'">
                   <q-tooltip>续住</q-tooltip>
@@ -141,6 +145,7 @@
       @checkout="checkoutOrderFromDetails"
       @refund-deposit="openRefundDepositFromDetails"
       @change-order="openChangeOrderDialog"
+      @early-checkout="openEarlyCheckoutFromDetails"
     />
 
 
@@ -189,6 +194,12 @@
       @refund-deposit="handleRefundDeposit"
     />
 
+    <EarlyCheckoutDialog
+      v-model="showEarlyCheckoutDialog"
+      :order="earlyCheckoutOrder"
+      @success="handleEarlyCheckoutSuccess"
+    />
+
     <!-- 办理入住确认对话框 -->
     <CheckInConfirmDialog
       v-model="showCheckInConfirmDialog"
@@ -219,6 +230,7 @@ import CheckIn from 'src/components/CheckIn.vue';
 import ExtendStayDialog from 'src/components/ExtendStayDialog.vue';
 import RefundDepositDialog from 'src/components/RefundDepositDialog.vue';
 import CheckInConfirmDialog from 'src/components/CheckInConfirmDialog.vue';
+import EarlyCheckoutDialog from 'src/components/EarlyCheckoutDialog.vue';
 import { watch } from 'vue'
 
 
@@ -405,6 +417,8 @@ const showChangeOrderDialog = ref(false)
 const changeOrderRooms = ref([])
 const showCheckInDialog = ref(false)
 const billOrder = ref(null)
+const showEarlyCheckoutDialog = ref(false)
+const earlyCheckoutOrder = ref(null)
 
 // 在 script 部分添加相关变量和方法
 const availableRoomOptions = ref([]); // 用于存储从API获取的可用房间选项
@@ -415,6 +429,18 @@ function viewOrderDetails(order) {
   console.log('Viewing order details. Status:', currentOrder.value ? currentOrder.value.status : 'currentOrder is null');
   console.log('currentOrder', currentOrder.value)
   showOrderDetails.value = true;
+}
+
+function openEarlyCheckoutDialog(order) {
+  if (!order) return
+  earlyCheckoutOrder.value = order
+  showEarlyCheckoutDialog.value = true
+}
+
+function openEarlyCheckoutFromDetails() {
+  if (currentOrder.value) {
+    openEarlyCheckoutDialog(currentOrder.value)
+  }
 }
 
 // 取消订单
@@ -460,6 +486,21 @@ async function cancelOrder(order) {
     } finally {
       loadingOrders.value = false;
     }
+  }
+}
+
+async function handleEarlyCheckoutSuccess() {
+  try {
+    await orderStore.fetchAllOrders()
+    await roomStore.fetchAllRooms()
+    if (currentOrder.value && currentOrder.value.orderNumber) {
+      const latest = await orderStore.getOrderByNumber(currentOrder.value.orderNumber, true)
+      if (latest) currentOrder.value = { ...latest }
+    }
+  } catch (error) {
+    console.warn('刷新订单/房间状态失败:', error)
+  } finally {
+    showEarlyCheckoutDialog.value = false
   }
 }
 
