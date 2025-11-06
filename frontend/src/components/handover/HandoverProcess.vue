@@ -428,21 +428,22 @@ const pettyCashColumns = [
 ]
 
 const PAY_WAY_KEYS = ['现金', '微信', '微邮付', '其他']
+const DEFAULT_CASH_RESERVE = 320
 
 const pettyCashRows = ref([
   {
     id: 1,
     label: '备用金',
-    cash: 320,
+    cash: DEFAULT_CASH_RESERVE,
     wechat: 0,
     weyoufu: 0,
     other: 0,
-    total: 0
+    total: DEFAULT_CASH_RESERVE
   }
 ])
 
 const DEFAULT_RETAINED_AMOUNTS = {
-  '现金': 320,
+  '现金': DEFAULT_CASH_RESERVE,
   '微信': 0,
   '微邮付': 0,
   '其他': 0
@@ -882,8 +883,8 @@ const nextStep = async () => {
           timeout: 2000
         })
       } else {
-        // 如果没有昨日记录，清空备用金表格，让用户手动输入
-        pettyCashRows.value[0].cash = 0
+        // 如果没有昨日记录，使用默认备用金（现金 320）并清空其他支付方式
+        pettyCashRows.value[0].cash = DEFAULT_CASH_RESERVE
         pettyCashRows.value[0].wechat = 0
         pettyCashRows.value[0].weyoufu = 0
         pettyCashRows.value[0].other = 0
@@ -893,7 +894,7 @@ const nextStep = async () => {
 
         $q.notify({
           type: 'info',
-          message: '无昨日交接记录，请手动输入今日备用金',
+          message: `无昨日交接记录，已使用默认现金备用金 ¥${DEFAULT_CASH_RESERVE}`,
           position: 'top',
           timeout: 2000
         })
