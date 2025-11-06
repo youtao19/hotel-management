@@ -31,7 +31,20 @@
 
         <!-- 客房数据表格 -->
         <div class="data-check-section q-mb-lg">
-          <div class="text-subtitle1 q-mb-sm text-weight-medium">客房数据</div>
+          <div class="section-header row items-center justify-between q-mb-sm">
+            <div class="text-subtitle1 text-weight-medium">客房数据</div>
+            <q-btn
+              size="sm"
+              color="positive"
+              outline
+              icon="done_all"
+              label="一键确认"
+              @click="confirmAllRows('hotel')"
+              :disable="isHotelBulkConfirmDisabled"
+            >
+              <q-tooltip>确认所有客房账单</q-tooltip>
+            </q-btn>
+          </div>
 
           <!-- 无数据提示 -->
           <div v-if="hotelRoomData.length === 0" class="no-data-hint q-pa-md text-center">
@@ -107,7 +120,20 @@
 
         <!-- 休息房数据表格 -->
         <div class="data-check-section q-mb-lg">
-          <div class="text-subtitle1 q-mb-sm text-weight-medium">休息房数据</div>
+          <div class="section-header row items-center justify-between q-mb-sm">
+            <div class="text-subtitle1 text-weight-medium">休息房数据</div>
+            <q-btn
+              size="sm"
+              color="positive"
+              outline
+              icon="done_all"
+              label="一键确认"
+              @click="confirmAllRows('rest')"
+              :disable="isRestBulkConfirmDisabled"
+            >
+              <q-tooltip>确认所有休息房账单</q-tooltip>
+            </q-btn>
+          </div>
 
           <!-- 无数据提示 -->
           <div v-if="restRoomData.length === 0" class="no-data-hint q-pa-md text-center">
@@ -471,6 +497,16 @@ const allDataConfirmed = computed(() => {
   return allHotelConfirmed && allRestConfirmed
 })
 
+const isHotelBulkConfirmDisabled = computed(() => {
+  const hotelData = hotelRoomData.value || []
+  return hotelData.length === 0 || hotelData.every(item => item.confirmed)
+})
+
+const isRestBulkConfirmDisabled = computed(() => {
+  const restData = restRoomData.value || []
+  return restData.length === 0 || restData.every(item => item.confirmed)
+})
+
 // 方法
 const mapBillToRow = (bill, overrides = {}) => {
   const normalizedAmount = overrides.amount !== undefined ? overrides.amount : (parseFloat(bill.change_price) || 0)
@@ -680,6 +716,43 @@ const confirmRow = (row, type) => {
   row.confirmed = true
   // 确认后重新计算汇总数据
   calculateSummaryData()
+}
+
+const confirmAllRows = (type) => {
+  const isRest = type === 'rest'
+  const targetData = isRest ? restRoomData.value : hotelRoomData.value
+
+  if (!targetData || targetData.length === 0) {
+    $q.notify({
+      type: 'info',
+      message: isRest ? '暂无休息房账单可以确认' : '暂无客房账单可以确认',
+      position: 'top'
+    })
+    return
+  }
+
+  const pendingRows = targetData.filter(item => !item.confirmed)
+
+  if (pendingRows.length === 0) {
+    $q.notify({
+      type: 'info',
+      message: isRest ? '休息房账单已全部确认' : '客房账单已全部确认',
+      position: 'top'
+    })
+    return
+  }
+
+  pendingRows.forEach(row => {
+    row.confirmed = true
+  })
+
+  calculateSummaryData()
+
+  $q.notify({
+    type: 'positive',
+    message: isRest ? '休息房账单已全部确认' : '客房账单已全部确认',
+    position: 'top'
+  })
 }
 
 // 编辑行数据
@@ -1113,6 +1186,10 @@ defineExpose({
 /* 数据检查部分样式 */
 .data-check-section {
   margin-bottom: 24px;
+}
+
+.section-header {
+  gap: 12px;
 }
 
 .data-check-section .text-subtitle1 {

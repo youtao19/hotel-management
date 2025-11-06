@@ -581,18 +581,8 @@ async function getShiftSpecialStats(date) {
   `
 
   try {
-    // 使用超时保护机制，如果查询超过5秒则返回默认值
-    const queryWithTimeout = async (sql, params, name) => {
-      return Promise.race([
-        query(sql, params),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error(`${name}查询超时`)), 5000)
-        )
-      ])
-    }
-
-    const roomRes = await queryWithTimeout(roomCountSql, [targetDate], '开房/休息房')
-    const reviewRes = await queryWithTimeout(reviewSql, [targetDate], '好评')
+    const roomRes = await query(roomCountSql, [targetDate])
+    const reviewRes = await query(reviewSql, [targetDate])
 
     const result = {
       openCount: parseInt(roomRes.rows[0]?.open_count) || 0,

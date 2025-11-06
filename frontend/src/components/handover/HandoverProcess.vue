@@ -441,13 +441,22 @@ const pettyCashRows = ref([
   }
 ])
 
-const retainedInitialized = ref(false)
-const retainedAmounts = ref({
-  '现金': 0,
+const DEFAULT_RETAINED_AMOUNTS = {
+  '现金': 320,
   '微信': 0,
   '微邮付': 0,
   '其他': 0
+}
+
+const createDefaultRetainedBuckets = () => ({
+  '现金': DEFAULT_RETAINED_AMOUNTS['现金'],
+  '微信': DEFAULT_RETAINED_AMOUNTS['微信'],
+  '微邮付': DEFAULT_RETAINED_AMOUNTS['微邮付'],
+  '其他': DEFAULT_RETAINED_AMOUNTS['其他']
 })
+
+const retainedInitialized = ref(false)
+const retainedAmounts = ref(createDefaultRetainedBuckets())
 
 const specialStatsState = reactive({
   vipCards: 0,
@@ -468,13 +477,7 @@ const mapReserveRowToBuckets = () => {
 }
 
 const initializeRetainedAmounts = () => {
-  const reserveBuckets = mapReserveRowToBuckets()
-  retainedAmounts.value = {
-    '现金': Number(reserveBuckets['现金'].toFixed(2)),
-    '微信': Number(reserveBuckets['微信'].toFixed(2)),
-    '微邮付': Number(reserveBuckets['微邮付'].toFixed(2)),
-    '其他': Number(reserveBuckets['其他'].toFixed(2))
-  }
+  retainedAmounts.value = createDefaultRetainedBuckets()
   retainedInitialized.value = true
 }
 
