@@ -261,13 +261,20 @@ router.get('/special-stats', async (req, res) => {
 
     const roomSql = `
       SELECT
-        COUNT(*) FILTER (WHERE stay_type = '客房')   AS open_count,
-        COUNT(*) FILTER (WHERE stay_type = '休息房') AS rest_count
+        COUNT(*) FILTER (
+          WHERE stay_type = '客房'
+            AND check_in_date <= $1::date
+            AND check_out_date > $1::date
+        ) AS open_count,
+        COUNT(*) FILTER (
+          WHERE stay_type = '休息房'
+            AND check_in_date = $1::date
+            AND check_out_date = $1::date
+        ) AS rest_count
       FROM orders
-      WHERE check_in_date <= $1::date
-        AND check_out_date > $1::date
-        AND stay_type IN ('客房', '休息房');
-      `;
+      WHERE stay_type IN ('客房', '休息房')
+        AND status NOT IN ('cancelled');
+    `;
 
     const roomResult = await db.query(roomSql, [date]);
 

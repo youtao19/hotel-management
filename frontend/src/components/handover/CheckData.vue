@@ -1050,12 +1050,6 @@ const confirmDataCheck = async () => {
     // 设置为已完成状态
     dataCheckCompleted.value = true
 
-    $q.notify({
-      type: 'positive',
-      message: '数据核对确认完成',
-      position: 'top'
-    })
-
   } catch (error) {
     console.error('确认数据核对失败:', error)
     $q.notify({

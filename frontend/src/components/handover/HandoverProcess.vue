@@ -596,10 +596,12 @@ const confirmationData = computed(() => {
   let totalRooms = countRoomNights(hotelRoomRows)
   let restRooms = countRoomNights(restRoomRows)
 
-  if (totalRooms === 0 && savedSpecialStats.value.openCount) {
+  const hasSpecialOpen = savedSpecialStats.value.openCount !== undefined && savedSpecialStats.value.openCount !== null
+  const hasSpecialRest = savedSpecialStats.value.restCount !== undefined && savedSpecialStats.value.restCount !== null
+  if (hasSpecialOpen) {
     totalRooms = savedSpecialStats.value.openCount
   }
-  if (restRooms === 0 && savedSpecialStats.value.restCount) {
+  if (hasSpecialRest) {
     restRooms = savedSpecialStats.value.restCount
   }
 
@@ -695,12 +697,6 @@ const confirmReserveCash = async () => {
     const total = toAmountNumber(row.total)
     row.total = total
 
-    $q.notify({
-      type: 'positive',
-      message: `备用金确认完成，总计: ¥${total.toFixed(2)}`,
-      position: 'top'
-    })
-
     retainedInitialized.value = false
     initializeRetainedAmounts()
 
@@ -724,25 +720,40 @@ const formatLocalDate = (date) => {
   return `${year}-${month}-${day}`
 }
 
+const resolveSelectedDateFromCheckData = () => {
+  if (!checkDataRef.value) return null
+  const exposed = checkDataRef.value.selectedDate
+  if (!exposed) return null
+  if (typeof exposed === 'string') return exposed
+  if (typeof exposed === 'object' && 'value' in exposed) {
+    return exposed.value
+  }
+  return null
+}
+
 // 获取特殊统计数据
-const fetchSpecialStatsData = async () => {
+const fetchSpecialStatsData = async (targetDate) => {
   try {
     console.log('📊 [获取特殊统计] 开始调用API...')
 
-    // 计算要查询的日期（与核对数据的日期逻辑一致）
-    const now = new Date()
-    const currentHour = now.getHours()
+    let queryDateStr = targetDate
 
-    // 计算当前营业日
-    let currentBusinessDate = new Date(now)
-    if (currentHour < 8) {
-      currentBusinessDate.setDate(currentBusinessDate.getDate() - 1)
+    if (!queryDateStr) {
+      // 计算要查询的日期（与核对数据的日期逻辑一致）
+      const now = new Date()
+      const currentHour = now.getHours()
+
+      // 计算当前营业日
+      let currentBusinessDate = new Date(now)
+      if (currentHour < 8) {
+        currentBusinessDate.setDate(currentBusinessDate.getDate() - 1)
+      }
+
+      // 计算要查询的营业日（当前营业日的前一天）
+      let queryDate = new Date(currentBusinessDate)
+      queryDate.setDate(queryDate.getDate() - 1)
+      queryDateStr = formatLocalDate(queryDate)
     }
-
-    // 计算要查询的营业日（当前营业日的前一天）
-    let queryDate = new Date(currentBusinessDate)
-    queryDate.setDate(queryDate.getDate() - 1)
-    const queryDateStr = formatLocalDate(queryDate)
 
     console.log('📊 [获取特殊统计] 查询日期:', queryDateStr)
 
@@ -944,12 +955,7 @@ const nextStep = async () => {
 
         console.log('⚠️ [步骤1→2] 无昨日记录，请手动输入备用金')
 
-        $q.notify({
-          type: 'info',
-          message: `无昨日交接记录，已使用默认现金备用金 ¥${DEFAULT_CASH_RESERVE}`,
-          position: 'top',
-          timeout: 2000
-        })
+
       }
     }
 
@@ -1039,7 +1045,8 @@ const nextStep = async () => {
       console.log('💾 [步骤3→4] 保存核对数据:', savedCheckData.value)
 
       // 调用后端API获取特殊统计数据
-      await fetchSpecialStatsData()
+      const selectedDateFromStep3 = resolveSelectedDateFromCheckData()
+      await fetchSpecialStatsData(selectedDateFromStep3)
 
       if (!retainedInitialized.value) {
         initializeRetainedAmounts()
