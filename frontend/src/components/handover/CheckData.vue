@@ -293,9 +293,71 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useQuasar } from 'quasar'
+import Decimal from 'decimal.js'
 import { billApi } from '../../api/index.js'
 
 const $q = useQuasar()
+
+const PAY_WAY_KEYS = ['现金', '微信', '微邮付', '其他']
+const INCOME_CHANGE_TYPES = ['房费', '收押', '押金', '补收', '订单账单']
+
+Decimal.set({
+  precision: 20,
+  rounding: Decimal.ROUND_HALF_UP
+})
+
+const toDecimal = (value) => {
+  if (Decimal.isDecimal(value)) {
+    return value
+  }
+  if (value === undefined || value === null) {
+    return new Decimal(0)
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (trimmed === '') {
+      return new Decimal(0)
+    }
+    const parsed = Number(trimmed)
+    return Number.isNaN(parsed) ? new Decimal(0) : new Decimal(parsed)
+  }
+  if (typeof value === 'number') {
+    return Number.isNaN(value) ? new Decimal(0) : new Decimal(value)
+  }
+  const parsed = Number(value)
+  return Number.isNaN(parsed) ? new Decimal(0) : new Decimal(parsed)
+}
+
+const toAmountNumber = (value, places = 2) =>
+  Number(toDecimal(value).toDecimalPlaces(places, Decimal.ROUND_HALF_UP).toString())
+
+const normalizePayWay = (payWay) => (PAY_WAY_KEYS.includes(payWay) ? payWay : '其他')
+
+const createPaywayBucket = (seed = {}) => {
+  const bucket = {}
+  PAY_WAY_KEYS.forEach(key => {
+    const source = Object.prototype.hasOwnProperty.call(seed, key) ? seed[key] : 0
+    bucket[key] = toAmountNumber(source)
+  })
+  return bucket
+}
+
+const createSummaryBuckets = () => ({
+  hotelIncome: createPaywayBucket(),
+  restIncome: createPaywayBucket(),
+  hotelRefundDeposit: createPaywayBucket(),
+  restRefundDeposit: createPaywayBucket()
+})
+
+const incrementBucket = (bucket, payWay, amount, { absolute = false } = {}) => {
+  if (!bucket) {
+    return
+  }
+  const key = normalizePayWay(payWay)
+  const delta = absolute ? toDecimal(amount).abs() : toDecimal(amount)
+  const updated = toDecimal(bucket[key]).plus(delta)
+  bucket[key] = toAmountNumber(updated)
+}
 
 // 账单类型选项
 const changeTypeOptions = [
@@ -418,66 +480,38 @@ const editDialog = ref({
 })
 
 // 汇总数据对象（按支付方式统计）
-const summaryDataObject = ref({
-  // 客房收入（按支付方式）- 包含：房费 + 收押 + 补收 + 订单账单
-  hotelIncome: {
-    '现金': 0,
-    '微信': 0,
-    '微邮付': 0,
-    '其他': 0
-  },
-  // 休息房收入（按支付方式）- 包含：房费 + 收押 + 补收 + 订单账单
-  restIncome: {
-    '现金': 0,
-    '微信': 0,
-    '微邮付': 0,
-    '其他': 0
-  },
-  // 客房退押（按支付方式）- 实退金额（包含退押金和退款）
-  hotelRefundDeposit: {
-    '现金': 0,
-    '微信': 0,
-    '微邮付': 0,
-    '其他': 0
-  },
-  // 休息房退押（按支付方式）- 实退金额（包含退押金和退款）
-  restRefundDeposit: {
-    '现金': 0,
-    '微信': 0,
-    '微邮付': 0,
-    '其他': 0
+const summaryDataObject = ref(createSummaryBuckets())
+
+const summarizeRoomData = (rows = []) => {
+  const totalDecimal = rows.reduce((sum, item) => sum.plus(toDecimal(item.amount || 0)), new Decimal(0))
+  const byTypeDecimal = {}
+
+  rows.forEach(bill => {
+    const type = bill.changeType || '未知'
+    const amountDecimal = toDecimal(bill.amount || 0)
+    if (!byTypeDecimal[type]) {
+      byTypeDecimal[type] = amountDecimal
+    } else {
+      byTypeDecimal[type] = byTypeDecimal[type].plus(amountDecimal)
+    }
+  })
+
+  const byType = {}
+  Object.keys(byTypeDecimal).forEach(key => {
+    byType[key] = toAmountNumber(byTypeDecimal[key])
+  })
+
+  return {
+    totalAmount: toAmountNumber(totalDecimal),
+    byType
   }
-})
+}
 
 // 计算属性 - 客房汇总
-const hotelSummary = computed(() => {
-  const totalAmount = hotelRoomData.value.reduce((sum, item) => sum + item.amount, 0)
-  const byType = {}
-
-  hotelRoomData.value.forEach(bill => {
-    if (!byType[bill.changeType]) {
-      byType[bill.changeType] = 0
-    }
-    byType[bill.changeType] += bill.amount
-  })
-
-  return { totalAmount, byType }
-})
+const hotelSummary = computed(() => summarizeRoomData(hotelRoomData.value))
 
 // 计算属性 - 休息房汇总
-const restSummary = computed(() => {
-  const totalAmount = restRoomData.value.reduce((sum, item) => sum + item.amount, 0)
-  const byType = {}
-
-  restRoomData.value.forEach(bill => {
-    if (!byType[bill.changeType]) {
-      byType[bill.changeType] = 0
-    }
-    byType[bill.changeType] += bill.amount
-  })
-
-  return { totalAmount, byType }
-})
+const restSummary = computed(() => summarizeRoomData(restRoomData.value))
 
 // 计算属性 - 是否所有数据都已确认
 const allDataConfirmed = computed(() => {
@@ -512,6 +546,7 @@ const mapBillToRow = (bill, overrides = {}) => {
   const normalizedAmount = overrides.amount !== undefined ? overrides.amount : (parseFloat(bill.change_price) || 0)
   const changeType = overrides.changeType || bill.change_type
   const signedAmount = REFUND_CHANGE_TYPES.includes(changeType) ? -Math.abs(normalizedAmount) : normalizedAmount
+  const normalizedSignedAmount = toAmountNumber(signedAmount)
   const normalizedPayWay = overrides.payWay !== undefined ? overrides.payWay : (bill.pay_way || '其他')
   const row = {
     billId: overrides.billId !== undefined ? overrides.billId : bill.bill_id,
@@ -519,7 +554,7 @@ const mapBillToRow = (bill, overrides = {}) => {
     roomNo: bill.room_number || '未知',
     guestName: bill.guest_name || '未知',
     changeType,
-    amount: signedAmount,
+    amount: normalizedSignedAmount,
     payWay: normalizedPayWay,
     stayDate: bill.stay_date,
     createTime: overrides.createTime || bill.create_time,
@@ -533,7 +568,7 @@ const mapBillToRow = (bill, overrides = {}) => {
   if (overrides.aggregatedBills) {
     row.aggregatedBills = overrides.aggregatedBills.map(item => ({
       ...item,
-      change_price: parseFloat(item.change_price) || 0
+      change_price: toAmountNumber(item.change_price)
     }))
   }
 
@@ -583,7 +618,7 @@ const buildTableRows = (bills = [], targetDate) => {
       if (!aggregateGroups.has(aggregateKey)) {
         aggregateGroups.set(aggregateKey, {
           firstBill: bill,
-          totalAmount: 0,
+          totalAmount: new Decimal(0),
           billIds: [],
           payWays: new Set(),
           bills: []
@@ -593,11 +628,12 @@ const buildTableRows = (bills = [], targetDate) => {
       }
 
       const group = aggregateGroups.get(aggregateKey)
-      group.totalAmount += normalizedAmount
+      const normalizedDecimal = toDecimal(normalizedAmount)
+      group.totalAmount = group.totalAmount.plus(normalizedDecimal)
       group.billIds.push(bill.bill_id)
       group.bills.push({
         ...bill,
-        change_price: normalizedAmount
+        change_price: toAmountNumber(normalizedDecimal)
       })
       if (bill.pay_way) {
         group.payWays.add(bill.pay_way)
@@ -631,7 +667,7 @@ const buildTableRows = (bills = [], targetDate) => {
 
     return mapBillToRow(firstBill, {
       billId: isAggregated ? `ROOMFEE-${firstBill.order_id || firstBill.bill_id}-${targetDate}` : billIds[0],
-      amount: totalAmount,
+      amount: toAmountNumber(totalAmount),
       payWay: payWayLabel,
       createTime: targetDate,
       isAggregatedRoomFee: isAggregated,
@@ -651,12 +687,7 @@ const onDateChange = (value) => {
 // 计算并更新汇总数据对象
 const calculateSummaryData = () => {
   // 重置汇总对象
-  summaryDataObject.value = {
-    hotelIncome: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
-    restIncome: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
-    hotelRefundDeposit: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
-    restRefundDeposit: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
-  }
+  summaryDataObject.value = createSummaryBuckets()
 
   // 统计客房数据
   hotelRoomData.value.forEach(bill => {
@@ -665,16 +696,16 @@ const calculateSummaryData = () => {
     const amount = bill.amount || 0
 
     // 确保支付方式存在于对象中
-    const normalizedPayWay = ['现金', '微信', '微邮付'].includes(payWay) ? payWay : '其他'
+    const normalizedPayWay = normalizePayWay(payWay)
 
     // 根据账单类型分类统计
-    if (changeType === '房费' || changeType === '收押' || changeType === '押金' || changeType === '补收' || changeType === '订单账单') {
+    if (INCOME_CHANGE_TYPES.includes(changeType)) {
       // 收入类型：房费 + 收押 + 补收 + 订单账单（兼容旧数据）
-      summaryDataObject.value.hotelIncome[normalizedPayWay] += amount
+      incrementBucket(summaryDataObject.value.hotelIncome, normalizedPayWay, amount)
       console.log(`💰 [收入统计] 客房收入: ${bill.orderNo}, 类型: ${changeType}, 金额: ${amount}, 支付方式: ${normalizedPayWay}`)
     } else if (changeType === '退押' || changeType === '退押金' || changeType === '退款') {
       // 退押金/退款是负数，取绝对值统计实退金额（合并到退押列）
-      summaryDataObject.value.hotelRefundDeposit[normalizedPayWay] += Math.abs(amount)
+      incrementBucket(summaryDataObject.value.hotelRefundDeposit, normalizedPayWay, amount, { absolute: true })
       console.log(`💰 [退款统计] 客房退款/退押: ${bill.orderNo}, 类型: ${changeType}, 金额: ${amount}, 支付方式: ${normalizedPayWay}`)
     } else {
       // 未知类型，记录警告
@@ -689,16 +720,16 @@ const calculateSummaryData = () => {
     const amount = bill.amount || 0
 
     // 确保支付方式存在于对象中
-    const normalizedPayWay = ['现金', '微信', '微邮付'].includes(payWay) ? payWay : '其他'
+    const normalizedPayWay = normalizePayWay(payWay)
 
     // 根据账单类型分类统计
-    if (changeType === '房费' || changeType === '收押' || changeType === '押金' || changeType === '补收' || changeType === '订单账单') {
+    if (INCOME_CHANGE_TYPES.includes(changeType)) {
       // 收入类型：房费 + 收押 + 补收 + 订单账单（兼容旧数据）
-      summaryDataObject.value.restIncome[normalizedPayWay] += amount
+      incrementBucket(summaryDataObject.value.restIncome, normalizedPayWay, amount)
       console.log(`💰 [收入统计] 休息房收入: ${bill.orderNo}, 类型: ${changeType}, 金额: ${amount}, 支付方式: ${normalizedPayWay}`)
     } else if (changeType === '退押' || changeType === '退押金' || changeType === '退款') {
       // 退押金/退款是负数，取绝对值统计实退金额（合并到退押列）
-      summaryDataObject.value.restRefundDeposit[normalizedPayWay] += Math.abs(amount)
+      incrementBucket(summaryDataObject.value.restRefundDeposit, normalizedPayWay, amount, { absolute: true })
       console.log(`💰 [退款统计] 休息房退款/退押: ${bill.orderNo}, 类型: ${changeType}, 金额: ${amount}, 支付方式: ${normalizedPayWay}`)
     } else {
       // 未知类型，记录警告
@@ -830,7 +861,7 @@ const distributeAmountEvenly = (totalAmount, count) => {
     return []
   }
 
-  const totalCents = Math.round(Number(totalAmount) * 100)
+  const totalCents = Math.round(toDecimal(totalAmount).mul(100).toNumber())
   const sign = totalCents >= 0 ? 1 : -1
   const absTotal = Math.abs(totalCents)
   const baseCents = Math.floor(absTotal / count)
@@ -863,10 +894,11 @@ const saveAggregatedRoomFee = async () => {
     throw new Error('未找到原始房费明细，无法更新')
   }
 
-  const totalAmount = Number(editDialog.value.data.amount)
-  if (Number.isNaN(totalAmount)) {
+  const rawAmount = editDialog.value.data.amount
+  if (Number.isNaN(Number(rawAmount))) {
     throw new Error('请输入有效的金额')
   }
+  const totalAmount = toAmountNumber(rawAmount)
 
   const sortedBills = sortBillsChronologically(sourceBills)
   const distributedAmounts = distributeAmountEvenly(totalAmount, sortedBills.length)
@@ -908,7 +940,7 @@ const saveAggregatedRoomFee = async () => {
   const payWaySet = new Set(updatedBills.map(item => item.pay_way).filter(Boolean))
   const newPayWay = payWaySet.size === 0 ? '其他' : (payWaySet.size === 1 ? Array.from(payWaySet)[0] : '多渠道')
 
-  originalRow.amount = Number(totalAmount)
+  originalRow.amount = totalAmount
   originalRow.changeType = '房费'
   originalRow.payWay = newPayWay
   originalRow.confirmed = false
@@ -921,7 +953,7 @@ const saveAggregatedRoomFee = async () => {
   calculateSummaryData()
 
   return {
-    totalAmount: Number(totalAmount),
+    totalAmount,
     billCount: updatedBills.length
   }
 }

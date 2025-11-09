@@ -511,11 +511,18 @@ const updateCurrentTime = () => {
   })
 }
 
+const formatLocalDate = (date = new Date()) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 // 加载今日统计数据
 const loadTodayStats = async () => {
   try {
-    // 获取今天的日期
-    const today = new Date().toISOString().split('T')[0]
+    // 获取当地时区的当前日期（YYYY-MM-DD）
+    const today = formatLocalDate(new Date())
 
     console.log('📊 [MainContent] 获取今日统计数据:', today)
 

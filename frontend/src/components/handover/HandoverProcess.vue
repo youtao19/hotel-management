@@ -291,6 +291,7 @@
 <script setup>
 import { ref, computed, reactive, watch } from 'vue'
 import { useQuasar } from 'quasar'
+import Decimal from 'decimal.js'
 import { shiftHandoverApi } from '../../api/index.js'
 import { useShiftHandoverStore } from '../../stores/shiftHandoverStore.js'
 import { useUserStore } from '../../stores/userStore.js'
@@ -430,6 +431,50 @@ const pettyCashColumns = [
 const PAY_WAY_KEYS = ['现金', '微信', '微邮付', '其他']
 const DEFAULT_CASH_RESERVE = 320
 
+Decimal.set({
+  precision: 20,
+  rounding: Decimal.ROUND_HALF_UP
+})
+
+const toDecimal = (value) => {
+  if (Decimal.isDecimal(value)) {
+    return value
+  }
+  if (value === undefined || value === null) {
+    return new Decimal(0)
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (trimmed === '') {
+      return new Decimal(0)
+    }
+    const parsed = Number(trimmed)
+    return Number.isNaN(parsed) ? new Decimal(0) : new Decimal(parsed)
+  }
+  if (typeof value === 'number') {
+    return Number.isNaN(value) ? new Decimal(0) : new Decimal(value)
+  }
+  const parsed = Number(value)
+  return Number.isNaN(parsed) ? new Decimal(0) : new Decimal(parsed)
+}
+
+const toAmountNumber = (value, places = 2) =>
+  Number(toDecimal(value).toDecimalPlaces(places, Decimal.ROUND_HALF_UP).toString())
+
+const sumDecimals = (...values) => values.reduce(
+  (acc, val) => acc.plus(toDecimal(val)),
+  new Decimal(0)
+)
+
+const createPaywayBucket = (seed = {}) => {
+  const bucket = {}
+  PAY_WAY_KEYS.forEach(key => {
+    const source = Object.prototype.hasOwnProperty.call(seed, key) ? seed[key] : 0
+    bucket[key] = toAmountNumber(source)
+  })
+  return bucket
+}
+
 const pettyCashRows = ref([
   {
     id: 1,
@@ -442,18 +487,12 @@ const pettyCashRows = ref([
   }
 ])
 
-const DEFAULT_RETAINED_AMOUNTS = {
-  '现金': DEFAULT_CASH_RESERVE,
-  '微信': 0,
-  '微邮付': 0,
-  '其他': 0
-}
+const DEFAULT_RETAINED_AMOUNTS = createPaywayBucket({
+  '现金': DEFAULT_CASH_RESERVE
+})
 
 const createDefaultRetainedBuckets = () => ({
-  '现金': DEFAULT_RETAINED_AMOUNTS['现金'],
-  '微信': DEFAULT_RETAINED_AMOUNTS['微信'],
-  '微邮付': DEFAULT_RETAINED_AMOUNTS['微邮付'],
-  '其他': DEFAULT_RETAINED_AMOUNTS['其他']
+  ...DEFAULT_RETAINED_AMOUNTS
 })
 
 const retainedInitialized = ref(false)
@@ -469,12 +508,12 @@ const specialStatsInitialized = ref(false)
 
 const mapReserveRowToBuckets = () => {
   const reserveCash = pettyCashRows.value[0] || { cash: 0, wechat: 0, weyoufu: 0, other: 0 }
-  return {
-    '现金': Number(reserveCash.cash) || 0,
-    '微信': Number(reserveCash.wechat) || 0,
-    '微邮付': Number(reserveCash.weyoufu) || 0,
-    '其他': Number(reserveCash.other) || 0
-  }
+  return createPaywayBucket({
+    '现金': reserveCash.cash,
+    '微信': reserveCash.wechat,
+    '微邮付': reserveCash.weyoufu,
+    '其他': reserveCash.other
+  })
 }
 
 const initializeRetainedAmounts = () => {
@@ -507,9 +546,10 @@ const confirmationData = computed(() => {
   const reserve = mapReserveRowToBuckets()
 
   // 计算总退押（客房退押 + 休息房退押）- 已包含退押金和退款
-  const totalRefundDeposit = { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
+  const totalRefundDeposit = createPaywayBucket()
   PAY_WAY_KEYS.forEach(key => {
-    totalRefundDeposit[key] = (summaryData.hotelRefundDeposit[key] || 0) + (summaryData.restRefundDeposit[key] || 0)
+    const combinedRefund = toDecimal(summaryData.hotelRefundDeposit[key]).plus(summaryData.restRefundDeposit[key])
+    totalRefundDeposit[key] = toAmountNumber(combinedRefund)
   })
 
   if (!retainedInitialized.value) {
@@ -519,29 +559,29 @@ const confirmationData = computed(() => {
   const currentRetained = { ...retainedAmounts.value }
 
   // 计算合计与交接款
-  const totalAmount = { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
-  const handoverAmount = { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
+  const totalAmount = createPaywayBucket()
+  const handoverAmount = createPaywayBucket()
 
   PAY_WAY_KEYS.forEach(key => {
-    const reserveValue = reserve[key] || 0
-    const hotelIncomeValue = summaryData.hotelIncome[key] || 0
-    const restIncomeValue = summaryData.restIncome[key] || 0
-    const carIncomeValue = 0 // 暂无租车收入数据
+    const reserveValue = toDecimal(reserve[key])
+    const hotelIncomeValue = toDecimal(summaryData.hotelIncome[key])
+    const restIncomeValue = toDecimal(summaryData.restIncome[key])
+    const carIncomeValue = new Decimal(0) // 暂无租车收入数据
 
-    const rowTotal = reserveValue + hotelIncomeValue + restIncomeValue + carIncomeValue
-    const roundedRowTotal = Number(rowTotal.toFixed(2))
-    totalAmount[key] = roundedRowTotal
+    const rowTotalDecimal = reserveValue.plus(hotelIncomeValue).plus(restIncomeValue).plus(carIncomeValue)
+    totalAmount[key] = toAmountNumber(rowTotalDecimal)
 
-    if (currentRetained[key] === undefined || currentRetained[key] === null) {
-      currentRetained[key] = Number(reserveValue.toFixed(2))
+    let retainedValue = currentRetained[key]
+    if (retainedValue === undefined || retainedValue === null || Number.isNaN(retainedValue)) {
+      retainedValue = toAmountNumber(reserveValue)
     } else {
-      const numericRetained = Number(currentRetained[key])
-      currentRetained[key] = Number.isNaN(numericRetained) ? 0 : Number(numericRetained.toFixed(2))
+      retainedValue = toAmountNumber(retainedValue)
     }
+    currentRetained[key] = retainedValue
 
-    const refundTotal = Number((totalRefundDeposit[key] || 0).toFixed(2))
-    const computedHandover = roundedRowTotal - refundTotal - currentRetained[key]
-    handoverAmount[key] = Number(computedHandover.toFixed(2))
+    const refundDecimal = toDecimal(totalRefundDeposit[key])
+    const handoverDecimal = rowTotalDecimal.minus(refundDecimal).minus(toDecimal(retainedValue))
+    handoverAmount[key] = toAmountNumber(handoverDecimal)
   })
 
   const retainedChanged = PAY_WAY_KEYS.some(key => currentRetained[key] !== retainedAmounts.value[key])
@@ -623,17 +663,18 @@ const completeHandoverInfo = computed(() => ({
 // 更新备用金总计
 const updateTotal = () => {
   const row = pettyCashRows.value[0]
-  row.total = (row.cash || 0) + (row.wechat || 0) + (row.weyoufu || 0) + (row.other || 0)
+  const total = sumDecimals(row.cash, row.wechat, row.weyoufu, row.other)
+  row.total = toAmountNumber(total)
 }
 
 const handleRetainedAmountUpdate = ({ payWay, value }) => {
   if (!PAY_WAY_KEYS.includes(payWay)) {
     return
   }
-  const numericValue = Number(value)
+  const numericValue = toAmountNumber(value)
   retainedAmounts.value = {
     ...retainedAmounts.value,
-    [payWay]: Number.isNaN(numericValue) ? 0 : Number(numericValue.toFixed(2))
+    [payWay]: numericValue
   }
 }
 
@@ -650,7 +691,9 @@ const confirmReserveCash = async () => {
   try {
     isConfirmingCash.value = true
 
-    const total = pettyCashRows.value[0].total
+    const row = pettyCashRows.value[0]
+    const total = toAmountNumber(row.total)
+    row.total = total
 
     $q.notify({
       type: 'positive',
@@ -802,7 +845,13 @@ const checkYesterdayRecord = async () => {
 
       if (isComplete && handoverAmounts) {
         // 如果有完整的昨日记录，保存交接款到 store，作为今日备用金
-        const totalReserve = handoverAmounts.cash + handoverAmounts.wechat + handoverAmounts.weyoufu + handoverAmounts.other
+        const totalReserveDecimal = sumDecimals(
+          handoverAmounts.cash,
+          handoverAmounts.wechat,
+          handoverAmounts.weyoufu,
+          handoverAmounts.other
+        )
+        const totalReserve = toAmountNumber(totalReserveDecimal)
         recordCheckResult.value.reserveAmount = totalReserve
 
         shiftHandoverStore.setYesterdayHandoverAmounts(handoverAmounts)
