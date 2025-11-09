@@ -320,8 +320,8 @@
                     <div class="col-12">
                       <div class="total-display">
                         <span class="text-grey-7">住宿总价：</span>
-                        <span class="text-h6 text-primary q-ml-sm">¥{{ totalPrice }}</span>
-                        <span class="text-caption text-grey-6 q-ml-md">平均 ¥{{ Math.round(totalPrice / dateList.length) }}/天</span>
+                        <span class="text-h6 text-primary q-ml-sm">¥{{ totalPrice.toFixed(2) }}</span>
+                        <span class="text-caption text-grey-6 q-ml-md">平均 ¥{{ averageDailyPrice.toFixed(2) }}/天</span>
                       </div>
                     </div>
                   </div>
@@ -369,6 +369,7 @@
 import { ref, onMounted, computed, nextTick, watch } from 'vue'
 import { date, useQuasar } from 'quasar'
 import { useRouter, useRoute } from 'vue-router'
+import Decimal from 'decimal.js'
 import { useOrderStore } from '../stores/orderStore' // 导入订单 store
 import { useRoomStore } from '../stores/roomStore' // 导入房间 store
 import { useViewStore } from '../stores/viewStore' // 导入视图 store
@@ -497,6 +498,39 @@ const orderData = ref({
 const dailyPrices = ref({}) // 存储每日价格 {date: price}
 const totalPriceInput = ref(0) // 总价输入
 
+Decimal.set({
+  precision: 20,
+  rounding: Decimal.ROUND_HALF_UP
+})
+
+function toDecimal(value) {
+  if (Decimal.isDecimal(value)) {
+    return value
+  }
+  if (value === undefined || value === null || value === '') {
+    return new Decimal(0)
+  }
+  try {
+    return new Decimal(value)
+  } catch (error) {
+    return new Decimal(0)
+  }
+}
+
+function toAmountNumber(value) {
+  const decimalValue = Decimal.isDecimal(value) ? value : toDecimal(value)
+  return Number(decimalValue.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toString())
+}
+
+function calculateAdjustedRoomPrice(rawPrice, restRoomFlag = orderData.value.isRestRoom) {
+  const base = toDecimal(rawPrice)
+  if (!base.gt(0)) {
+    return 0
+  }
+  const adjusted = restRoomFlag ? base.div(2) : base
+  return toAmountNumber(adjusted)
+}
+
 // 判断是否为多日订单
 const isMultiDay = computed(() => {
   if (!isValidFullDate(orderData.value.checkInDate) || !isValidFullDate(orderData.value.checkOutDate)) return false;
@@ -540,6 +574,20 @@ const dateList = computed(() => {
   console.log(`🗓️ ${daysDiff === 1 ? '单日' : '多日'}订单，dateList包含${dates.length}天`);
   return dates;
 });
+
+function sumDailyPricesDecimal() {
+  if (!Array.isArray(dateList.value) || dateList.value.length === 0) {
+    return new Decimal(0)
+  }
+
+  return dateList.value.reduce((sum, currentDate) => {
+    const price = dailyPrices.value[currentDate]
+    if (price === undefined || price === null || price === '') {
+      return sum
+    }
+    return sum.plus(toDecimal(price))
+  }, new Decimal(0))
+}
 
 // 首日价格（用于应用到所有天）
 const firstDatePrice = computed(() => {
@@ -691,8 +739,7 @@ watch(() => orderData.value.checkInDate, async () => {
   if (orderData.value.roomNumber) {
     const selectedRoom = findAvailableRoomByNumber(orderData.value.roomNumber);
     if (selectedRoom) {
-      const basePrice = Number(selectedRoom.price);
-      const finalPrice = orderData.value.isRestRoom ? Math.round(basePrice / 2) : basePrice;
+      const finalPrice = calculateAdjustedRoomPrice(selectedRoom.price);
       initializeDailyPrices(finalPrice);
     }
   }
@@ -706,8 +753,7 @@ watch(() => orderData.value.checkOutDate, async () => {
   if (orderData.value.roomNumber) {
     const selectedRoom = findAvailableRoomByNumber(orderData.value.roomNumber);
     if (selectedRoom) {
-      const basePrice = Number(selectedRoom.price);
-      const finalPrice = orderData.value.isRestRoom ? Math.round(basePrice / 2) : basePrice;
+      const finalPrice = calculateAdjustedRoomPrice(selectedRoom.price);
       initializeDailyPrices(finalPrice);
     }
   }
@@ -810,8 +856,7 @@ function applyRoomSelection(room, { resetPricing = true } = {}) {
 
   if (resetPricing) {
     dailyPrices.value = {};
-    const basePrice = Number(room.price || 0);
-    const finalPrice = orderData.value.isRestRoom ? Math.round(basePrice / 2) : basePrice;
+    const finalPrice = calculateAdjustedRoomPrice(room.price || 0);
     if (finalPrice > 0) {
       initializeDailyPrices(finalPrice);
     } else {
@@ -961,37 +1006,53 @@ function formatDateLabel(dateStr) {
  * 分配总价到每日价格
  */
 function distributeTotalPrice() {
-  if (!totalPriceInput.value || totalPriceInput.value <= 0) return;
   if (dateList.value.length === 0) return;
+  const total = toDecimal(totalPriceInput.value);
+  if (!total.gt(0)) return;
 
-  const avgPrice = Math.round(totalPriceInput.value / dateList.value.length);
+  const days = dateList.value.length;
+  const totalCents = total.mul(100).toDecimalPlaces(0, Decimal.ROUND_HALF_UP);
+  const baseCents = totalCents.div(days).floor();
+  let remainder = totalCents.minus(baseCents.mul(days));
+
   dateList.value.forEach(date => {
-    dailyPrices.value[date] = avgPrice;
+    let cents = baseCents;
+    if (remainder.gt(0)) {
+      cents = cents.plus(1);
+      remainder = remainder.minus(1);
+    }
+    dailyPrices.value[date] = cents.div(100).toNumber();
   });
+  updateTotalFromDaily();
 }
 
 /**
  * 从每日价格更新总价输入框
  */
 function updateTotalFromDaily() {
-  totalPriceInput.value = totalPrice.value;
+  if (!dateList.value.length) {
+    totalPriceInput.value = 0;
+    return;
+  }
+  const sumDecimal = sumDailyPricesDecimal();
+  totalPriceInput.value = toAmountNumber(sumDecimal);
 }
 
 /**
  * 应用首日价格到所有天
  */
 function applyFirstDayPriceToAll() {
-  const firstPrice = firstDatePrice.value;
-  if (!(firstPrice > 0)) {
+  const firstPriceDecimal = toDecimal(firstDatePrice.value);
+  if (!firstPriceDecimal.gt(0)) {
     $q.notify({ type: 'warning', message: '首日价格未设置或无效', position: 'top' });
     return;
   }
-  dateList.value.forEach(d => { dailyPrices.value[d] = firstPrice; });
-  // 更新总价输入框
-  totalPriceInput.value = totalPrice.value;
+  const normalized = toAmountNumber(firstPriceDecimal);
+  dateList.value.forEach(d => { dailyPrices.value[d] = normalized; });
+  updateTotalFromDaily();
   $q.notify({
     type: 'positive',
-    message: `已将首日价格 ¥${firstPrice} 应用到所有 ${dateList.value.length} 天`,
+    message: `已将首日价格 ¥${firstPriceDecimal.toFixed(2)} 应用到所有 ${dateList.value.length} 天`,
     position: 'top',
     icon: 'content_copy'
   });
@@ -1003,15 +1064,21 @@ function applyFirstDayPriceToAll() {
  * @param {number} basePrice - 基础价格
  */
 function initializeDailyPrices(basePrice) {
-  if (basePrice > 0 && dateList.value.length > 0) {
-    dateList.value.forEach(date => {
-      if (!dailyPrices.value[date]) {
-        dailyPrices.value[date] = basePrice
-      }
-    })
-    // 更新总价输入框
-    totalPriceInput.value = totalPrice.value;
+  if (dateList.value.length === 0) {
+    totalPriceInput.value = 0;
+    return;
   }
+  const normalized = toAmountNumber(basePrice);
+  if (!(normalized > 0)) {
+    totalPriceInput.value = 0;
+    return;
+  }
+  dateList.value.forEach(date => {
+    if (!dailyPrices.value[date]) {
+      dailyPrices.value[date] = normalized;
+    }
+  });
+  updateTotalFromDaily();
 }
 
 /**
@@ -1135,9 +1202,9 @@ async function submitOrder() {
   console.log(`📅 ${dateList.value.length === 1 ? '单日' : '多日'}订单价格数据：`, roomPriceData);
 
   if (orderData.value.isPrepaid) {
-    const totalPriceValue = Number(totalPrice.value) || 0;
-    const prepaidAmount = Number(orderData.value.prepaidAmount) || 0;
-    if (!(prepaidAmount > 0)) {
+    const totalPriceValue = toDecimal(totalPrice.value);
+    const prepaidAmount = toDecimal(orderData.value.prepaidAmount);
+    if (!prepaidAmount.gt(0)) {
       $q.notify({
         type: 'negative',
         message: '请输入有效的预收房费金额',
@@ -1145,7 +1212,7 @@ async function submitOrder() {
       });
       return;
     }
-    if (totalPriceValue > 0 && prepaidAmount - totalPriceValue > 0.01) {
+    if (totalPriceValue.gt(0) && prepaidAmount.minus(totalPriceValue).gt(0.01)) {
       $q.notify({
         type: 'negative',
         message: '预收房费金额不能超过房费总额',
@@ -1350,21 +1417,28 @@ const isRestRoom = computed(() => orderData.value.checkInDate === orderData.valu
 watch(dateList, (newList) => {
   const set = new Set(newList);
   Object.keys(dailyPrices.value).forEach(k => { if (!set.has(k)) delete dailyPrices.value[k]; });
+  updateTotalFromDaily();
 });
 
 
 
 // 计算属性：总价格（统一从 dailyPrices 计算）
 const totalPrice = computed(() => {
-  return dateList.value.reduce((sum, date) => {
-    return sum + (dailyPrices.value[date] || 0)
-  }, 0)
+  const totalDecimal = sumDailyPricesDecimal();
+  return Number(totalDecimal.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toString());
+});
+
+const averageDailyPrice = computed(() => {
+  const days = dateList.value.length;
+  if (!days) return 0;
+  const avgDecimal = toDecimal(totalPrice.value).div(days);
+  return Number(avgDecimal.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toString());
 });
 
 watch(() => orderData.value.isPrepaid, (now) => {
   if (now) {
-    const total = Number(totalPrice.value) || 0;
-    orderData.value.prepaidAmount = total > 0 ? Number(total.toFixed(2)) : 0;
+    const total = toDecimal(totalPrice.value);
+    orderData.value.prepaidAmount = total.gt(0) ? toAmountNumber(total) : 0;
   } else {
     orderData.value.prepaidAmount = 0;
   }
@@ -1372,8 +1446,8 @@ watch(() => orderData.value.isPrepaid, (now) => {
 
 watch(totalPrice, (val) => {
   if (!orderData.value.isPrepaid) return;
-  const total = Number(val) || 0;
-  orderData.value.prepaidAmount = total > 0 ? Number(total.toFixed(2)) : 0;
+  const total = toDecimal(val);
+  orderData.value.prepaidAmount = total.gt(0) ? toAmountNumber(total) : 0;
 });
 
 // 监听休息房状态变化，自动处理价格和备注

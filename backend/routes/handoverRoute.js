@@ -143,6 +143,11 @@ const validateDateRangeQuery = ajv.compile(dateRangeQuerySchema);
 const validateSaveAdminMemo = ajv.compile(saveAdminMemoSchema);
 const validateCompleteHandover = ajv.compile(completeHandoverSchema);
 
+/**
+ * 清洗查询参数，去掉字符串值首尾空格
+ * @param {Record<string, unknown>} query 原始查询对象（默认空对象）
+ * @returns {Record<string, unknown>} 去除空格后的新对象
+ */
 const sanitizeQuery = (query = {}) => {
   return Object.keys(query).reduce((acc, key) => {
     const value = query[key];
@@ -241,7 +246,6 @@ router.get('/remarks', async (req, res) => {
 
 // 获取交接班页面特殊统计（开房数、休息房数、好评邀/得）
 router.get('/special-stats', async (req, res) => {
-
   try {
     const queryData = sanitizeQuery(req.query);
     const isValid = validateRequiredDateQuery(queryData);
@@ -254,7 +258,37 @@ router.get('/special-stats', async (req, res) => {
       });
     }
     const { date } = queryData;
-    const data = await getShiftSpecialStats(date);
+
+    const roomSql = `
+      SELECT
+        COUNT(*) FILTER (WHERE stay_type = '客房')   AS open_count,
+        COUNT(*) FILTER (WHERE stay_type = '休息房') AS rest_count
+      FROM orders
+      WHERE check_in_date <= $1::date
+        AND check_out_date > $1::date
+        AND stay_type IN ('客房', '休息房');
+      `;
+
+    const roomResult = await db.query(roomSql, [date]);
+
+    // 统计好评邀请/得到数量 - 使用正确的字段名
+    const reviewSql = `
+      SELECT
+        COUNT(*) AS invited,
+        COUNT(*) FILTER (WHERE positive_review = true) AS positive
+      FROM review_invitations
+      WHERE invite_time::date = $1::date
+    `;
+
+    const reviewResult = await db.query(reviewSql, [date]);
+
+    const data = {
+      openCount: parseInt(roomResult.rows[0].open_count) || 0,
+      restCount: parseInt(roomResult.rows[0].rest_count) || 0,
+      invited: parseInt(reviewResult.rows[0].invited) || 0,
+      positive: parseInt(reviewResult.rows[0].positive) || 0
+    };
+
     res.json({ success: true, data });
   } catch (error) {
     console.error('获取交接班特殊统计失败:', error);

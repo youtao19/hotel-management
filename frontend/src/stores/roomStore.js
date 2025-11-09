@@ -916,9 +916,6 @@ export const useRoomStore = defineStore('room', () => {
       })
   }
 
-  // 不再自动初始化，由组件控制初始化时机
-  // initialize()
-
 
 
   return {
