@@ -345,6 +345,8 @@ const savedSpecialStats = ref({
   positive: 0
 })
 
+const selectedHandoverDate = ref(null)
+
 // 步骤相关数据
 const formatDateTimeLocal = (date) => {
   const pad = (value) => String(value).padStart(2, '0')
@@ -1046,6 +1048,7 @@ const nextStep = async () => {
 
       // 调用后端API获取特殊统计数据
       const selectedDateFromStep3 = resolveSelectedDateFromCheckData()
+      selectedHandoverDate.value = selectedDateFromStep3 || null
       await fetchSpecialStatsData(selectedDateFromStep3)
 
       if (!retainedInitialized.value) {
@@ -1102,28 +1105,30 @@ const completeHandover = async () => {
     })
 
     // 准备交接班数据
-    // 交接班业务逻辑：保存的是"要交接的营业日"的日期
     const now = new Date()
     const currentHour = now.getHours()
 
-    // 计算当前营业日
-    let currentBusinessDate = new Date(now)
-    if (currentHour < 8) {
-      // 还没到8点，还在昨天营业日的时间范围内
-      currentBusinessDate.setDate(currentBusinessDate.getDate() - 1)
+    let handoverDateStr = selectedHandoverDate.value
+    let handoverDateSource = 'step3-selected'
+
+    if (!handoverDateStr) {
+      handoverDateSource = 'auto-business-day'
+      let currentBusinessDate = new Date(now)
+      if (currentHour < 8) {
+        currentBusinessDate.setDate(currentBusinessDate.getDate() - 1)
+      }
+
+      let handoverBusinessDate = new Date(currentBusinessDate)
+      handoverBusinessDate.setDate(handoverBusinessDate.getDate() - 1)
+      handoverDateStr = formatLocalDate(handoverBusinessDate)
     }
 
-    // 计算要交接的营业日（当前营业日的前一天）
-    let handoverBusinessDate = new Date(currentBusinessDate)
-    handoverBusinessDate.setDate(handoverBusinessDate.getDate() - 1)
-    const handoverDateStr = formatLocalDate(handoverBusinessDate)
-
-    console.log('📤 [完成交接] 日期计算:', {
+    console.log('📤 [完成交接] 日期来源:', {
       currentTime: now.toLocaleString('zh-CN'),
       currentHour,
-      currentBusinessDate: formatLocalDate(currentBusinessDate),
-      handoverBusinessDate: handoverDateStr,
-      logic: '保存"要交接的营业日"的日期'
+      handoverDate: handoverDateStr,
+      handoverDateSource,
+      selectedDateFromStep3: selectedHandoverDate.value
     })
 
     // 转换字段名：前端使用 hotelRefundDeposit/restRefundDeposit，后端使用 hotelDeposit/restDeposit
