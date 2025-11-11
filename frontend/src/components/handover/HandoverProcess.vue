@@ -932,8 +932,8 @@ const nextStep = async () => {
         const amounts = shiftHandoverStore.yesterdayHandoverAmounts
         pettyCashRows.value[0].cash = DEFAULT_CASH_RESERVE
         pettyCashRows.value[0].wechat = amounts.wechat || 0
-        pettyCashRows.value[0].weyoufu = amounts.weyoufu || 0
-        pettyCashRows.value[0].other = amounts.other || 0
+        pettyCashRows.value[0].weyoufu = 0
+        pettyCashRows.value[0].other = 0
         updateTotal()
 
         console.log('✅ [步骤1→2] 自动填入昨日交接款作为备用金（现金使用默认）:', {

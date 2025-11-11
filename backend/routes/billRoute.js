@@ -110,6 +110,7 @@ router.get('/by-date/:date', async (req, res) => {
       FROM bills b
       LEFT JOIN orders o ON b.order_id = o.order_id
       WHERE DATE(b.create_time) = $1::date
+        AND COALESCE(b.pay_way, '') <> '平台'
       ORDER BY o.stay_type, b.order_id, b.bill_id ASC
     `;
 
