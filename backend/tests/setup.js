@@ -30,17 +30,17 @@ afterAll(async () => {
     // 先禁用外键约束
     await db.query('SET session_replication_role = replica;');
 
-    // 删除所有测试表
+    // 清空所有测试表数据
     for (const table of tables) {
-      await db.query(`DROP TABLE IF EXISTS ${table} CASCADE;`);
+      await db.query(`TRUNCATE TABLE ${table} RESTART IDENTITY CASCADE;`);
     }
 
     // 恢复外键约束
     await db.query('SET session_replication_role = DEFAULT;');
 
-    console.log('✅ 所有测试表已删除');
+    console.log('✅ 所有测试表已清空');
   } catch (err) {
-    console.error('❌ 删除测试表时出错:', err);
+    console.error('❌ 清空测试表时出错:', err);
   } finally {
     // 关闭数据库连接
     await db.closePool();

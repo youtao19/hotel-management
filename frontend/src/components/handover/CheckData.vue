@@ -333,6 +333,8 @@ const toAmountNumber = (value, places = 2) =>
 
 const normalizePayWay = (payWay) => (PAY_WAY_KEYS.includes(payWay) ? payWay : '其他')
 
+
+// 创建四种支付方式汇总对象
 const createPaywayBucket = (seed = {}) => {
   const bucket = {}
   PAY_WAY_KEYS.forEach(key => {
@@ -342,6 +344,7 @@ const createPaywayBucket = (seed = {}) => {
   return bucket
 }
 
+// 创建表格数据汇总对象
 const createSummaryBuckets = () => ({
   hotelIncome: createPaywayBucket(),
   restIncome: createPaywayBucket(),
@@ -349,6 +352,13 @@ const createSummaryBuckets = () => ({
   restRefundDeposit: createPaywayBucket()
 })
 
+/**
+ * 增加汇总对象中指定支付方式的金额
+ * @param bucket 汇总对象
+ * @param payWay 支付方式
+ * @param amount 金额
+ * @param param3 选项对象，absolute 表示是否取绝对值
+ */
 const incrementBucket = (bucket, payWay, amount, { absolute = false } = {}) => {
   if (!bucket) {
     return
@@ -356,19 +366,16 @@ const incrementBucket = (bucket, payWay, amount, { absolute = false } = {}) => {
   const key = normalizePayWay(payWay)
   const delta = absolute ? toDecimal(amount).abs() : toDecimal(amount)
   const updated = toDecimal(bucket[key]).plus(delta)
-  bucket[key] = toAmountNumber(updated)
-}
+    bucket[key] = toAmountNumber(updated)
+  }
 
 // 账单类型选项
 const changeTypeOptions = [
   '房费',
   '收押',
-  '押金',
   '补收',
   '退押',
-  '退押金',
   '退款',
-  '订单账单'
 ]
 
 const REFUND_CHANGE_TYPES = ['退押', '退押金', '退款']
@@ -482,10 +489,12 @@ const editDialog = ref({
 // 汇总数据对象（按支付方式统计）
 const summaryDataObject = ref(createSummaryBuckets())
 
+// 对账单数据进行汇总统计
 const summarizeRoomData = (rows = []) => {
   const totalDecimal = rows.reduce((sum, item) => sum.plus(toDecimal(item.amount || 0)), new Decimal(0))
   const byTypeDecimal = {}
 
+  // 按账单类型汇总
   rows.forEach(bill => {
     const type = bill.changeType || '未知'
     const amountDecimal = toDecimal(bill.amount || 0)
@@ -496,6 +505,7 @@ const summarizeRoomData = (rows = []) => {
     }
   })
 
+  // 转换为普通数字
   const byType = {}
   Object.keys(byTypeDecimal).forEach(key => {
     byType[key] = toAmountNumber(byTypeDecimal[key])
@@ -541,7 +551,13 @@ const isRestBulkConfirmDisabled = computed(() => {
   return restData.length === 0 || restData.every(item => item.confirmed)
 })
 
-// 方法
+
+/**
+ * 将单个账单对象映射为表格行数据
+ * @param {Object} bill - 账单对象
+ * @param {Object} overrides - 可选的覆盖字段
+ * @return {Object} - 映射后的表格行数据
+ */
 const mapBillToRow = (bill, overrides = {}) => {
   const normalizedAmount = overrides.amount !== undefined ? overrides.amount : (parseFloat(bill.change_price) || 0)
   const changeType = overrides.changeType || bill.change_type
@@ -599,6 +615,7 @@ const matchesTargetDate = (bill, targetDate) => {
   return extractDatePart(bill.stay_date) === targetDate
 }
 
+// 构建表格行数据，汇总同一订单的房费账单
 const buildTableRows = (bills = [], targetDate) => {
   if (!Array.isArray(bills)) {
     return []
@@ -856,6 +873,7 @@ const getBillSortKey = (bill = {}) => {
 
 const sortBillsChronologically = (bills = []) => bills.slice().sort((a, b) => getBillSortKey(a) - getBillSortKey(b))
 
+// 平均分配总金额到指定份数，处理四舍五入问题
 const distributeAmountEvenly = (totalAmount, count) => {
   if (count <= 0) {
     return []
@@ -880,6 +898,8 @@ const distributeAmountEvenly = (totalAmount, count) => {
   return result
 }
 
+
+// 在用户修改“汇总房费”后，将修改的总金额平均分配到每一天的原始房费账单中，并同步更新数据库与前端表格数据
 const saveAggregatedRoomFee = async () => {
   const originalRow = editDialog.value.originalData
   if (!originalRow) {

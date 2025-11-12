@@ -163,7 +163,6 @@ const sanitizeQuery = (query = {}) => {
 const {
   getShiftTable,
   getRemarks,
-  getShiftSpecialStats,
   getHandoverTableData,
   saveAdminMemoToHandover,
   getAdminMemosFromHandover,
