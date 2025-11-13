@@ -29,7 +29,7 @@ GET /api/handover/check-yesterday?date=2025-10-07
     "handoverAmounts": {
       "cash": 1500,
       "wechat": 2100,
-      "weyoufu": 900,
+      "weiyoufu": 900,
       "other": 350
     }
   },
@@ -52,7 +52,7 @@ GET /api/handover/check-yesterday?date=2025-10-07
     "handoverAmounts": {
       "cash": 0,
       "wechat": 0,
-      "weyoufu": 0,
+      "weiyoufu": 0,
       "other": 0
     }
   },
@@ -75,7 +75,7 @@ GET /api/handover/check-yesterday?date=2025-10-07
     "handoverAmounts": {
       "cash": 0,
       "wechat": 0,
-      "weyoufu": 0,
+      "weiyoufu": 0,
       "other": 0
     }
   },

@@ -12,7 +12,7 @@ export const useShiftHandoverStore = defineStore("shiftHandover", () => {
   let yesterdayHandoverAmounts = ref({
     cash: 0,
     wechat: 0,
-    weyoufu: 0,
+    weiyoufu: 0,
     other: 0
   })
 
@@ -75,7 +75,7 @@ export const useShiftHandoverStore = defineStore("shiftHandover", () => {
     yesterdayHandoverAmounts.value = {
       cash: amounts.cash || 0,
       wechat: amounts.wechat || 0,
-      weyoufu: amounts.weyoufu || 0,
+      weiyoufu: amounts.weiyoufu || 0,
       other: amounts.other || 0
     }
   }
@@ -85,7 +85,7 @@ export const useShiftHandoverStore = defineStore("shiftHandover", () => {
     yesterdayHandoverAmounts.value = {
       cash: 0,
       wechat: 0,
-      weyoufu: 0,
+      weiyoufu: 0,
       other: 0
     }
   }

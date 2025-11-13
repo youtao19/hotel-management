@@ -32,7 +32,7 @@ afterAll(async () => {
 
     // 清空所有测试表数据
     for (const table of tables) {
-      await db.query(`TRUNCATE TABLE ${table} RESTART IDENTITY CASCADE;`);
+      await db.query(`DROP TABLE IF EXISTS ${table} CASCADE;`);
     }
 
     // 恢复外键约束

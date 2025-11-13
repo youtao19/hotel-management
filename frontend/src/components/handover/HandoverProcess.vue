@@ -108,10 +108,10 @@
                   />
                 </q-td>
               </template>
-              <template v-slot:body-cell-weyoufu="props">
+              <template v-slot:body-cell-weiyoufu="props">
                 <q-td :props="props" class="input-cell">
                   <q-input
-                    v-model.number="props.row.weyoufu"
+                    v-model.number="props.row.weiyoufu"
                     type="number"
                     dense
                     borderless
@@ -408,9 +408,9 @@ const pettyCashColumns = [
     headerStyle: 'font-weight: bold;'
   },
   {
-    name: 'weyoufu',
+    name: 'weiyoufu',
     label: '微邮付',
-    field: 'weyoufu',
+    field: 'weiyoufu',
     align: 'center',
     headerStyle: 'font-weight: bold;'
   },
@@ -483,7 +483,7 @@ const pettyCashRows = ref([
     label: '备用金',
     cash: DEFAULT_CASH_RESERVE,
     wechat: 0,
-    weyoufu: 0,
+    weiyoufu: 0,
     other: 0,
     total: DEFAULT_CASH_RESERVE
   }
@@ -509,11 +509,11 @@ const specialStatsState = reactive({
 const specialStatsInitialized = ref(false)
 
 const mapReserveRowToBuckets = () => {
-  const reserveCash = pettyCashRows.value[0] || { cash: 0, wechat: 0, weyoufu: 0, other: 0 }
+  const reserveCash = pettyCashRows.value[0] || { cash: 0, wechat: 0, weiyoufu: 0, other: 0 }
   return createPaywayBucket({
     '现金': reserveCash.cash,
     '微信': reserveCash.wechat,
-    '微邮付': reserveCash.weyoufu,
+    '微邮付': reserveCash.weiyoufu,
     '其他': reserveCash.other
   })
 }
@@ -667,7 +667,7 @@ const completeHandoverInfo = computed(() => ({
 // 更新备用金总计
 const updateTotal = () => {
   const row = pettyCashRows.value[0]
-  const total = sumDecimals(row.cash, row.wechat, row.weyoufu, row.other)
+  const total = sumDecimals(row.cash, row.wechat, row.weiyoufu, row.other)
   row.total = toAmountNumber(total)
 }
 
@@ -861,7 +861,7 @@ const checkYesterdayRecord = async () => {
         const totalReserveDecimal = sumDecimals(
           handoverAmounts.cash,
           handoverAmounts.wechat,
-          handoverAmounts.weyoufu,
+          handoverAmounts.weiyoufu,
           handoverAmounts.other
         )
         const totalReserve = toAmountNumber(totalReserveDecimal)
@@ -932,7 +932,7 @@ const nextStep = async () => {
         const amounts = shiftHandoverStore.yesterdayHandoverAmounts
         pettyCashRows.value[0].cash = DEFAULT_CASH_RESERVE
         pettyCashRows.value[0].wechat = amounts.wechat || 0
-        pettyCashRows.value[0].weyoufu = 0
+        pettyCashRows.value[0].weiyoufu = 0
         pettyCashRows.value[0].other = 0
         updateTotal()
 
@@ -951,7 +951,7 @@ const nextStep = async () => {
         // 如果没有昨日记录，使用默认备用金（现金 320）并清空其他支付方式
         pettyCashRows.value[0].cash = DEFAULT_CASH_RESERVE
         pettyCashRows.value[0].wechat = 0
-        pettyCashRows.value[0].weyoufu = 0
+        pettyCashRows.value[0].weiyoufu = 0
         pettyCashRows.value[0].other = 0
         updateTotal()
 

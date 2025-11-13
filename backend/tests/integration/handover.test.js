@@ -7,6 +7,7 @@ const { query } = require('../../database/postgreDB/pg');
 
 // Helpers mirroring the CheckData.vue data preparation flow
 const PAY_WAY_KEYS = ['现金', '微信', '微邮付', '其他'];
+const DEFAULT_RESERVE_CASH = 320;
 const INCOME_CHANGE_TYPES = ['房费', '收押', '押金', '补收', '订单账单'];
 const REFUND_CHANGE_TYPES = ['退押', '退押金', '退款'];
 
@@ -270,6 +271,65 @@ const calculateSummaryData = (hotelRows = [], restRows = []) => {
   return summaryData;
 };
 
+const cloneBucket = (bucket = {}) => createPaywayBucket(bucket);
+
+const addBuckets = (...buckets) => {
+  const result = createPaywayBucket();
+  buckets.filter(Boolean).forEach(bucket => {
+    PAY_WAY_KEYS.forEach(key => {
+      const current = toDecimal(result[key]);
+      const addition = toDecimal(bucket?.[key] || 0);
+      result[key] = toAmountNumber(current.plus(addition));
+    });
+  });
+  return result;
+};
+
+// 构建交接班支付数据
+const buildPaymentDataPayload = (summaryDataObject = {}, options = {}) => {
+  const reserve = cloneBucket(options.reserveBucket || { '现金': DEFAULT_RESERVE_CASH });
+  const hotelIncome = cloneBucket(summaryDataObject.hotelIncome);
+  const restIncome = cloneBucket(summaryDataObject.restIncome);
+  const carRentIncome = cloneBucket(options.carRentBucket);
+  const hotelDeposit = cloneBucket(summaryDataObject.hotelRefundDeposit);
+  const restDeposit = cloneBucket(summaryDataObject.restRefundDeposit);
+  const totalIncome = addBuckets(reserve, hotelIncome, restIncome, carRentIncome);
+  const totalRefundDeposit = addBuckets(hotelDeposit, restDeposit);
+  const retainedAmount = createPaywayBucket();
+  const handoverAmount = createPaywayBucket();
+
+  PAY_WAY_KEYS.forEach(key => {
+    const total = toDecimal(totalIncome[key]);
+    const refund = toDecimal(totalRefundDeposit[key]);
+    const retained = toDecimal(retainedAmount[key]);
+    handoverAmount[key] = toAmountNumber(total.minus(refund).minus(retained));
+  });
+
+
+  // 金额计算
+  PAY_WAY_KEYS.forEach(key => {
+    totalIncome[key] = reserve[key] + hotelIncome[key] + restIncome[key] + (carRentIncome ? carRentIncome[key] : 0);
+    if(key === '现金') {
+      retainedAmount[key] = 320;
+    }
+    handoverAmount[key] = totalIncome[key] - totalRefundDeposit[key] - retainedAmount[key];
+  });
+
+
+  return {
+    reserve,
+    hotelIncome,
+    restIncome,
+    carRentIncome,
+    totalIncome,
+    hotelDeposit,
+    restDeposit,
+    totalRefundDeposit,
+    retainedAmount,
+    handoverAmount
+  };
+};
+
 
 // 构建前端模拟表格模型
 const buildFrontEndTableModel = ({ date, hotelRows, restRows, summaryData }) => ({
@@ -284,6 +344,7 @@ const buildFrontEndTableModel = ({ date, hotelRows, restRows, summaryData }) => 
   },
   summaryDataObject: summaryData
 });
+
 
 describe('交接班接口集成测试', () => {
   beforeAll(async () => {
@@ -352,7 +413,7 @@ describe('交接班接口集成测试', () => {
     expect(checkYesterdayRes.body.data.handoverAmounts).toEqual({
       cash: 0,
       wechat: 0,
-      weyoufu: 0,
+      weiyoufu: 0,
       other: 0
     });
 
@@ -365,12 +426,7 @@ describe('交接班接口集成测试', () => {
 
     // 模拟确认账单
     const hotelRows = buildTableRows(hotelBills, targetDate);
-
-    console.log('Hotel Rows:', hotelRows);
-
     const restRows = buildTableRows(restBills, targetDate);
-
-    console.log('Rest Rows:', restRows);
 
     // 全部标记为已确认
     hotelRows.forEach(row => {
@@ -419,6 +475,27 @@ describe('交接班接口集成测试', () => {
       '微邮付': 0,
       '其他': 0
     });
+
+    // 完成交接班
+    const paymentDataPayload = buildPaymentDataPayload(summaryDataObject, {
+      reserveBucket: { '微信': 2336.5 , '现金': 320 },
+    });
+
+    const completeHandoverRes = await request(app)
+      .post('/api/handover/complete')
+      .send({
+        date: targetDate,
+        handoverPerson: 'youtao',
+        receivePerson: 'peach',
+        paymentData: paymentDataPayload,
+        vipCard: 6,
+        taskList: [],
+        notes: "第一天交接班完成"
+      });
+
+
+    expect(completeHandoverRes.body.success).toBe(true);
+    expect(completeHandoverRes.body.data.recordCount).toBe(4);
   });
 
   test('测试 11-03 交接班数据', async () => {
@@ -432,11 +509,15 @@ describe('交接班接口集成测试', () => {
     expect(checkYesterdayRes.body).toHaveProperty('success', true);
     expect(checkYesterdayRes.body.message).toBe('已完成交接');
     expect(checkYesterdayRes.body.data.handoverAmounts).toEqual({
-      cash: 400,
-      wechat: 139,
-      weyoufu: 984,
-      other: 0
+      'cash': 400,
+      'wechat': 2197.5,
+      'weiyoufu': 1144,
+      'other': 0
     });
+
+    const reserve = checkYesterdayRes.body.data.handoverAmounts;
+    reserve['现金'] = 320; // 固定留存现金
+    reserve['微信'] = 2197.5;
 
     const billsRes = await request(app)
       .get(`/api/bills/by-date/${targetDate}`);
@@ -470,9 +551,9 @@ describe('交接班接口集成测试', () => {
     expect(tableModel.rest.rows.every(row => row.confirmed)).toBe(true);
     // 客房收入
     expect(tableModel.summaryDataObject.hotelIncome).toEqual({
-      '现金': 200,
+      '现金': 100,
       '微信': 0,
-      '微邮付': 492,
+      '微邮付': 1434,
       '其他': 0
     });
     // 休息房收入
@@ -484,8 +565,8 @@ describe('交接班接口集成测试', () => {
     });
     // 客房退押
     expect(tableModel.summaryDataObject.hotelRefundDeposit).toEqual({
-      '现金': 0,
-      '微信': 69.5,
+      '现金': 95,
+      '微信': 20,
       '微邮付': 0,
       '其他': 0
     });
@@ -496,6 +577,607 @@ describe('交接班接口集成测试', () => {
       '微邮付': 0,
       '其他': 0
     });
+
+    // 完成交接班
+    const paymentDataPayload = buildPaymentDataPayload(summaryDataObject,{
+      reserveBucket: reserve
+    });
+
+    const completeHandoverRes = await request(app)
+      .post('/api/handover/complete')
+      .send({
+        date: targetDate,
+        handoverPerson: 'youtao',
+        receivePerson: 'peach',
+        paymentData: paymentDataPayload,
+        vipCard: 6,
+        taskList: [],
+        notes: "第二天交接班完成"
+      });
+
+    expect(completeHandoverRes.body).toHaveProperty('success', true);
+    expect(completeHandoverRes.body.data.recordCount).toBe(4);
+  });
+
+  test('测试 11-04 交接班数据', async () => {
+    const targetDate = '2025-11-04';
+
+    // 第三天有交接班数据
+    const checkYesterdayRes = await request(app)
+      .get('/api/handover/check-yesterday')
+      .query({ date: '2025-11-03' });
+
+    expect(checkYesterdayRes.body).toHaveProperty('success', true);
+    expect(checkYesterdayRes.body.message).toBe('已完成交接');
+    expect(checkYesterdayRes.body.data.handoverAmounts).toEqual({
+      'cash': 5,
+      'wechat': 2177.5,
+      'weiyoufu': 1514,
+      'other': 0
+    });
+
+    const reserve = checkYesterdayRes.body.data.handoverAmounts;
+    reserve['现金'] = 320; // 固定留存现金
+    reserve['微信'] = 2177.5;
+
+    const billsRes = await request(app)
+      .get(`/api/bills/by-date/${targetDate}`);
+
+    expect(billsRes.body).toHaveProperty('success', true);
+
+    const { hotelBills = [], restBills = [] } = billsRes.body.data || {};
+
+    // 模拟确认账单
+    const hotelRows = buildTableRows(hotelBills, targetDate);
+    const restRows = buildTableRows(restBills, targetDate);
+
+    // 全部标记为已确认
+    hotelRows.forEach(row => {
+      row.confirmed = true;
+    });
+    restRows.forEach(row => {
+      row.confirmed = true;
+    });
+    const summaryDataObject = calculateSummaryData(hotelRows, restRows);
+    const tableModel = buildFrontEndTableModel({
+      date: targetDate,
+      hotelRows,
+      restRows,
+      summaryData: summaryDataObject
+    });
+    expect(tableModel.hotel.rows.length).toBeGreaterThan(0);
+    expect(tableModel.rest.rows.length).toBeGreaterThan(0);
+    expect(tableModel.hotel.rows.some(row => row.isAggregatedRoomFee)).toBe(true);
+    expect(tableModel.hotel.rows.every(row => row.confirmed)).toBe(true);
+    expect(tableModel.rest.rows.every(row => row.confirmed)).toBe(true);
+    // 客房收入
+    expect(tableModel.summaryDataObject.hotelIncome).toEqual({
+      '现金': 0,
+      '微信': 170,
+      '微邮付': 924,
+      '其他': 0
+    });
+    // 休息房收入
+    expect(tableModel.summaryDataObject.restIncome).toEqual({
+      '现金': 100,
+      '微信': 0,
+      '微邮付': 0,
+      '其他': 0
+    });
+    // 客房退押
+    expect(tableModel.summaryDataObject.hotelRefundDeposit).toEqual({
+      '现金': 0,
+      '微信': 0,
+      '微邮付': 0,
+      '其他': 0
+    });
+    // 休息退押
+    expect(tableModel.summaryDataObject.restRefundDeposit).toEqual({
+      '现金': 20,
+      '微信': 0,
+      '微邮付': 0,
+      '其他': 0
+    });
+
+    // 完成交接班
+    const paymentDataPayload = buildPaymentDataPayload(summaryDataObject,{
+      reserveBucket: reserve
+    });
+
+    const completeHandoverRes = await request(app)
+      .post('/api/handover/complete')
+      .send({
+        date: targetDate,
+        handoverPerson: 'youtao',
+        receivePerson: 'peach',
+        paymentData: paymentDataPayload,
+        vipCard: 6,
+        taskList: [],
+        notes: "第三天交接班完成"
+      });
+
+    expect(completeHandoverRes.body).toHaveProperty('success', true);
+    expect(completeHandoverRes.body.data.recordCount).toBe(4);
+  });
+
+  test('测试 11-05 交接班数据', async () => {
+    const targetDate = '2025-11-05';
+
+    // 第四天有交接班数据
+    const checkYesterdayRes = await request(app)
+      .get('/api/handover/check-yesterday')
+      .query({ date: '2025-11-04' });
+
+    expect(checkYesterdayRes.body).toHaveProperty('success', true);
+    expect(checkYesterdayRes.body.message).toBe('已完成交接');
+    expect(checkYesterdayRes.body.data.handoverAmounts).toEqual({
+      'cash': 80,
+      'wechat': 2347.5,
+      'weiyoufu': 924,
+      'other': 0
+    });
+
+    const reserve = checkYesterdayRes.body.data.handoverAmounts;
+    reserve['现金'] = 320; // 固定留存现金
+    reserve['微信'] = 2347.5;
+
+    const billsRes = await request(app)
+      .get(`/api/bills/by-date/${targetDate}`);
+
+    expect(billsRes.body).toHaveProperty('success', true);
+    const { hotelBills = [], restBills = [] } = billsRes.body.data || {};
+    // 模拟确认账单
+    const hotelRows = buildTableRows(hotelBills, targetDate);
+    const restRows = buildTableRows(restBills, targetDate);
+
+    // 全部标记为已确认
+    hotelRows.forEach(row => {
+      row.confirmed = true;
+    });
+    restRows.forEach(row => {
+      row.confirmed = true;
+    });
+    const summaryDataObject = calculateSummaryData(hotelRows, restRows);
+    const tableModel = buildFrontEndTableModel({
+      date: targetDate,
+      hotelRows,
+      restRows,
+      summaryData: summaryDataObject
+    });
+    expect(tableModel.hotel.rows.every(row => row.confirmed)).toBe(true);
+    expect(tableModel.rest.rows.every(row => row.confirmed)).toBe(true);
+    // 客房收入
+    expect(tableModel.summaryDataObject.hotelIncome).toEqual({
+      '现金': 360,
+      '微信': 0,
+      '微邮付': 838,
+      '其他': 0
+    });
+    // 休息房收入
+    expect(tableModel.summaryDataObject.restIncome).toEqual({
+      '现金': 100,
+      '微信': 0,
+      '微邮付': 0,
+      '其他': 0
+    });
+    // 客房退押
+    expect(tableModel.summaryDataObject.hotelRefundDeposit).toEqual({
+      '现金': 70,
+      '微信': 0,
+      '微邮付': 0,
+      '其他': 0
+    });
+    // 休息退押
+    expect(tableModel.summaryDataObject.restRefundDeposit).toEqual({
+      '现金': 20,
+      '微信': 0,
+      '微邮付': 0,
+      '其他': 0
+    });
+
+    // 完成交接班
+    const paymentDataPayload = buildPaymentDataPayload(summaryDataObject,{
+      reserveBucket: reserve
+    });
+
+    const completeHandoverRes = await request(app)
+      .post('/api/handover/complete')
+      .send({
+        date: targetDate,
+        handoverPerson: 'youtao',
+        receivePerson: 'peach',
+        paymentData: paymentDataPayload,
+        vipCard: 6,
+        taskList: [],
+        notes: "第四天交接班完成"
+      });
+
+    expect(completeHandoverRes.body).toHaveProperty('success', true);
+    expect(completeHandoverRes.body.data.recordCount).toBe(4);
+  });
+
+  test('测试 11-06 交接班数据', async () => {
+    const targetDate = '2025-11-06';
+
+    // 第五天有交接班数据
+    const checkYesterdayRes = await request(app)
+      .get('/api/handover/check-yesterday')
+      .query({ date: '2025-11-05' });
+
+    expect(checkYesterdayRes.body).toHaveProperty('success', true);
+    expect(checkYesterdayRes.body.message).toBe('已完成交接');
+    expect(checkYesterdayRes.body.data.handoverAmounts).toEqual({
+      'cash': 370,
+      'wechat': 2347.5,
+      'weiyoufu': 838,
+      'other': 0
+    });
+
+    const reserve = checkYesterdayRes.body.data.handoverAmounts;
+    reserve['现金'] = 320; // 固定留存现金
+    reserve['微信'] = 2347.5;
+
+    const billsRes = await request(app)
+      .get(`/api/bills/by-date/${targetDate}`);
+
+    expect(billsRes.body).toHaveProperty('success', true);
+    const { hotelBills = [], restBills = [] } = billsRes.body.data || {};
+    // 模拟确认账单
+    const hotelRows = buildTableRows(hotelBills, targetDate);
+    const restRows = buildTableRows(restBills, targetDate);
+
+    // 全部标记为已确认
+    hotelRows.forEach(row => {
+      row.confirmed = true;
+    });
+    restRows.forEach(row => {
+      row.confirmed = true;
+    });
+    const summaryDataObject = calculateSummaryData(hotelRows, restRows);
+    const tableModel = buildFrontEndTableModel({
+      date: targetDate,
+      hotelRows,
+      restRows,
+      summaryData: summaryDataObject
+    });
+    expect(tableModel.hotel.rows.every(row => row.confirmed)).toBe(true);
+    expect(tableModel.rest.rows.every(row => row.confirmed)).toBe(true);
+    // 客房收入
+    expect(tableModel.summaryDataObject.hotelIncome).toEqual({
+      '现金': 370,
+      '微信': 0,
+      '微邮付': 1678,
+      '其他': 0
+    });
+    // 休息房收入
+    expect(tableModel.summaryDataObject.restIncome).toEqual({
+      '现金': 150,
+      '微信': 0,
+      '微邮付': 140,
+      '其他': 0
+    });
+    // 客房退押
+    expect(tableModel.summaryDataObject.hotelRefundDeposit).toEqual({
+      '现金': 20,
+      '微信': 80,
+      '微邮付': 0,
+      '其他': 0
+    });
+    // 休息退押
+    expect(tableModel.summaryDataObject.restRefundDeposit).toEqual({
+      '现金': 20,
+      '微信': 0,
+      '微邮付': 0,
+      '其他': 0
+    });
+
+    // 完成交接班
+    const paymentDataPayload = buildPaymentDataPayload(summaryDataObject,{
+      reserveBucket: reserve
+    });
+
+    const completeHandoverRes = await request(app)
+      .post('/api/handover/complete')
+      .send({
+        date: targetDate,
+        handoverPerson: 'youtao',
+        receivePerson: 'peach',
+        paymentData: paymentDataPayload,
+        vipCard: 6,
+        taskList: [],
+        notes: "第四天交接班完成"
+      });
+
+    expect(completeHandoverRes.body).toHaveProperty('success', true);
+    expect(completeHandoverRes.body.data.recordCount).toBe(4);
+  });
+
+  test('测试 11-07 交接班数据', async () => {
+    const targetDate = '2025-11-07';
+
+    // 第六天有交接班数据
+    const checkYesterdayRes = await request(app)
+      .get('/api/handover/check-yesterday')
+      .query({ date: '2025-11-06' });
+
+    expect(checkYesterdayRes.body).toHaveProperty('success', true);
+    expect(checkYesterdayRes.body.message).toBe('已完成交接');
+    expect(checkYesterdayRes.body.data.handoverAmounts).toEqual({
+      'cash': 480,
+      'wechat': 2267.50,
+      'weiyoufu': 1818,
+      'other': 0
+    });
+
+    const reserve = checkYesterdayRes.body.data.handoverAmounts;
+    reserve['现金'] = 320; // 固定留存现金
+    reserve['微信'] = 2267.50;
+
+    const billsRes = await request(app)
+      .get(`/api/bills/by-date/${targetDate}`);
+
+    expect(billsRes.body).toHaveProperty('success', true);
+    const { hotelBills = [], restBills = [] } = billsRes.body.data || {};
+    // 模拟确认账单
+    const hotelRows = buildTableRows(hotelBills, targetDate);
+    const restRows = buildTableRows(restBills, targetDate);
+
+    // 全部标记为已确认
+    hotelRows.forEach(row => {
+      row.confirmed = true;
+    });
+    restRows.forEach(row => {
+      row.confirmed = true;
+    });
+    const summaryDataObject = calculateSummaryData(hotelRows, restRows);
+    const tableModel = buildFrontEndTableModel({
+      date: targetDate,
+      hotelRows,
+      restRows,
+      summaryData: summaryDataObject
+    });
+    expect(tableModel.hotel.rows.every(row => row.confirmed)).toBe(true);
+    expect(tableModel.rest.rows.every(row => row.confirmed)).toBe(true);
+    // 客房收入
+    expect(tableModel.summaryDataObject.hotelIncome).toEqual({
+      '现金': 410,
+      '微信': 660,
+      '微邮付': 760,
+      '其他': 0
+    });
+    // 休息房收入
+    expect(tableModel.summaryDataObject.restIncome).toEqual({
+      '现金': 100,
+      '微信': 0,
+      '微邮付': 100,
+      '其他': 0
+    });
+    // 客房退押
+    expect(tableModel.summaryDataObject.hotelRefundDeposit).toEqual({
+      '现金': 0,
+      '微信': 0,
+      '微邮付': 0,
+      '其他': 0
+    });
+    // 休息退押
+    expect(tableModel.summaryDataObject.restRefundDeposit).toEqual({
+      '现金': 40,
+      '微信': 0,
+      '微邮付': 0,
+      '其他': 0
+    });
+
+    // 完成交接班
+    const paymentDataPayload = buildPaymentDataPayload(summaryDataObject,{
+      reserveBucket: reserve
+    });
+
+    const completeHandoverRes = await request(app)
+      .post('/api/handover/complete')
+      .send({
+        date: targetDate,
+        handoverPerson: 'youtao',
+        receivePerson: 'peach',
+        paymentData: paymentDataPayload,
+        vipCard: 6,
+        taskList: [],
+        notes: "第四天交接班完成"
+      });
+
+    expect(completeHandoverRes.body).toHaveProperty('success', true);
+    expect(completeHandoverRes.body.data.recordCount).toBe(4);
+  });
+
+  test('测试 11-08 交接班数据', async () => {
+    const targetDate = '2025-11-08';
+
+    // 第七天有交接班数据
+    const checkYesterdayRes = await request(app)
+      .get('/api/handover/check-yesterday')
+      .query({ date: '2025-11-07' });
+
+    expect(checkYesterdayRes.body).toHaveProperty('success', true);
+    expect(checkYesterdayRes.body.message).toBe('已完成交接');
+    expect(checkYesterdayRes.body.data.handoverAmounts).toEqual({
+      'cash': 470,
+      'wechat': 2927.50,
+      'weiyoufu': 860,
+      'other': 0
+    });
+
+    const reserve = checkYesterdayRes.body.data.handoverAmounts;
+    reserve['现金'] = 320; // 固定留存现金
+    reserve['微信'] = 2927.50;
+
+    const billsRes = await request(app)
+      .get(`/api/bills/by-date/${targetDate}`);
+
+    expect(billsRes.body).toHaveProperty('success', true);
+    const { hotelBills = [], restBills = [] } = billsRes.body.data || {};
+    // 模拟确认账单
+    const hotelRows = buildTableRows(hotelBills, targetDate);
+    const restRows = buildTableRows(restBills, targetDate);
+
+    // 全部标记为已确认
+    hotelRows.forEach(row => {
+      row.confirmed = true;
+    });
+    restRows.forEach(row => {
+      row.confirmed = true;
+    });
+    const summaryDataObject = calculateSummaryData(hotelRows, restRows);
+    const tableModel = buildFrontEndTableModel({
+      date: targetDate,
+      hotelRows,
+      restRows,
+      summaryData: summaryDataObject
+    });
+    expect(tableModel.hotel.rows.every(row => row.confirmed)).toBe(true);
+    expect(tableModel.rest.rows.every(row => row.confirmed)).toBe(true);
+    // 客房收入
+    expect(tableModel.summaryDataObject.hotelIncome).toEqual({
+      '现金': 0,
+      '微信': 80,
+      '微邮付': 436,
+      '其他': 0
+    });
+    // 休息房收入
+    expect(tableModel.summaryDataObject.restIncome).toEqual({
+      '现金': 0,
+      '微信': 0,
+      '微邮付': 0,
+      '其他': 0
+    });
+    // 客房退押
+    expect(tableModel.summaryDataObject.hotelRefundDeposit).toEqual({
+      '现金': 0,
+      '微信': 0,
+      '微邮付': 0,
+      '其他': 0
+    });
+    // 休息退押
+    expect(tableModel.summaryDataObject.restRefundDeposit).toEqual({
+      '现金': 0,
+      '微信': 0,
+      '微邮付': 0,
+      '其他': 0
+    });
+
+    // 完成交接班
+    const paymentDataPayload = buildPaymentDataPayload(summaryDataObject,{
+      reserveBucket: reserve
+    });
+
+    const completeHandoverRes = await request(app)
+      .post('/api/handover/complete')
+      .send({
+        date: targetDate,
+        handoverPerson: 'youtao',
+        receivePerson: 'peach',
+        paymentData: paymentDataPayload,
+        vipCard: 6,
+        taskList: [],
+        notes: "第四天交接班完成"
+      });
+
+    expect(completeHandoverRes.body).toHaveProperty('success', true);
+    expect(completeHandoverRes.body.data.recordCount).toBe(4);
+  });
+
+  test('测试 11-09 交接班数据', async () => {
+    const targetDate = '2025-11-09';
+
+    // 第八天有交接班数据
+    const checkYesterdayRes = await request(app)
+      .get('/api/handover/check-yesterday')
+      .query({ date: '2025-11-08' });
+
+    expect(checkYesterdayRes.body).toHaveProperty('success', true);
+    expect(checkYesterdayRes.body.message).toBe('已完成交接');
+    expect(checkYesterdayRes.body.data.handoverAmounts).toEqual({
+      'cash': 0,
+      'wechat': 3007.50,
+      'weiyoufu': 436,
+      'other': 0
+    });
+
+    const reserve = checkYesterdayRes.body.data.handoverAmounts;
+    reserve['现金'] = 320; // 固定留存现金
+    reserve['微信'] = 3007.50;
+
+    const billsRes = await request(app)
+      .get(`/api/bills/by-date/${targetDate}`);
+
+    expect(billsRes.body).toHaveProperty('success', true);
+    const { hotelBills = [], restBills = [] } = billsRes.body.data || {};
+    // 模拟确认账单
+    const hotelRows = buildTableRows(hotelBills, targetDate);
+    const restRows = buildTableRows(restBills, targetDate);
+
+    // 全部标记为已确认
+    hotelRows.forEach(row => {
+      row.confirmed = true;
+    });
+    restRows.forEach(row => {
+      row.confirmed = true;
+    });
+    const summaryDataObject = calculateSummaryData(hotelRows, restRows);
+    const tableModel = buildFrontEndTableModel({
+      date: targetDate,
+      hotelRows,
+      restRows,
+      summaryData: summaryDataObject
+    });
+    expect(tableModel.hotel.rows.every(row => row.confirmed)).toBe(true);
+    expect(tableModel.rest.rows.every(row => row.confirmed)).toBe(true);
+    // 客房收入
+    expect(tableModel.summaryDataObject.hotelIncome).toEqual({
+      '现金': 0,
+      '微信': 0,
+      '微邮付': 410,
+      '其他': 0
+    });
+    // 休息房收入
+    expect(tableModel.summaryDataObject.restIncome).toEqual({
+      '现金': 0,
+      '微信': 0,
+      '微邮付': 160,
+      '其他': 0
+    });
+    // 客房退押
+    expect(tableModel.summaryDataObject.hotelRefundDeposit).toEqual({
+      '现金': 0,
+      '微信': 0,
+      '微邮付': 0,
+      '其他': 0
+    });
+    // 休息退押
+    expect(tableModel.summaryDataObject.restRefundDeposit).toEqual({
+      '现金': 0,
+      '微信': 0,
+      '微邮付': 0,
+      '其他': 0
+    });
+
+    // 完成交接班
+    const paymentDataPayload = buildPaymentDataPayload(summaryDataObject,{
+      reserveBucket: reserve
+    });
+
+    const completeHandoverRes = await request(app)
+      .post('/api/handover/complete')
+      .send({
+        date: targetDate,
+        handoverPerson: 'youtao',
+        receivePerson: 'peach',
+        paymentData: paymentDataPayload,
+        vipCard: 6,
+        taskList: [],
+        notes: "第四天交接班完成"
+      });
+
+    expect(completeHandoverRes.body).toHaveProperty('success', true);
+    expect(completeHandoverRes.body.data.recordCount).toBe(4);
   });
 
   afterAll(async () => {

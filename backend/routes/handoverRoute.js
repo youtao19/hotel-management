@@ -439,7 +439,7 @@ router.get('/check-yesterday', async (req, res) => {
     let handoverAmounts = {
       cash: 0,
       wechat: 0,
-      weyoufu: 0,
+      weiyoufu: 0,
       other: 0
     };
 
@@ -468,7 +468,7 @@ router.get('/check-yesterday', async (req, res) => {
             handoverAmounts.wechat = amount;
             break;
           case 3:
-            handoverAmounts.weyoufu = amount;
+            handoverAmounts.weiyoufu = amount;
             break;
           case 4:
             handoverAmounts.other = amount;
@@ -675,53 +675,13 @@ router.get('/available-dates', async (req, res) => {
   }
 });
 
-// 完成交接班（保存完整数据并标记完成）
+// 完成交接班（优化版）
 router.post('/complete', async (req, res) => {
   let client;
-  let payload;
 
   try {
-    const rawBody = req.body || {};
-    payload = {};
-
-    if (Object.prototype.hasOwnProperty.call(rawBody, "date")) {
-      payload.date = typeof rawBody.date === "string" ? rawBody.date.trim() : rawBody.date;
-    }
-
-    if (Object.prototype.hasOwnProperty.call(rawBody, "handoverPerson")) {
-      const trimmedHandover = typeof rawBody.handoverPerson === "string" ? rawBody.handoverPerson.trim() : rawBody.handoverPerson;
-      if (trimmedHandover) {
-        payload.handoverPerson = trimmedHandover;
-      }
-    }
-
-    if (Object.prototype.hasOwnProperty.call(rawBody, "receivePerson")) {
-      payload.receivePerson = typeof rawBody.receivePerson === "string" ? rawBody.receivePerson.trim() : rawBody.receivePerson;
-    }
-
-    if (Object.prototype.hasOwnProperty.call(rawBody, "paymentData")) {
-      payload.paymentData = rawBody.paymentData;
-    }
-
-    if (Object.prototype.hasOwnProperty.call(rawBody, "vipCard")) {
-      payload.vipCard = rawBody.vipCard;
-    }
-
-    if (Object.prototype.hasOwnProperty.call(rawBody, "taskList")) {
-      payload.taskList = rawBody.taskList;
-    }
-
-    if (Object.prototype.hasOwnProperty.call(rawBody, "notes")) {
-      payload.notes = typeof rawBody.notes === "string" ? rawBody.notes.trim() : rawBody.notes;
-    }
-
-    console.log('收到完成交接班请求:', {
-      body: JSON.stringify(payload, null, 2),
-      timestamp: new Date().toISOString()
-    });
-
-    const isValid = validateCompleteHandover(payload);
-
+    // ✅ 使用 AJV 自动校验与类型清洗
+    const isValid = validateCompleteHandover(req.body);
     if (!isValid) {
       return res.status(400).json({
         success: false,
@@ -730,121 +690,99 @@ router.post('/complete', async (req, res) => {
       });
     }
 
+    // Ajv 已清洗类型
     const {
       date,
-      handoverPerson,
+      handoverPerson = '系统',
       receivePerson,
       paymentData,
       vipCard = 0,
       taskList = [],
-      notes = ""
-    } = payload;
+      notes = ''
+    } = req.body;
 
-    console.log('开始保存交接班数据到数据库');
+    console.log('收到完成交接班请求:', {
+      date, handoverPerson, receivePerson,
+      vipCard, timestamp: new Date().toISOString()
+    });
 
-    // 获取数据库连接并开启事务
     client = await getClient();
     await client.query('BEGIN');
 
-    // 支付方式映射：前端字段名 -> 数据库代码
-    const paymentTypeMapping = {
-      '现金': 1,
-      '微信': 2,
-      '微邮付': 3,
-      '其他': 4
-    };
+    const paymentTypeMapping = { '现金': 1, '微信': 2, '微邮付': 3, '其他': 4 };
 
-    // 定义要保存的支付方式
-    const paymentMethods = PAYMENT_METHODS;
+    const insertSQL = `
+      INSERT INTO handover (
+        date, handover_person, takeover_person, vip_card, payment_type,
+        reserve_cash, room_income, rest_income, rent_income, total_income,
+        room_refund, rest_refund, retained, handover, task_list, remarks
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      ON CONFLICT (date, payment_type) DO UPDATE SET
+        handover_person = EXCLUDED.handover_person,
+        takeover_person = EXCLUDED.takeover_person,
+        vip_card = EXCLUDED.vip_card,
+        reserve_cash = EXCLUDED.reserve_cash,
+        room_income = EXCLUDED.room_income,
+        rest_income = EXCLUDED.rest_income,
+        rent_income = EXCLUDED.rent_income,
+        total_income = EXCLUDED.total_income,
+        room_refund = EXCLUDED.room_refund,
+        rest_refund = EXCLUDED.rest_refund,
+        retained = EXCLUDED.retained,
+        handover = EXCLUDED.handover,
+        task_list = EXCLUDED.task_list,
+        remarks = EXCLUDED.remarks
+      RETURNING *;
+    `;
 
-    // 保存结果数组
-    const savedRecords = [];
+    // ✅ 并行保存四种支付方式记录
+    const results = await Promise.all(
+      PAYMENT_METHODS.map(method => {
+        const values = [
+          date,
+          handoverPerson || '系统',
+          receivePerson.trim(),
+          method === '现金' ? vipCard : 0,
+          paymentTypeMapping[method],
+          paymentData.reserve?.[method] || 0,
+          paymentData.hotelIncome?.[method] || 0,
+          paymentData.restIncome?.[method] || 0,
+          paymentData.carRentIncome?.[method] || 0,
+          paymentData.totalIncome?.[method] || 0,
+          paymentData.hotelDeposit?.[method] || 0,
+          paymentData.restDeposit?.[method] || 0,
+          paymentData.retainedAmount?.[method] || 0,
+          paymentData.handoverAmount?.[method] || 0,
+          method === '现金' ? JSON.stringify(taskList || []) : '[]',
+          method === '现金' ? (notes || '') : ''
+        ];
+        return client.query(insertSQL, values);
+      })
+    );
 
-    // 为每种支付方式保存一条记录
-    for (const method of paymentMethods) {
-      const sql = `
-        INSERT INTO handover (
-          date, handover_person, takeover_person, vip_card, payment_type,
-          reserve_cash, room_income, rest_income, rent_income, total_income,
-          room_refund, rest_refund, retained, handover, task_list, remarks
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-        ON CONFLICT (date, payment_type) DO UPDATE SET
-          handover_person = EXCLUDED.handover_person,
-          takeover_person = EXCLUDED.takeover_person,
-          vip_card = EXCLUDED.vip_card,
-          reserve_cash = EXCLUDED.reserve_cash,
-          room_income = EXCLUDED.room_income,
-          rest_income = EXCLUDED.rest_income,
-          rent_income = EXCLUDED.rent_income,
-          total_income = EXCLUDED.total_income,
-          room_refund = EXCLUDED.room_refund,
-          rest_refund = EXCLUDED.rest_refund,
-          retained = EXCLUDED.retained,
-          handover = EXCLUDED.handover,
-          task_list = EXCLUDED.task_list,
-          remarks = EXCLUDED.remarks
-        RETURNING *;
-      `;
-
-      // 提取当前支付方式的数据
-      const values = [
-        date,                                                      // $1: date
-        handoverPerson || '系统',                                  // $2: handover_person
-        receivePerson.trim(),                                     // $3: takeover_person
-        method === '现金' ? (vipCard || 0) : 0,                   // $4: vip_card (只在现金记录中保存)
-        paymentTypeMapping[method],                               // $5: payment_type
-        paymentData.reserve?.[method] || 0,                       // $6: reserve_cash
-        paymentData.hotelIncome?.[method] || 0,                   // $7: room_income
-        paymentData.restIncome?.[method] || 0,                    // $8: rest_income
-        paymentData.carRentIncome?.[method] || 0,                 // $9: rent_income
-        paymentData.totalIncome?.[method] || 0,                   // $10: total_income
-        paymentData.hotelDeposit?.[method] || 0,                  // $11: room_refund
-        paymentData.restDeposit?.[method] || 0,                   // $12: rest_refund
-        paymentData.retainedAmount?.[method] || 0,                // $13: retained
-        paymentData.handoverAmount?.[method] || 0,                // $14: handover
-        method === '现金' ? JSON.stringify(taskList || []) : '[]', // $15: task_list (只在现金记录中保存)
-        method === '现金' ? (notes || '') : ''                    // $16: remarks (只在现金记录中保存)
-      ];
-
-      console.log(`保存 ${method} 支付方式的记录:`, {
-        payment_type: paymentTypeMapping[method],
-        handover_person: values[1],
-        takeover_person: values[2]
-      });
-
-      const result = await client.query(sql, values);
-      savedRecords.push(result.rows[0]);
-
-      console.log(`${method} 记录保存成功，ID: ${result.rows[0].id}`);
-    }
-
-    // 提交事务
     await client.query('COMMIT');
 
-    console.log('所有交接班记录保存成功，共保存', savedRecords.length, '条记录');
+    const savedRecords = results.flatMap(r => r.rows);
+    console.log('交接班记录保存完成，共', savedRecords.length, '条');
 
-    // 准备响应数据
-    const responseData = {
+    res.json({
       success: true,
       message: '交接班完成，数据已保存',
       data: {
         date,
-        handoverPerson: handoverPerson || '系统',
+        handoverPerson,
         receivePerson: receivePerson.trim(),
         recordCount: savedRecords.length,
         records: savedRecords
       }
-    };
-
-    res.json(responseData);
+    });
 
   } catch (error) {
-    // 回滚事务
     if (client) {
       try {
         await client.query('ROLLBACK');
-        console.log('事务已回滚');
+        console.warn('事务已回滚');
       } catch (rollbackError) {
         console.error('回滚事务失败:', rollbackError);
       }
@@ -852,19 +790,15 @@ router.post('/complete', async (req, res) => {
 
     console.error('完成交接班失败:', {
       message: error.message,
-      stack: error.stack,
-      payload: payload ? JSON.stringify(payload, null, 2) : null
+      stack: error.stack
     });
+
     res.status(500).json({
       success: false,
-      message: error.message || '完成交接班失败',
-      error: error.stack
+      message: error.message || '完成交接班失败'
     });
   } finally {
-    // 释放数据库连接
-    if (client) {
-      client.release();
-    }
+    if (client) client.release();
   }
 });
 
