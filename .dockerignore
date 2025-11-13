@@ -1,0 +1,69 @@
+# Ignore all node_modules to prevent copying host-compiled binaries
+**/node_modules
+**/.npm
+**/npm-debug.log
+
+# Ignore test files
+backend/tests
+backend/*.test.js
+backend/__mocks__
+
+# Ignore frontend source files (only keep dist)
+frontend/src
+frontend/public
+frontend/index.html
+frontend/package*.json
+frontend/quasar.config.js
+frontend/postcss.config.js
+frontend/Dockerfile
+
+# Ignore development files
+.env
+.env.local
+*.log
+dev.env
+dev.env.template
+
+# Ignore git
+.git
+.gitignore
+.gitattributes
+.github
+
+# Ignore documentation
+docs/
+gemini_Doc/
+*.md
+CROSS-PLATFORM.md
+DOCKER-WINDOWS.md
+GEMINI.md
+
+# Ignore IDE and editor files
+.vscode
+.idea
+.cursor
+.cursorignore
+.editorconfig
+.quasar
+*.swp
+*.swo
+*~
+
+# Ignore build scripts and test files
+*.test.js
+jest.config.js
+test-*.js
+update-test.sh
+start.bat
+start.ps1
+stop.bat
+
+# Ignore other compose files
+compose copy.yaml
+
+# Ignore root server.js (we use backend/server.js)
+server.js
+
+# Keep only what we need
+!backend/
+!frontend/dist/spa/

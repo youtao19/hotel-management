@@ -73,4 +73,8 @@ SELECT * FROM rooms;
 
 1. 在 `sql/init/` 目录下创建新的 SQL 文件
 2. 使用递增的数字前缀（如 `03-init-xxx.sql`）
+<<<<<<< HEAD
 3. 重新启动容器：`docker compose down -v && docker compose up -d`
+=======
+3. 重新启动容器：`docker compose down -v && docker compose up -d`
+>>>>>>> hotel-manage-v1.0

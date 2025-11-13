@@ -213,3 +213,7 @@ if (changeType === '房费') {
 
 
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> hotel-manage-v1.0

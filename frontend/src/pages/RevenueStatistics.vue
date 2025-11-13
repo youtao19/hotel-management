@@ -400,26 +400,82 @@
           </div>
 
           <q-table
-            :rows="revenueData"
-            :columns="tableColumns"
-            row-key="date"
-            :loading="loading"
-            :pagination="{ rowsPerPage: 10 }"
+            :rows="billRows"
+            :columns="billTableColumns"
+            row-key="bill_id"
+            :loading="billLoading"
+            :pagination="billPagination"
             class="revenue-table"
+            flat
           >
-            <template v-slot:body-cell-total_revenue="props">
+            <template #top>
+              <div class="row q-col-gutter-md q-mb-md full-width">
+                <div class="col-md-3 col-sm-4 col-xs-12">
+                  <q-input
+                    v-model="billFilters.date"
+                    label="日期"
+                    dense
+                    filled
+                    clearable
+                  >
+                    <template #append>
+                      <q-icon name="event" class="cursor-pointer">
+                        <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+                          <q-date
+                            v-model="billFilters.date"
+                            mask="YYYY-MM-DD"
+                            :locale="langZhCn.date"
+                          >
+                            <div class="row items-center justify-end q-pa-sm">
+                              <q-btn label="确定" color="primary" flat v-close-popup />
+                            </div>
+                          </q-date>
+                        </q-popup-proxy>
+                      </q-icon>
+                    </template>
+                  </q-input>
+                </div>
+                <div class="col-md-3 col-sm-4 col-xs-12">
+                  <q-input
+                    v-model="billFilters.roomNumber"
+                    label="房间号"
+                    dense
+                    filled
+                    clearable
+                    @keyup.enter="applyBillFilters"
+                    @clear="applyBillFilters"
+                  />
+                </div>
+                <div class="col-auto self-end q-gutter-sm">
+                  <q-btn
+                    color="primary"
+                    label="查询"
+                    unelevated
+                    @click="applyBillFilters"
+                    :loading="billLoading"
+                  />
+                  <q-btn
+                    flat
+                    color="primary"
+                    label="重置"
+                    @click="resetBillFilters"
+                    :disable="billLoading"
+                  />
+                </div>
+              </div>
+            </template>
+
+            <template #body-cell-change_price="props">
               <q-td :props="props">
-                <span class="text-weight-bold text-positive">
+                <span :class="props.value >= 0 ? 'text-positive' : 'text-negative'">
                   ¥{{ formatCurrency(props.value) }}
                 </span>
               </q-td>
             </template>
 
-            <template v-slot:body-cell-order_count="props">
+            <template #body-cell-create_time="props">
               <q-td :props="props">
-                <q-chip color="primary" text-color="white" size="sm">
-                  {{ props.value }}
-                </q-chip>
+                {{ formatDateTime(props.value) }}
               </q-td>
             </template>
           </q-table>
@@ -430,9 +486,9 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, nextTick, watch, onBeforeUnmount } from 'vue'
 import { useQuasar, date } from 'quasar'
-import { revenueApi, shiftHandoverApi } from '../api/index'
+import { revenueApi } from '../api/index'
 import api from '../api/index'
 import Chart from 'chart.js/auto'
 import { useViewStore } from '../stores/viewStore'
@@ -450,6 +506,33 @@ const quickStats = ref({
 })
 const revenueData = ref([])
 const roomTypeData = ref([])
+
+// 账单明细数据
+const billRows = ref([])
+const billLoading = ref(false)
+const billFilters = ref({
+  date: '',
+  roomNumber: ''
+})
+const billPagination = ref({ rowsPerPage: 10 })
+let suppressBillWatch = false
+let billRoomFilterTimer = null
+
+const billTableColumns = [
+  { name: 'bill_id', label: '账单ID', field: 'bill_id', align: 'left' },
+  { name: 'order_id', label: '订单ID', field: 'order_id', align: 'left' },
+  { name: 'room_number', label: '房间号', field: 'room_number', align: 'center' },
+  { name: 'guest_name', label: '客人姓名', field: 'guest_name', align: 'center' },
+  { name: 'change_price', label: '金额', field: 'change_price', align: 'right' },
+  { name: 'change_type', label: '金额类型', field: 'change_type', align: 'center' },
+  {
+    name: 'pay_way',
+    label: '支付方式',
+    field: row => viewStore.getPaymentMethodName(row.pay_way) || row.pay_way,
+    align: 'center'
+  },
+  { name: 'create_time', label: '创建时间', field: 'create_time', align: 'center' }
+]
 
 // 收款明细表相关数据
 const receiptLoading = ref(false)
@@ -506,84 +589,6 @@ const receiptColumns = [
   { name: 'stayDate', label: '入住日期', field: 'stay_date_display', align: 'center', style: 'width: 140px' }
 ]
 
-// 表格列定义
-const tableColumns = computed(() => {
-  const baseColumns = [
-    {
-      name: 'date',
-      label: '日期',
-      field: 'date',
-      align: 'left',
-      format: (val) => formatDate(val)
-    },
-    {
-      name: 'order_count',
-      label: '订单数',
-      field: 'order_count',
-      align: 'center'
-    },
-    {
-      name: 'bill_count',
-      label: '账单数',
-      field: 'bill_count',
-      align: 'center'
-    },
-    {
-      name: 'total_revenue',
-      label: '总收入',
-      field: 'total_revenue',
-      align: 'right'
-    },
-    {
-      name: 'total_room_fee',
-      label: '房费收入',
-      field: 'total_room_fee',
-      align: 'right',
-      format: (val) => `¥${formatCurrency(val || 0)}`
-    },
-    {
-      name: 'cash_revenue',
-      label: '现金收入',
-      field: 'cash_revenue',
-      align: 'right',
-      format: (val) => `¥${formatCurrency(val || 0)}`
-    },
-    {
-      name: 'wechat_revenue',
-      label: '微信收入',
-      field: 'wechat_revenue',
-      align: 'right',
-      format: (val) => `¥${formatCurrency(val || 0)}`
-    },
-    {
-      name: 'alipay_revenue',
-      label: '微邮付收入',
-      field: 'alipay_revenue',
-      align: 'right',
-      format: (val) => `¥${formatCurrency(val || 0)}`
-    }
-  ]
-
-  // 根据统计周期调整列
-  if (selectedPeriod.value === 'weekly') {
-    baseColumns[0] = {
-      name: 'week',
-      label: '周期',
-      field: row => `${row.year}年第${row.week_number}周`,
-      align: 'left'
-    }
-  } else if (selectedPeriod.value === 'monthly') {
-    baseColumns[0] = {
-      name: 'month',
-      label: '月份',
-      field: row => `${row.year}年${row.month}月`,
-      align: 'left'
-    }
-  }
-
-  return baseColumns
-})
-
 // 收款明细表计算属性
 const receiptTotalAmount = computed(() => {
   return receiptDetails.value.reduce((sum, item) => sum + (item.total_amount || 0), 0)
@@ -626,6 +631,15 @@ const formatDate = (dateStr) => {
   }
 }
 
+const formatDateTime = (dateTime) => {
+  if (!dateTime) return ''
+  try {
+    return date.formatDate(new Date(dateTime), 'YYYY-MM-DD HH:mm')
+  } catch (e) {
+    return dateTime
+  }
+}
+
 // 收款明细表日期格式化
 const formatReceiptDisplayDate = (dateStr) => {
   if (!dateStr) return ''
@@ -633,6 +647,109 @@ const formatReceiptDisplayDate = (dateStr) => {
     return date.formatDate(new Date(dateStr), 'MM-DD')
   } catch (e) {
     return dateStr
+  }
+}
+
+const extractBillList = (payload) => {
+  if (Array.isArray(payload)) return payload
+  if (Array.isArray(payload?.data)) return payload.data
+  if (Array.isArray(payload?.rows)) return payload.rows
+  if (Array.isArray(payload?.bills)) return payload.bills
+  return []
+}
+
+const fetchBillDetails = async () => {
+  billLoading.value = true
+  try {
+    const params = {}
+    if (billFilters.value.date) params.date = billFilters.value.date
+    if (billFilters.value.roomNumber && billFilters.value.roomNumber.trim()) {
+      params.roomNumber = billFilters.value.roomNumber.trim()
+    }
+
+    const response = await revenueApi.getRevenueBills(params)
+    const list = extractBillList(response)
+
+    const hasDateFilter = !!billFilters.value.date
+    const roomFilter = (billFilters.value.roomNumber || '').trim()
+    const hasRoomFilter = roomFilter.length > 0
+
+    const normalizeTime = (value) => {
+      if (!value) return 0
+      const time = new Date(value).getTime()
+      return Number.isFinite(time) ? time : 0
+    }
+
+    const mapped = list.map(item => ({
+      ...item,
+      change_price: Number(item.change_price || 0),
+      create_time: item.create_time,
+      stay_date: item.stay_date || item.create_time
+    }))
+
+    mapped.sort((a, b) => {
+      const createDiff = normalizeTime(b.create_time) - normalizeTime(a.create_time)
+      if (createDiff !== 0) {
+        return createDiff
+      }
+
+      if (hasRoomFilter) {
+        const roomA = a.room_number ? String(a.room_number) : ''
+        const roomB = b.room_number ? String(b.room_number) : ''
+        const roomCompare = roomA.localeCompare(roomB, 'zh-Hans-CN', { numeric: true, sensitivity: 'base' })
+        if (roomCompare !== 0) {
+          return roomCompare
+        }
+      }
+
+      if (hasDateFilter) {
+        const dateDiff = normalizeTime(a.stay_date) - normalizeTime(b.stay_date)
+        if (dateDiff !== 0) {
+          return dateDiff
+        }
+      }
+
+      const billIdA = Number(a.bill_id) || 0
+      const billIdB = Number(b.bill_id) || 0
+      return billIdB - billIdA
+    })
+
+    billRows.value = mapped
+  } catch (error) {
+    console.error('获取收入账单明细失败:', error)
+    $q.notify({
+      type: 'negative',
+      message: '获取收入账单明细失败',
+      position: 'top'
+    })
+  } finally {
+    billLoading.value = false
+  }
+}
+
+const applyBillFilters = async () => {
+  if (billRoomFilterTimer) {
+    clearTimeout(billRoomFilterTimer)
+    billRoomFilterTimer = null
+  }
+  await fetchBillDetails()
+}
+
+const resetBillFilters = async () => {
+  const hadFilters = !!billFilters.value.date || !!billFilters.value.roomNumber
+  if (billRoomFilterTimer) {
+    clearTimeout(billRoomFilterTimer)
+    billRoomFilterTimer = null
+  }
+  suppressBillWatch = true
+  billFilters.value.date = ''
+  billFilters.value.roomNumber = ''
+  try {
+    if (hadFilters) {
+      await fetchBillDetails()
+    }
+  } finally {
+    suppressBillWatch = false
   }
 }
 
@@ -751,8 +868,6 @@ const generateDateList = (start, end) => {
 // 填充缺失的每日数据为 0，确保趋势图起止日期与选择一致
 const fillMissingDailyData = (rows, start, end) => {
   try {
-    console.log('[DEBUG] 原始每日统计 rows 长度:', rows.length)
-    if (rows[0]) console.log('[DEBUG] 第一条原始记录:', rows[0])
     const map = new Map()
     rows.forEach(r => {
       const rawDate = r.date || r.day || r.check_in_date
@@ -788,7 +903,6 @@ const fillMissingDailyData = (rows, start, end) => {
     filled.sort((a,b) => a.date < b.date ? 1 : -1)
     const originalHasRevenue = rows.some(r => Number(r.total_revenue) > 0)
     const filledAllZero = filled.every(r => Number(r.total_revenue) === 0)
-    console.log(`[DEBUG] originalHasRevenue=${originalHasRevenue} filledAllZero=${filledAllZero}`)
     if (originalHasRevenue && filledAllZero) {
       console.warn('[WARN] 填充后全部为0，回退到原始数据（可能日期键不匹配）')
       return rows
@@ -1137,8 +1251,25 @@ const setReceiptThisMonth = async () => {
 
   // 设置显示日期为今天
   receiptSelectedDate.value = date.formatDate(new Date(), 'YYYY-MM-DD')
-  await fetchReceiptDetails(startDate, endDate)
+await fetchReceiptDetails(startDate, endDate)
 }
+
+watch(() => billFilters.value.date, () => {
+  if (suppressBillWatch) return
+  fetchBillDetails()
+})
+
+watch(() => billFilters.value.roomNumber, () => {
+  if (suppressBillWatch) return
+  if (billRoomFilterTimer) clearTimeout(billRoomFilterTimer)
+  billRoomFilterTimer = setTimeout(() => {
+    fetchBillDetails()
+  }, 400)
+})
+
+onBeforeUnmount(() => {
+  if (billRoomFilterTimer) clearTimeout(billRoomFilterTimer)
+})
 
 
 // 刷新所有数据
@@ -1146,7 +1277,8 @@ const refreshAllData = async () => {
   await Promise.all([
     fetchQuickStats(),
     fetchRevenueData(),
-    fetchReceiptDetails()
+    fetchReceiptDetails(),
+    fetchBillDetails()
   ])
 }
 
@@ -1155,6 +1287,7 @@ onMounted(async () => {
   await fetchQuickStats()
   await fetchRevenueData()
   await fetchReceiptDetails()
+  await fetchBillDetails()
 })
 
 // ============= 自动刷新逻辑（日期 / 周期变化时自动更新趋势图） =============

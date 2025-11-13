@@ -22,106 +22,138 @@
         <tr class="payment-row cash-row">
           <td class="payment-label">现金</td>
           <td class="editable-cell">
-            <q-input :model-value="paymentData.reserve[payWay.cash]" dense borderless class="table-input" readonly />
+            <q-input :model-value="getDisplayValue(paymentData.reserve, payWay.cash)" type="number" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="paymentData.hotelIncome[payWay.cash]" dense borderless class="table-input" readonly />
+            <q-input :model-value="getDisplayValue(paymentData.hotelIncome, payWay.cash)" type="number" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="paymentData.restIncome[payWay.cash]" dense borderless class="table-input" readonly />
+            <q-input :model-value="getDisplayValue(paymentData.restIncome, payWay.cash)" type="number" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="paymentData.carRentIncome[payWay.cash]" dense borderless class="table-input" readonly />
+            <q-input :model-value="getDisplayValue(paymentData.carRentIncome, payWay.cash)" type="number" dense borderless class="table-input" readonly />
           </td>
-          <td class="total-cell">{{ paymentData.totalIncome[payWay.cash].toFixed(0) }}</td>
+          <td class="total-cell">{{ formatAmount(calculateRowTotal(payWay.cash)) }}</td>
           <td class="editable-cell">
-            <q-input :model-value="paymentData.hotelRefundDeposit[payWay.cash]" dense borderless class="table-input" readonly />
-          </td>
-          <td class="editable-cell">
-            <q-input :model-value="paymentData.restRefundDeposit[payWay.cash]" dense borderless class="table-input" readonly />
+            <q-input :model-value="getDisplayValue(paymentData.hotelRefundDeposit, payWay.cash)" type="number" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="paymentData.retainedAmount[payWay.cash]" dense borderless class="table-input" readonly />
+            <q-input :model-value="getDisplayValue(paymentData.restRefundDeposit, payWay.cash)" type="number" dense borderless class="table-input" readonly />
           </td>
-          <td class="auto-calculate">{{ paymentData.handoverAmount[payWay.cash].toFixed(0) }}</td>
+          <td class="editable-cell">
+            <q-input
+              :model-value="getDisplayValue(paymentData.retainedAmount, payWay.cash)"
+              type="number"
+              dense
+              borderless
+              class="table-input"
+              :readonly="readOnly"
+              @update:model-value="val => onRetainedInput(payWay.cash, val)"
+            />
+          </td>
+          <td class="auto-calculate">{{ formatAmount(calculateHandover(payWay.cash)) }}</td>
         </tr>
         <tr class="payment-row wechat-row">
           <td class="payment-label">微信</td>
           <td class="editable-cell">
-            <q-input :model-value="paymentData.reserve[payWay.wechat]" dense borderless class="table-input" readonly />
+            <q-input :model-value="getDisplayValue(paymentData.reserve, payWay.wechat)" type="number" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="paymentData.hotelIncome[payWay.wechat]" dense borderless class="table-input" readonly />
+            <q-input :model-value="getDisplayValue(paymentData.hotelIncome, payWay.wechat)" type="number" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="paymentData.restIncome[payWay.wechat]" dense borderless class="table-input" readonly />
+            <q-input :model-value="getDisplayValue(paymentData.restIncome, payWay.wechat)" type="number" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="paymentData.carRentIncome[payWay.wechat]" dense borderless class="table-input" readonly />
+            <q-input :model-value="getDisplayValue(paymentData.carRentIncome, payWay.wechat)" type="number" dense borderless class="table-input" readonly />
           </td>
-          <td class="total-cell">{{ paymentData.totalIncome[payWay.wechat].toFixed(0) }}</td>
+          <td class="total-cell">{{ formatAmount(calculateRowTotal(payWay.wechat)) }}</td>
           <td class="editable-cell">
-            <q-input :model-value="paymentData.hotelRefundDeposit[payWay.wechat]" dense borderless class="table-input" readonly />
-          </td>
-          <td class="editable-cell">
-            <q-input :model-value="paymentData.restRefundDeposit[payWay.wechat]" dense borderless class="table-input" readonly />
+            <q-input :model-value="getDisplayValue(paymentData.hotelRefundDeposit, payWay.wechat)" type="number" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="paymentData.retainedAmount[payWay.wechat]" dense borderless class="table-input" readonly />
+            <q-input :model-value="getDisplayValue(paymentData.restRefundDeposit, payWay.wechat)" type="number" dense borderless class="table-input" readonly />
           </td>
-          <td class="auto-calculate">{{ paymentData.handoverAmount[payWay.wechat].toFixed(0) }}</td>
+          <td class="editable-cell">
+            <q-input
+              :model-value="getDisplayValue(paymentData.retainedAmount, payWay.wechat)"
+              type="number"
+              dense
+              borderless
+              class="table-input"
+              :readonly="readOnly"
+              @update:model-value="val => onRetainedInput(payWay.wechat, val)"
+            />
+          </td>
+          <td class="auto-calculate">{{ formatAmount(calculateHandover(payWay.wechat)) }}</td>
         </tr>
         <tr class="payment-row digital-row">
           <td class="payment-label">微邮付</td>
           <td class="editable-cell">
-            <q-input :model-value="paymentData.reserve[payWay.digital]" dense borderless class="table-input" readonly />
+            <q-input :model-value="getDisplayValue(paymentData.reserve, payWay.digital)" type="number" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="paymentData.hotelIncome[payWay.digital]" dense borderless class="table-input" readonly />
+            <q-input :model-value="getDisplayValue(paymentData.hotelIncome, payWay.digital)" type="number" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="paymentData.restIncome[payWay.digital]" dense borderless class="table-input" readonly />
+            <q-input :model-value="getDisplayValue(paymentData.restIncome, payWay.digital)" type="number" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="paymentData.carRentIncome[payWay.digital]" dense borderless class="table-input" readonly />
+            <q-input :model-value="getDisplayValue(paymentData.carRentIncome, payWay.digital)" type="number" dense borderless class="table-input" readonly />
           </td>
-              <td class="total-cell">{{ paymentData.totalIncome[payWay.digital].toFixed(0) }}</td>
+          <td class="total-cell">{{ formatAmount(calculateRowTotal(payWay.digital)) }}</td>
           <td class="editable-cell">
-            <q-input :model-value="paymentData.hotelRefundDeposit[payWay.digital]" dense borderless class="table-input" readonly />
-          </td>
-          <td class="editable-cell">
-            <q-input :model-value="paymentData.restRefundDeposit[payWay.digital]" dense borderless class="table-input" readonly />
+            <q-input :model-value="getDisplayValue(paymentData.hotelRefundDeposit, payWay.digital)" type="number" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="paymentData.retainedAmount[payWay.digital]" dense borderless class="table-input" readonly />
+            <q-input :model-value="getDisplayValue(paymentData.restRefundDeposit, payWay.digital)" type="number" dense borderless class="table-input" readonly />
           </td>
-          <td class="auto-calculate">{{ paymentData.handoverAmount[payWay.digital].toFixed(0) }}</td>
+          <td class="editable-cell">
+            <q-input
+              :model-value="getDisplayValue(paymentData.retainedAmount, payWay.digital)"
+              type="number"
+              dense
+              borderless
+              class="table-input"
+              :readonly="readOnly"
+              @update:model-value="val => onRetainedInput(payWay.digital, val)"
+            />
+          </td>
+          <td class="auto-calculate">{{ formatAmount(calculateHandover(payWay.digital)) }}</td>
         </tr>
         <tr class="payment-row other-row">
           <td class="payment-label">其他方式</td>
           <td class="editable-cell">
-            <q-input :model-value="paymentData.reserve[payWay.other]" dense borderless class="table-input" readonly />
+            <q-input :model-value="getDisplayValue(paymentData.reserve, payWay.other)" type="number" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="paymentData.hotelIncome[payWay.other]" dense borderless class="table-input" readonly />
+            <q-input :model-value="getDisplayValue(paymentData.hotelIncome, payWay.other)" type="number" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="paymentData.restIncome[payWay.other]" dense borderless class="table-input" readonly />
+            <q-input :model-value="getDisplayValue(paymentData.restIncome, payWay.other)" type="number" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="paymentData.carRentIncome[payWay.other]" dense borderless class="table-input" readonly />
+            <q-input :model-value="getDisplayValue(paymentData.carRentIncome, payWay.other)" type="number" dense borderless class="table-input" readonly />
           </td>
-          <td class="total-cell">{{ paymentData.totalIncome[payWay.other].toFixed(0) }}</td>
+          <td class="total-cell">{{ formatAmount(calculateRowTotal(payWay.other)) }}</td>
           <td class="editable-cell">
-            <q-input :model-value="paymentData.hotelRefundDeposit[payWay.other]" dense borderless class="table-input" readonly />
-          </td>
-          <td class="editable-cell">
-            <q-input :model-value="paymentData.restRefundDeposit[payWay.other]" dense borderless class="table-input" readonly />
+            <q-input :model-value="getDisplayValue(paymentData.hotelRefundDeposit, payWay.other)" type="number" dense borderless class="table-input" readonly />
           </td>
           <td class="editable-cell">
-            <q-input :model-value="paymentData.retainedAmount[payWay.other]" dense borderless class="table-input" readonly />
+            <q-input :model-value="getDisplayValue(paymentData.restRefundDeposit, payWay.other)" type="number" dense borderless class="table-input" readonly />
           </td>
-          <td class="auto-calculate">{{ paymentData.handoverAmount[payWay.other].toFixed(0) }}</td>
+          <td class="editable-cell">
+            <q-input
+              :model-value="getDisplayValue(paymentData.retainedAmount, payWay.other)"
+              type="number"
+              dense
+              borderless
+              class="table-input"
+              :readonly="readOnly"
+              @update:model-value="val => onRetainedInput(payWay.other, val)"
+            />
+          </td>
+          <td class="auto-calculate">{{ formatAmount(calculateHandover(payWay.other)) }}</td>
         </tr>
       </tbody>
     </table>
@@ -134,6 +166,7 @@ const props = defineProps({
   paymentData: { type: Object, required: true },
   readOnly: { type: Boolean, default: false }
 })
+const emit = defineEmits(['update-retained'])
 
 const payWay = { cash: '现金', wechat: '微信', digital: '微邮付', other: '其他' }
 
@@ -169,12 +202,63 @@ const paymentData = computed(() => {
     restIncome: pd.restIncome || empty.restIncome,
     carRentIncome: pd.carRentIncome || empty.carRentIncome,
     totalIncome: pd.totalIncome || empty.totalIncome,
-    hotelRefundDeposit: pd.hotelRefundDeposit || empty.hotelRefundDeposit,
-    restRefundDeposit: pd.restRefundDeposit || empty.restRefundDeposit,
-    retainedAmount: pd.retainedAmount || empty.retainedAmount,
+    hotelRefundDeposit: pd.hotelRefundDeposit || pd.hotelDeposit || empty.hotelRefundDeposit,
+    restRefundDeposit: pd.restRefundDeposit || pd.restDeposit || empty.restRefundDeposit,
+    retainedAmount: pd.retainedAmount || pd.retained || empty.retainedAmount,
     handoverAmount: pd.handoverAmount || empty.handoverAmount
   }
 })
+
+const toNumber = (value) => {
+  const numeric = Number(value)
+  return Number.isNaN(numeric) ? 0 : numeric
+}
+
+const getDisplayValue = (bucket, key) => {
+  if (!bucket || bucket[key] === undefined || bucket[key] === null) {
+    return 0
+  }
+  return bucket[key]
+}
+
+const getBucketValue = (bucket, key) => toNumber(bucket?.[key])
+
+const calculateRowTotal = (key) => {
+  const total = getBucketValue(paymentData.value.reserve, key)
+    + getBucketValue(paymentData.value.hotelIncome, key)
+    + getBucketValue(paymentData.value.restIncome, key)
+    + getBucketValue(paymentData.value.carRentIncome, key)
+  return Number(total.toFixed(2))
+}
+
+const calculateHandover = (key) => {
+  const total = calculateRowTotal(key)
+  const refunds = getBucketValue(paymentData.value.hotelRefundDeposit, key)
+    + getBucketValue(paymentData.value.restRefundDeposit, key)
+  const retained = getBucketValue(paymentData.value.retainedAmount, key)
+  const handover = total - refunds - retained
+  return Number(handover.toFixed(2))
+}
+
+const formatAmount = (value) => {
+  const numeric = Number(toNumber(value).toFixed(2))
+  const adjusted = Math.abs(numeric) < 0.005 ? 0 : numeric
+  if (Number.isInteger(adjusted)) {
+    return adjusted.toFixed(0)
+  }
+  return adjusted.toFixed(2)
+}
+
+const onRetainedInput = (payWayKey, value) => {
+  if (props.readOnly) {
+    return
+  }
+  const normalizedValue = Number(toNumber(value).toFixed(2))
+  emit('update-retained', {
+    payWay: payWayKey,
+    value: normalizedValue
+  })
+}
 
 </script>
 

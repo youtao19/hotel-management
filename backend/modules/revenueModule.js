@@ -404,10 +404,55 @@ async function getRoomTypeRevenue(startDate, endDate) {
     }
 }
 
+/**
+ * 获取账单明细数据
+ */
+async function getRevenueBillDetails({ date: filterDate, roomNumber } = {}) {
+    try {
+        const params = [];
+        const conditions = [];
+
+        if (filterDate) {
+            params.push(filterDate);
+            conditions.push(`DATE(b.create_time) = $${params.length}`);
+        }
+
+        if (roomNumber) {
+            params.push(roomNumber);
+            conditions.push(`b.room_number = $${params.length}`);
+        }
+
+        const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+        const sql = `
+            SELECT
+                b.bill_id,
+                b.order_id,
+                b.room_number,
+                b.guest_name,
+                b.change_price,
+                b.change_type,
+                b.pay_way,
+                b.create_time,
+                b.stay_date
+            FROM bills b
+            ${whereClause}
+            ORDER BY DATE(b.create_time) DESC, b.room_number DESC, b.bill_id DESC
+        `;
+
+        const result = await query(sql, params);
+        return result.rows || [];
+    } catch (error) {
+        console.error('获取收入账单明细失败:', error);
+        throw error;
+    }
+}
+
 module.exports = {
     getDailyRevenue,
     getWeeklyRevenue,
     getMonthlyRevenue,
     getRevenueOverview,
-    getRoomTypeRevenue
+    getRoomTypeRevenue,
+    getRevenueBillDetails
 };

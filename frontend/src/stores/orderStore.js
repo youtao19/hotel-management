@@ -37,7 +37,6 @@ export const useOrderStore = defineStore('order', () => {
           orderNumber: order.order_id,
           guestName: order.guest_name,
           phone: order.phone,
-          idNumber: order.id_number,
           roomType: order.room_type,
           roomNumber: order.room_number,
           checkInDate: formatOrderDate(order.check_in_date),
@@ -51,7 +50,10 @@ export const useOrderStore = defineStore('order', () => {
           createTime: order.create_time,
           remarks: order.remarks,
           source: order.order_source,
-          sourceNumber: order.id_source
+          sourceNumber: order.id_source,
+          isPrepaid: Boolean(order.is_prepaid),
+          prepaidAmount: parseFloat(order.prepaid_amount) || 0,
+          prepaidAt: order.prepaid_at
         }))
 
         return orders.value
@@ -152,11 +154,25 @@ export const useOrderStore = defineStore('order', () => {
         assertValidDate(checkOutDateISO, '退房日期');
       }
 
+      const isPrepaid = Boolean(order.isPrepaid);
+      const prepaidAmount = isPrepaid ? parseFloat(order.prepaidAmount) || 0 : 0;
+      if (isPrepaid && !(prepaidAmount > 0)) {
+        throw new Error('预收房费金额必须大于0');
+      }
+      let prepaidAtISO;
+      if (isPrepaid) {
+        const rawPrepaidAt = order.prepaidAt || new Date().toISOString();
+        const parsedPrepaidAt = new Date(rawPrepaidAt);
+        if (Number.isNaN(parsedPrepaidAt.getTime())) {
+          throw new Error('预收房费时间无效');
+        }
+        prepaidAtISO = parsedPrepaidAt.toISOString();
+      }
+
       const orderData = {
         order_id: order.orderNumber?.toString(),
         guest_name: order.guestName?.toString(),
-        phone: order.phone?.toString(),
-        id_number: order.idNumber?.toString(),
+        phone: order.phone?.toString() || '',
         room_type: order.roomType?.toString(),
         room_number: order.roomNumber?.toString(),
         check_in_date: checkInDateISO,
@@ -169,9 +185,14 @@ export const useOrderStore = defineStore('order', () => {
         order_source: order.source?.toString() || 'front_desk',
         id_source: order.sourceNumber?.toString() || '',
         create_time: new Date().toISOString(),
+        is_prepaid: isPrepaid,
+        prepaid_amount: prepaidAmount,
+      }
+      if (prepaidAtISO) {
+        orderData.prepaid_at = prepaidAtISO;
       }
 
-      const requiredFields = ['order_id', 'guest_name', 'id_number', 'room_type', 'room_number', 'check_in_date', 'check_out_date', 'total_price'];
+      const requiredFields = ['order_id', 'guest_name', 'room_type', 'room_number', 'check_in_date', 'check_out_date', 'total_price'];
       const missingFields = requiredFields.filter(field => {
         const value = orderData[field];
         if (field === 'total_price') {
@@ -192,24 +213,23 @@ export const useOrderStore = defineStore('order', () => {
         throw new Error(`缺少必填字段: ${missingFields.join(', ')}`);
       }
 
-      if (!orderData.id_number || orderData.id_number.length !== 18) {
-        console.error('身份证号无效:', orderData.id_number);
-        throw new Error('身份证号必须为18位');
-      }
-
-      if (orderData.phone && orderData.phone.length !== 11) {
+      // 手机号如果提供，验证格式（可选）
+      if (orderData.phone && orderData.phone.length > 0 && orderData.phone.length !== 11) {
         console.error('手机号无效:', orderData.phone);
         throw new Error('手机号必须为11位');
       }
 
       const response = await orderApi.addOrder(orderData);
 
+      console.log('🔍 后端返回的原始数据:', response);
+
       const newOrderFromApi = response.order || response;
+      console.log('🔍 提取的订单数据:', newOrderFromApi);
+
       const newOrderMapped = {
         orderNumber: newOrderFromApi.order_id,
         guestName: newOrderFromApi.guest_name,
         phone: newOrderFromApi.phone,
-        idNumber: newOrderFromApi.id_number,
         roomType: newOrderFromApi.room_type,
         roomNumber: newOrderFromApi.room_number,
         checkInDate: newOrderFromApi.check_in_date,
@@ -222,7 +242,12 @@ export const useOrderStore = defineStore('order', () => {
         remarks: newOrderFromApi.remarks,
         source: newOrderFromApi.order_source,
         sourceNumber: newOrderFromApi.id_source,
+        isPrepaid: Boolean(newOrderFromApi.is_prepaid),
+        prepaidAmount: parseFloat(newOrderFromApi.prepaid_amount) || 0,
+        prepaidAt: newOrderFromApi.prepaid_at
       };
+
+      console.log('🔍 映射后的订单数据:', newOrderMapped);
       orders.value.unshift(newOrderMapped)
       return newOrderMapped;
     } catch (err) {
@@ -231,8 +256,15 @@ export const useOrderStore = defineStore('order', () => {
       const code = backend?.error?.code || backend?.error?.details || backend?.code;
       const msg = backend?.message || backend?.error?.details || backend?.error?.message || err.message;
       const combined = code ? `[${code}] ${msg}` : msg;
-      error.value = combined || '添加订单失败';
-      throw new Error(combined);
+      const userMessage = combined || '添加订单失败';
+      error.value = userMessage;
+
+      if (err.isAxiosError && err.response) {
+        err.userFacingMessage = userMessage;
+        throw err;
+      }
+
+      throw new Error(userMessage);
     } finally {
       loading.value = false
     }
@@ -246,10 +278,15 @@ export const useOrderStore = defineStore('order', () => {
     try {
       loading.value = true;
       error.value = null;
+      const targetOrderId = orderNumber || ''
+      if (!targetOrderId) {
+        throw new Error('订单号无效，无法更新状态');
+      }
       const statusData = { newStatus };
-      const response = await orderApi.updateOrderStatus(orderNumber, statusData);
+      const response = await orderApi.updateOrderStatus(targetOrderId, statusData);
       const updatedOrderFromApi = response.order || response;
-      const index = orders.value.findIndex(o => o.orderNumber === orderNumber);
+      const normalizedOrderId = updatedOrderFromApi.order_id || updatedOrderFromApi.orderNumber || targetOrderId;
+      const index = orders.value.findIndex(o => o.orderNumber === normalizedOrderId);
       if (index !== -1) {
         orders.value[index] = {
           ...orders.value[index],
@@ -320,7 +357,6 @@ export const useOrderStore = defineStore('order', () => {
           orderNumber: orderData.order_id,
           guestName: orderData.guest_name,
           phone: orderData.phone,
-          idNumber: orderData.id_number,
           roomType: orderData.room_type,
           roomNumber: orderData.room_number,
           checkInDate: formatOrderDate(orderData.check_in_date),
@@ -334,7 +370,10 @@ export const useOrderStore = defineStore('order', () => {
           createTime: orderData.create_time,
           remarks: orderData.remarks,
           source: orderData.order_source,
-          sourceNumber: orderData.id_source
+          sourceNumber: orderData.id_source,
+          isPrepaid: Boolean(orderData.is_prepaid),
+          prepaidAmount: parseFloat(orderData.prepaid_amount) || 0,
+          prepaidAt: orderData.prepaid_at
         }
 
         const index = orders.value.findIndex(o => o.orderNumber === orderNumber)
@@ -364,7 +403,6 @@ export const useOrderStore = defineStore('order', () => {
       const map = {
         guestName: 'guest_name',
         phone: 'phone',
-        idNumber: 'id_number',
         roomType: 'room_type',
         roomNumber: 'room_number',
         checkInDate: 'check_in_date',
@@ -403,7 +441,6 @@ export const useOrderStore = defineStore('order', () => {
           ...orders.value[idx],
           guestName: updated.guest_name ?? orders.value[idx].guestName,
           phone: updated.phone ?? orders.value[idx].phone,
-          idNumber: updated.id_number ?? orders.value[idx].idNumber,
           roomType: updated.room_type ?? orders.value[idx].roomType,
           roomNumber: updated.room_number ?? orders.value[idx].roomNumber,
           checkInDate: updated.check_in_date ? formatOrderDate(updated.check_in_date) : orders.value[idx].checkInDate,
@@ -412,6 +449,9 @@ export const useOrderStore = defineStore('order', () => {
           roomPrice: updated.total_price ?? orders.value[idx].roomPrice,
           deposit: updated.deposit ?? orders.value[idx].deposit,
           remarks: updated.remarks ?? orders.value[idx].remarks,
+          isPrepaid: updated.is_prepaid ?? orders.value[idx].isPrepaid,
+          prepaidAmount: updated.prepaid_amount !== undefined ? (parseFloat(updated.prepaid_amount) || 0) : orders.value[idx].prepaidAmount,
+          prepaidAt: updated.prepaid_at ?? orders.value[idx].prepaidAt
         };
         orders.value[idx] = merged;
       }
@@ -440,8 +480,7 @@ export const useOrderStore = defineStore('order', () => {
       const convertedOrderData = {
         orderNumber: orderData.orderNumber,
         guestName: orderData.guestName,
-        phone: orderData.phone,
-        idNumber: orderData.idNumber || '000000000000000000',
+        phone: orderData.phone || '',
         roomType: orderData.roomType,
         roomNumber: orderData.roomNumber,
         checkInDate: orderData.checkInDate,
@@ -507,17 +546,22 @@ export const useOrderStore = defineStore('order', () => {
     }
   }
 
-  async function checkIn(orderNumber) {
+  async function checkIn(orderNumber, depositAmount) {
     try {
       loading.value = true;
       error.value = null;
-      console.log(`🚀 开始办理入住，订单号: ${orderNumber}`);
+      console.log(`🚀 开始办理入住，订单号: ${orderNumber}, 押金: ${depositAmount}`);
 
-      const result = await orderApi.checkIn(orderNumber);
+      const checkInData = depositAmount !== undefined ? { deposit: depositAmount } : {};
+      const result = await orderApi.checkIn(orderNumber, checkInData);
 
       const index = orders.value.findIndex(o => o.orderNumber === orderNumber);
       if (index !== -1) {
         orders.value[index].status = 'checked-in';
+        // 如果传入了押金金额，更新订单的押金
+        if (depositAmount !== undefined) {
+          orders.value[index].deposit = depositAmount;
+        }
       }
 
       console.log(`✅ 办理入住成功，订单号: ${orderNumber}`, result);
@@ -527,6 +571,123 @@ export const useOrderStore = defineStore('order', () => {
       const errorMessage = err.response?.data?.message || err.message || '办理入住失败';
       error.value = errorMessage;
       throw new Error(errorMessage);
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function fastCheckIn(order) {
+    try {
+      loading.value = true;
+      error.value = null;
+
+      // Prepare data (similar to addOrder)
+      const orderData = {
+        order_id: order.orderNumber?.toString(),
+        guest_name: order.guestName?.toString(),
+        phone: order.phone?.toString() || '',
+        room_type: order.roomType?.toString(),
+        room_number: order.roomNumber?.toString(),
+        check_in_date: formatOrderDate(order.checkInDate),
+        check_out_date: formatOrderDate(order.checkOutDate),
+        status: 'checked-in', // This is the key for the new API
+        payment_method: viewStore.normalizePaymentMethodForDB(typeof order.paymentMethod === 'object' ? order.paymentMethod.value?.toString() : order.paymentMethod?.toString()),
+        total_price: order.roomPrice,
+        deposit: parseFloat(order.deposit) || 0,
+        remarks: order.remarks?.toString() || '',
+        order_source: order.source?.toString() || 'front_desk',
+        id_source: order.sourceNumber?.toString() || '',
+        create_time: new Date().toISOString(),
+      };
+
+      // Call the new API
+      const response = await orderApi.fastCheckIn(orderData);
+
+      console.log('✅ [fastCheckIn] 后端返回数据:', response);
+
+      // The backend returns { success, message, data: { order, bill, room } }
+      const newOrderFromApi = response.data?.order || response.order;
+
+      // Update local state
+      const newOrderMapped = {
+        orderNumber: newOrderFromApi.order_id,
+        guestName: newOrderFromApi.guest_name,
+        phone: newOrderFromApi.phone,
+        roomType: newOrderFromApi.room_type,
+        roomNumber: newOrderFromApi.room_number,
+        checkInDate: newOrderFromApi.check_in_date,
+        checkOutDate: newOrderFromApi.check_out_date,
+        status: newOrderFromApi.status,
+        paymentMethod: newOrderFromApi.payment_method,
+        roomPrice: newOrderFromApi.total_price,
+        deposit: newOrderFromApi.deposit,
+        createTime: newOrderFromApi.create_time,
+        remarks: newOrderFromApi.remarks,
+        source: newOrderFromApi.order_source,
+        sourceNumber: newOrderFromApi.id_source,
+      };
+
+      orders.value.unshift(newOrderMapped);
+
+      return response; // Return the full { order, bills } object
+
+    } catch (err) {
+      const backend = err.response?.data;
+      console.error('快速入住失败:', backend || err.message);
+      const code = backend?.code;
+      const msg = backend?.message || err.message;
+      const combined = code ? `[${code}] ${msg}` : msg;
+      error.value = combined || '快速入住失败';
+      throw new Error(combined);
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function earlyCheckout(orderNumber, payload) {
+    if (!orderNumber) {
+      throw new Error('订单号无效，无法提前退房');
+    }
+    try {
+      loading.value = true;
+      error.value = null;
+      const response = await orderApi.earlyCheckout(orderNumber, payload);
+      const result = response?.data || response;
+      const updatedOrderFromApi = result?.order || result?.data?.order;
+      if (!updatedOrderFromApi) {
+        throw new Error('提前退房成功，但未返回订单信息');
+      }
+      const index = orders.value.findIndex(o => o.orderNumber === orderNumber);
+      const mappedOrder = {
+        orderNumber: updatedOrderFromApi.order_id,
+        guestName: updatedOrderFromApi.guest_name,
+        phone: updatedOrderFromApi.phone,
+        roomType: updatedOrderFromApi.room_type,
+        roomNumber: updatedOrderFromApi.room_number,
+        checkInDate: updatedOrderFromApi.check_in_date ? formatOrderDate(updatedOrderFromApi.check_in_date) : null,
+        checkOutDate: updatedOrderFromApi.check_out_date ? formatOrderDate(updatedOrderFromApi.check_out_date) : null,
+        status: updatedOrderFromApi.status,
+        paymentMethod: updatedOrderFromApi.payment_method,
+        roomPrice: updatedOrderFromApi.total_price,
+        deposit: updatedOrderFromApi.deposit,
+        refundedDeposit: updatedOrderFromApi.refunded_deposit || 0,
+        refundRecords: [],
+        createTime: updatedOrderFromApi.create_time,
+        remarks: updatedOrderFromApi.remarks,
+        source: updatedOrderFromApi.order_source,
+        sourceNumber: updatedOrderFromApi.id_source,
+        isPrepaid: Boolean(updatedOrderFromApi.is_prepaid),
+        prepaidAmount: parseFloat(updatedOrderFromApi.prepaid_amount) || 0,
+        prepaidAt: updatedOrderFromApi.prepaid_at
+      };
+      if (index !== -1) {
+        orders.value[index] = { ...orders.value[index], ...mappedOrder };
+      }
+      return result;
+    } catch (err) {
+      console.error('提前退房失败:', err.response?.data || err.message);
+      error.value = err.response?.data?.message || err.message || '提前退房失败';
+      throw err;
     } finally {
       loading.value = false;
     }
@@ -560,6 +721,8 @@ export const useOrderStore = defineStore('order', () => {
     formatOrderDate,
     createOrder: createExtendStayOrder, // 导出续住专用函数
     refundDeposit,
-    checkIn
+    checkIn,
+    fastCheckIn,
+    earlyCheckout
   }
 })

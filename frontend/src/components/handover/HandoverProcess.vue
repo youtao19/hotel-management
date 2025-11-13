@@ -108,10 +108,10 @@
                   />
                 </q-td>
               </template>
-              <template v-slot:body-cell-weyoufu="props">
+              <template v-slot:body-cell-weiyoufu="props">
                 <q-td :props="props" class="input-cell">
                   <q-input
-                    v-model.number="props.row.weyoufu"
+                    v-model.number="props.row.weiyoufu"
                     type="number"
                     dense
                     borderless
@@ -178,7 +178,8 @@
           <div class="q-mb-lg">
             <ShiftHandoverPaymentTable
               :paymentData="confirmationData.paymentData"
-              :readOnly="true"
+              :readOnly="false"
+              @update-retained="handleRetainedAmountUpdate"
             />
           </div>
 
@@ -191,18 +192,13 @@
               :cashierName="confirmationData.cashierName"
               :notes="confirmationData.notes"
               :goodReview="confirmationData.goodReview"
-              :readOnly="true"
+              :readOnly="false"
+              @update:vip-cards="value => handleSpecialStatsUpdate('vipCards', value)"
+              @update:notes="value => handleSpecialStatsUpdate('notes', value)"
             />
           </div>
 
-          <!-- 备忘录 -->
-          <div class="q-mb-lg">
-            <ShiftHandoverMemoList
-              :taskList="confirmationData.taskList"
-              :newTaskTitle="confirmationData.newTaskTitle"
-              :readOnly="true"
-            />
-          </div>
+          <!-- 步骤四不展示备忘录 -->
         </q-card-section>
       </q-card>
     </div>
@@ -293,15 +289,15 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, reactive, watch } from 'vue'
 import { useQuasar } from 'quasar'
+import Decimal from 'decimal.js'
 import { shiftHandoverApi } from '../../api/index.js'
 import { useShiftHandoverStore } from '../../stores/shiftHandoverStore.js'
 import { useUserStore } from '../../stores/userStore.js'
 import CheckData from './CheckData.vue'
 import ShiftHandoverPaymentTable from './ShiftHandoverPaymentTable.vue'
 import ShiftHandoverSpecialStats from './ShiftHandoverSpecialStats.vue'
-import ShiftHandoverMemoList from './ShiftHandoverMemoList.vue'
 import HandoverComplete from './HandoverComplete.vue'
 
 // 定义 props
@@ -349,12 +345,33 @@ const savedSpecialStats = ref({
   positive: 0
 })
 
+const selectedHandoverDate = ref(null)
+
 // 步骤相关数据
+const formatDateTimeLocal = (date) => {
+  const pad = (value) => String(value).padStart(2, '0')
+  const year = date.getFullYear()
+  const month = pad(date.getMonth() + 1)
+  const day = pad(date.getDate())
+  const hours = pad(date.getHours())
+  const minutes = pad(date.getMinutes())
+  return `${year}-${month}-${day}T${hours}:${minutes}`
+}
+
 const handoverInfo = ref({
   nextOperator: '',
-  handoverTime: new Date().toISOString().slice(0, 16),
+  handoverTime: formatDateTimeLocal(new Date()),
   notes: ''
 })
+
+watch(
+  () => props.currentStep,
+  (newStep) => {
+    if (newStep === 5) {
+      handoverInfo.value.handoverTime = formatDateTimeLocal(new Date())
+    }
+  }
+)
 
 // 昨日记录检查相关数据
 const isCheckingRecord = ref(false)
@@ -391,9 +408,9 @@ const pettyCashColumns = [
     headerStyle: 'font-weight: bold;'
   },
   {
-    name: 'weyoufu',
+    name: 'weiyoufu',
     label: '微邮付',
-    field: 'weyoufu',
+    field: 'weiyoufu',
     align: 'center',
     headerStyle: 'font-weight: bold;'
   },
@@ -413,17 +430,110 @@ const pettyCashColumns = [
   }
 ]
 
+const PAY_WAY_KEYS = ['现金', '微信', '微邮付', '其他']
+const DEFAULT_CASH_RESERVE = 320
+
+Decimal.set({
+  precision: 20,
+  rounding: Decimal.ROUND_HALF_UP
+})
+
+const toDecimal = (value) => {
+  if (Decimal.isDecimal(value)) {
+    return value
+  }
+  if (value === undefined || value === null) {
+    return new Decimal(0)
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (trimmed === '') {
+      return new Decimal(0)
+    }
+    const parsed = Number(trimmed)
+    return Number.isNaN(parsed) ? new Decimal(0) : new Decimal(parsed)
+  }
+  if (typeof value === 'number') {
+    return Number.isNaN(value) ? new Decimal(0) : new Decimal(value)
+  }
+  const parsed = Number(value)
+  return Number.isNaN(parsed) ? new Decimal(0) : new Decimal(parsed)
+}
+
+const toAmountNumber = (value, places = 2) =>
+  Number(toDecimal(value).toDecimalPlaces(places, Decimal.ROUND_HALF_UP).toString())
+
+const sumDecimals = (...values) => values.reduce(
+  (acc, val) => acc.plus(toDecimal(val)),
+  new Decimal(0)
+)
+
+const createPaywayBucket = (seed = {}) => {
+  const bucket = {}
+  PAY_WAY_KEYS.forEach(key => {
+    const source = Object.prototype.hasOwnProperty.call(seed, key) ? seed[key] : 0
+    bucket[key] = toAmountNumber(source)
+  })
+  return bucket
+}
+
 const pettyCashRows = ref([
   {
     id: 1,
     label: '备用金',
-    cash: 320,
+    cash: DEFAULT_CASH_RESERVE,
     wechat: 0,
-    weyoufu: 0,
+    weiyoufu: 0,
     other: 0,
-    total: 0
+    total: DEFAULT_CASH_RESERVE
   }
 ])
+
+const DEFAULT_RETAINED_AMOUNTS = createPaywayBucket({
+  '现金': DEFAULT_CASH_RESERVE
+})
+
+const createDefaultRetainedBuckets = () => ({
+  ...DEFAULT_RETAINED_AMOUNTS
+})
+
+const retainedInitialized = ref(false)
+const retainedAmounts = ref(createDefaultRetainedBuckets())
+
+const specialStatsState = reactive({
+  vipCards: 0,
+  notes: '',
+  goodReview: ''
+})
+
+const specialStatsInitialized = ref(false)
+
+const mapReserveRowToBuckets = () => {
+  const reserveCash = pettyCashRows.value[0] || { cash: 0, wechat: 0, weiyoufu: 0, other: 0 }
+  return createPaywayBucket({
+    '现金': reserveCash.cash,
+    '微信': reserveCash.wechat,
+    '微邮付': reserveCash.weiyoufu,
+    '其他': reserveCash.other
+  })
+}
+
+const initializeRetainedAmounts = () => {
+  retainedAmounts.value = createDefaultRetainedBuckets()
+  retainedInitialized.value = true
+}
+
+const countRoomNights = (rows = []) => {
+  return rows.reduce((sum, row) => {
+    if (row.changeType !== '房费') {
+      return sum
+    }
+    if (row.isAggregatedRoomFee && Array.isArray(row.aggregatedBillIds) && row.aggregatedBillIds.length > 0) {
+      return sum + row.aggregatedBillIds.length
+    }
+    return sum + 1
+  }, 0)
+}
 
 // 计算确认数据（从步骤3的汇总数据对象中获取）
 const confirmationData = computed(() => {
@@ -435,46 +545,81 @@ const confirmationData = computed(() => {
   console.log('📦 [步骤4] 休息退押:', summaryData.restRefundDeposit)
 
   // 获取备用金（来自步骤2）
-  const reserveCash = pettyCashRows.value[0] || { cash: 0, wechat: 0, weyoufu: 0, other: 0 }
-  const reserve = {
-    '现金': reserveCash.cash || 0,
-    '微信': reserveCash.wechat || 0,
-    '微邮付': reserveCash.weyoufu || 0,
-    '其他': reserveCash.other || 0
-  }
-
-  // 计算总收入（客房收入 + 休息房收入）
-  const totalIncome = { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
-  Object.keys(totalIncome).forEach(key => {
-    totalIncome[key] = (summaryData.hotelIncome[key] || 0) + (summaryData.restIncome[key] || 0)
-  })
+  const reserve = mapReserveRowToBuckets()
 
   // 计算总退押（客房退押 + 休息房退押）- 已包含退押金和退款
-  const totalRefundDeposit = { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
-  Object.keys(totalRefundDeposit).forEach(key => {
-    totalRefundDeposit[key] = (summaryData.hotelRefundDeposit[key] || 0) + (summaryData.restRefundDeposit[key] || 0)
+  const totalRefundDeposit = createPaywayBucket()
+  PAY_WAY_KEYS.forEach(key => {
+    const combinedRefund = toDecimal(summaryData.hotelRefundDeposit[key]).plus(summaryData.restRefundDeposit[key])
+    totalRefundDeposit[key] = toAmountNumber(combinedRefund)
   })
 
-  // 计算交接款（备用金 + 总收入 - 总退押）
-  const handoverAmount = { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
-  Object.keys(handoverAmount).forEach(key => {
-    handoverAmount[key] = (reserve[key] || 0) + (totalIncome[key] || 0) - (totalRefundDeposit[key] || 0)
+  if (!retainedInitialized.value) {
+    initializeRetainedAmounts()
+  }
+
+  const currentRetained = { ...retainedAmounts.value }
+
+  // 计算合计与交接款
+  const totalAmount = createPaywayBucket()
+  const handoverAmount = createPaywayBucket()
+
+  PAY_WAY_KEYS.forEach(key => {
+    const reserveValue = toDecimal(reserve[key])
+    const hotelIncomeValue = toDecimal(summaryData.hotelIncome[key])
+    const restIncomeValue = toDecimal(summaryData.restIncome[key])
+    const carIncomeValue = new Decimal(0) // 暂无租车收入数据
+
+    const rowTotalDecimal = reserveValue.plus(hotelIncomeValue).plus(restIncomeValue).plus(carIncomeValue)
+    totalAmount[key] = toAmountNumber(rowTotalDecimal)
+
+    let retainedValue = currentRetained[key]
+    if (retainedValue === undefined || retainedValue === null || Number.isNaN(retainedValue)) {
+      retainedValue = toAmountNumber(reserveValue)
+    } else {
+      retainedValue = toAmountNumber(retainedValue)
+    }
+    currentRetained[key] = retainedValue
+
+    const refundDecimal = toDecimal(totalRefundDeposit[key])
+    const handoverDecimal = rowTotalDecimal.minus(refundDecimal).minus(toDecimal(retainedValue))
+    handoverAmount[key] = toAmountNumber(handoverDecimal)
   })
+
+  const retainedChanged = PAY_WAY_KEYS.some(key => currentRetained[key] !== retainedAmounts.value[key])
+  if (retainedChanged) {
+    retainedAmounts.value = { ...currentRetained }
+  }
 
   // 获取房间统计数据（优先使用特殊统计API的数据）
-  let totalRooms = savedSpecialStats.value.openCount || 0
-  let restRooms = savedSpecialStats.value.restCount || 0
+  const hotelRoomRows = savedCheckData.value.hotelRoomData || []
+  const restRoomRows = savedCheckData.value.restRoomData || []
 
-  // 如果没有特殊统计数据，使用核对数据的账单数量
-  if (totalRooms === 0 && restRooms === 0) {
-    if (savedCheckData.value.hotelRoomData.length > 0 || savedCheckData.value.restRoomData.length > 0) {
-      totalRooms = savedCheckData.value.hotelRoomData.length
-      restRooms = savedCheckData.value.restRoomData.length
-    }
+  let totalRooms = countRoomNights(hotelRoomRows)
+  let restRooms = countRoomNights(restRoomRows)
+
+  const hasSpecialOpen = savedSpecialStats.value.openCount !== undefined && savedSpecialStats.value.openCount !== null
+  const hasSpecialRest = savedSpecialStats.value.restCount !== undefined && savedSpecialStats.value.restCount !== null
+  if (hasSpecialOpen) {
+    totalRooms = savedSpecialStats.value.openCount
+  }
+  if (hasSpecialRest) {
+    restRooms = savedSpecialStats.value.restCount
   }
 
   // 格式化好评数据为 "邀X得Y"
-  const goodReview = `邀${savedSpecialStats.value.invited}得${savedSpecialStats.value.positive}`
+  const derivedGoodReview = `邀${savedSpecialStats.value.invited || 0}得${savedSpecialStats.value.positive || 0}`
+
+  if (!specialStatsInitialized.value) {
+    specialStatsState.vipCards = Number(savedSpecialStats.value.vipCards || 0)
+    specialStatsState.notes = ''
+    specialStatsState.goodReview = derivedGoodReview
+    specialStatsInitialized.value = true
+  }
+
+  if (!specialStatsState.goodReview) {
+    specialStatsState.goodReview = derivedGoodReview
+  }
 
   const result = {
     paymentData: {
@@ -482,19 +627,19 @@ const confirmationData = computed(() => {
       hotelIncome: summaryData.hotelIncome,
       restIncome: summaryData.restIncome,
       carRentIncome: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }, // 暂无数据
-      totalIncome,
+      totalIncome: totalAmount,
       hotelRefundDeposit: summaryData.hotelRefundDeposit,
       restRefundDeposit: summaryData.restRefundDeposit,
       totalRefundDeposit, // 总退押（已包含退押金和退款）
-      retainedAmount: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }, // 暂无数据
+      retainedAmount: currentRetained,
       handoverAmount
     },
     totalRooms,
     restRooms,
-    vipCards: 0, // 暂无数据
-    cashierName: '', // 需要从用户信息获取
-    notes: '',
-    goodReview,
+    vipCards: specialStatsState.vipCards,
+    cashierName: userStore.user.username || '交班人',
+    notes: specialStatsState.notes,
+    goodReview: specialStatsState.goodReview,
     taskList: [],
     newTaskTitle: ''
   }
@@ -522,7 +667,27 @@ const completeHandoverInfo = computed(() => ({
 // 更新备用金总计
 const updateTotal = () => {
   const row = pettyCashRows.value[0]
-  row.total = (row.cash || 0) + (row.wechat || 0) + (row.weyoufu || 0) + (row.other || 0)
+  const total = sumDecimals(row.cash, row.wechat, row.weiyoufu, row.other)
+  row.total = toAmountNumber(total)
+}
+
+const handleRetainedAmountUpdate = ({ payWay, value }) => {
+  if (!PAY_WAY_KEYS.includes(payWay)) {
+    return
+  }
+  const numericValue = toAmountNumber(value)
+  retainedAmounts.value = {
+    ...retainedAmounts.value,
+    [payWay]: numericValue
+  }
+}
+
+const handleSpecialStatsUpdate = (field, value) => {
+  if (field === 'vipCards') {
+    specialStatsState.vipCards = Number(value) || 0
+  } else if (field === 'notes') {
+    specialStatsState.notes = value || ''
+  }
 }
 
 // 确认备用金
@@ -530,20 +695,12 @@ const confirmReserveCash = async () => {
   try {
     isConfirmingCash.value = true
 
-    $q.notify({
-      type: 'info',
-      message: '正在确认备用金...',
-      position: 'top'
-    })
+    const row = pettyCashRows.value[0]
+    const total = toAmountNumber(row.total)
+    row.total = total
 
-
-    const total = pettyCashRows.value[0].total
-
-    $q.notify({
-      type: 'positive',
-      message: `备用金确认完成，总计: ¥${total.toFixed(2)}`,
-      position: 'top'
-    })
+    retainedInitialized.value = false
+    initializeRetainedAmounts()
 
   } catch (error) {
     console.error('确认备用金失败:', error)
@@ -565,25 +722,40 @@ const formatLocalDate = (date) => {
   return `${year}-${month}-${day}`
 }
 
+const resolveSelectedDateFromCheckData = () => {
+  if (!checkDataRef.value) return null
+  const exposed = checkDataRef.value.selectedDate
+  if (!exposed) return null
+  if (typeof exposed === 'string') return exposed
+  if (typeof exposed === 'object' && 'value' in exposed) {
+    return exposed.value
+  }
+  return null
+}
+
 // 获取特殊统计数据
-const fetchSpecialStatsData = async () => {
+const fetchSpecialStatsData = async (targetDate) => {
   try {
     console.log('📊 [获取特殊统计] 开始调用API...')
 
-    // 计算要查询的日期（与核对数据的日期逻辑一致）
-    const now = new Date()
-    const currentHour = now.getHours()
+    let queryDateStr = targetDate
 
-    // 计算当前营业日
-    let currentBusinessDate = new Date(now)
-    if (currentHour < 8) {
-      currentBusinessDate.setDate(currentBusinessDate.getDate() - 1)
+    if (!queryDateStr) {
+      // 计算要查询的日期（与核对数据的日期逻辑一致）
+      const now = new Date()
+      const currentHour = now.getHours()
+
+      // 计算当前营业日
+      let currentBusinessDate = new Date(now)
+      if (currentHour < 8) {
+        currentBusinessDate.setDate(currentBusinessDate.getDate() - 1)
+      }
+
+      // 计算要查询的营业日（当前营业日的前一天）
+      let queryDate = new Date(currentBusinessDate)
+      queryDate.setDate(queryDate.getDate() - 1)
+      queryDateStr = formatLocalDate(queryDate)
     }
-
-    // 计算要查询的营业日（当前营业日的前一天）
-    let queryDate = new Date(currentBusinessDate)
-    queryDate.setDate(queryDate.getDate() - 1)
-    const queryDateStr = formatLocalDate(queryDate)
 
     console.log('📊 [获取特殊统计] 查询日期:', queryDateStr)
 
@@ -597,6 +769,8 @@ const fetchSpecialStatsData = async () => {
         invited: response.data.invited || 0,
         positive: response.data.positive || 0
       }
+
+      specialStatsInitialized.value = false
 
       console.log('✅ [获取特殊统计] 数据获取成功:', savedSpecialStats.value)
 
@@ -619,6 +793,8 @@ const fetchSpecialStatsData = async () => {
       invited: 0,
       positive: 0
     }
+
+    specialStatsInitialized.value = false
 
     $q.notify({
       type: 'warning',
@@ -682,7 +858,13 @@ const checkYesterdayRecord = async () => {
 
       if (isComplete && handoverAmounts) {
         // 如果有完整的昨日记录，保存交接款到 store，作为今日备用金
-        const totalReserve = handoverAmounts.cash + handoverAmounts.wechat + handoverAmounts.weyoufu + handoverAmounts.other
+        const totalReserveDecimal = sumDecimals(
+          handoverAmounts.cash,
+          handoverAmounts.wechat,
+          handoverAmounts.weiyoufu,
+          handoverAmounts.other
+        )
+        const totalReserve = toAmountNumber(totalReserveDecimal)
         recordCheckResult.value.reserveAmount = totalReserve
 
         shiftHandoverStore.setYesterdayHandoverAmounts(handoverAmounts)
@@ -748,36 +930,34 @@ const nextStep = async () => {
       // 如果有昨日记录，自动填入昨日交接款作为备用金
       if (recordCheckResult.value.hasRecord) {
         const amounts = shiftHandoverStore.yesterdayHandoverAmounts
-        pettyCashRows.value[0].cash = amounts.cash || 0
+        pettyCashRows.value[0].cash = DEFAULT_CASH_RESERVE
         pettyCashRows.value[0].wechat = amounts.wechat || 0
-        pettyCashRows.value[0].weyoufu = amounts.weyoufu || 0
-        pettyCashRows.value[0].other = amounts.other || 0
+        pettyCashRows.value[0].weiyoufu = 0
+        pettyCashRows.value[0].other = 0
         updateTotal()
 
-        console.log('✅ [步骤1→2] 自动填入昨日交接款作为备用金:', amounts)
+        console.log('✅ [步骤1→2] 自动填入昨日交接款作为备用金（现金使用默认）:', {
+          ...amounts,
+          cash: DEFAULT_CASH_RESERVE
+        })
 
         $q.notify({
           type: 'positive',
-          message: '已自动填入昨日交接款作为今日备用金',
+          message: `已自动填入昨日交接款作为今日备用金（现金默认 ¥${DEFAULT_CASH_RESERVE}）`,
           position: 'top',
           timeout: 2000
         })
       } else {
-        // 如果没有昨日记录，清空备用金表格，让用户手动输入
-        pettyCashRows.value[0].cash = 0
+        // 如果没有昨日记录，使用默认备用金（现金 320）并清空其他支付方式
+        pettyCashRows.value[0].cash = DEFAULT_CASH_RESERVE
         pettyCashRows.value[0].wechat = 0
-        pettyCashRows.value[0].weyoufu = 0
+        pettyCashRows.value[0].weiyoufu = 0
         pettyCashRows.value[0].other = 0
         updateTotal()
 
         console.log('⚠️ [步骤1→2] 无昨日记录，请手动输入备用金')
 
-        $q.notify({
-          type: 'info',
-          message: '无昨日交接记录，请手动输入今日备用金',
-          position: 'top',
-          timeout: 2000
-        })
+
       }
     }
 
@@ -807,8 +987,16 @@ const nextStep = async () => {
       // 检查数据（defineExpose 会自动解包，直接访问即可）
       const hotelData = checkDataRef.value.hotelRoomData || []
       const restData = checkDataRef.value.restRoomData || []
-      const allConfirmed = checkDataRef.value.allDataConfirmed
-      const dataCheckCompleted = checkDataRef.value.dataCheckCompleted
+
+      const unwrap = (candidate) => {
+        if (candidate && typeof candidate === 'object' && 'value' in candidate) {
+          return candidate.value
+        }
+        return candidate
+      }
+
+      const allConfirmed = unwrap(checkDataRef.value.allDataConfirmed)
+      const dataCheckCompleted = unwrap(checkDataRef.value.dataCheckCompleted)
 
       console.log('🔍 [步骤验证] 数据核对状态:', {
         hotelDataCount: hotelData.length,
@@ -819,17 +1007,9 @@ const nextStep = async () => {
         restConfirmedStatus: restData.map(item => ({ orderNo: item.orderNo, confirmed: item.confirmed }))
       })
 
-      // 如果没有数据，也不能进入下一步
-      if (hotelData.length === 0 && restData.length === 0) {
-        $q.notify({
-          type: 'warning',
-          message: '当前没有账单数据，请确认是否已加载数据',
-          position: 'top'
-        })
-        return
-      }
+      const hasAnyData = hotelData.length > 0 || restData.length > 0
 
-      if (!allConfirmed) {
+      if (hasAnyData && !allConfirmed) {
         $q.notify({
           type: 'warning',
           message: '请确认所有账单数据后再进入下一步',
@@ -842,7 +1022,9 @@ const nextStep = async () => {
       if (!dataCheckCompleted) {
         $q.notify({
           type: 'warning',
-          message: '请点击"确认核对"按钮完成数据核对',
+          message: hasAnyData
+            ? '请点击"确认核对"按钮完成数据核对'
+            : '今日暂无账单数据，请先点击"确认核对"后继续',
           position: 'top'
         })
         return
@@ -865,7 +1047,13 @@ const nextStep = async () => {
       console.log('💾 [步骤3→4] 保存核对数据:', savedCheckData.value)
 
       // 调用后端API获取特殊统计数据
-      await fetchSpecialStatsData()
+      const selectedDateFromStep3 = resolveSelectedDateFromCheckData()
+      selectedHandoverDate.value = selectedDateFromStep3 || null
+      await fetchSpecialStatsData(selectedDateFromStep3)
+
+      if (!retainedInitialized.value) {
+        initializeRetainedAmounts()
+      }
     }
 
     if (props.currentStep < 6) {
@@ -917,28 +1105,30 @@ const completeHandover = async () => {
     })
 
     // 准备交接班数据
-    // 交接班业务逻辑：保存的是"要交接的营业日"的日期
     const now = new Date()
     const currentHour = now.getHours()
 
-    // 计算当前营业日
-    let currentBusinessDate = new Date(now)
-    if (currentHour < 8) {
-      // 还没到8点，还在昨天营业日的时间范围内
-      currentBusinessDate.setDate(currentBusinessDate.getDate() - 1)
+    let handoverDateStr = selectedHandoverDate.value
+    let handoverDateSource = 'step3-selected'
+
+    if (!handoverDateStr) {
+      handoverDateSource = 'auto-business-day'
+      let currentBusinessDate = new Date(now)
+      if (currentHour < 8) {
+        currentBusinessDate.setDate(currentBusinessDate.getDate() - 1)
+      }
+
+      let handoverBusinessDate = new Date(currentBusinessDate)
+      handoverBusinessDate.setDate(handoverBusinessDate.getDate() - 1)
+      handoverDateStr = formatLocalDate(handoverBusinessDate)
     }
 
-    // 计算要交接的营业日（当前营业日的前一天）
-    let handoverBusinessDate = new Date(currentBusinessDate)
-    handoverBusinessDate.setDate(handoverBusinessDate.getDate() - 1)
-    const handoverDateStr = formatLocalDate(handoverBusinessDate)
-
-    console.log('📤 [完成交接] 日期计算:', {
+    console.log('📤 [完成交接] 日期来源:', {
       currentTime: now.toLocaleString('zh-CN'),
       currentHour,
-      currentBusinessDate: formatLocalDate(currentBusinessDate),
-      handoverBusinessDate: handoverDateStr,
-      logic: '保存"要交接的营业日"的日期'
+      handoverDate: handoverDateStr,
+      handoverDateSource,
+      selectedDateFromStep3: selectedHandoverDate.value
     })
 
     // 转换字段名：前端使用 hotelRefundDeposit/restRefundDeposit，后端使用 hotelDeposit/restDeposit
@@ -950,6 +1140,7 @@ const completeHandover = async () => {
       totalIncome: confirmationData.value.paymentData.totalIncome,
       hotelDeposit: confirmationData.value.paymentData.hotelRefundDeposit,  // 字段名转换
       restDeposit: confirmationData.value.paymentData.restRefundDeposit,    // 字段名转换
+      totalRefundDeposit: confirmationData.value.paymentData.totalRefundDeposit,
       retainedAmount: confirmationData.value.paymentData.retainedAmount,
       handoverAmount: confirmationData.value.paymentData.handoverAmount
     }

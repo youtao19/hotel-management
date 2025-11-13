@@ -1,19 +1,3 @@
-// 在导入数据库之前先设置测试环境变量
-process.env.NODE_ENV = 'test';
-process.env.REDIS_PW = process.env.REDIS_PW || '';
-process.env.REDIS_HOST = process.env.REDIS_HOST || 'localhost';
-process.env.REDIS_PORT = process.env.REDIS_PORT || '6379';
-process.env.ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'test@example.com';
-process.env.APP_NAME = process.env.APP_NAME || 'hotelManagement';
-process.env.APP_URL = process.env.APP_URL || 'http://localhost:9000';
-process.env.EMAIL_HOST = process.env.EMAIL_HOST || 'smtp.example.com';
-process.env.EMAIL_PORT = process.env.EMAIL_PORT || '587';
-process.env.EMAIL_USER = process.env.EMAIL_USER || 'test';
-process.env.EMAIL_PW = process.env.EMAIL_PW || 'test';
-process.env.OPENAI_KEY = process.env.OPENAI_KEY || 'test';
-process.env.OPENAI_HOST = process.env.OPENAI_HOST || 'test';
-process.env.OPENAI_CHAT_COMPLETION_PATH = process.env.OPENAI_CHAT_COMPLETION_PATH || 'test';
-
 const db = require('../database/postgreDB/pg');
 const redisDB = require('../database/redis/redis');
 const app = require('../app');
@@ -30,58 +14,38 @@ const tables = [
   'handover'
 ];
 
-// 生成 TRUNCATE SQL
-const truncateTablesSQL = () => `TRUNCATE TABLE ${tables.join(', ')} RESTART IDENTITY CASCADE;`;
-
-// ✅ 立即定义全局清理函数（在 beforeAll 之前）
-global.cleanupTestData = async () => {
-  try {
-    await db.query(truncateTablesSQL());
-  } catch (error) {
-    console.warn('cleanupTestData 警告:', error.message);
-  }
-};
-
 // 全局测试设置
 beforeAll(async () => {
+  // 初始化数据库结构
+  await db.initializePostgreDB();
+
   // ✅ 初始化 app 的 session 和路由（重要！）
   await app.initializeSession();
 
-  // 初始化数据库结构
-  await db.initializeHotelDB();
-
-  // 初始化 Redis 连接
-  await redisDB.initialize();
-
   console.log('✅ 测试环境初始化完成');
-}, 60000); // 增加超时时间
+});
 
-// 全局测试清理
 afterAll(async () => {
   try {
-    // 直接关闭连接，不清理数据（因为数据库是测试数据库）
-    console.log('开始清理测试环境...');
-  } catch (e) {
-    console.warn('清理测试数据时出现警告:', e.message);
+    // 先禁用外键约束
+    await db.query('SET session_replication_role = replica;');
+
+    // 清空所有测试表数据
+    for (const table of tables) {
+      await db.query(`DROP TABLE IF EXISTS ${table} CASCADE;`);
+    }
+
+    // 恢复外键约束
+    await db.query('SET session_replication_role = DEFAULT;');
+
+    console.log('✅ 所有测试表已清空');
+  } catch (err) {
+    console.error('❌ 清空测试表时出错:', err);
   } finally {
-    // 关闭 Redis 连接
-    try {
-      await redisDB.close();
-      console.log('Redis 连接已关闭');
-    } catch (e) {
-      console.warn('关闭 Redis 时出现警告:', e.message);
-    }
+    // 关闭数据库连接
+    await db.closePool();
+    await redisDB.close();
 
-    // 关闭数据库连接池
-    try {
-      await db.closePool();
-      console.log('数据库连接池已关闭');
-    } catch (e) {
-      console.warn('关闭数据库时出现警告:', e.message);
-    }
-
-    // 等待一小段时间，确保所有连接完全关闭
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    console.log('测试环境清理完成');
+    console.log('✅ 测试环境清理完成');
   }
-}, 10000); // 10秒超时
+});

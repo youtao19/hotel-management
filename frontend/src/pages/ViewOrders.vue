@@ -89,6 +89,10 @@
                   v-if="props.row.status === 'checked-in'">
                   <q-tooltip>办理退房</q-tooltip>
                 </q-btn>
+                <q-btn flat round dense color="warning" icon="logout" @click="openEarlyCheckoutDialog(props.row)"
+                  v-if="props.row.status === 'checked-in'">
+                  <q-tooltip>提前退房</q-tooltip>
+                </q-btn>
                 <q-btn flat round dense color="orange" icon="hotel_class" @click="openExtendStayDialog(props.row)"
                   v-if="props.row.status === 'checked-out'">
                   <q-tooltip>续住</q-tooltip>
@@ -141,6 +145,7 @@
       @checkout="checkoutOrderFromDetails"
       @refund-deposit="openRefundDepositFromDetails"
       @change-order="openChangeOrderDialog"
+      @early-checkout="openEarlyCheckoutFromDetails"
     />
 
 
@@ -189,7 +194,21 @@
       @refund-deposit="handleRefundDeposit"
     />
 
+    <EarlyCheckoutDialog
+      v-model="showEarlyCheckoutDialog"
+      :order="earlyCheckoutOrder"
+      @success="handleEarlyCheckoutSuccess"
+    />
 
+    <!-- 办理入住确认对话框 -->
+    <CheckInConfirmDialog
+      v-model="showCheckInConfirmDialog"
+      :order="checkInOrder_ref"
+      :getRoomTypeName="getRoomTypeName"
+      :getPaymentMethodName="getPaymentMethodName"
+      :formatDate="formatDate"
+      @confirm="handleCheckInConfirm"
+    />
 
     </div>
   </q-page>
@@ -210,6 +229,8 @@ import ChangeRoomDialog from 'src/components/ChangeRoomDialog.vue';
 import CheckIn from 'src/components/CheckIn.vue';
 import ExtendStayDialog from 'src/components/ExtendStayDialog.vue';
 import RefundDepositDialog from 'src/components/RefundDepositDialog.vue';
+import CheckInConfirmDialog from 'src/components/CheckInConfirmDialog.vue';
+import EarlyCheckoutDialog from 'src/components/EarlyCheckoutDialog.vue';
 import { watch } from 'vue'
 
 
@@ -333,17 +354,6 @@ const filteredOrders = computed(() => {
       const filterDateStr = formatDate(filterDate.value)
       const checkInDateStr = order.checkInDate ? formatDate(order.checkInDate) : ''
       const checkOutDateStr = order.checkOutDate ? formatDate(order.checkOutDate) : ''
-
-      // 调试信息（在开发时可以开启）
-      if (process.env.NODE_ENV === 'development') {
-        console.log('日期筛选:', {
-          filter: filterDateStr,
-          checkIn: checkInDateStr,
-          checkOut: checkOutDateStr,
-          order: order.orderNumber
-        })
-      }
-
       return checkInDateStr === filterDateStr || checkOutDateStr === filterDateStr
     })
   }
@@ -374,7 +384,6 @@ async function fetchAllOrders() {
     loadingOrders.value = true
 
     await orderStore.fetchAllOrders()
-    console.log('获取到的订单数据:', orderStore.orders)
 
   } catch (error) {
     console.error('获取订单数据失败:', error)
@@ -408,6 +417,8 @@ const showChangeOrderDialog = ref(false)
 const changeOrderRooms = ref([])
 const showCheckInDialog = ref(false)
 const billOrder = ref(null)
+const showEarlyCheckoutDialog = ref(false)
+const earlyCheckoutOrder = ref(null)
 
 // 在 script 部分添加相关变量和方法
 const availableRoomOptions = ref([]); // 用于存储从API获取的可用房间选项
@@ -418,6 +429,18 @@ function viewOrderDetails(order) {
   console.log('Viewing order details. Status:', currentOrder.value ? currentOrder.value.status : 'currentOrder is null');
   console.log('currentOrder', currentOrder.value)
   showOrderDetails.value = true;
+}
+
+function openEarlyCheckoutDialog(order) {
+  if (!order) return
+  earlyCheckoutOrder.value = order
+  showEarlyCheckoutDialog.value = true
+}
+
+function openEarlyCheckoutFromDetails() {
+  if (currentOrder.value) {
+    openEarlyCheckoutDialog(currentOrder.value)
+  }
 }
 
 // 取消订单
@@ -466,6 +489,21 @@ async function cancelOrder(order) {
   }
 }
 
+async function handleEarlyCheckoutSuccess() {
+  try {
+    await orderStore.fetchAllOrders()
+    await roomStore.fetchAllRooms()
+    if (currentOrder.value && currentOrder.value.orderNumber) {
+      const latest = await orderStore.getOrderByNumber(currentOrder.value.orderNumber, true)
+      if (latest) currentOrder.value = { ...latest }
+    }
+  } catch (error) {
+    console.warn('刷新订单/房间状态失败:', error)
+  } finally {
+    showEarlyCheckoutDialog.value = false
+  }
+}
+
 
 
 // 续住相关变量
@@ -477,6 +515,10 @@ const loadingExtendStayRooms = ref(false)
 // 退押金相关变量
 const showRefundDepositDialog = ref(false)
 const refundDepositOrder = ref(null)
+
+// 办理入住确认对话框
+const showCheckInConfirmDialog = ref(false)
+const checkInOrder_ref = ref(null)
 // 退押按钮可见性的本地缓存：true 可退；false 不可退；未定义 表示尚未计算
 const refundableMap = ref({})
 
@@ -562,8 +604,8 @@ async function performCheckOut(order) {
 
     // 获取房间并将状态更改为清洁中
     const room = roomStore.getRoomByNumber(order.roomNumber);
-    if (room && room.room_id) {
-      const roomUpdateSuccess = await roomStore.checkOutRoom(room.room_id);
+    if (room && room.room_number) {
+      const roomUpdateSuccess = await roomStore.checkOutRoom(room.room_number);
       if (!roomUpdateSuccess) {
         $q.notify({
           type: 'warning',
@@ -654,29 +696,23 @@ async function checkInOrder(order) {
     return;
   }
 
-  // 使用 Quasar Dialog 显示确认对话框
-  $q.dialog({
-    title: '确认办理入住',
-    message: `确定要为订单 ${order.orderNumber} (客人: ${order.guestName}, 房间: ${order.roomNumber}) 办理入住吗？
+  // 显示账单确认对话框
+  checkInOrder_ref.value = order;
+  showCheckInConfirmDialog.value = true;
+}
 
-  办理入住后将自动创建账单。`,
-    cancel: true,
-    persistent: true
-  }).onOk(async () => {
-    // 用户点击确定，执行入住操作
-    await performCheckIn(order);
-  }).onCancel(() => {
-    // 用户点击取消，什么也不做
-    console.log('用户取消了入住操作');
-  });
+// 确认办理入住（从对话框回调）
+async function handleCheckInConfirm(order) {
+  showCheckInConfirmDialog.value = false;
+  await performCheckIn(order);
 }
 
 // 执行入住操作
 async function performCheckIn(order) {
   loadingOrders.value = true;
   try {
-    // 1. 等待核心入住操作完成
-    await orderStore.checkIn(order.orderNumber);
+    // 1. 等待核心入住操作完成，传入押金金额
+    await orderStore.checkIn(order.orderNumber, order.deposit);
 
     $q.notify({
       type: 'positive',
@@ -790,6 +826,7 @@ async function changeRoom(newRoomNumber) {
         NEW_ROOM_REPAIR: '目标房间正在维修中',
         NEW_ROOM_NOT_AVAILABLE: '目标房间当前不可用',
         NEW_ROOM_CONFLICT: '目标房间在该日期范围内已有冲突订单',
+        ROOM_TYPE_MISMATCH: '目标房间的房型与订单房型不一致',
         ROOM_CHANGE_VALIDATION: '请求参数校验失败',
         ROOM_CHANGE_SERVER: '服务器内部错误，请稍后再试'
       };
@@ -806,7 +843,7 @@ async function changeRoom(newRoomNumber) {
   }
 }
 
-// 打开更换房间对话框时获取可用房间
+// 打开更换房间对话框时获取可用房间（只获取相同房型的房间）
 async function openChangeRoomDialog() {
   console.log('openChangeRoomDialog function called'); // 确认函数被调用
 
@@ -820,7 +857,8 @@ async function openChangeRoomDialog() {
     // 从订单中获取入住和离店日期
     const rawCheckInDate = currentOrder.value.checkInDate;
     const rawCheckOutDate = currentOrder.value.checkOutDate;
-    console.log('Raw dates from order:', { rawCheckInDate, rawCheckOutDate });
+    const roomType = currentOrder.value.roomType; // 获取当前房型
+    console.log('Raw dates from order:', { rawCheckInDate, rawCheckOutDate, roomType });
 
     // 确保日期格式正确（YYYY-MM-DD）
     const startDate = formatDate(rawCheckInDate);
@@ -837,12 +875,22 @@ async function openChangeRoomDialog() {
       return;
     }
 
-    // 调用 roomStore 中的方法获取可用房间
-    console.log('Calling roomStore.getAvailableRoomsByDate...');
-    const rooms = await roomStore.getAvailableRoomsByDate(startDate, endDate);
-    console.log('Rooms received from API:', rooms); // 打印从API获取的房间
+    if (!roomType) {
+      console.error('Room type is missing from current order.');
+      $q.notify({
+        type: 'negative',
+        message: '无法获取订单的房型信息',
+        position: 'top'
+      });
+      return;
+    }
 
-    // 更新可用房间选项
+    // 调用 roomStore 中的方法获取可用房间，并传入房型参数
+    console.log('Calling roomStore.getAvailableRoomsByDate with roomType:', roomType);
+    const rooms = await roomStore.getAvailableRoomsByDate(startDate, endDate, roomType);
+    console.log('Rooms received from API (same type only):', rooms); // 打印从API获取的房间
+
+    // 更新可用房间选项（排除当前房间）
     availableRoomOptions.value = rooms
       .filter(room => room.room_number !== currentOrder.value.roomNumber)
       .map(room => ({
@@ -989,7 +1037,7 @@ async function handleCheckInCompleted(checkInData) {
 
     // 3. 更新房间状态为 'occupied'
     const room = roomStore.getRoomByNumber(checkInData.room_number);
-    const updatedRoomFromApi = await roomStore.updateRoomStatus(room.room_id, 'occupied');
+    const updatedRoomFromApi = room ? await roomStore.updateRoomStatus(room.room_number, 'occupied') : false;
     if (!updatedRoomFromApi) {
       console.log('更新房间状态失败',updatedRoomFromApi)
       $q.notify({
@@ -1090,24 +1138,43 @@ async function handleExtendStay(extendStayData) {
     const uniqueId = String(timestamp).slice(-4);
     const extendStayGuestName = `${extendStayData.guestName}[续${uniqueId}]`;
 
+    const normalizedRoomPrice = (() => {
+      const priceData = extendStayData.roomPrice;
+      if (priceData && typeof priceData === 'object' && !Array.isArray(priceData)) {
+        return { ...priceData };
+      }
+      const nightlyTotal = typeof priceData === 'number' ? Number(priceData) : Number(extendStayData.totalPrice);
+      const checkInDate = extendStayData.checkInDate;
+      if (checkInDate && !Number.isNaN(nightlyTotal) && nightlyTotal > 0) {
+        return { [checkInDate]: nightlyTotal };
+      }
+      return {};
+    })();
+
     // 创建新订单数据，使用 addOrder 期望的格式
     const newOrderData = {
       orderNumber: newOrderNumber,
       guestName: extendStayGuestName, // 使用带唯一标识的客人姓名
       phone: extendStayData.phone,
-      idNumber: extendStayData.idNumber || '000000000000000000', // 使用原订单的身份证号，如果没有则使用默认值
       roomType: extendStayData.roomType,
       roomNumber: extendStayData.roomNumber,
       checkInDate: extendStayData.checkInDate,
       checkOutDate: extendStayData.checkOutDate,
       status: 'pending', // 新订单默认为待入住状态
-      paymentMethod: 'cash', // 默认现金支付，管理员可以修改
-      roomPrice: extendStayData.roomPrice, // 单日房价
+      paymentMethod: extendStayData.paymentMethod || 'cash', // 使用用户选择的支付方式
+      roomPrice: normalizedRoomPrice,
       deposit: 0, // 续住默认押金为0
       remarks: `续住订单，原客人：${extendStayData.guestName}，原订单号：${extendStayData.originalOrderNumber}。${extendStayData.notes || ''}`.trim(),
       source: 'extend_stay', // 标记为续住来源
       sourceNumber: extendStayData.originalOrderNumber || ''
     };
+
+    console.log('🔍 续住数据调试:', {
+      '对话框传递的roomPrice': extendStayData.roomPrice,
+      '对话框传递的totalPrice': extendStayData.totalPrice,
+      '最终发送的roomPrice': newOrderData.roomPrice,
+      '支付方式': newOrderData.paymentMethod
+    });
 
     console.log('📋 准备创建续住订单:', newOrderData);
 
@@ -1266,12 +1333,6 @@ async function handleRefundDeposit(refundData) {
     // 重新计算该订单的可退状态
     const order = await orderStore.getOrderByNumber(refundData.order_id);
     if (order) await computeRefundable(order);
-
-    $q.notify({
-      type: 'positive',
-      message: `退押金成功！实际退款：¥${refundData.change_price}，已自动记录到交接班系统`,
-      position: 'top'
-    })
 
   } catch (error) {
     console.error('退押金处理失败:', error)

@@ -1,75 +1,165 @@
 <template>
   <q-dialog :model-value="modelValue" @update:model-value="val => emit('update:modelValue', val)" persistent>
-    <q-card style="min-width: 400px;">
+    <q-card style="min-width: 500px; max-width: 650px;">
       <q-card-section class="row items-center q-pb-none">
-        <div class="text-h6">更改订单信息</div>
+        <div class="text-h6">修改订单信息</div>
         <q-space />
         <q-btn icon="close" flat round dense v-close-popup />
       </q-card-section>
 
       <q-card-section v-if="editableOrder">
         <q-form @submit.prevent="submitChange">
-          <q-input v-model="editableOrder.guestName" label="客人姓名" dense class="q-mb-md" />
-          <q-input v-model="editableOrder.phone" label="手机号" dense class="q-mb-md" />
-          <q-input v-model="editableOrder.idNumber" label="身份证号" dense class="q-mb-md" />
-          <q-select
-            v-model="editableOrder.roomNumber"
-            :options="roomOptions"
-            label="房间号"
-            dense
-            emit-value
-            map-options
-            @update:model-value="handleRoomChange"
-            class="q-mb-md"
-          />
-          <div class="q-mt-md">
-            <div class="text-subtitle1">房费明细</div>
+          <!-- 客人信息 -->
+          <div class="q-mb-md">
+            <div class="text-subtitle2 q-mb-sm">客人信息</div>
+            <div class="row q-col-gutter-md">
+              <div class="col-6">
+                <q-input
+                  v-model="editableOrder.guestName"
+                  label="客人姓名"
+                  filled
+                  dense
+                />
+              </div>
+              <div class="col-6">
+                <q-input
+                  v-model="editableOrder.phone"
+                  label="手机号"
+                  filled
+                  dense
+                  mask="###-####-####"
+                  unmasked-value
+                />
+              </div>
+            </div>
+          </div>
+
+          <!-- 房间信息 -->
+          <div class="q-mb-md">
+            <div class="text-subtitle2 q-mb-sm">房间信息</div>
+            <q-select
+              v-model="editableOrder.roomNumber"
+              :options="roomOptions"
+              label="房间号"
+              filled
+              dense
+              emit-value
+              map-options
+              @update:model-value="handleRoomChange"
+            />
+          </div>
+
+          <!-- 入住时间（只读） -->
+          <div class="q-mb-md">
+            <div class="text-subtitle2 q-mb-sm">入住时间</div>
+            <div class="row q-col-gutter-md">
+              <div class="col-6">
+                <q-input
+                  v-model="editableOrder.checkInDate"
+                  label="入住日期"
+                  type="date"
+                  filled
+                  dense
+                  readonly
+                />
+              </div>
+              <div class="col-6">
+                <q-input
+                  v-model="editableOrder.checkOutDate"
+                  label="离店日期"
+                  type="date"
+                  filled
+                  dense
+                  readonly
+                />
+              </div>
+            </div>
+          </div>
+
+          <!-- 房费明细 -->
+          <div class="q-mb-md">
+            <div class="text-subtitle2 q-mb-sm">房费明细</div>
             <div v-if="Object.keys(editableOrder.roomPrice || {}).length > 0">
-              <div v-for="(price, date) in editableOrder.roomPrice" :key="date" class="row q-col-gutter-sm q-mb-sm">
-                <div class="col-6">
-                  <q-input
-                    :label="date"
-                    v-model.number="editableOrder.roomPrice[date]"
-                    type="number"
-                    filled
-                    dense
-                  />
-                </div>
-                <div class="col-6 flex items-center">
-                  <span class="text-grey-7">元/晚</span>
+              <q-markup-table flat bordered dense>
+                <tbody>
+                  <tr v-for="(price, date) in editableOrder.roomPrice" :key="date">
+                    <td class="text-caption" style="width:100px">{{ formatDay(date) }}</td>
+                    <td>
+                      <q-input
+                        v-model.number="editableOrder.roomPrice[date]"
+                        type="number"
+                        filled
+                        dense
+                        prefix="¥"
+                      />
+                    </td>
+                  </tr>
+                </tbody>
+              </q-markup-table>
+              <!-- 总房费 -->
+              <div class="q-mt-sm q-pa-sm rounded-borders" style="border: 1px solid #e0e0e0;">
+                <div class="row items-center">
+                  <div class="col text-body2">房费总计</div>
+                  <div class="col-auto text-subtitle1 text-primary">¥{{ totalRoomPrice }}</div>
                 </div>
               </div>
             </div>
-             <div v-else>
-                <p class="text-grey-7 q-pa-sm">未找到房费记录，请手动添加或检查订单。</p>
+            <div v-else class="q-pa-sm" style="border: 1px solid #e0e0e0; border-radius: 4px;">
+              <p class="text-grey-7 q-ma-none">未找到房费记录</p>
             </div>
           </div>
-          <q-input v-model.number="editableOrder.deposit" label="押金" type="number" dense class="q-mb-md" />
-          <q-input
-            v-model="editableOrder.checkInDate"
-            label="入住日期"
-            type="date"
-            dense
-            class="q-mb-md"
-            stack-label
-            readonly
-          />
-          <q-input
-            v-model="editableOrder.checkOutDate"
-            label="离店日期"
-            type="date"
-            dense
-            class="q-mb-md"
-            stack-label
-            readonly
-          />
-          <q-input v-model="editableOrder.remarks" label="备注" type="textarea" dense autogrow />
+
+          <!-- 押金和支付方式 -->
+          <div class="q-mb-md">
+            <div class="text-subtitle2 q-mb-sm">支付信息</div>
+            <div class="row q-col-gutter-md">
+              <div class="col-6">
+                <q-input
+                  v-model.number="editableOrder.deposit"
+                  label="押金"
+                  type="number"
+                  filled
+                  dense
+                  prefix="¥"
+                />
+              </div>
+              <div class="col-6">
+                <q-select
+                  v-model="editableOrder.paymentMethod"
+                  :options="paymentMethodOptions"
+                  label="支付方式"
+                  filled
+                  dense
+                  emit-value
+                  map-options
+                />
+              </div>
+            </div>
+          </div>
+
+          <!-- 备注 -->
+          <div class="q-mb-md">
+            <q-input
+              v-model="editableOrder.remarks"
+              label="备注(可选)"
+              type="textarea"
+              filled
+              dense
+              rows="2"
+              autogrow
+            />
+          </div>
         </q-form>
       </q-card-section>
 
       <q-card-actions align="right">
-        <q-btn flat label="取消" color="primary" v-close-popup />
-        <q-btn flat label="保存更改" color="primary" @click="submitChange" />
+        <q-btn flat label="取消" color="grey" v-close-popup :disable="loading" />
+        <q-btn
+          label="保存更改"
+          color="primary"
+          @click="submitChange"
+          :loading="loading"
+        />
       </q-card-actions>
     </q-card>
   </q-dialog>
@@ -79,8 +169,10 @@
 import { ref, watch, computed } from 'vue';
 import { useQuasar } from 'quasar';
 import { billApi, orderApi } from '../api';
+import { useViewStore } from '../stores/viewStore';
 
 const $q = useQuasar();
+const viewStore = useViewStore();
 
 // 通用日期格式化函数，避免时区问题
 function formatDateFromDB(dateString) {
@@ -110,19 +202,95 @@ const originalRoomNumber = ref(null);
 const loading = ref(false);
 const billData = ref([]);
 
+// 支付方式选项
+const paymentMethodOptions = computed(() => viewStore.paymentMethodOptions);
+
+// 计算总房费
+const totalRoomPrice = computed(() => {
+  if (!editableOrder.value || !editableOrder.value.roomPrice) return 0;
+  return Object.values(editableOrder.value.roomPrice).reduce((sum, price) => sum + (Number(price) || 0), 0);
+});
+
+// 格式化日期显示
+function formatDay(dateStr) {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    return `${d.getMonth() + 1}月${d.getDate()}日`;
+  } catch {
+    return dateStr;
+  }
+}
+
+function getStayDates(checkIn, checkOut) {
+  if (!checkIn) return [];
+
+  const format = (dateObj) => {
+    return (
+      dateObj.getFullYear() + '-' +
+      String(dateObj.getMonth() + 1).padStart(2, '0') + '-' +
+      String(dateObj.getDate()).padStart(2, '0')
+    );
+  };
+
+  const start = new Date(`${checkIn}T00:00:00`);
+  const end = checkOut ? new Date(`${checkOut}T00:00:00`) : null;
+
+  if (Number.isNaN(start.getTime())) return [];
+
+  if (!end || Number.isNaN(end.getTime()) || end <= start) {
+    return [format(start)];
+  }
+
+  const dates = [];
+  const cursor = new Date(start);
+  while (cursor < end) {
+    dates.push(format(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return dates;
+}
+
 watch(() => props.order, async (newOrder) => {
   if (newOrder && newOrder.orderNumber) {
+    console.log('🔍 原始订单数据:', newOrder);
     const clonedOrder = JSON.parse(JSON.stringify(newOrder));
 
     clonedOrder.checkInDate = clonedOrder.checkInDate ? clonedOrder.checkInDate.split('T')[0] : '';
     clonedOrder.checkOutDate = clonedOrder.checkOutDate ? clonedOrder.checkOutDate.split('T')[0] : '';
 
-    // Initialize roomPrice from order's total_price as a fallback
-    const price = Number(clonedOrder.total_price) || 0;
+    // Initialize roomPrice from order's roomPrice field (from orderStore)
+    // 注意：orderStore 将 API 的 total_price 映射为 roomPrice
+    const price = Number(clonedOrder.roomPrice)
+                  || Number(clonedOrder.total_price)
+                  || 0;
+    console.log('💰 订单总房价:', price);
+    console.log('📅 入住日期:', clonedOrder.checkInDate, '离店日期:', clonedOrder.checkOutDate);
+
     clonedOrder.roomPrice = {};
-    if (clonedOrder.checkInDate) {
-      clonedOrder.roomPrice[clonedOrder.checkInDate] = price;
+    const stayDates = getStayDates(clonedOrder.checkInDate, clonedOrder.checkOutDate);
+    console.log('📆 住宿日期列表:', stayDates);
+
+    if (stayDates.length > 0) {
+      const nights = stayDates.length;
+      const average = nights > 0 ? price / nights : price;
+      let cumulated = 0;
+
+      stayDates.forEach((date, index) => {
+        const baseValue = index === nights - 1
+          ? price - cumulated
+          : average;
+        const normalized = Number((baseValue || 0).toFixed(2));
+        clonedOrder.roomPrice[date] = normalized;
+        cumulated += normalized;
+      });
+      console.log('📊 初始房费分配:', clonedOrder.roomPrice);
+    } else {
+      console.warn('⚠️ 没有住宿日期！');
     }
+
+    // 初始化支付方式
+    clonedOrder.paymentMethod = clonedOrder.paymentMethod || viewStore.paymentMethodOptions[0]?.value || '';
 
     editableOrder.value = clonedOrder;
     originalRoomNumber.value = newOrder.roomNumber;
@@ -134,22 +302,40 @@ watch(() => props.order, async (newOrder) => {
         billData.value = response.data; // 存储账单数据
         const newRoomPrice = {};
         let totalDeposit = 0;
+        let hasValidRoomFee = false; // 标记是否有有效的房费数据
+
         response.data.forEach(bill => {
           // 使用通用日期格式化函数
           const stayDate = formatDateFromDB(bill.stay_date);
           if (stayDate) {
-            newRoomPrice[stayDate] = Number(bill.room_fee) || 0;
+            const roomFee = Number(bill.room_fee) || 0;
+            newRoomPrice[stayDate] = roomFee;
+            if (roomFee > 0) {
+              hasValidRoomFee = true; // 有非零房费
+            }
             console.log(`📅 账单日期处理: ${bill.stay_date} -> ${stayDate}, 房费: ${bill.room_fee}`);
           }
           totalDeposit += Number(bill.deposit) || 0;
         });
 
         if (editableOrder.value) {
-          editableOrder.value.roomPrice = newRoomPrice;
-          editableOrder.value.deposit = totalDeposit;
+          // 只有当账单中有有效的房费数据时，才用账单数据覆盖
+          // 否则保留从订单总房价计算的平均值（适用于待入住订单）
+          if (hasValidRoomFee && Object.keys(newRoomPrice).length > 0) {
+            editableOrder.value.roomPrice = newRoomPrice;
+            console.log('✅ 使用账单中的房费数据');
+          } else {
+            console.log('ℹ️ 账单中无有效房费，保留订单总房价的平均分配');
+          }
+
+          // 押金总是使用账单中的数据
+          if (totalDeposit > 0) {
+            editableOrder.value.deposit = totalDeposit;
+          }
         }
       } else {
         billData.value = []; // 没有账单数据
+        console.log('ℹ️ 无账单数据，使用订单总房价的平均分配');
       }
     } catch (error) {
       console.error('获取账单详情错误:', error);
@@ -201,7 +387,8 @@ async function submitChange() {
       room_number: editableOrder.value.roomNumber,
       remarks: editableOrder.value.remarks,
       deposit: editableOrder.value.deposit,
-      total_price: totalPrice
+      total_price: totalPrice,
+      payment_method: editableOrder.value.paymentMethod
     };
 
     // 准备账单更新数据
@@ -297,3 +484,17 @@ async function submitChange() {
   }
 }
 </script>
+
+<style scoped>
+.rounded-borders {
+  border-radius: 4px;
+}
+
+.q-markup-table {
+  background: transparent;
+}
+
+.q-markup-table td {
+  padding: 8px;
+}
+</style>

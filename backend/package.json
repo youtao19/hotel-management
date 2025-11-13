@@ -3,16 +3,23 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "cross-env NODE_ENV=dev nodemon server.js",
-    "start": "node server.js",
-    "test": "cross-env NODE_ENV=test jest --config=../jest.config.js",
-    "test:watch": "cross-env NODE_ENV=test jest --config=../jest.config.js --watch",
+    "dev": "dotenv -e ../dev.env -- cross-env NODE_ENV=dev nodemon server.js",
+    "start": "dotenv -e ../dev.env -- node server.js",
+    "test": "dotenv -e ../.env.test -- cross-env NODE_ENV=test jest --rootDir=.",
+    "test:watch": "dotenv -e ../.env.test -- cross-env NODE_ENV=test jest --watch",
+    "test:coverage": "dotenv -e ../.env.test -- cross-env NODE_ENV=test jest --coverage",
     "export-schema": "node scripts/exportSchema.js",
     "export-structure": "node scripts/exportStructure.js",
     "export-all": "node scripts/exportAll.js",
     "db:backup": "node scripts/exportAll.js",
     "db:init": "node -e \"require('./database/postgreDB/pg').initializeHotelDB()\"",
     "db:migrate": "node database/postgreDB/migrations/run-migrations.js"
+  },
+  "jest": {
+    "setupFilesAfterEnv": [
+      "<rootDir>/tests/setup.js"
+    ],
+    "testEnvironment": "node"
   },
   "dependencies": {
     "ajv": "^8.17.1",
@@ -24,7 +31,7 @@
     "express": "^5.1.0",
     "express-session": "^1.18.2",
     "express-validator": "^7.2.1",
-    "nanoid": "^5.1.6",
+    "nanoid": "^3.3.4",
     "nodemailer": "^7.0.3",
     "pg": "^8.16.0",
     "postgres-mcp": "^1.0.4",

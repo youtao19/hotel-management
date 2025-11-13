@@ -4,14 +4,6 @@
     <div class="q-pa-md">
       <!-- 页面标题 -->
       <h1 class="text-h4 q-mb-md">创建订单</h1>
-
-    <!-- 添加测试数据按钮 -->
-    <div class="row q-mb-md">
-      <q-btn label="填充测试数据" color="orange" icon="bug_report" @click="fillTestData" class="q-mr-sm" />
-      <q-btn v-if="isDev" label="随机数据" color="purple" icon="auto_awesome" @click="fillRandomData" class="q-mr-sm" />
-      <q-btn label="快速休息房" color="teal" icon="hotel" @click="fillRestRoomData" />
-    </div>
-
     <!-- 主卡片容器，包含整个表单 -->
     <q-card>
       <q-card-section>
@@ -52,26 +44,10 @@
               <div class="col-md-4 col-xs-12">
                 <q-input v-model="orderData.guestName" label="姓名" filled :rules="[val => !!val || '请输入姓名']" />
               </div>
-              <!-- 身份证号输入框 -->
+              <!-- 手机号输入框（可选） -->
               <div class="col-md-4 col-xs-12">
-                <q-input v-model="orderData.idNumber" label="身份证号" filled type="text" maxlength="18"
-                  @input="validateIdNumber" :rules="[
-                    val => !!val || '请输入身份证号',
-                    val => (val.length === 18) || '身份证号必须为18位',
-                    val => /^[0-9Xx]+$/.test(val) || '身份证号只能包含数字和X'
-                  ]">
-                  <!-- 提示文本 -->
-                  <template v-slot:hint>
-                    请输入18位身份证号，最后一位可以是数字或X
-                  </template>
-                </q-input>
-              </div>
-              <!-- 手机号输入框 -->
-              <div class="col-md-4 col-xs-12">
-                <q-input v-model="orderData.phone" label="手机号" filled mask="###########" :rules="[
-                  val => !!val || '请输入手机号',
-                  val => (val.length === 11) || '手机号必须为11位'
-                ]" />
+                <q-input v-model="orderData.phone" label="手机号（可选）" filled mask="###########"
+                  hint="选填，用于联系客人" />
               </div>
             </div>
           </div>
@@ -157,10 +133,6 @@
                   <div class="col-auto q-ml-sm text-caption text-grey-6" v-if="isRestRoom">
                     当日入住，当日离店
                   </div>
-                  <!-- 调试信息 -->
-                  <div class="col-auto q-ml-sm text-caption text-grey-6" v-if="isDev">
-                    (调试: 入住={{orderData.checkInDate}}, 离店={{orderData.checkOutDate}}, 休息房={{isRestRoom}})
-                  </div>
                 </div>
               </div>
             </div>
@@ -172,38 +144,44 @@
 
             <div class="row q-col-gutter-md">
               <!-- 房间类型选择 -->
-              <div class="col-md-6 col-xs-12">
-                <div class="row items-center">
-                  <div class="col">
-                    <q-select v-model="orderData.roomType" :options="roomTypeOptionsWithCount" label="房间类型" filled
-                      emit-value map-options @update:model-value="onRoomTypeChange"
-                      :rules="[val => !!val || '请选择房间类型']">
-                      <template v-slot:option="scope">
-                        <q-item v-bind="scope.itemProps">
-                          <q-item-section>
-                            <q-item-label>{{ scope.opt.label }}</q-item-label>
-                          </q-item-section>
-                          <q-item-section side>
-                            <q-badge :color="getRoomCountColor(scope.opt.availableCount)"
-                              :label="scope.opt.availableCount + '间'" />
-                          </q-item-section>
-                        </q-item>
-                      </template>
-                    </q-select>
-                  </div>
-                  <!-- 当前房型剩余房间信息 -->
-                  <div class="col-auto q-ml-md" v-if="orderData.roomType">
-                    <q-chip :color="getRoomCountColor(availableRoomCount)" text-color="white" icon="hotel">
-                      剩余: {{ availableRoomCount }}间
-                    </q-chip>
-                  </div>
-                </div>
+              <div class="col-md-4 col-xs-12">
+                <q-select
+                  v-model="orderData.roomType"
+                  :options="roomTypeOptionsWithCount"
+                  label="房间类型"
+                  filled
+                  emit-value
+                  map-options
+                  @update:model-value="onRoomTypeChange"
+                  :rules="[val => !!val || '请选择房间类型']"
+                  :hint="orderData.roomType ? `剩余 ${availableRoomCount} 间可用` : ''"
+                >
+                  <template v-slot:option="scope">
+                    <q-item v-bind="scope.itemProps">
+                      <q-item-section>
+                        <q-item-label>{{ scope.opt.label }}</q-item-label>
+                      </q-item-section>
+                      <q-item-section side>
+                        <q-badge :color="getRoomCountColor(scope.opt.availableCount)"
+                          :label="scope.opt.availableCount + '间'" />
+                      </q-item-section>
+                    </q-item>
+                  </template>
+                </q-select>
               </div>
 
               <!-- 房间号选择 -->
-              <div class="col-md-6 col-xs-12">
-                <q-select v-model="orderData.roomNumber" :options="availableRoomOptions" label="房间号" filled emit-value
-                  map-options :rules="[val => !!val || '请选择房间号']" :disable="!orderData.roomType">
+              <div class="col-md-4 col-xs-12">
+                <q-select
+                  v-model="orderData.roomNumber"
+                  :options="availableRoomOptions"
+                  label="房间号"
+                  filled
+                  emit-value
+                  map-options
+                  :rules="[val => !!val || '请选择房间号']"
+                  :disable="!orderData.roomType"
+                >
                   <!-- 自定义选项显示 -->
                   <template v-slot:option="scope">
                     <q-item v-bind="scope.itemProps">
@@ -236,168 +214,118 @@
             <!-- 分区标题 -->
             <div class="text-subtitle1 q-mb-sm">支付信息</div>
             <div class="row q-col-gutter-md">
-              <!-- 多日价格设置 -->
-              <div class="col-md-8 col-xs-12" v-if="isMultiDay">
-                <q-card class="multi-day-pricing-card" bordered>
-                  <q-card-section class="q-pb-sm">
-                    <div class="row items-center q-mb-md">
-                      <div class="col">
-                        <div class="text-h6 text-primary q-mb-xs">
-                          <q-icon name="event_note" class="q-mr-sm" />
-                          每日房间价格设置
-                        </div>
-                        <div class="text-caption text-grey-6">
-                          共 {{ dateList.length }} 天，可为每天设置不同价格
-                        </div>
-                      </div>
-                      <div class="col-auto">
-                        <q-chip
-                          color="blue-1"
-                          text-color="blue-8"
-                          icon="hotel"
-                          :label="`${dateList.length}天住宿`"
-                          outline
-                        />
-                      </div>
+              <!-- 价格设置区域（统一处理单日和多日） -->
+              <div class="col-12">
+                <div class="simple-pricing-container">
+                  <!-- 标题和操作区（仅多日显示） -->
+                  <div class="row items-center q-mb-md" v-if="isMultiDay">
+                    <div class="col-auto">
+                      <span class="text-subtitle2 text-grey-8">
+                        每日房间价格设置 (共 {{ dateList.length }} 天)
+                      </span>
                     </div>
-                  </q-card-section>
-
-                  <!-- 价格设置列表 -->
-                  <q-card-section class="q-pt-none">
-                    <div class="pricing-list">
-                      <q-card
-                        v-for="(date, index) in dateList"
-                        :key="date"
-                        class="price-item-card q-mb-sm"
+                    <div class="col-auto q-ml-sm">
+                      <q-btn
                         flat
-                        bordered
-                      >
-                        <q-card-section class="row items-center q-pa-md">
-                          <!-- 日期显示 -->
-                          <div class="col-auto q-mr-md">
-                            <div class="date-badge">
-                              <div class="date-number">{{ new Date(date).getDate() }}</div>
-                              <div class="date-info">
-                                <div class="month-day">{{ new Date(date).getMonth() + 1 }}月</div>
-                                <div class="weekday">{{ ['日', '一', '二', '三', '四', '五', '六'][new Date(date).getDay()] }}</div>
-                              </div>
-                            </div>
-                          </div>
-
-                          <!-- 价格输入 -->
-                          <div class="col">
-                            <q-input
-                              v-model.number="dailyPrices[date]"
-                              :label="`第${index + 1}天价格`"
-                              filled
-                              type="number"
-                              prefix="¥"
-                              :rules="[val => val > 0 || '价格必须大于0']"
-                              class="price-input"
-                            >
-                              <template v-slot:append>
-                                <q-icon
-                                  name="trending_up"
-                                  :color="dailyPrices[date] > (index > 0 ? dailyPrices[dateList[index-1]] : 0) ? 'positive' : 'grey-5'"
-                                />
-                              </template>
-                            </q-input>
-                          </div>
-                        </q-card-section>
-                      </q-card>
-                    </div>
-                  </q-card-section>
-
-                  <!-- 操作按钮和总计 -->
-                  <q-card-section class="q-pt-none">
-                    <div class="row items-center q-gutter-md">
-                      <div class="col-auto">
-                        <q-btn
-                          unelevated
-                          color="orange"
-                          icon="content_copy"
-                          label="应用首日价格"
-                          @click="applyFirstDayPriceToAll"
-                          :disable="!firstDatePrice"
-                          class="apply-price-btn"
-                        />
-                      </div>
-
-                      <q-space />
-
-                      <!-- 总计显示 -->
-                      <div class="col-auto">
-                        <q-card class="total-price-card" flat>
-                          <q-card-section class="q-pa-md text-center">
-                            <div class="text-caption q-mb-xs">住宿总价</div>
-                            <div class="text-h5 text-weight-bold">
-                              <q-icon name="payments" class="q-mr-xs" />
-                              ¥{{ totalPrice }}
-                            </div>
-                            <div class="text-caption">
-                              平均 ¥{{ Math.round(totalPrice / dateList.length) }}/天
-                            </div>
-                          </q-card-section>
-                        </q-card>
-                      </div>
-                    </div>
-                  </q-card-section>
-                </q-card>
-              </div>
-
-              <!-- 单日价格输入（单日或休息房） -->
-              <div class="col-md-4 col-xs-12" v-else>
-                <q-card class="single-day-pricing-card" flat bordered>
-                  <q-card-section class="q-pa-md">
-                    <div class="row items-center q-mb-sm">
-                      <q-icon name="payments" color="primary" size="20px" class="q-mr-sm" />
-                      <div class="text-subtitle2 text-weight-medium">
-                        {{ isRestRoom ? '休息房价格' : '住宿价格' }}
-                      </div>
-                      <q-space />
-                      <q-chip
-                        :color="isRestRoom ? 'orange-2' : 'blue-2'"
-                        :text-color="isRestRoom ? 'orange-8' : 'blue-8'"
-                        :icon="isRestRoom ? 'hotel' : 'night_shelter'"
-                        :label="isRestRoom ? '当日' : '单日'"
-                        size="sm"
-                        outline
+                        dense
+                        color="orange"
+                        label="应用首日价格"
+                        @click="applyFirstDayPriceToAll"
+                        :disable="!firstDatePrice"
+                        class="simple-btn"
                       />
                     </div>
-                    <q-input
-                      v-model.number="orderData.roomPrice"
-                      label="房间金额"
-                      filled
-                      type="number"
-                      prefix="¥"
-                      :rules="[val => val > 0 || '房间金额必须大于0']"
-                      class="single-price-input"
-                    >
-                      <template v-slot:append>
-                        <q-icon name="attach_money" color="positive" />
-                      </template>
-                    </q-input>
-                  </q-card-section>
-                </q-card>
-              </div>
+                  </div>
 
-              <!-- 押金输入 -->
-              <div class="col-md-4 col-xs-12">
-                <q-input
-                      v-model.number="orderData.deposit"
-                      label="押金金额"
-                      filled
-                      type="number"
-                      prefix="¥"
-                      :rules="[val => val >= 0 || '押金不能为负数']"
-                      class="deposit-input"
+                  <!-- 总价输入框（仅多日显示） -->
+                  <div class="row q-mb-md" v-if="isMultiDay">
+                    <div class="col-md-4 col-xs-12">
+                      <q-input
+                        v-model.number="totalPriceInput"
+                        label="住宿总价"
+                        filled
+                        type="number"
+                        prefix="¥"
+                        hint="输入总价后自动平均分配"
+                        @update:model-value="distributeTotalPrice"
+                        class="simple-input"
+                      >
+                        <template v-slot:append>
+                          <q-icon name="calculate" color="primary" />
+                        </template>
+                      </q-input>
+                    </div>
+                  </div>
+
+                  <!-- 每日价格输入列表（单日和多日统一） -->
+                  <div class="row q-col-gutter-md">
+                    <div
+                      v-for="(date, index) in dateList"
+                      :key="date"
+                      :class="dateList.length === 1 ? 'col-md-4 col-xs-12' : 'col-md-3 col-sm-4 col-xs-6'"
                     >
-                    </q-input>
-                <!-- 支付方式 -->
-                <q-select v-model="orderData.paymentMethod"
-                  :options="viewStore.paymentMethodOptions"
-                  label="支付方式"
-                  filled :rules="[val => !!val || '请选择支付方式']" />
+                      <q-input
+                        v-model.number="dailyPrices[date]"
+                        :label="dateList.length === 1 ? (isRestRoom ? '休息房价格' : '住宿价格') : formatDateLabel(date)"
+                        filled
+                        type="number"
+                        prefix="¥"
+                        :rules="[val => val > 0 || '价格必须大于0']"
+                        :hint="dateList.length === 1 ? (isRestRoom ? '当日入住，当日离店' : '单日住宿') : ''"
+                        class="simple-input"
+                        @update:model-value="updateTotalFromDaily"
+                      />
+                    </div>
+
+                    <!-- 支付方式（紧跟在价格后面） -->
+                    <div :class="dateList.length === 1 ? 'col-md-4 col-xs-12' : 'col-md-3 col-sm-4 col-xs-6'">
+                      <q-select
+                        v-model="orderData.paymentMethod"
+                        :options="viewStore.paymentMethodOptions"
+                        label="支付方式"
+                        filled
+                        :rules="[val => !!val || '请选择支付方式']"
+                        class="simple-input"
+                      />
+                    </div>
+                  </div>
+
+                  <!-- 预收房费选项 -->
+                  <div class="row q-col-gutter-md q-mt-md">
+                    <div class="col-md-4 col-xs-12">
+                      <div class="text-body2 text-grey-7 q-mb-xs">当前是否收房费</div>
+                      <q-option-group
+                        v-model="orderData.isPrepaid"
+                        :options="prepayOptions"
+                        type="radio"
+                        inline
+                        color="primary"
+                      />
+                    </div>
+                    <div class="col-md-4 col-xs-12" v-if="orderData.isPrepaid">
+                      <q-input
+                        v-model.number="orderData.prepaidAmount"
+                        label="已收房费金额"
+                        filled
+                        type="number"
+                        prefix="¥"
+                        :rules="[val => val > 0 || '金额必须大于0']"
+                        hint="请输入已收取的房费金额"
+                      />
+                    </div>
+                  </div>
+
+                  <!-- 总计显示（仅多日显示） -->
+                  <div class="row q-mt-md" v-if="isMultiDay">
+                    <div class="col-12">
+                      <div class="total-display">
+                        <span class="text-grey-7">住宿总价：</span>
+                        <span class="text-h6 text-primary q-ml-sm">¥{{ totalPrice.toFixed(2) }}</span>
+                        <span class="text-caption text-grey-6 q-ml-md">平均 ¥{{ averageDailyPrice.toFixed(2) }}/天</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -424,24 +352,66 @@
       </q-card-section>
     </q-card>
     </div>
+
+    <!-- 入住确认对话框 -->
+    <CheckInConfirmDialog
+      v-model="showCheckInDialog"
+      :order="pendingCheckInOrder"
+      :get-room-type-name="viewStore.getRoomTypeName"
+      :get-payment-method-name="getPaymentMethodName"
+      :format-date="formatDateForDialog"
+      @confirm="handleCheckInConfirm"
+    />
   </q-page>
 </template>
 
 <script setup>
 import { ref, onMounted, computed, nextTick, watch } from 'vue'
 import { date, useQuasar } from 'quasar'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
+import Decimal from 'decimal.js'
 import { useOrderStore } from '../stores/orderStore' // 导入订单 store
 import { useRoomStore } from '../stores/roomStore' // 导入房间 store
 import { useViewStore } from '../stores/viewStore' // 导入视图 store
 import langZhCn from 'quasar/lang/zh-CN' // 导入中文语言包
+import CheckInConfirmDialog from '../components/CheckInConfirmDialog.vue' // 导入入住确认对话框
 
 // 获取路由和store
 const router = useRouter()
+const route = useRoute()
 const orderStore = useOrderStore()
 const roomStore = useRoomStore()
 const viewStore = useViewStore()
 const $q = useQuasar() // For notifications
+
+const prepayOptions = [
+  { label: '否', value: false },
+  { label: '是', value: true }
+]
+
+// 规范化路由查询参数，支持数组与空值
+function normalizeQueryParam(param) {
+  if (Array.isArray(param)) {
+    param = param[0]
+  }
+  if (param === undefined || param === null) {
+    return null
+  }
+  const str = String(param).trim()
+  return str === '' ? null : str
+}
+
+// 路由传递的待预选房间信息
+const pendingRouteSelection = ref({
+  roomNumber: normalizeQueryParam(route.query.roomNumber),
+  roomType: normalizeQueryParam(route.query.roomType)
+})
+
+const isDataInitialized = ref(false)
+let suppressRoomTypeWatcher = false
+let isApplyingPreselectedRoom = false
+let shouldAutoSelectRoom = false
+let pendingRoomTypeChange = null
 
 // 检查是否为开发环境
 const isDev = ref(process.env.NODE_ENV === 'development')
@@ -449,6 +419,10 @@ const isDev = ref(process.env.NODE_ENV === 'development')
 // roomStore 已导入，可以直接使用其方法
 
 const availableRoomsByDate = ref([]); // 存储当前时间范围下所有可用房间
+
+// 入住确认对话框控制
+const showCheckInDialog = ref(false)
+const pendingCheckInOrder = ref(null) // 待办理入住的订单数据
 
 /**
  * 生成唯一的订单号
@@ -490,10 +464,10 @@ const statusOptions = [
 const sourceOptions = [
   { label: '前台录入', value: 'front_desk' },
   { label: '电话预订', value: 'phone' },
+  { label: '抖音', valuue:'douyin'},
+  { label: '美团', value: 'meituan' },
   { label: '携程', value: 'ctrip' },
   { label: '飞猪', value: 'fliggy' },
-  { label: '美团', value: 'meituan' },
-  { label: '去哪儿', value: 'qunar' },
   { label: '旅行社', value: 'agency' },
   { label: '其他', value: 'other' }
 ]
@@ -505,22 +479,57 @@ const orderData = ref({
   source: 'front_desk',                // 默认订单来源为前台录入
   sourceNumber: '',                    // 来源编号（可选）
   guestName: '',                       // 客人姓名
-  idNumber: '',                        // 身份证号
   phone: '',                           // 手机号
   roomType: null,                      // 房间类型
   roomNumber: null,                    // 房间号
   checkInDate: date.formatDate(getCurrentTimeToMinute(), 'YYYY-MM-DD'),  // 入住日期，默认今天
   checkOutDate: date.formatDate(date.addToDate(getCurrentTimeToMinute(), { days: 1 }), 'YYYY-MM-DD'), // 离店日期，默认明天
-  deposit: 100,                        // 押金默认100元
+  deposit: 0,                          // 押金默认0元，办理入住时才收取
   paymentMethod: viewStore.paymentMethodOptions[0]?.value || 'cash',    // 支付方式使用 value
   roomPrice: 0,                        // 房间价格，会根据选择的房间自动设置
   remarks: '',                         // 备注信息（可选）
   createTime: date.formatDate(getCurrentTimeToMinute(), 'YYYY-MM-DD HH:mm:ss'), // 创建时间
   isRestRoom: false,                   // 是否为休息房
+  isPrepaid: false,                    // 是否在创建时收房费
+  prepaidAmount: 0                     // 预收房费金额
 })
 
 // 多日价格管理
 const dailyPrices = ref({}) // 存储每日价格 {date: price}
+const totalPriceInput = ref(0) // 总价输入
+
+Decimal.set({
+  precision: 20,
+  rounding: Decimal.ROUND_HALF_UP
+})
+
+function toDecimal(value) {
+  if (Decimal.isDecimal(value)) {
+    return value
+  }
+  if (value === undefined || value === null || value === '') {
+    return new Decimal(0)
+  }
+  try {
+    return new Decimal(value)
+  } catch (error) {
+    return new Decimal(0)
+  }
+}
+
+function toAmountNumber(value) {
+  const decimalValue = Decimal.isDecimal(value) ? value : toDecimal(value)
+  return Number(decimalValue.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toString())
+}
+
+function calculateAdjustedRoomPrice(rawPrice, restRoomFlag = orderData.value.isRestRoom) {
+  const base = toDecimal(rawPrice)
+  if (!base.gt(0)) {
+    return 0
+  }
+  const adjusted = restRoomFlag ? base.div(2) : base
+  return toAmountNumber(adjusted)
+}
 
 // 判断是否为多日订单
 const isMultiDay = computed(() => {
@@ -539,7 +548,7 @@ const isMultiDay = computed(() => {
   return daysDiff > 1; // 超过1天算多日
 });
 
-// 生成日期列表（住宿的每一晚）
+// 生成日期列表（包括单日、休息房和多日）
 const dateList = computed(() => {
   if (!isValidFullDate(orderData.value.checkInDate) || !isValidFullDate(orderData.value.checkOutDate)) return [];
   const checkIn = new Date(orderData.value.checkInDate);
@@ -548,22 +557,37 @@ const dateList = computed(() => {
 
   const dates = [];
 
-  // 对于休息房（同日入住退房）或单日住宿，返回空数组（单日订单不使用dateList）
-  if (daysDiff <= 1) {
-    console.log('📅 单日/休息房订单，dateList为空');
+  // 休息房（同日入住退房）：只有入住日期
+  if (daysDiff === 0) {
+    dates.push(date.formatDate(checkIn, 'YYYY-MM-DD'));
+    console.log('📅 休息房订单，dateList包含1天');
     return dates;
   }
 
-  // 多日订单：生成每一晚的日期（不包括退房日期）
+  // 单日或多日住宿：生成每一晚的日期（不包括退房日期）
   for (let i = 0; i < daysDiff; i++) {
     const currentDate = new Date(checkIn);
     currentDate.setDate(currentDate.getDate() + i);
     dates.push(date.formatDate(currentDate, 'YYYY-MM-DD'));
   }
 
-  console.log('🗓️ 多日订单日期列表：', dates);
+  console.log(`🗓️ ${daysDiff === 1 ? '单日' : '多日'}订单，dateList包含${dates.length}天`);
   return dates;
 });
+
+function sumDailyPricesDecimal() {
+  if (!Array.isArray(dateList.value) || dateList.value.length === 0) {
+    return new Decimal(0)
+  }
+
+  return dateList.value.reduce((sum, currentDate) => {
+    const price = dailyPrices.value[currentDate]
+    if (price === undefined || price === null || price === '') {
+      return sum
+    }
+    return sum.plus(toDecimal(price))
+  }, new Decimal(0))
+}
 
 // 首日价格（用于应用到所有天）
 const firstDatePrice = computed(() => {
@@ -587,21 +611,64 @@ const dateOptions = (dateStr) => {
 /**
  * 更新可用房间列表
  */
-async function updateAvailableRooms() {
+async function updateAvailableRooms(preserveSelection = true) {
   try {
-  if (!isValidFullDate(orderData.value.checkInDate) || !isValidFullDate(orderData.value.checkOutDate)) {
+    if (!isValidFullDate(orderData.value.checkInDate) || !isValidFullDate(orderData.value.checkOutDate)) {
       return;
     }
     // 强制格式化
     const startDate = date.formatDate(orderData.value.checkInDate, 'YYYY-MM-DD');
     const endDate = date.formatDate(orderData.value.checkOutDate, 'YYYY-MM-DD');
-    orderData.value.roomNumber = null;
+
+    const previousRoomNumber = preserveSelection ? orderData.value.roomNumber : null;
 
     const rooms = await roomStore.getAvailableRoomsByDate(
       startDate,
       endDate
     );
     availableRoomsByDate.value = rooms;
+
+    if (preserveSelection && previousRoomNumber) {
+      const stillAvailable = rooms.some(room => String(room.room_number) === String(previousRoomNumber));
+      if (!stillAvailable) {
+        orderData.value.roomNumber = null;
+        shouldAutoSelectRoom = true;
+      }
+    } else if (!preserveSelection) {
+      orderData.value.roomNumber = null;
+      shouldAutoSelectRoom = true;
+    } else if (!previousRoomNumber) {
+      orderData.value.roomNumber = null;
+      shouldAutoSelectRoom = true;
+    }
+
+    if (pendingRoomTypeChange && pendingRoomTypeChange === orderData.value.roomType) {
+      const roomTypeText = viewStore.getRoomTypeName(orderData.value.roomType);
+      const countForType = rooms.filter(room => room.type_code === orderData.value.roomType).length;
+      if (countForType === 0) {
+        $q.notify({
+          type: 'warning',
+          message: `当前没有可用的${roomTypeText}，请联系管理员。`,
+          position: 'top'
+        });
+      }
+      pendingRoomTypeChange = null;
+    } else if (pendingRoomTypeChange) {
+      pendingRoomTypeChange = null;
+    }
+
+    const canAutoAssign = !isApplyingPreselectedRoom && !pendingRouteSelection.value.roomNumber;
+    if (!canAutoAssign) {
+      shouldAutoSelectRoom = false;
+      return;
+    }
+
+    await nextTick();
+
+    if (shouldAutoSelectRoom || !orderData.value.roomNumber) {
+      autoSelectFirstAvailableRoom();
+      shouldAutoSelectRoom = false;
+    }
   } catch (error) {
     console.error('获取可用房间失败:', error);
     $q.notify({
@@ -668,14 +735,11 @@ watch(() => orderData.value.checkInDate, async () => {
   if (!isValidFullDate(orderData.value.checkInDate)) return; // 等待完整输入
   scheduleUpdateRooms();
 
-  // 如果是多日订单且有房间选择，重新初始化价格
-  if (isMultiDay.value && orderData.value.roomNumber) {
-    const selectedRoom = availableRoomsByDate.value.find(
-      room => room.room_number === orderData.value.roomNumber
-    );
+  // 如果有房间选择，重新初始化价格（适用于单日和多日）
+  if (orderData.value.roomNumber) {
+    const selectedRoom = findAvailableRoomByNumber(orderData.value.roomNumber);
     if (selectedRoom) {
-      const basePrice = Number(selectedRoom.price);
-      const finalPrice = orderData.value.isRestRoom ? Math.round(basePrice / 2) : basePrice;
+      const finalPrice = calculateAdjustedRoomPrice(selectedRoom.price);
       initializeDailyPrices(finalPrice);
     }
   }
@@ -685,14 +749,11 @@ watch(() => orderData.value.checkOutDate, async () => {
   if (!isValidFullDate(orderData.value.checkOutDate)) return;
   scheduleUpdateRooms();
 
-  // 如果是多日订单且有房间选择，重新初始化价格
-  if (isMultiDay.value && orderData.value.roomNumber) {
-    const selectedRoom = availableRoomsByDate.value.find(
-      room => room.room_number === orderData.value.roomNumber
-    );
+  // 如果有房间选择，重新初始化价格（适用于单日和多日）
+  if (orderData.value.roomNumber) {
+    const selectedRoom = findAvailableRoomByNumber(orderData.value.roomNumber);
     if (selectedRoom) {
-      const basePrice = Number(selectedRoom.price);
-      const finalPrice = orderData.value.isRestRoom ? Math.round(basePrice / 2) : basePrice;
+      const finalPrice = calculateAdjustedRoomPrice(selectedRoom.price);
       initializeDailyPrices(finalPrice);
     }
   }
@@ -700,6 +761,9 @@ watch(() => orderData.value.checkOutDate, async () => {
 
 // 监听房型变化
 watch(() => orderData.value.roomType, async () => {
+  if (suppressRoomTypeWatcher) {
+    return;
+  }
   await updateAvailableRooms();
 });
 
@@ -761,7 +825,6 @@ const availableRoomOptions = computed(() => {
         value: room.room_number,
         type: room.type_code,
         price: room.price,
-        id: room.room_id,
         status: room.status
       };
     });
@@ -775,6 +838,116 @@ const availableRoomCount = computed(() => {
     room => room.type_code === orderData.value.roomType
   ).length;
 })
+
+function findAvailableRoomByNumber(roomNumber) {
+  if (!roomNumber && roomNumber !== 0) return null;
+  const normalized = String(roomNumber);
+  return availableRoomsByDate.value.find(room => String(room.room_number) === normalized) || null;
+}
+
+function applyRoomSelection(room, { resetPricing = true } = {}) {
+  if (!room) return false;
+
+  const roomNumber = room.room_number ?? room.value;
+  if (roomNumber === undefined || roomNumber === null) return false;
+
+  orderData.value.roomNumber = roomNumber;
+  shouldAutoSelectRoom = false;
+
+  if (resetPricing) {
+    dailyPrices.value = {};
+    const finalPrice = calculateAdjustedRoomPrice(room.price || 0);
+    if (finalPrice > 0) {
+      initializeDailyPrices(finalPrice);
+    } else {
+      totalPriceInput.value = 0;
+    }
+  }
+
+  return true;
+}
+
+function autoSelectFirstAvailableRoom() {
+  if (!orderData.value.roomType) return false;
+  if (!Array.isArray(availableRoomOptions.value) || availableRoomOptions.value.length === 0) return false;
+  const firstOption = availableRoomOptions.value[0];
+  const candidate = findAvailableRoomByNumber(firstOption.value);
+  if (!candidate) return false;
+  return applyRoomSelection(candidate);
+}
+
+/**
+ * 根据路由参数预选房间
+ */
+async function applyPreselectedRoom() {
+  if (!isDataInitialized.value) return;
+  if (isApplyingPreselectedRoom) return;
+
+  const targetNumber = pendingRouteSelection.value.roomNumber;
+  if (!targetNumber) return;
+
+  const normalizedNumber = String(targetNumber);
+  const matchedRoom = findAvailableRoomByNumber(normalizedNumber);
+
+  pendingRoomTypeChange = null;
+  if (!matchedRoom) {
+    console.warn(`房间 ${normalizedNumber} 在当前日期不可预订，已忽略预选`);
+    $q.notify({
+      type: 'warning',
+      message: `房间 ${normalizedNumber} 当前不可预订`,
+      position: 'top'
+    });
+    pendingRouteSelection.value = { roomNumber: null, roomType: null };
+    return;
+  }
+
+  const targetTypeCode = pendingRouteSelection.value.roomType || matchedRoom.type_code;
+  if (!targetTypeCode) {
+    console.warn(`未找到房间 ${normalizedNumber} 对应的房型信息`);
+    pendingRouteSelection.value = { roomNumber: null, roomType: null };
+    return;
+  }
+
+  isApplyingPreselectedRoom = true;
+  suppressRoomTypeWatcher = true;
+  shouldAutoSelectRoom = false;
+
+  orderData.value.roomType = targetTypeCode;
+  await nextTick();
+
+  const optionExists = availableRoomOptions.value.some(option => String(option.value) === normalizedNumber);
+  if (!optionExists) {
+    console.warn(`房间 ${normalizedNumber} 未出现在当前房型的可选列表中`);
+    $q.notify({
+      type: 'warning',
+      message: `房间 ${normalizedNumber} 当前不可预订`,
+      position: 'top'
+    });
+    suppressRoomTypeWatcher = false;
+    isApplyingPreselectedRoom = false;
+    pendingRouteSelection.value = { roomNumber: null, roomType: null };
+    return;
+  }
+
+  applyRoomSelection(matchedRoom);
+
+  pendingRouteSelection.value = { roomNumber: null, roomType: null };
+  suppressRoomTypeWatcher = false;
+  isApplyingPreselectedRoom = false;
+}
+
+watch(
+  () => [route.query.roomNumber, route.query.roomType],
+  ([roomNumberParam, roomTypeParam]) => {
+    pendingRouteSelection.value = {
+      roomNumber: normalizeQueryParam(roomNumberParam),
+      roomType: normalizeQueryParam(roomTypeParam)
+    };
+    shouldAutoSelectRoom = false;
+    pendingRoomTypeChange = null;
+    applyPreselectedRoom();
+  }
+);
 // // 从roomStore获取房间类型选项数组和可用房间数量
 // const roomTypeOptionsWithCountFromStore = computed(
 //   () => roomStore.getRoomTypeOptionsWithCount()
@@ -796,57 +969,10 @@ function onRoomTypeChange(value) {
   // 清空多日价格数据
   dailyPrices.value = {};
 
-  nextTick(() => {
-    const roomTypeText = viewStore.getRoomTypeName(value);
-    const count = availableRoomCount.value;
-    if (count === 0) {
-      $q.notify({
-        type: 'warning',
-        message: `当前没有可用的${roomTypeText}，请联系管理员。`,
-        position: 'top'
-      });
-    } else {
-      if (availableRoomOptions.value.length > 0) {
-        orderData.value.roomNumber = availableRoomOptions.value[0].value;
-        const selectedRoom = availableRoomsByDate.value.find(
-          room => room.room_number === orderData.value.roomNumber
-        );
-        if (selectedRoom) {
-          // 计算基础价格
-          const basePrice = Number(selectedRoom.price);
-          const finalPrice = orderData.value.isRestRoom ?
-            Math.round(basePrice / 2) : basePrice;
-
-          if (isMultiDay.value) {
-            // 多日订单：初始化每日价格
-            initializeDailyPrices(finalPrice);
-          } else {
-            // 单日订单：设置单价
-            orderData.value.roomPrice = finalPrice;
-          }
-        }
-      }
-    }
-  });
+  shouldAutoSelectRoom = true;
+  pendingRoomTypeChange = value;
 }
 
-/**
- * 身份证号验证函数
- * 确保身份证号只包含数字和最后一位的X
- */
-function validateIdNumber() {
-  // 仅保留数字和X/x
-  orderData.value.idNumber = orderData.value.idNumber.replace(/[^0-9Xx]/g, '');
-  // 中间过程只允许前17位数字
-  if (orderData.value.idNumber.length <= 17) {
-    orderData.value.idNumber = orderData.value.idNumber.replace(/[^0-9]/g, '');
-  } else if (orderData.value.idNumber.length === 18) {
-    // 第18位允许X/x，统一转大写
-    const first17 = orderData.value.idNumber.slice(0,17).replace(/[^0-9]/g,'');
-    const lastChar = orderData.value.idNumber.slice(17,18).toUpperCase();
-    orderData.value.idNumber = first17 + (/[0-9X]/.test(lastChar) ? lastChar : '');
-  }
-}
 
 /**
  * 格式化日期显示
@@ -863,18 +989,70 @@ function formatDateDisplay(dateStr) {
 }
 
 /**
+ * 格式化日期标签（用于输入框label）
+ * @param {string} dateStr - 日期字符串 YYYY-MM-DD
+ * @returns {string} 格式化后的日期标签
+ */
+function formatDateLabel(dateStr) {
+  const d = new Date(dateStr)
+  const month = d.getMonth() + 1
+  const day = d.getDate()
+  const weekdays = ['日', '一', '二', '三', '四', '五', '六']
+  const weekday = weekdays[d.getDay()]
+  return `${month}月${day}日 周${weekday}`
+}
+
+/**
+ * 分配总价到每日价格
+ */
+function distributeTotalPrice() {
+  if (dateList.value.length === 0) return;
+  const total = toDecimal(totalPriceInput.value);
+  if (!total.gt(0)) return;
+
+  const days = dateList.value.length;
+  const totalCents = total.mul(100).toDecimalPlaces(0, Decimal.ROUND_HALF_UP);
+  const baseCents = totalCents.div(days).floor();
+  let remainder = totalCents.minus(baseCents.mul(days));
+
+  dateList.value.forEach(date => {
+    let cents = baseCents;
+    if (remainder.gt(0)) {
+      cents = cents.plus(1);
+      remainder = remainder.minus(1);
+    }
+    dailyPrices.value[date] = cents.div(100).toNumber();
+  });
+  updateTotalFromDaily();
+}
+
+/**
+ * 从每日价格更新总价输入框
+ */
+function updateTotalFromDaily() {
+  if (!dateList.value.length) {
+    totalPriceInput.value = 0;
+    return;
+  }
+  const sumDecimal = sumDailyPricesDecimal();
+  totalPriceInput.value = toAmountNumber(sumDecimal);
+}
+
+/**
  * 应用首日价格到所有天
  */
 function applyFirstDayPriceToAll() {
-  const firstPrice = firstDatePrice.value;
-  if (!(firstPrice > 0)) {
+  const firstPriceDecimal = toDecimal(firstDatePrice.value);
+  if (!firstPriceDecimal.gt(0)) {
     $q.notify({ type: 'warning', message: '首日价格未设置或无效', position: 'top' });
     return;
   }
-  dateList.value.forEach(d => { dailyPrices.value[d] = firstPrice; });
+  const normalized = toAmountNumber(firstPriceDecimal);
+  dateList.value.forEach(d => { dailyPrices.value[d] = normalized; });
+  updateTotalFromDaily();
   $q.notify({
     type: 'positive',
-    message: `已将首日价格 ¥${firstPrice} 应用到所有 ${dateList.value.length} 天`,
+    message: `已将首日价格 ¥${firstPriceDecimal.toFixed(2)} 应用到所有 ${dateList.value.length} 天`,
     position: 'top',
     icon: 'content_copy'
   });
@@ -882,16 +1060,100 @@ function applyFirstDayPriceToAll() {
 
 
 /**
- * 初始化多日价格
+ * 初始化每日价格（适用于单日、休息房和多日）
  * @param {number} basePrice - 基础价格
  */
 function initializeDailyPrices(basePrice) {
-  if (isMultiDay.value && basePrice > 0) {
-    dateList.value.forEach(date => {
-      if (!dailyPrices.value[date]) {
-        dailyPrices.value[date] = basePrice
+  if (dateList.value.length === 0) {
+    totalPriceInput.value = 0;
+    return;
+  }
+  const normalized = toAmountNumber(basePrice);
+  if (!(normalized > 0)) {
+    totalPriceInput.value = 0;
+    return;
+  }
+  dateList.value.forEach(date => {
+    if (!dailyPrices.value[date]) {
+      dailyPrices.value[date] = normalized;
+    }
+  });
+  updateTotalFromDaily();
+}
+
+/**
+ * 格式化日期显示（用于 CheckInConfirmDialog）
+ * @param {string} dateStr - 日期字符串
+ * @returns {string} 格式化后的日期
+ */
+function formatDateForDialog(dateStr) {
+  if (!dateStr) return ''
+  return date.formatDate(dateStr, 'YYYY-MM-DD')
+}
+
+/**
+ * 获取支付方式名称（用于 CheckInConfirmDialog）
+ * @param {string} value - 支付方式值
+ * @returns {string} 支付方式名称
+ */
+function getPaymentMethodName(value) {
+  const option = viewStore.paymentMethodOptions.find(opt => opt.value === value)
+  return option ? option.label : value
+}
+
+/**
+ * 处理入住确认
+ * 在 CheckInConfirmDialog 中点击确认后调用
+ * @param {Object} orderWithDeposit - 包含押金信息的订单数据
+ */
+async function handleCheckInConfirm(orderWithDeposit) {
+  try {
+    console.log('🚀 准备使用快速入住API，数据:', orderWithDeposit);
+
+    // 直接调用新的 fastCheckIn action
+    const result = await orderStore.fastCheckIn(orderWithDeposit);
+
+    console.log('✅ 快速入住成功，后端返回:', result);
+
+    // 刷新房间状态
+    await roomStore.refreshData();
+
+    // 关闭对话框
+    showCheckInDialog.value = false;
+    pendingCheckInOrder.value = null;
+
+    $q.notify({
+      type: 'positive',
+      message: '快速入住成功！订单和账单已创建。',
+      position: 'top'
+    });
+
+    // 导航到订单列表页面
+    router.push('/ViewOrders');
+
+  } catch (error) {
+    console.error('快速入住失败:', error);
+    let errorMessage = '操作失败，请稍后再试。';
+
+    // 错误处理逻辑保持不变
+    if (error.response?.data) {
+      if (error.response.data.errors && Array.isArray(error.response.data.errors)) {
+        errorMessage = '表单验证失败：\n' +
+          error.response.data.errors.map(e => `- ${e.msg}`).join('\n');
+      } else if (error.response.data.message) {
+        errorMessage = error.response.data.message;
       }
-    })
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+
+    $q.notify({
+      type: 'negative',
+      message: errorMessage,
+      position: 'top',
+      timeout: 10000,
+      multiLine: true
+    });
   }
 }
 
@@ -913,57 +1175,51 @@ async function submitOrder() {
     return
   }
 
-      // 构建价格数据
-  let roomPriceData
+  // 构建价格数据（统一使用 dailyPrices）
+  const roomPriceData = { ...dailyPrices.value }
 
-  // 调试信息
-  console.log('🏨 订单日期信息：');
-  console.log('  入住日期：', orderData.value.checkInDate);
-  console.log('  退房日期：', orderData.value.checkOutDate);
-  console.log('  是否多日：', isMultiDay.value);
-  console.log('  日期列表：', dateList.value);
-  console.log('  每日价格：', dailyPrices.value);
-
-  if (isMultiDay.value) {
-    // 多日订单：使用JSON格式
-    roomPriceData = { ...dailyPrices.value }
-    console.log('📊 多日订单价格数据：', roomPriceData);
-
-    // 验证所有日期都有价格
-    const missingPrices = dateList.value.filter(date => !dailyPrices.value[date] || dailyPrices.value[date] <= 0)
-    if (missingPrices.length > 0) {
-      $q.notify({
-        type: 'negative',
-        message: `请设置以下日期的价格：${missingPrices.map(formatDateDisplay).join('、')}`,
-        position: 'top'
-      });
-      return
-    }
-  } else {
-    // 单日订单：转换为JSON格式 {date: price}
-    if (!orderData.value.roomPrice || orderData.value.roomPrice <= 0) {
-      $q.notify({
-        type: 'negative',
-        message: '请设置房间价格',
-        position: 'top'
-      });
-      return
-    }
-
-    roomPriceData = {
-      [orderData.value.checkInDate]: Number(orderData.value.roomPrice)
-    }
-    console.log('📅 单日订单价格数据：', roomPriceData);
+  // 验证所有日期都有价格
+  const missingPrices = dateList.value.filter(date => !dailyPrices.value[date] || dailyPrices.value[date] <= 0)
+  if (missingPrices.length > 0) {
+    $q.notify({
+      type: 'negative',
+      message: `请设置以下日期的价格：${missingPrices.map(formatDateDisplay).join('、')}`,
+      position: 'top'
+    });
+    return
   }
 
   // 最终验证价格数据
-  if (!roomPriceData || (typeof roomPriceData === 'object' && Object.keys(roomPriceData).length === 0)) {
+  if (!roomPriceData || Object.keys(roomPriceData).length === 0) {
     $q.notify({
       type: 'negative',
       message: '价格数据异常，请重新设置价格',
       position: 'top'
     });
     return;
+  }
+
+  console.log(`📅 ${dateList.value.length === 1 ? '单日' : '多日'}订单价格数据：`, roomPriceData);
+
+  if (orderData.value.isPrepaid) {
+    const totalPriceValue = toDecimal(totalPrice.value);
+    const prepaidAmount = toDecimal(orderData.value.prepaidAmount);
+    if (!prepaidAmount.gt(0)) {
+      $q.notify({
+        type: 'negative',
+        message: '请输入有效的预收房费金额',
+        position: 'top'
+      });
+      return;
+    }
+    if (totalPriceValue.gt(0) && prepaidAmount.minus(totalPriceValue).gt(0.01)) {
+      $q.notify({
+        type: 'negative',
+        message: '预收房费金额不能超过房费总额',
+        position: 'top'
+      });
+      return;
+    }
   }
 
   // 获取选择的房间 (client-side check before API call)
@@ -992,20 +1248,46 @@ async function submitOrder() {
   // 注意：移除了对房间状态的严格检查，允许清扫中的房间创建订单
   // 冲突检测将由后端API处理，确保不会创建真正冲突的订单
 
+  // 构建要提交的订单数据
+  const prepaidAtISO = orderData.value.isPrepaid ? new Date().toISOString() : null;
+  const submitData = {
+    ...orderData.value,
+    createTime: date.formatDate(now, 'YYYY-MM-DD HH:mm:ss'),
+    paymentMethod: typeof orderData.value.paymentMethod === 'object' ?
+      orderData.value.paymentMethod.value :
+      orderData.value.paymentMethod,
+    roomPrice: roomPriceData, // 发送JSON格式的价格数据
+    deposit: Number(orderData.value.deposit),
+    isPrepaid: orderData.value.isPrepaid,
+    prepaidAmount: orderData.value.isPrepaid ? Number(orderData.value.prepaidAmount) : 0,
+    ...(orderData.value.isPrepaid && prepaidAtISO ? { prepaidAt: prepaidAtISO } : {})
+  };
+
+  // 如果订单状态是"已入住"，需要先确认入住信息
+  if (orderData.value.status === 'checked-in') {
+    $q.dialog({
+      title: '确认立即入住',
+      message: '创建订单后将立即办理入住，是否继续？',
+      cancel: {
+        label: '取消',
+        color: 'grey',
+        flat: true
+      },
+      ok: {
+        label: '确定',
+        color: 'primary'
+      },
+      persistent: true
+    }).onOk(() => {
+      // 用户确认后，显示入住确认对话框
+      pendingCheckInOrder.value = submitData
+      showCheckInDialog.value = true
+    })
+    return
+  }
+
+  // 普通订单创建流程
   try {
-    // 构建要提交的订单数据
-    const submitData = {
-      ...orderData.value,
-      createTime: date.formatDate(now, 'YYYY-MM-DD HH:mm:ss'),
-      paymentMethod: typeof orderData.value.paymentMethod === 'object' ?
-        orderData.value.paymentMethod.value :
-        orderData.value.paymentMethod,
-      roomPrice: roomPriceData, // 发送JSON格式的价格数据
-      deposit: Number(orderData.value.deposit)
-    };
-
-
-
     // 使用 orderStore.addOrder 创建订单
     await orderStore.addOrder(submitData);
 
@@ -1022,23 +1304,30 @@ async function submitOrder() {
     router.push('/ViewOrders');
   } catch (error) {
     console.error('订单创建失败:', error);
-    let errorMessage = '订单创建失败，请稍后再试。';
+    const defaultMessage = '订单创建失败，请稍后再试。';
+    let errorMessage = defaultMessage;
 
-    if (error.response) {
-      if (error.response.data) {
-        console.log('服务器返回的详细错误:', error.response.data);
+    if (error.response?.data) {
+      console.log('服务器返回的详细错误:', error.response.data);
 
-        if (error.response.data.errors) {
-          if (Array.isArray(error.response.data.errors)) {
-            error.response.data.errors.forEach((err, index) => {
-              console.log(`错误 ${index + 1}:`, err);
-            });
+      if (error.response.data.errors && Array.isArray(error.response.data.errors)) {
+        error.response.data.errors.forEach((err, index) => {
+          console.log(`错误 ${index + 1}:`, err);
+        });
+        errorMessage = '表单验证失败：\n' +
+          error.response.data.errors.map(e => `- ${e.msg}`).join('\n');
+      } else if (error.response.data.message) {
+        errorMessage = error.response.data.message;
+      }
+    }
 
-            errorMessage = '表单验证失败：\n' +
-              error.response.data.errors.map(e => `- ${e.msg}`).join('\n');
-          }
-        } else if (error.response.data.message) {
-          errorMessage = error.response.data.message;
+    if (errorMessage === defaultMessage) {
+      const fallbackMessage = error.userFacingMessage || error.message;
+      if (typeof fallbackMessage === 'string') {
+        const trimmed = fallbackMessage.trim();
+        if (trimmed && trimmed !== 'Error') {
+          const match = trimmed.match(/^\[(.+?)\]\s*(.*)$/);
+          errorMessage = match && match[2] ? match[2] : trimmed;
         }
       }
     }
@@ -1053,206 +1342,6 @@ async function submitOrder() {
   }
 }
 
-/**
- * 填充测试数据
- */
-function fillTestData() {
-  // 填充基本订单数据
-  orderData.value.guestName = '张测试'
-  orderData.value.idNumber = '110101199001011234'
-  orderData.value.phone = '13800138000'
-  orderData.value.remarks = '测试订单，请勿处理'
-
-  // 获取第一个可用的房间类型
-  const availableRoomTypes = roomTypeOptionsWithCount.value
-    .filter(type => type.availableCount > 0)
-
-  if (availableRoomTypes.length > 0) {
-    // 设置房间类型
-    orderData.value.roomType = availableRoomTypes[0].value
-
-    // 等待DOM更新
-    nextTick(() => {
-      // 设置第一个可用房间
-      if (availableRoomOptions.value.length > 0) {
-        orderData.value.roomNumber = availableRoomOptions.value[0].value
-
-        // 根据选择的房间直接设置房间价格
-        const selectedRoom = roomStore.getRoomByNumber(orderData.value.roomNumber)
-        if (selectedRoom) {
-          console.log('设置房间价格:', selectedRoom.price)
-          orderData.value.roomPrice = Number(selectedRoom.price)
-        } else {
-          console.error('无法获取选择房间的价格信息')
-          // 设置一个默认价格
-          orderData.value.roomPrice = 299
-        }
-      }
-    })
-  }
-
-  // 设置支付信息
-  orderData.value.paymentMethod = 'cash'
-  orderData.value.deposit = 200
-
-  // 显示通知
-  $q.notify({
-    type: 'positive',
-    message: '测试数据已填充',
-    position: 'top'
-  })
-
-  // 添加验证
-  nextTick(() => {
-    // 验证房间是否正确选择
-    const room = roomStore.getRoomByNumber(orderData.value.roomNumber)
-    if (!room) {
-      console.error('测试数据填充后，无法找到选择的房间')
-    } else {
-      console.log('测试数据填充后，房间状态:', room.status)
-      console.log('测试数据填充后，房间价格:', room.price)
-    }
-  })
-}
-
-/**
- * 填充随机测试数据
- */
-function fillRandomData() {
-  // 随机名字
-  const firstNames = ['张', '王', '李', '赵', '刘', '陈', '杨', '黄']
-  const lastNames = ['明', '芳', '军', '华', '英', '伟', '强', '勇', '静', '敏']
-  const randomName = firstNames[Math.floor(Math.random() * firstNames.length)] +
-    lastNames[Math.floor(Math.random() * lastNames.length)]
-
-  // 随机身份证
-  const randomIdPrefix = '1101011990'
-  const randomMonth = String(Math.floor(Math.random() * 12) + 1).padStart(2, '0')
-  const randomDay = String(Math.floor(Math.random() * 28) + 1).padStart(2, '0')
-  const randomSuffix = String(Math.floor(Math.random() * 10000)).padStart(4, '0')
-  const randomId = `${randomIdPrefix}${randomMonth}${randomDay}${randomSuffix}`
-
-  // 随机手机号
-  const phonePrefix = ['138', '139', '186', '187', '158', '159']
-  const randomPhone = phonePrefix[Math.floor(Math.random() * phonePrefix.length)] +
-    String(Math.floor(Math.random() * 100000000)).padStart(8, '0')
-
-  // 填充数据
-  orderData.value.guestName = randomName
-  orderData.value.idNumber = randomId
-  orderData.value.phone = randomPhone
-  orderData.value.remarks = `随机生成的测试订单 - ${new Date().toLocaleString()}`
-
-  // 随机选择一个可用房型
-  const availableRoomTypes = roomTypeOptionsWithCount.value
-    .filter(type => type.availableCount > 0)
-
-  if (availableRoomTypes.length > 0) {
-    const randomRoomType = availableRoomTypes[Math.floor(Math.random() * availableRoomTypes.length)]
-    orderData.value.roomType = randomRoomType.value
-
-    // 等待DOM更新
-    nextTick(() => {
-      // 随机选择一个可用房间
-      if (availableRoomOptions.value.length > 0) {
-        const randomIndex = Math.floor(Math.random() * availableRoomOptions.value.length)
-        orderData.value.roomNumber = availableRoomOptions.value[randomIndex].value
-
-        // 根据选择的房间直接设置房间价格
-        const selectedRoom = roomStore.getRoomByNumber(orderData.value.roomNumber)
-        if (selectedRoom) {
-          console.log('设置随机房间价格:', selectedRoom.price)
-          orderData.value.roomPrice = Number(selectedRoom.price)
-        } else {
-          // 设置一个随机默认价格 (200-800)
-          orderData.value.roomPrice = Math.floor(Math.random() * 601) + 200
-        }
-      }
-    })
-  }
-
-  // 随机支付方式
-  const paymentMethods = viewStore.paymentMethodOptions
-  orderData.value.paymentMethod = paymentMethods[Math.floor(Math.random() * paymentMethods.length)].value
-
-  // 随机押金 (100-500)
-  orderData.value.deposit = Math.floor(Math.random() * 401) + 100
-
-  // 显示通知
-  $q.notify({
-    type: 'positive',
-    message: '随机测试数据已填充',
-    position: 'top'
-  })
-
-  // 添加随机数据的验证
-  setTimeout(() => {
-    console.log('房间价格设置情况:', {
-      roomNumber: orderData.value.roomNumber,
-      roomPrice: orderData.value.roomPrice,
-      selectedRoom: roomStore.getRoomByNumber(orderData.value.roomNumber)
-    })
-  }, 500)
-}
-
-/**
- * 填充休息房测试数据
- */
-function fillRestRoomData() {
-  // 填充基本订单数据
-  orderData.value.guestName = '李休息'
-  orderData.value.idNumber = '110101199002021234'
-  orderData.value.phone = '13900139000'
-
-  // 设置当天入住和离店
-  const today = date.formatDate(new Date(), 'YYYY-MM-DD')
-  orderData.value.checkInDate = today
-  orderData.value.checkOutDate = today
-
-  // 获取第一个可用的房间类型
-  const availableRoomTypes = roomTypeOptionsWithCount.value
-    .filter(type => type.availableCount > 0)
-
-  if (availableRoomTypes.length > 0) {
-    // 设置房间类型
-    orderData.value.roomType = availableRoomTypes[0].value
-
-    // 等待DOM更新
-    nextTick(() => {
-      // 设置第一个可用房间
-      if (availableRoomOptions.value.length > 0) {
-        orderData.value.roomNumber = availableRoomOptions.value[0].value
-
-        // 根据选择的房间设置房间价格（休息房半价）
-        const selectedRoom = roomStore.getRoomByNumber(orderData.value.roomNumber)
-        if (selectedRoom) {
-          console.log('设置休息房价格:', Math.round(selectedRoom.price / 2))
-          orderData.value.roomPrice = Math.round(Number(selectedRoom.price) / 2)
-        } else {
-          // 设置一个默认的休息房价格
-          orderData.value.roomPrice = 150
-        }
-      }
-    })
-  }
-
-  // 设置休息房特有的支付信息
-  orderData.value.paymentMethod = 'cash'
-  orderData.value.deposit = 50  // 休息房押金较低
-
-  // 显示通知
-  $q.notify({
-    type: 'positive',
-    message: '休息房数据已填充',
-    position: 'top'
-  })
-
-  // 刷新可用房间
-  setTimeout(() => {
-    updateAvailableRooms()
-  }, 100)
-}
-
 // 组件挂载时执行的钩子函数
 onMounted(async () => {
   console.log('CreateOrder组件已挂载，开始初始化数据')
@@ -1265,6 +1354,9 @@ onMounted(async () => {
 
   // 页面加载时，主动拉取一次可用房间，保证房型数量能显示
   await updateAvailableRooms()
+
+  isDataInitialized.value = true
+  await applyPreselectedRoom()
 
   console.log('CreateOrder组件数据初始化完成')
 });
@@ -1321,56 +1413,56 @@ async function onCheckInDateChange() {
 // 计算属性：休息房状态
 const isRestRoom = computed(() => orderData.value.checkInDate === orderData.value.checkOutDate);
 
-// 保存原始房价与押金以便恢复
-const originalRoomPrice = ref(null);
-const originalDeposit = ref(null);
-
 // 清理不再使用的多日价格键
 watch(dateList, (newList) => {
   const set = new Set(newList);
   Object.keys(dailyPrices.value).forEach(k => { if (!set.has(k)) delete dailyPrices.value[k]; });
+  updateTotalFromDaily();
 });
 
 
 
-// 计算属性：总价格（多日情况下）
+// 计算属性：总价格（统一从 dailyPrices 计算）
 const totalPrice = computed(() => {
-  if (isMultiDay.value) {
-    return dateList.value.reduce((sum, date) => {
-      return sum + (dailyPrices.value[date] || 0)
-    }, 0)
+  const totalDecimal = sumDailyPricesDecimal();
+  return Number(totalDecimal.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toString());
+});
+
+const averageDailyPrice = computed(() => {
+  const days = dateList.value.length;
+  if (!days) return 0;
+  const avgDecimal = toDecimal(totalPrice.value).div(days);
+  return Number(avgDecimal.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toString());
+});
+
+watch(() => orderData.value.isPrepaid, (now) => {
+  if (now) {
+    const total = toDecimal(totalPrice.value);
+    orderData.value.prepaidAmount = total.gt(0) ? toAmountNumber(total) : 0;
+  } else {
+    orderData.value.prepaidAmount = 0;
   }
-  return orderData.value.roomPrice || 0
+});
+
+watch(totalPrice, (val) => {
+  if (!orderData.value.isPrepaid) return;
+  const total = toDecimal(val);
+  orderData.value.prepaidAmount = total.gt(0) ? toAmountNumber(total) : 0;
 });
 
 // 监听休息房状态变化，自动处理价格和备注
 watch(isRestRoom, (now, prev) => {
   if (now === prev) return;
   if (now) {
-    // 进入休息房模式
+    // 进入休息房模式：自动在备注中添加标记
     if (!orderData.value.remarks.includes('【休息房】')) {
       orderData.value.remarks = orderData.value.remarks ? `【休息房】${orderData.value.remarks}` : '【休息房】';
     }
-    if (orderData.value.roomPrice > 0) {
-      originalRoomPrice.value = originalRoomPrice.value ?? orderData.value.roomPrice; // 只保存一次
-      orderData.value.roomPrice = Math.round(orderData.value.roomPrice / 2);
-    }
-    originalDeposit.value = originalDeposit.value ?? orderData.value.deposit;
-    if (orderData.value.deposit > 50) orderData.value.deposit = 50;
+    // 价格调整已在 initializeDailyPrices 中处理，这里不需要额外操作
   } else {
-    // 退出休息房模式
+    // 退出休息房模式：移除备注标记
     orderData.value.remarks = orderData.value.remarks.replace(/【休息房】/g, '').trim();
-    if (originalRoomPrice.value != null) {
-      orderData.value.roomPrice = originalRoomPrice.value;
-    }
-    if (originalDeposit.value != null) {
-      orderData.value.deposit = Math.max(originalDeposit.value, 100);
-    } else if (orderData.value.deposit < 100) {
-      orderData.value.deposit = 100;
-    }
-    // 复位缓存
-    originalRoomPrice.value = null;
-    originalDeposit.value = null;
+    // 价格调整已在 initializeDailyPrices 中处理，这里不需要额外操作
   }
 });
 </script>
@@ -1383,289 +1475,45 @@ watch(isRestRoom, (now, prev) => {
   margin: 0 auto;
 }
 
-/* 多日价格设置卡片 */
-.multi-day-pricing-card {
-  border-radius: 12px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
-  background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
-}
-
-/* 价格项卡片 */
-.price-item-card {
-  border-radius: 8px;
-  transition: all 0.2s ease;
+/* 简洁价格设置容器 */
+.simple-pricing-container {
+  padding: 16px;
+  background: #fafafa;
+  border-radius: 4px;
   border: 1px solid #e0e0e0;
-  background: #ffffff;
 }
 
-.price-item-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  transform: translateY(-1px);
+/* 简洁输入框样式 */
+.simple-input .q-field__control {
+  border-radius: 4px;
 }
 
-/* 日期徽章样式 */
-.date-badge {
+/* 简洁按钮样式 */
+.simple-btn {
+  border-radius: 4px;
+  font-weight: 400;
+  text-transform: none;
+}
+
+/* 总计显示 */
+.total-display {
+  padding: 12px 16px;
+  background: #f5f5f5;
+  border-radius: 4px;
+  border: 1px solid #e0e0e0;
   display: flex;
   align-items: center;
-  background: linear-gradient(135deg, #1976d2 0%, #42a5f5 100%);
-  color: white;
-  border-radius: 8px;
-  padding: 8px 12px;
-  min-width: 80px;
-  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.3);
-}
-
-.date-number {
-  font-size: 24px;
-  font-weight: bold;
-  line-height: 1;
-  margin-right: 8px;
-}
-
-.date-info {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-}
-
-.month-day {
-  font-size: 12px;
-  opacity: 0.9;
-  line-height: 1;
-}
-
-.weekday {
-  font-size: 11px;
-  opacity: 0.8;
-  line-height: 1;
-  margin-top: 2px;
-}
-
-/* 价格输入框 */
-.price-input {
-  border-radius: 6px;
-}
-
-.price-input .q-field__control {
-  border-radius: 6px;
-}
-
-/* 按钮样式 */
-.apply-price-btn {
-  border-radius: 6px;
-  padding: 8px 16px;
-  font-weight: 500;
-  box-shadow: 0 2px 4px rgba(255, 152, 0, 0.3);
-}
-
-.smart-pricing-btn {
-  border-radius: 6px;
-  padding: 8px 16px;
-  font-weight: 500;
-  box-shadow: 0 2px 4px rgba(96, 125, 139, 0.3);
-}
-
-/* 总价卡片 */
-.total-price-card {
-  background: linear-gradient(135deg, #4caf50 0%, #81c784 100%);
-  color: white;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
-  min-width: 140px;
-}
-
-.total-price-card .text-caption:first-child {
-  color: rgba(255, 255, 255, 0.9) !important;
-}
-
-.total-price-card .text-caption:last-child {
-  color: rgba(255, 255, 255, 0.8) !important;
-}
-
-.total-price-card .text-h5 {
-  color: white !important;
-}
-
-.total-price-card .q-icon {
-  color: white !important;
-}
-
-/* 价格列表动画 */
-.pricing-list {
-  animation: fadeInUp 0.6s ease-out;
-}
-
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* 响应式设计 */
-@media (max-width: 768px) {
-  .date-badge {
-    min-width: 70px;
-    padding: 6px 10px;
-  }
-
-  .date-number {
-    font-size: 20px;
-  }
-
-  .month-day, .weekday {
-    font-size: 10px;
-  }
-
-  .apply-price-btn, .smart-pricing-btn {
-    padding: 6px 12px;
-    font-size: 12px;
-  }
-
-  .total-price-card {
-    min-width: 120px;
-  }
 }
 
 /* 深色模式适配 */
-.body--dark .multi-day-pricing-card {
-  background: linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 100%);
+.body--dark .simple-pricing-container {
+  background: #1e1e1e;
   border-color: #404040;
 }
 
-.body--dark .price-item-card {
+.body--dark .total-display {
   background: #2d2d2d;
   border-color: #404040;
 }
 
-.body--dark .price-item-card:hover {
-  box-shadow: 0 4px 12px rgba(255, 255, 255, 0.1);
-}
-
-/* 输入框聚焦效果 */
-.price-input .q-field--focused .q-field__control {
-  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.2);
-}
-
-/* 价格趋势图标动画 */
-.q-icon[name="trending_up"] {
-  transition: all 0.3s ease;
-}
-
-/* 卡片进入动画 */
-.price-item-card {
-  animation: slideInLeft 0.4s ease-out;
-}
-
-@keyframes slideInLeft {
-  from {
-    opacity: 0;
-    transform: translateX(-20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-/* 按钮悬停效果 */
-.apply-price-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(255, 152, 0, 0.4);
-}
-
-.smart-pricing-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(96, 125, 139, 0.4);
-}
-
-/* 总价卡片悬停效果 */
-.total-price-card:hover {
-  transform: scale(1.02);
-  box-shadow: 0 6px 16px rgba(76, 175, 80, 0.4);
-}
-
-/* 单日价格卡片 */
-.single-day-pricing-card {
-  border-radius: 8px;
-  border: 1px solid #e3f2fd;
-  background: linear-gradient(135deg, #f8fffe 0%, #ffffff 100%);
-  transition: all 0.3s ease;
-}
-
-.single-day-pricing-card:hover {
-  box-shadow: 0 4px 12px rgba(25, 118, 210, 0.15);
-  transform: translateY(-1px);
-}
-
-/* 单日价格输入框 */
-.single-price-input {
-  border-radius: 6px;
-}
-
-.single-price-input .q-field__control {
-  border-radius: 6px;
-}
-
-/* 押金卡片 */
-.deposit-card {
-  border-radius: 8px;
-  border: 1px solid #fff3e0;
-  background: linear-gradient(135deg, #fffcf8 0%, #ffffff 100%);
-  transition: all 0.3s ease;
-}
-
-.deposit-card:hover {
-  box-shadow: 0 4px 12px rgba(255, 152, 0, 0.15);
-  transform: translateY(-1px);
-}
-
-/* 押金输入框 */
-.deposit-input {
-  border-radius: 6px;
-}
-
-.deposit-input .q-field__control {
-  border-radius: 6px;
-}
-
-/* 深色模式适配 - 单日价格和押金卡片 */
-.body--dark .single-day-pricing-card {
-  background: linear-gradient(135deg, #1e2328 0%, #2d2d2d 100%);
-  border-color: #404040;
-}
-
-.body--dark .deposit-card {
-  background: linear-gradient(135deg, #2d1e1e 0%, #2d2d2d 100%);
-  border-color: #404040;
-}
-
-.body--dark .single-day-pricing-card:hover,
-.body--dark .deposit-card:hover {
-  box-shadow: 0 4px 12px rgba(255, 255, 255, 0.1);
-}
-
-/* 卡片标题图标动画 */
-.single-day-pricing-card .q-icon,
-.deposit-card .q-icon {
-  transition: transform 0.3s ease;
-}
-
-.single-day-pricing-card:hover .q-icon,
-.deposit-card:hover .q-icon {
-  transform: scale(1.1);
-}
-
-/* 输入框聚焦效果增强 */
-.single-price-input .q-field--focused .q-field__control {
-  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.2);
-}
-
-.deposit-input .q-field--focused .q-field__control {
-  box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.2);
-}
 </style>

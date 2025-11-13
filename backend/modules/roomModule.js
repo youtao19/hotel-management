@@ -1,5 +1,5 @@
 "use strict";
-const { query } = require('../database/postgreDB/pg');
+const { query, getClient } = require('../database/postgreDB/pg');
 /**
  * 获取所有房间
  * @param {string} [queryDate] - 查询日期 YYYY-MM-DD，如果不提供则查询当前活跃订单
@@ -31,10 +31,11 @@ async function getAllRooms(queryDate = null) {
           o.check_out_date,
           o.status as order_status,
           o.order_id,
-          o.check_in_date
+          o.check_in_date,
+          o.stay_type
         FROM orders o
         WHERE o.check_in_date <= $1::date
-          AND o.check_out_date > $1::date
+          AND o.check_out_date >= $1::date
           AND o.status IN ('pending', 'checked-in')
         ORDER BY o.room_number, o.create_time DESC
       `;
@@ -49,11 +50,12 @@ async function getAllRooms(queryDate = null) {
           o.check_out_date,
           o.status as order_status,
           o.order_id,
-          o.check_in_date
+          o.check_in_date,
+          o.stay_type
         FROM orders o
         WHERE o.status IN ('pending', 'checked-in')
           AND NOW()::date >= o.check_in_date
-          AND NOW()::date < o.check_out_date
+          AND NOW()::date <= o.check_out_date
         ORDER BY o.room_number, o.create_time DESC
       `;
     }
@@ -78,7 +80,8 @@ async function getAllRooms(queryDate = null) {
           check_out_date: order.check_out_date,
           order_status: order.order_status,
           order_id: order.order_id,
-          check_in_date: order.check_in_date
+          check_in_date: order.check_in_date,
+          stay_type: order.stay_type
         };
       }
       return room;
@@ -105,20 +108,6 @@ async function getAllRooms(queryDate = null) {
   }
 }
 
-/**
- * 根据ID获取房间
- * @param {number} id - 房间ID
- * @returns {Promise<Object|null>} 房间对象或null
- */
-async function getRoomById(id) {
-  try {
-    const { rows } = await query('SELECT * FROM rooms WHERE room_id = $1', [id]);
-    return rows.length > 0 ? rows[0] : null;
-  } catch (error) {
-    console.error(`获取房间(ID: ${id})失败:`, error);
-    throw error;
-  }
-}
 
 /**
  * 根据房间号获取房间
@@ -137,40 +126,40 @@ async function getRoomByNumber(number) {
 
 /**
  * 更新房间状态并自动处理房间可用性
- * @param {number} id - 房间ID
+ * @param {number} number - 房间ID
  * @param {string} status - 新状态
  * @returns {Promise<Object|null>} 更新后的房间对象或null
  */
-async function updateRoomStatus(id, status) {
+async function updateRoomStatus(number, status) {
   try {
-    console.log(`更新房间(ID: ${id})状态为: ${status}`);
+    console.log(`更新房间(Number: ${number})状态为: ${status}`);
 
     // 直接使用传入的状态值，不做转换
     let isClosed = false;
 
     // 根据状态自动设置房间的is_closed字段
     if (status === 'repair') {
-      console.log(`设置房间 ${id} 为关闭状态(is_closed=true)`);
+      console.log(`设置房间 ${number} 为关闭状态(is_closed=true)`);
       isClosed = true; // 维修中或清洁中的房间设为关闭状态
     } else {
-      console.log(`设置房间 ${id} 为开放状态(is_closed=false)`);
+      console.log(`设置房间 ${number} 为开放状态(is_closed=false)`);
     }
 
     // 执行房间状态更新，同时更新is_closed字段
-    console.log(`执行SQL: UPDATE rooms SET status = '${status}', is_closed = ${isClosed} WHERE room_id = ${id}`);
+    console.log(`执行SQL: UPDATE rooms SET status = '${status}', is_closed = ${isClosed} WHERE room_number = '${number}'`);
     const { rows } = await query(
-      'UPDATE rooms SET status = $1, is_closed = $2 WHERE room_id = $3 RETURNING *',
-      [status, isClosed, id]
+      'UPDATE rooms SET status = $1, is_closed = $2 WHERE room_number = $3 RETURNING *',
+      [status, isClosed, number]
     );
 
     if (rows.length > 0) {
       console.log(`更新成功，结果:`, rows[0]);
     } else {
-      console.log(`未找到ID为 ${id} 的房间`);
+      console.log(`未找到Number为 ${number} 的房间`);
     }
     return rows.length > 0 ? rows[0] : null;
   } catch (error) {
-    console.error(`更新房间(ID: ${id})状态失败:`, error);
+    console.error(`更新房间(Number: ${number})状态失败:`, error);
     throw error;
   }
 }
@@ -183,27 +172,90 @@ async function updateRoomStatus(id, status) {
 async function addRoom(roomData) {
   const { room_number, type_code, status, price } = roomData;
 
+  let client;
   try {
+    client = await getClient();
+    await client.query('BEGIN');
+
     // 检查房间号是否已存在
-    const checkResult = await query('SELECT * FROM rooms WHERE room_number = $1', [room_number]);
+    const checkResult = await client.query('SELECT 1 FROM rooms WHERE room_number = $1', [room_number]);
     if (checkResult.rows.length > 0) {
-      throw new Error('房间号已存在');
+      const err = new Error('房间号已存在');
+      err.code = 'ROOM_EXISTS';
+      throw err;
     }
 
-    // 获取新ID
-    const idResult = await query('SELECT MAX(room_id) as max_id FROM rooms');
-    const newId = (idResult.rows[0].max_id || 0) + 1;
+    // 验证房型是否存在，并获取默认价格
+    const roomTypeResult = await client.query('SELECT base_price FROM room_types WHERE type_code = $1', [type_code]);
+    if (roomTypeResult.rows.length === 0) {
+      const err = new Error('房型不存在');
+      err.code = 'ROOM_TYPE_NOT_FOUND';
+      throw err;
+    }
+
+    const basePriceRaw = roomTypeResult.rows[0].base_price;
+    const basePrice = Number(basePriceRaw);
+    const finalPrice = typeof price === 'number' && Number.isFinite(price) && price > 0
+      ? price
+      : (Number.isFinite(basePrice) ? basePrice : 0);
+
+    // 检查是否存在 room_id 列且需要手动赋值
+    const roomIdColumnInfo = await client.query(
+      `
+        SELECT column_default, is_nullable
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'rooms'
+          AND column_name = 'room_id'
+      `
+    );
+
+    let insertQueryText = 'INSERT INTO rooms (room_number, type_code, status, price) VALUES ($1, $2, $3, $4) RETURNING *';
+    let insertParams = [room_number, type_code, status, finalPrice];
+
+    if (roomIdColumnInfo.rows.length > 0) {
+      const { column_default: columnDefault, is_nullable: isNullable } = roomIdColumnInfo.rows[0];
+      const needsExplicitRoomId = isNullable === 'NO' && columnDefault === null;
+
+      if (needsExplicitRoomId) {
+        // 优先尝试使用序列
+        const seqResult = await client.query('SELECT pg_get_serial_sequence($1, $2) AS seq_name', ['rooms', 'room_id']);
+        let nextRoomId;
+        const seqRow = seqResult.rows && seqResult.rows[0];
+
+        if (seqRow && seqRow.seq_name) {
+          const nextValResult = await client.query('SELECT nextval($1) AS next_id', [seqRow.seq_name]);
+          nextRoomId = Number(nextValResult.rows[0].next_id);
+        } else {
+          const nextIdResult = await client.query('SELECT COALESCE(MAX(room_id), 0) + 1 AS next_id FROM rooms');
+          nextRoomId = Number(nextIdResult.rows[0].next_id || 1);
+        }
+
+        insertQueryText = 'INSERT INTO rooms (room_id, room_number, type_code, status, price) VALUES ($1, $2, $3, $4, $5) RETURNING *';
+        insertParams = [nextRoomId, room_number, type_code, status, finalPrice];
+      }
+    }
 
     // 插入新房间
-    const { rows } = await query(
-      'INSERT INTO rooms (room_id, room_number, type_code, status, price) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [newId, room_number, type_code, status, price]
-    );
+    const { rows } = await client.query(insertQueryText, insertParams);
+
+    await client.query('COMMIT');
 
     return rows[0];
   } catch (error) {
+    if (client) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackErr) {
+        console.error('添加房间回滚失败:', rollbackErr);
+      }
+    }
     console.error('添加房间失败:', error);
     throw error;
+  } finally {
+    if (client) {
+      client.release();
+    }
   }
 }
 
@@ -245,7 +297,7 @@ async function getAvailableRooms(startDate, endDate, typeCode = null) {
     if (isRestRoomQuery) {
       // 休息房查询：检查当天是否有冲突
       sqlQuery = `
-        SELECT r.room_id, r.room_number, r.type_code, r.status, r.price, r.is_closed
+        SELECT r.room_number, r.type_code, r.status, r.price, r.is_closed
         FROM rooms r
         WHERE r.is_closed = FALSE
           AND r.status != 'repair'
@@ -264,7 +316,7 @@ async function getAvailableRooms(startDate, endDate, typeCode = null) {
     } else {
       // 普通订单查询：标准的日期区间冲突检查
       sqlQuery = `
-        SELECT r.room_id, r.room_number, r.type_code, r.status, r.price, r.is_closed
+        SELECT r.room_number, r.type_code, r.status, r.price, r.is_closed
         FROM rooms r
         WHERE r.is_closed = FALSE
           AND r.status != 'repair'
@@ -294,8 +346,6 @@ async function getAvailableRooms(startDate, endDate, typeCode = null) {
     // 添加排序
     sqlQuery += ' ORDER BY r.room_number';
 
-    console.log('[Backend DEBUG] getAvailableRooms: 最终执行的SQL:\n', sqlQuery);
-    console.log('[Backend DEBUG] getAvailableRooms: SQL参数:', queryParams);
 
     const result = await query(sqlQuery, queryParams);
     const availableRooms = result.rows;
@@ -378,6 +428,13 @@ async function changeOrderRoom(orderNumber, oldRoomNumber, newRoomNumber) {
   throw err;
     }
 
+    // 3. 验证新房间与原订单房型是否相同
+    if (newRoom.type_code !== order.room_type) {
+  const err = new Error(`新房间房型(${newRoom.type_code})与订单房型(${order.room_type})不一致，无法更换`);
+  err.code = 'ROOM_TYPE_MISMATCH';
+  throw err;
+    }
+
     // 对于已入住的订单，新房间必须是可用状态
     if (order.status === 'checked-in' && newRoom.status !== 'available') {
   const err = new Error(`新房间当前状态为"${newRoom.status}"，已入住订单只能换到可用房间`);
@@ -385,7 +442,7 @@ async function changeOrderRoom(orderNumber, oldRoomNumber, newRoomNumber) {
   throw err;
     }
 
-        // 3. 检查新房间在订单日期期间是否有冲突
+        // 4. 检查新房间在订单日期期间是否有冲突
     const conflictCheckResult = await query(`
       SELECT COUNT(*) as count
       FROM orders
@@ -402,34 +459,32 @@ async function changeOrderRoom(orderNumber, oldRoomNumber, newRoomNumber) {
   throw err;
     }
 
-    // 4. 开始事务更新
+    // 5. 开始事务更新
     await query('BEGIN');
 
     try {
             // 更新订单的房间信息
-      // 准备新的 room_price JSON：保持 JSONB 结构 (满足 chk_room_price_json)
-      let newRoomPriceJson = {};
-      try {
-        // order.room_price 可能已是对象 (JSONB -> JS 对象)，也可能是数字(旧数据)，也可能为空
-        if (order.room_price && typeof order.room_price === 'object' && !Array.isArray(order.room_price)) {
-          Object.keys(order.room_price).forEach(k => { newRoomPriceJson[k] = Number(newRoom.price); });
-        } else {
-          // 构造单日键：使用入住日期；若为空则使用当前日期
-            const keyDate = (order.check_in_date || new Date().toISOString().split('T')[0]).toString().split('T')[0];
-          newRoomPriceJson[keyDate] = Number(newRoom.price);
-        }
-      } catch (e) {
-        console.warn('构造 newRoomPriceJson 失败，使用回退策略:', e.message);
-        const keyDate = (order.check_in_date || new Date().toISOString().split('T')[0]).toString().split('T')[0];
-        newRoomPriceJson[keyDate] = Number(newRoom.price);
+      // 计算新的总价格（根据住宿天数）
+      const checkInDate = new Date(order.check_in_date);
+      const checkOutDate = new Date(order.check_out_date);
+      let nights = Math.ceil((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24));
+
+      // 对于休息房等当天退房的情况（nights === 0），按1晚计算
+      if (nights === 0) {
+        nights = 1;
       }
+
+      // 计算新的总价格
+      const newTotalPrice = Number(newRoom.price) * nights;
+
+      console.log(`更换房间价格计算: 新房间单价 ${newRoom.price} × ${nights}晚 = ${newTotalPrice}`);
 
       const updateOrderResult = await query(`
         UPDATE orders
-        SET room_number = $1, room_type = $2, room_price = $3::jsonb
+        SET room_number = $1, room_type = $2, total_price = $3
         WHERE order_id = $4
         RETURNING *
-      `, [newRoomNumber, newRoom.type_code, JSON.stringify(newRoomPriceJson), orderNumber]);
+      `, [newRoomNumber, newRoom.type_code, newTotalPrice, orderNumber]);
 
       if (updateOrderResult.rows.length === 0) {
         const err = new Error('更新订单失败');
@@ -487,7 +542,6 @@ async function changeOrderRoom(orderNumber, oldRoomNumber, newRoomNumber) {
 // 导出表定义和功能函数
 module.exports = {
   getAllRooms,
-  getRoomById,
   getRoomByNumber,
   updateRoomStatus,
   addRoom,

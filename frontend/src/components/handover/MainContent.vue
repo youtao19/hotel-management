@@ -272,6 +272,7 @@ import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useQuasar } from 'quasar'
 import { useRouter } from 'vue-router'
 import { shiftHandoverApi } from '../../api/index.js'
+import { useUserStore } from 'src/stores/userStore'
 import HandoverProcess from './HandoverProcess.vue'
 import ShiftHandoverPaymentTable from './ShiftHandoverPaymentTable.vue'
 import ShiftHandoverSpecialStats from './ShiftHandoverSpecialStats.vue'
@@ -288,6 +289,7 @@ const props = defineProps({
 // 主内容组件 - 组合式函数
 const $q = useQuasar()
 const router = useRouter()
+const userStore = useUserStore()
 
 // 响应式状态
 const isHandoverInProgress = ref(false)
@@ -345,11 +347,7 @@ const handleStartHandover = async () => {
     }).onOk(() => {
       startHandoverProcess()
     }).onCancel(() => {
-      $q.notify({
-        type: 'info',
-        message: '已取消交接班',
-        position: 'top'
-      })
+      console.log('MainContent - 已取消交接班')
     })
   } catch (error) {
     $q.notify({
@@ -390,9 +388,7 @@ const handleLogout = async () => {
     // 这里可以调用后端API来记录交接完成
     // await api.completeHandover(handoverData)
 
-    // 清除本地存储的用户信息
-    localStorage.removeItem('userToken')
-    localStorage.removeItem('userInfo')
+    await userStore.logout()
 
     // 清除其他可能的本地数据
     localStorage.removeItem('handoverData')
@@ -450,11 +446,7 @@ const loadHandoverRecordData = async (date) => {
       recordViewData.value.taskList = memoResponse.data || []
     }
 
-    $q.notify({
-      type: 'positive',
-      message: '交接记录加载完成',
-      position: 'top'
-    })
+
 
   } catch (error) {
     console.error('加载交接记录数据失败:', error)
@@ -493,21 +485,11 @@ watch(() => props.selectedRecord, async (newRecord) => {
     console.log('MainContent - 当前步骤变更为:', currentStep.value)
 
     try {
-      $q.notify({
-        type: 'info',
-        message: `正在加载 ${newRecord.date} 的交接记录...`,
-        position: 'top'
-      })
-
+      console.log('MainContent - 加载交接记录:', newRecord.date)
       // 调用后端API获取交接班表格数据
       await loadHandoverRecordData(newRecord.date)
     } catch (error) {
       console.error('从父组件加载交接记录失败:', error)
-      $q.notify({
-        type: 'negative',
-        message: '加载交接记录失败，请重试',
-        position: 'top'
-      })
     }
   }
 })
@@ -517,11 +499,6 @@ const closeRecordView = () => {
   selectedRecord.value = null
   currentStep.value = 0 // 返回初始状态
 
-  $q.notify({
-    type: 'info',
-    message: '已关闭交接记录查看',
-    position: 'top'
-  })
 }
 
 // 更新当前时间
@@ -534,11 +511,18 @@ const updateCurrentTime = () => {
   })
 }
 
+const formatLocalDate = (date = new Date()) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 // 加载今日统计数据
 const loadTodayStats = async () => {
   try {
-    // 获取今天的日期
-    const today = new Date().toISOString().split('T')[0]
+    // 获取当地时区的当前日期（YYYY-MM-DD）
+    const today = formatLocalDate(new Date())
 
     console.log('📊 [MainContent] 获取今日统计数据:', today)
 
@@ -548,19 +532,9 @@ const loadTodayStats = async () => {
     if (response.success) {
       todayStats.value.totalRooms = response.data.openCount || 0
       todayStats.value.restRooms = response.data.restCount || 0
-
-      console.log('✅ [MainContent] 今日统计数据加载成功:', {
-        开房数: todayStats.value.totalRooms,
-        休息房数: todayStats.value.restRooms
-      })
     }
   } catch (error) {
-    console.error('❌ [MainContent] 加载今日统计数据失败:', error)
-    $q.notify({
-      type: 'warning',
-      message: '加载今日统计数据失败',
-      position: 'top'
-    })
+    console.error('加载今日统计数据失败:', error)
   }
 }
 

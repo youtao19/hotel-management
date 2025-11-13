@@ -2,7 +2,10 @@ import axios from 'axios'
 
 // 创建axios实例
 const api = axios.create({
-  baseURL: 'http://localhost:3000/api', // 后端API运行在3000端口
+  // 使用相对路径，通过 Vite/Quasar 的 proxy 转发到后端
+  // Docker 环境：proxy 会转发到 http://backend:3000
+  // 本地开发：proxy 会转发到 http://localhost:3000
+  baseURL: '/api',
   timeout: 30000, // 增加到30秒
   withCredentials: true // 允许携带session cookie
 })
@@ -71,26 +74,23 @@ export const roomApi = {
     return api.get(finalUrl);
   },
 
-  // 根据ID获取房间
-  getRoomById: (id) => api.get(`/rooms/${id}`),
-
   // 根据房间号获取房间
   getRoomByNumber: (number) => api.get(`/rooms/number/${number}`),
 
   // 更新房间状态
-  updateRoomStatus: (id, status) => {
-    console.log(`前端发送更新房间状态请求: ID=${id}, 状态=${status}`);
-    return api.post(`/rooms/${id}/status`, { status });
+  updateRoomStatus: (roomNumber, status) => {
+    console.log(`前端发送更新房间状态请求: 房间号=${roomNumber}, 状态=${status}`);
+    return api.patch(`/rooms/${roomNumber}/status`, { status });
   },
 
   // 添加新房间
   addRoom: (roomData) => api.post('/rooms', roomData),
 
   // 更新房间信息
-  updateRoom: (id, roomData) => api.put(`/rooms/${id}`, roomData),
+  updateRoom: (roomNumber, roomData) => api.put(`/rooms/${roomNumber}`, roomData),
 
   // 删除房间
-  deleteRoom: (id) => api.delete(`/rooms/${id}`),
+  deleteRoom: (roomNumber) => api.delete(`/rooms/${roomNumber}`),
 
   // 获取房间类型
   getRoomTypes: () => api.get('/room-types'),
@@ -105,6 +105,7 @@ export const roomApi = {
   deleteRoomType: (code) => api.delete(`/room-types/${code}`),
 
   getAvailableRooms: (params) => api.get(`/rooms/available?${params}`),
+  
   changePendingRoom: (data) => api.post(`/rooms/change-room`, data),
 }
 
@@ -122,6 +123,9 @@ export const orderApi = {
   // 添加新订单
   addOrder: (orderData) => api.post('/orders/new', orderData),
 
+  // 快速入住
+  fastCheckIn: (orderData) => api.post('/orders/fast-check-in', orderData),
+
   // 更新订单状态
   updateOrderStatus: (orderId, statusData) => api.post(`/orders/${orderId}/status`, statusData),
 
@@ -138,8 +142,11 @@ export const orderApi = {
   // 获取押金状态
   getDepositInfo: (order_id) => api.get(`/orders/${order_id}/deposit-info`),
 
-  // 办理入住
-  checkIn: (orderId) => api.post(`/orders/${orderId}/check-in`),
+  // 办理入住（支持传递押金金额）
+  checkIn: (orderId, data = {}) => api.post(`/orders/${orderId}/check-in`, data),
+
+  // 提前退房
+  earlyCheckout: (orderId, payload) => api.post(`/orders/${orderId}/early-checkout`, payload),
 }
 
 // 用户相关接口
@@ -180,6 +187,9 @@ export const billApi = {
   // 获取订单的所有账单（支持多账单）
   getBillsByOrderId: (orderId) => api.get(`/bills/order/${orderId}`),
 
+  // 按日期获取账单（交接班核对用）
+  getBillsByDate: (date) => api.get(`/bills/by-date/${date}`),
+
   // 获取所有账单
   getAllBills: () => api.get('/bills'),
 
@@ -189,23 +199,20 @@ export const billApi = {
   // 更新账单
   updateBill: (billId, updateData) => api.put(`/bills/${billId}`, updateData),
 
-  // 根据订单号和日期更新账单
-  updateBillByOrderAndDate: (orderId, stayDate, updateData) => api.put(`/bills/order/${orderId}/date/${stayDate}`, updateData),
+}
 
-  // 邀请客户好评
-  inviteReview: (orderId) => api.post(`/bills/${orderId}/invite-review`),
+// 仪表盘备忘录相关接口
+export const memoApi = {
+  getMemos: (memoDate) => {
+    const query = memoDate ? `?date=${memoDate}` : ''
+    return api.get(`/dashboard/memos${query}`)
+  },
 
-  // 更新好评状态
-  updateReviewStatus: (orderId, positive_review) => api.put(`/bills/${orderId}/review-status`, { positive_review }),
+  addMemo: (memoData) => api.post('/dashboard/memos', memoData),
 
-  // 获取待邀请好评的账单
-  getPendingInvitations: () => api.get('/bills/pending-invitations'),
+  updateMemo: (memoId, memoData) => api.put(`/dashboard/memos/${memoId}`, memoData),
 
-  // 获取已邀请但未设置好评状态的账单
-  getPendingReviews: () => api.get('/bills/pending-reviews'),
-
-  // 获取指定日期的所有账单（用于交接班核对数据）
-  getBillsByDate: (date) => api.get(`/bills/by-date/${date}`),
+  deleteMemo: (memoId) => api.delete(`/dashboard/memos/${memoId}`)
 }
 
 // 好评相关接口
@@ -257,11 +264,13 @@ export const revenueApi = {
 
   // 获取快速统计数据（今日、本周、本月）
   getQuickStats: () => api.get('/revenue/quick-stats'),
+
+  // 获取账单明细
+  getRevenueBills: (params = {}) => api.get('/revenue/bills', { params }),
 }
 
 // 交接班相关接口
 export const shiftHandoverApi = {
-
 
   // 获取交接班表格（计算版本）
   getShiftTable: (params) => api.get('/handover/table', { params }),

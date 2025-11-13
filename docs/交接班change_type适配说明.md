@@ -256,3 +256,7 @@ Object.keys(handoverAmount).forEach(key => {
 
 
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> hotel-manage-v1.0

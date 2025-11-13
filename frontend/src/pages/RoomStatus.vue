@@ -196,7 +196,7 @@
         <!-- 遍历过滤后的房间列表 -->
         <div
           v-for="room in filteredRooms"
-          :key="room.room_id"
+          :key="room.room_number"
           class="col-lg-3 col-md-4 col-sm-6 col-xs-12"
         >
           <!-- 房间卡片，根据状态设置不同背景色 -->
@@ -340,7 +340,7 @@
                   icon="book_online"
                   label="预订"
                   size="sm"
-                  @click.stop="bookRoom(room.room_id)"
+                  @click.stop="bookRoom(room)"
                 />
                 <!-- 待入住房间可办理入住 -->
                 <q-btn
@@ -358,7 +358,7 @@
                   icon="logout"
                   label="退房"
                   size="sm"
-                  @click.stop="checkOut(room.room_id)"
+                  @click.stop="checkOut(room)"
                 />
                 <!-- 所有非清洁中和非维修中的房间都可以设置为清理状态 -->
                 <q-btn
@@ -367,7 +367,7 @@
                   icon="cleaning_services"
                   label="清理"
                   size="sm"
-                  @click.stop="setRoomCleaning(room.room_id)"
+                  @click.stop="setRoomCleaning(room.room_number)"
                 />
                 <!-- 非维修中房间可设为维修 -->
                 <q-btn
@@ -376,7 +376,7 @@
                   icon="build"
                   label="维修"
                   size="sm"
-                  @click.stop="setMaintenance(room.room_id)"
+                  @click.stop="setMaintenance(room.room_number)"
                 />
                 <!-- 维修中房间可完成维修 -->
                 <q-btn
@@ -385,7 +385,7 @@
                   icon="check"
                   label="完成维修"
                   size="sm"
-                  @click.stop="clearMaintenance(room.room_id)"
+                  @click.stop="clearMaintenance(room.room_number)"
                 />
                 <!-- 清扫中房间可完成清洁 -->
                 <q-btn
@@ -394,7 +394,7 @@
                   icon="check"
                   label="完成清洁"
                   size="sm"
-                  @click.stop="clearCleaning(room.room_id)"
+                  @click.stop="clearCleaning(room.room_number)"
                 />
               </q-btn-group>
             </q-card-actions>
@@ -524,11 +524,14 @@
       </q-card>
     </q-dialog>
 
-    <!-- 账单对话框 -->
-    <Bill
-      v-model="showBillDialog"
-      :currentOrder="billOrder"
-      @bill-created="handleBillCreated"
+    <!-- 入住确认对话框 -->
+    <CheckInConfirmDialog
+      v-model="showCheckInConfirmDialog"
+      :order="pendingCheckInOrder"
+      :get-room-type-name="getRoomTypeName"
+      :get-payment-method-name="getPaymentMethodName"
+      :format-date="formatDateForDialog"
+      @confirm="handleCheckInConfirm"
     />
   </q-page>
 </template>
@@ -541,7 +544,7 @@ import { useViewStore } from '../stores/viewStore'
 import { useOrderStore } from '../stores/orderStore'
 import { useQuasar } from 'quasar'
 import langZhCn from 'quasar/lang/zh-CN' // 导入中文语言包
-import Bill from '../components/CheckIn.vue' // 导入账单组件
+import CheckInConfirmDialog from '../components/CheckInConfirmDialog.vue' // 导入账单组件
 
 // 获取房间store和视图store
 const roomStore = useRoomStore()
@@ -577,9 +580,17 @@ const currentCalendarView = ref({ // 跟踪日历当前显示的月份
   month: new Date().getMonth() + 1
 })
 
-// 账单相关变量
-const showBillDialog = ref(false)
-const billOrder = ref(null)
+// 入住确认对话框
+const showCheckInConfirmDialog = ref(false)
+const pendingCheckInOrder = ref(null)
+const getPaymentMethodName = viewStore.getPaymentMethodName
+const formatDateForDialog = (dateString) => viewStore.formatDate(dateString)
+
+watch(showCheckInConfirmDialog, (isOpen) => {
+  if (!isOpen) {
+    pendingCheckInOrder.value = null
+  }
+})
 
 // 日期选项函数 - 允许所有日期可选
 const dateOptions = (date) => {
@@ -601,16 +612,20 @@ const previousMonth = async () => {
   calendarDate.value = currentDate.toISOString().substr(0, 10)
 
   // 更新当前视图
+  const year = currentDate.getFullYear()
+  const month = currentDate.getMonth()
+
   currentCalendarView.value = {
-    year: currentDate.getFullYear(),
-    month: currentDate.getMonth() + 1
+    year: year,
+    month: month + 1
   }
 
   // 重新获取数据
   if (selectedRoom.value) {
-    const startDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).toISOString().substr(0, 10)
-    const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).toISOString().substr(0, 10)
-    await fetchRoomBookingData(selectedRoom.value.room_id, startDate, endDate)
+    const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`
+    const lastDay = new Date(year, month + 1, 0).getDate()
+    const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+    await fetchRoomBookingData(selectedRoom.value.room_number, startDate, endDate)
   }
 }
 
@@ -621,16 +636,20 @@ const nextMonth = async () => {
   calendarDate.value = currentDate.toISOString().substr(0, 10)
 
   // 更新当前视图
+  const year = currentDate.getFullYear()
+  const month = currentDate.getMonth()
+
   currentCalendarView.value = {
-    year: currentDate.getFullYear(),
-    month: currentDate.getMonth() + 1
+    year: year,
+    month: month + 1
   }
 
   // 重新获取数据
   if (selectedRoom.value) {
-    const startDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).toISOString().substr(0, 10)
-    const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).toISOString().substr(0, 10)
-    await fetchRoomBookingData(selectedRoom.value.room_id, startDate, endDate)
+    const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`
+    const lastDay = new Date(year, month + 1, 0).getDate()
+    const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+    await fetchRoomBookingData(selectedRoom.value.room_number, startDate, endDate)
   }
 }
 
@@ -946,6 +965,13 @@ const roomCalendarEvents = computed(() => {
     return [];
   }
 
+  // 添加对 roomBookingData 的依赖，确保当数据变化时重新计算
+  const bookingDataLength = roomBookingData.value?.length || 0;
+
+  if (bookingDataLength > 0) {
+    console.log(`🔄 roomCalendarEvents 重新计算 (预订数据: ${bookingDataLength} 条)`);
+  }
+
   const events = [];
 
   // 使用当前日历视图的年月
@@ -959,9 +985,6 @@ const roomCalendarEvents = computed(() => {
     const dateStr = `${year}/${String(month + 1).padStart(2, '0')}/${String(i).padStart(2, '0')}`;
     events.push(dateStr);
   }
-
-  console.log('生成的日历事件:', events.slice(0, 5), '...'); // 调试信息
-
   return events;
 })
 
@@ -971,13 +994,26 @@ const roomCalendarEvents = computed(() => {
  */
 const getEventColor = (timestamp) => {
   if (!timestamp) {
-    console.log('getEventColor: 无效的时间戳');
     return 'grey';
   }
 
   // timestamp 格式：YYYY/MM/DD，转换为 YYYY-MM-DD 格式
   const dateStr = timestamp.replace ? timestamp.replace(/\//g, '-') : timestamp;
+
+  // 检查是否有预订数据
+  if (!roomBookingData.value || roomBookingData.value.length === 0) {
+    // 只在第一次打印警告
+    if (dateStr.endsWith('-01')) {
+      console.warn(`⚠️ getEventColor: ${dateStr} 时没有预订数据`);
+    }
+  }
+
   const status = getRoomDateStatus(dateStr);
+
+  // 添加调试日志 - 只在月初几天打印
+  if (dateStr.endsWith('-01') || dateStr.endsWith('-02') || dateStr.endsWith('-30')) {
+    console.log(`🎨 getEventColor: ${dateStr} -> status: ${status} (数据条数: ${roomBookingData.value?.length || 0})`);
+  }
 
   let color;
   switch (status) {
@@ -985,20 +1021,14 @@ const getEventColor = (timestamp) => {
       color = 'red'; // 已入住显示红色
       break;
     case 'reserved':
-      color = 'orange'; // 已预订显示橙色
+      color = 'blue'; // 已预订显示蓝色
       break;
     case 'available':
-      color = ''; // 可入住不显示特殊颜色
+      color = 'green'; // 可入住显示绿色
       break;
     default:
       color = 'grey'; // 默认灰色
   }
-
-  // 添加调试信息（仅显示前几个日期的信息）
-  if (timestamp.endsWith('/01') || timestamp.endsWith('/02')) {
-    console.log(`getEventColor: ${timestamp} -> ${dateStr} -> ${status} -> ${color}`);
-  }
-
   return color;
 }
 
@@ -1025,9 +1055,14 @@ async function onCalendarNavigation(view) {
 
     // 如果有选中的房间，重新获取新月份的预订数据
     if (selectedRoom.value) {
-      const startDate = new Date(view.year, view.month - 1, 1).toISOString().substr(0, 10)
-      const endDate = new Date(view.year, view.month, 0).toISOString().substr(0, 10)
-      await fetchRoomBookingData(selectedRoom.value.room_id, startDate, endDate)
+      const year = view.year
+      const month = view.month - 1 // view.month 是 1-12，需要转换为 0-11
+
+      const startDate = `${year}-${String(view.month).padStart(2, '0')}-01`
+      const lastDay = new Date(year, view.month, 0).getDate()
+      const endDate = `${year}-${String(view.month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+
+      await fetchRoomBookingData(selectedRoom.value.room_number, startDate, endDate)
     }
   }
 }
@@ -1068,8 +1103,6 @@ function onDateSelect(date) {
     color: getEventColor(date), // 使用getEventColor函数获取颜色
     guestName: booking?.guest_name || null
   };
-
-  console.log('选中日期信息:', selectedDateInfo.value); // 添加调试信息
 }
 
 /**
@@ -1186,7 +1219,9 @@ const resetAllFilters = async () => {
  */
 async function showRoomCalendar(room) {
   try {
-    console.log('点击房间卡片:', room)
+    console.log('=== 打开房间日历 ===')
+    console.log('房间信息:', { roomNumber: room.room_number, roomType: room.room_type })
+
     selectedRoom.value = room
 
     // 初始化日历视图为当前月份
@@ -1196,21 +1231,26 @@ async function showRoomCalendar(room) {
       month: currentDate.getMonth() + 1
     }
 
+    // 获取当前月份的开始和结束日期
+    const year = currentDate.getFullYear()
+    const month = currentDate.getMonth() // 0-11
+
+    // 使用本地时间构建日期字符串，避免时区问题
+    const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`
+
+    // 获取当月最后一天
+    const lastDay = new Date(year, month + 1, 0).getDate()
+    const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+
+    console.log('查询日期范围:', startDate, '到', endDate, `(共 ${lastDay} 天)`)
+
+    // 先获取该房间在当月的预订数据，再显示对话框
+    await fetchRoomBookingData(room.room_number, startDate, endDate)
+
+    // 数据获取完成后再显示对话框
     showCalendarDialog.value = true
 
-    // 获取当前月份的开始和结束日期
-    const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
-    const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
-
-    const startDate = startOfMonth.toISOString().substr(0, 10)
-    const endDate = endOfMonth.toISOString().substr(0, 10)
-
-    console.log('日期范围:', startDate, '到', endDate)
-
-    // 获取该房间在当月的预订数据
-    await fetchRoomBookingData(room.room_id, startDate, endDate)
-
-    console.log('日历已显示，所有日期都应该有颜色标识')
+    console.log('=== 日历对话框已打开，预订数据已加载 ===')
 
   } catch (error) {
     console.error('显示房间日历失败:', error)
@@ -1225,28 +1265,45 @@ async function showRoomCalendar(room) {
 /**
  * 获取房间预订数据
  */
-async function fetchRoomBookingData(roomId, startDate, endDate) {
+async function fetchRoomBookingData(roomNumber, startDate, endDate) {
   try {
-    console.log(`获取房间 ${roomId} 在 ${startDate} 到 ${endDate} 的预订数据`);
+    console.log(`获取房间 ${roomNumber} 在 ${startDate} 到 ${endDate} 的预订数据`);
     roomBookingData.value = []; // 清空之前的数据
 
     // 首先尝试从订单store中获取数据
     const room = selectedRoom.value;
     if (room && room.room_number) {
       const orders = orderStore.orders || [];
+      console.log('=== 开始获取房间预订数据 ===');
       console.log('所有订单数据:', orders.length, '个订单');
       console.log('查找房间号:', room.room_number);
+      console.log('查询日期范围:', startDate, '到', endDate);
 
       const roomOrders = orders.filter(order => {
         // orderStore中的字段是roomNumber，不是room_number
         const matches = order.roomNumber === room.room_number;
         if (matches) {
-          console.log('找到匹配订单:', order.orderNumber, order.roomNumber, order.status);
+          console.log('找到匹配订单:', {
+            orderNumber: order.orderNumber,
+            roomNumber: order.roomNumber,
+            status: order.status,
+            checkInDate: order.checkInDate,
+            checkOutDate: order.checkOutDate,
+            guestName: order.guestName
+          });
         }
         return matches;
       });
 
       console.log(`找到房间 ${room.room_number} 的订单:`, roomOrders.length);
+
+      // 打印所有找到的订单详情
+      if (roomOrders.length > 0) {
+        console.log('房间订单详情:');
+        roomOrders.forEach(order => {
+          console.log(`  - 订单号: ${order.orderNumber}, 状态: ${order.status}, 入住: ${order.checkInDate}, 退房: ${order.checkOutDate}`);
+        });
+      }
 
       // 筛选在指定日期范围内的订单
       const filteredOrders = roomOrders.filter(order => {
@@ -1266,22 +1323,57 @@ async function fetchRoomBookingData(roomId, startDate, endDate) {
                           (checkOut >= start && checkOut <= end) ||
                           (checkIn <= start && checkOut >= end);
 
-        if (hasOverlap) {
-          console.log(`订单 ${order.orderNumber} 在日期范围内:`, order.checkInDate, '到', order.checkOutDate);
-        }
+        console.log(`📅 订单 ${order.orderNumber}:`, {
+          状态: order.status,
+          入住日期: order.checkInDate,
+          退房日期: order.checkOutDate,
+          查询范围: `${startDate} ~ ${endDate}`,
+          日期对象: {
+            checkIn: checkIn.toISOString().substr(0, 10),
+            checkOut: checkOut.toISOString().substr(0, 10),
+            start: start.toISOString().substr(0, 10),
+            end: end.toISOString().substr(0, 10)
+          },
+          是否重叠: hasOverlap
+        });
 
         return hasOverlap;
       });
 
       if (filteredOrders.length > 0) {
-        roomBookingData.value = filteredOrders.map(order => ({
-          check_in_date: order.checkInDate,
-          check_out_date: order.checkOutDate,
-          status: order.status,
-          guest_name: order.guestName
-        }));
+        console.log(`✅ 找到 ${filteredOrders.length} 个符合条件的订单，开始映射...`);
 
-        console.log('处理后的预订数据:', roomBookingData.value);
+        roomBookingData.value = filteredOrders.map(order => {
+          // 规范化状态值
+          let normalizedStatus = order.status;
+          const originalStatus = order.status;
+
+          if (normalizedStatus === '待入住') {
+            normalizedStatus = 'pending';
+          } else if (normalizedStatus === '已入住') {
+            normalizedStatus = 'checked-in';
+          } else if (normalizedStatus === '已退房') {
+            normalizedStatus = 'checked-out';
+          } else if (normalizedStatus === '已取消') {
+            normalizedStatus = 'cancelled';
+          }
+
+          console.log(`🔄 订单 ${order.orderNumber} 状态转换: "${originalStatus}" -> "${normalizedStatus}"`);
+
+          const mappedData = {
+            check_in_date: order.checkInDate,
+            check_out_date: order.checkOutDate,
+            status: normalizedStatus,
+            guest_name: order.guestName
+          };
+
+          console.log(`   映射结果:`, mappedData);
+
+          return mappedData;
+        });
+
+        console.log('✅ 处理后的预订数据总数:', roomBookingData.value.length);
+        console.log('预订数据内容:', JSON.stringify(roomBookingData.value, null, 2));
         return; // 找到真实数据，不需要生成示例数据
       } else {
         console.log('没有找到在指定日期范围内的订单');
@@ -1291,6 +1383,11 @@ async function fetchRoomBookingData(roomId, startDate, endDate) {
     // 如果没有找到真实的预订数据，保持空数组
     if (roomBookingData.value.length === 0) {
       console.log('没有找到该房间的预订数据，房间状态将显示为可用');
+    } else {
+      console.log(`=== 最终预订数据 (${roomBookingData.value.length}条) ===`);
+      roomBookingData.value.forEach(booking => {
+        console.log(`- 入住: ${booking.check_in_date}, 退房: ${booking.check_out_date}, 状态: ${booking.status}, 客人: ${booking.guest_name}`);
+      });
     }
 
   } catch (error) {
@@ -1377,7 +1474,6 @@ const availableRoomTypeOptions = computed(() => {
       .filter(roomType => {
         // 检查该房型是否有房间存在
         const totalRoomCount = roomStore.rooms.filter(room => room.type_code === roomType.type_code).length
-        console.log(`房型 ${roomType.type_code} (${roomType.type_name}) 有 ${totalRoomCount} 个房间`)
         return totalRoomCount > 0 // 只显示有房间的房型（不论是否可用）
       })
       .map(roomType => ({
@@ -1464,29 +1560,58 @@ function getRoomDateStatus(dateInput) {
 
   // 检查是否有预订数据
   if (!roomBookingData.value || roomBookingData.value.length === 0) {
-    // 添加调试信息（仅显示前几个日期的信息）
-    if (dateStr.endsWith('-01') || dateStr.endsWith('-02')) {
-      console.log(`getRoomDateStatus: ${dateStr} -> 无预订数据 -> available`);
+    if (dateStr.endsWith('-01') || dateStr.endsWith('-30') || dateStr.endsWith('-31')) {
+      console.log(`⚠️ getRoomDateStatus: ${dateStr} -> 无预订数据 (roomBookingData为空) -> available`);
     }
     return 'available';
   }
 
-  // 添加调试信息
+  // 在月初打印预订数据状态
   if (dateStr.endsWith('-01')) {
-    console.log(`getRoomDateStatus: ${dateStr} -> 预订数据数量: ${roomBookingData.value.length}`);
+    console.log(`📊 getRoomDateStatus 当前预订数据 (${dateStr}):`, {
+      数据条数: roomBookingData.value.length,
+      数据内容: roomBookingData.value.map(b => ({
+        入住: b.check_in_date,
+        退房: b.check_out_date,
+        状态: b.status
+      }))
+    });
   }
 
   // 检查日期是否在任何预订范围内
   for (const booking of roomBookingData.value) {
     // 确保有效的日期值
-    if (!booking.check_in_date || !booking.check_out_date) continue;
+    if (!booking.check_in_date || !booking.check_out_date) {
+      console.log(`getRoomDateStatus: ${dateStr} -> 订单缺少日期信息，跳过`);
+      continue;
+    }
 
     // 转换日期格式以便比较
     const checkIn = new Date(booking.check_in_date).toISOString().substr(0, 10);
     const checkOut = new Date(booking.check_out_date).toISOString().substr(0, 10);
 
-    // 检查日期是否在入住期间（不包含退房日期）
-    if (dateStr >= checkIn && dateStr < checkOut) {
+    // 检查是否为休息房（入住和退房日期相同）
+    const isRestRoom = checkIn === checkOut;
+
+    // 检查日期是否在入住期间
+    // 对于休息房：只在入住当天显示状态
+    // 对于普通订单：从入住日到退房日前一天都显示状态
+    const isInRange = isRestRoom
+      ? (dateStr === checkIn)
+      : (dateStr >= checkIn && dateStr < checkOut);
+
+    // 添加详细的日志以调试（仅在月初打印以减少日志量）
+    if ((dateStr >= checkIn && dateStr <= checkOut) && (dateStr.endsWith('-01') || dateStr.endsWith('-02'))) {
+      console.log(`getRoomDateStatus: 检查 ${dateStr}:`, {
+        订单范围: `${checkIn}~${checkOut}`,
+        状态: booking.status,
+        客人: booking.guest_name,
+        是否休息房: isRestRoom,
+        是否在范围内: isInRange
+      });
+    }
+
+    if (isInRange) {
       // 如果是已取消的订单，整个期间都显示为可用
       if (booking.status === 'cancelled') {
         if (dateStr.endsWith('-01') || dateStr.endsWith('-02')) {
@@ -1497,25 +1622,17 @@ function getRoomDateStatus(dateInput) {
 
       // 正常的入住期间状态判断
       if (booking.status === 'checked-in') {
-        if (dateStr.endsWith('-01') || dateStr.endsWith('-02')) {
-          console.log(`getRoomDateStatus: ${dateStr} -> 入住期间 (${checkIn} 到 ${checkOut}前) -> 状态: ${booking.status} -> occupied`);
-        }
+        console.log(`getRoomDateStatus: ${dateStr} -> ✅ 已入住 (${checkIn}~${checkOut}) -> occupied`);
         return 'occupied'; // 已入住
       } else if (booking.status === 'pending') {
-        if (dateStr.endsWith('-01') || dateStr.endsWith('-02')) {
-          console.log(`getRoomDateStatus: ${dateStr} -> 预订期间 (${checkIn} 到 ${checkOut}前) -> 状态: ${booking.status} -> reserved`);
-        }
+        console.log(`getRoomDateStatus: ${dateStr} -> 📅 已预订 (${checkIn}~${checkOut}) -> reserved`);
         return 'reserved'; // 待入住（已预订）
       } else if (booking.status === 'checked-out') {
         // 入住期间但已退房，这些日期曾经被占用
-        if (dateStr.endsWith('-01') || dateStr.endsWith('-02')) {
-          console.log(`getRoomDateStatus: ${dateStr} -> 入住期间但已退房 (${checkIn} 到 ${checkOut}前) -> occupied`);
-        }
+        console.log(`getRoomDateStatus: ${dateStr} -> ✅ 已退房但曾入住 (${checkIn}~${checkOut}) -> occupied`);
         return 'occupied'; // 入住期间（虽然已退房，但这些日期曾经被占用）
       } else {
-        if (dateStr.endsWith('-01') || dateStr.endsWith('-02')) {
-          console.log(`getRoomDateStatus: ${dateStr} -> 未知状态 (${checkIn} 到 ${checkOut}前) -> 状态: ${booking.status} -> reserved`);
-        }
+        console.log(`getRoomDateStatus: ${dateStr} -> ⚠️ 未知状态 (${checkIn}~${checkOut}) 状态: ${booking.status} -> reserved`);
         return 'reserved'; // 未知状态默认为预订
       }
     }
@@ -1609,13 +1726,32 @@ async function setToday() {
  * 房间操作方法
  */
 // 预订房间
-async function bookRoom(roomId) {
+async function bookRoom(room) {
   try {
-    console.log('预订房间:', roomId)
-    // 跳转到创建订单页面，并传递房间ID
+    if (!room || !room.room_number) {
+      console.warn('预订房间时缺少房间信息', room)
+      $q.notify({
+        type: 'warning',
+        message: '未找到房间信息，无法预订',
+        position: 'top'
+      })
+      return
+    }
+
+    const roomNumber = room.room_number
+    const roomType = room.type_code || room.typeCode
+
+    console.log('预订房间:', { roomNumber, roomType })
+
+    // 构建查询参数，传递房间号及房型，便于创建订单页预选
+    const query = { roomNumber: roomNumber }
+    if (roomType) {
+      query.roomType = roomType
+    }
+
     router.push({
       path: '/CreateOrder',
-      query: { roomId }
+      query
     })
   } catch (error) {
     console.error('预订房间失败:', error)
@@ -1633,7 +1769,8 @@ async function checkInRoom(room) {
     console.log('办理入住:', room)
 
     // 获取房间对应的订单信息
-    const orderNumber = room.order_id || room.orderId
+    const rawOrderNumber = room.order_id || room.orderId
+    const orderNumber = typeof rawOrderNumber === 'string' ? rawOrderNumber : rawOrderNumber?.toString()
     if (!orderNumber) {
       $q.notify({
         type: 'warning',
@@ -1644,7 +1781,7 @@ async function checkInRoom(room) {
     }
 
     // 获取完整的订单信息
-    const order = orderStore.getOrderByNumber(orderNumber)
+    const order = await orderStore.getOrderByNumber(orderNumber)
     if (!order) {
       $q.notify({
         type: 'negative',
@@ -1654,19 +1791,21 @@ async function checkInRoom(room) {
       return
     }
 
-    // 使用 Quasar Dialog 显示确认对话框
-    $q.dialog({
-      title: '确认办理入住',
-      message: `确定要为订单 ${order.orderNumber} (客人: ${order.guestName}, 房间: ${order.roomNumber}) 办理入住吗？\n\n办理入住后将自动创建账单。`,
-      cancel: true,
-      persistent: true
-    }).onOk(async () => {
-      // 用户点击确定，执行入住操作
-      await performCheckIn(order)
-    }).onCancel(() => {
-      // 用户点击取消，什么也不做
-      console.log('用户取消了入住操作')
-    })
+    const normalizedOrderNumber = order.orderNumber || order.order_id || order.orderId || order.order_number
+    if (!normalizedOrderNumber) {
+      $q.notify({
+        type: 'warning',
+        message: '订单信息不完整，无法办理入住',
+        position: 'top'
+      })
+      return
+    }
+
+    pendingCheckInOrder.value = {
+      ...order,
+      orderNumber: normalizedOrderNumber
+    }
+    showCheckInConfirmDialog.value = true
   } catch (error) {
     console.error('办理入住失败:', error)
     $q.notify({
@@ -1680,48 +1819,26 @@ async function checkInRoom(room) {
 // 执行入住操作
 async function performCheckIn(order) {
   try {
-    console.log('办理入住:', order.orderNumber, '房间:', order.roomNumber)
-
-    // 调用订单store更新订单状态
-    const updatedOrderFromApi = await orderStore.updateOrderStatusViaApi(order.orderNumber, 'checked-in')
-
-    if (!updatedOrderFromApi) {
-      $q.notify({
-        type: 'negative',
-        message: '办理入住失败，API未返回更新后的订单',
-        position: 'top'
-      })
-      return
+    const normalizedOrderNumber = order.orderNumber || order.order_id || order.orderId || order.order_number
+    if (!normalizedOrderNumber) {
+      throw new Error('订单号缺失')
     }
 
-    // 获取房间信息 (主要为了拿到 room_id)
-    const room = roomStore.getRoomByNumber(order.roomNumber)
-    if (!room) {
-      console.error('预订房间未找到:', order.roomNumber)
-      $q.notify({
-        type: 'warning',
-        message: '订单已更新为入住，但预订的房间信息未找到，请检查房间状态！',
-        position: 'top',
-        multiLine: true
-      })
-      await loadRoomDataForDate(selectedDate.value)
-      return
-    }
-
-    // 入住成功后刷新房间列表，确保房间状态页面能显示最新的客人信息
-    await roomStore.fetchAllRooms()
-
-    // 办理入住成功后，显示账单创建对话框
-    showBillDialog.value = true
-    billOrder.value = { ...orderStore.getOrderByNumber(order.orderNumber) }
+    console.log('办理入住:', normalizedOrderNumber, '房间:', order.roomNumber)
+    await orderStore.checkIn(normalizedOrderNumber, order.deposit)
 
     $q.notify({
       type: 'positive',
-      message: '入住成功，请完成账单创建',
+      message: '入住成功',
       position: 'top'
     })
 
+    // 更新本地状态
+    pendingCheckInOrder.value = null
+    showCheckInConfirmDialog.value = false
+
     // 刷新房间数据
+    await roomStore.fetchAllRooms()
     await loadRoomDataForDate(selectedDate.value)
 
   } catch (error) {
@@ -1737,42 +1854,31 @@ async function performCheckIn(order) {
 }
 
 // 处理账单创建成功
-async function handleBillCreated() {
+async function handleCheckInConfirm(orderWithDeposit) {
   try {
-    if (!billOrder.value || !billOrder.value.orderNumber) {
-      console.error('订单信息无效')
-      return
+    showCheckInConfirmDialog.value = false
+    if (!orderWithDeposit?.orderNumber) {
+      throw new Error('订单信息无效')
     }
 
-    console.log('账单创建成功，订单:', billOrder.value.orderNumber)
-
-    // 刷新房间数据
-    await loadRoomDataForDate(selectedDate.value)
-
-    $q.notify({
-      type: 'positive',
-      message: '账单创建成功，入住手续已完成',
-      position: 'top'
-    })
-
+    await performCheckIn(orderWithDeposit)
   } catch (error) {
-    console.error('处理账单创建成功事件失败:', error)
+    console.error('办理入住操作失败:', error)
+    pendingCheckInOrder.value = null
     $q.notify({
       type: 'negative',
-      message: '账单创建成功，但更新界面失败，请刷新页面',
-      position: 'top'
+      message: error.message || '办理入住失败',
+      position: 'top',
+      multiLine: true
     })
   }
 }
 
 // 退房
-async function checkOut(roomId) {
+async function checkOut(room) {
   try {
-    console.log('退房操作:', roomId)
-
-    // 根据roomId找到对应的房间信息
-    const room = roomStore.rooms.find(r => r.room_id === roomId)
-    if (!room) {
+    if (!room || !room.room_number) {
+      console.warn('退房时缺少房间信息', room)
       $q.notify({
         type: 'negative',
         message: '未找到房间信息',
@@ -1782,18 +1888,16 @@ async function checkOut(roomId) {
     }
 
     // 获取房间对应的订单信息
-    const orderNumber = room.order_id || room.orderId
-    let orderInfo = null
-    if (orderNumber) {
-      orderInfo = orderStore.getOrderByNumber(orderNumber)
-    }
+    const rawOrderNumber = room.order_id || room.orderId
+    const orderInfo = rawOrderNumber
+      ? await orderStore.getOrderByNumber(rawOrderNumber)
+      : null
 
-    // 构建确认信息
-    let confirmMessage = `确定要为房间 ${room.room_number} 办理退房吗？`
-    if (orderInfo) {
-      confirmMessage = `确定要为订单 ${orderInfo.orderNumber} (客人: ${orderInfo.guestName}, 房间: ${room.room_number}) 办理退房吗？`
-    }
-    confirmMessage += '\n\n办理退房后房间将设置为清扫中状态。'
+    const orderNumber = orderInfo?.orderNumber || rawOrderNumber
+    const guestName = orderInfo?.guestName || room.currentGuest || room.guest_name || '未知客人'
+    const confirmMessage = orderNumber
+      ? `确定要为订单 ${orderNumber} (客人: ${guestName}, 房间: ${room.room_number}) 办理退房吗？\n\n办理退房后房间将设置为清扫中状态。`
+      : `确定要为房间 ${room.room_number} 办理退房吗？\n\n办理退房后房间将设置为清扫中状态。`
 
     // 使用 Quasar Dialog 显示确认对话框
     $q.dialog({
@@ -1803,7 +1907,7 @@ async function checkOut(roomId) {
       persistent: true
     }).onOk(async () => {
       // 用户点击确定，执行退房操作
-      await performRoomCheckOut(roomId, orderInfo);
+      await performRoomCheckOut(room, orderInfo || (orderNumber ? { orderNumber, roomNumber: room.room_number } : null));
     }).onCancel(() => {
       // 用户点击取消，什么也不做
       console.log('用户取消了退房操作');
@@ -1819,17 +1923,19 @@ async function checkOut(roomId) {
 }
 
 // 执行退房操作
-async function performRoomCheckOut(roomId, orderInfo) {
+async function performRoomCheckOut(room, orderInfo) {
   try {
-    console.log('执行退房操作:', roomId, orderInfo)
+    const roomNumber = typeof room === 'string' ? room : room?.room_number
+    const targetOrderNumber = orderInfo?.orderNumber || orderInfo?.order_id || orderInfo?.orderId
+    console.log('执行退房操作:', roomNumber, targetOrderNumber)
 
     // 如果有订单信息，先更新订单状态
-    if (orderInfo) {
-      const updatedOrder = await orderStore.updateOrderStatusViaApi(orderInfo.orderNumber, 'checked-out')
+    if (targetOrderNumber) {
+      const updatedOrder = await orderStore.updateOrderStatusViaApi(targetOrderNumber, 'checked-out')
       if (!updatedOrder) {
         $q.notify({
           type: 'negative',
-          message: '更新订单状态失败，退房操作取消',
+          message: '办理退房失败，请重试',
           position: 'top'
         })
         return
@@ -1837,22 +1943,41 @@ async function performRoomCheckOut(roomId, orderInfo) {
     }
 
     // 更新房间状态为清扫中
-    const success = await roomStore.checkOutRoom(roomId)
-    if (success) {
-      $q.notify({
-        type: 'positive',
-        message: '退房成功',
-        position: 'top'
-      })
-      // 刷新房间数据
-      await loadRoomDataForDate(selectedDate.value)
-    } else {
+    let roomUpdateSuccess = false
+    if (roomNumber) {
+      roomUpdateSuccess = await roomStore.checkOutRoom(roomNumber)
+      if (!roomUpdateSuccess) {
+        $q.notify({
+          type: 'warning',
+          message: '订单已退房，但更新房间状态为清扫中失败，请检查房间状态！',
+          position: 'top',
+          multiLine: true
+        })
+      } else {
+        await roomStore.fetchAllRooms()
+      }
+    }
+
+    // 刷新订单数据，保持列表同步
+    await orderStore.fetchAllOrders()
+
+    if (!roomUpdateSuccess && !targetOrderNumber) {
       $q.notify({
         type: 'negative',
         message: '退房失败',
         position: 'top'
       })
+      return
     }
+
+    $q.notify({
+      type: 'positive',
+      message: '退房成功',
+      position: 'top'
+    })
+
+    // 刷新房间数据
+    await loadRoomDataForDate(selectedDate.value)
   } catch (error) {
     console.error('执行退房操作失败:', error)
     const errorMessage = error.response?.data?.message || error.message || '未知错误'
@@ -1866,10 +1991,10 @@ async function performRoomCheckOut(roomId, orderInfo) {
 }
 
 // 设置房间为清洁状态
-async function setRoomCleaning(roomId) {
+async function setRoomCleaning(roomNumber) {
   try {
-    console.log('设置房间清洁:', roomId)
-    const success = await roomStore.updateRoomStatus(roomId, 'cleaning')
+    console.log('设置房间清洁:', roomNumber)
+    const success = await roomStore.updateRoomStatus(roomNumber, 'cleaning')
     if (success) {
       $q.notify({
         type: 'positive',
@@ -1896,10 +2021,10 @@ async function setRoomCleaning(roomId) {
 }
 
 // 设置房间为维修状态
-async function setMaintenance(roomId) {
+async function setMaintenance(roomNumber) {
   try {
-    console.log('设置房间维修:', roomId)
-    const success = await roomStore.setMaintenance(roomId)
+    console.log('设置房间维修:', roomNumber)
+    const success = await roomStore.setMaintenance(roomNumber)
     if (success) {
       $q.notify({
         type: 'positive',
@@ -1926,10 +2051,10 @@ async function setMaintenance(roomId) {
 }
 
 // 完成维修
-async function clearMaintenance(roomId) {
+async function clearMaintenance(roomNumber) {
   try {
-    console.log('完成维修:', roomId)
-    const success = await roomStore.clearMaintenance(roomId)
+    console.log('完成维修:', roomNumber)
+    const success = await roomStore.clearMaintenance(roomNumber)
     if (success) {
       $q.notify({
         type: 'positive',
@@ -1956,10 +2081,10 @@ async function clearMaintenance(roomId) {
 }
 
 // 完成清洁
-async function clearCleaning(roomId) {
+async function clearCleaning(roomNumber) {
   try {
-    console.log('完成清洁:', roomId)
-    const success = await roomStore.clearCleaning(roomId)
+    console.log('完成清洁:', roomNumber)
+    const success = await roomStore.clearCleaning(roomNumber)
     if (success) {
       $q.notify({
         type: 'positive',

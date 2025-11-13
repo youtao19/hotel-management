@@ -302,11 +302,7 @@ async function fetchData() {
     pendingReviews.value = Array.isArray(pendingReviewsData) ? pendingReviewsData : []
     allBills.value = Array.isArray(allReviewsData) ? allReviewsData : []
 
-    console.log('获取数据成功:', {
-      pendingInvitations: pendingInvitations.value.length,
-      pendingReviews: pendingReviews.value.length,
-      allBills: allBills.value.length
-    })
+    console.log('获取数据成功:')
 
   } catch (error) {
     console.error('获取数据失败:', error)

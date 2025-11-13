@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const db = require('../database/postgreDB/pg');
 const { query, closePool } = require('../database/postgreDB/pg');
 
 // 需要导出的表（如果不指定则自动发现）
@@ -51,6 +52,9 @@ function toInsertSQL(table, row) {
 }
 
 async function exportAll() {
+
+  await db.initializePostgreDB();
+
   let sqls = [];
 
   // 添加文件头注释

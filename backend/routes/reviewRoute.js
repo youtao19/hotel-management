@@ -1,11 +1,35 @@
 "use strict";
 
 const express = require('express');
-const { body, validationResult } = require('express-validator');
 const reviewInvitationModule = require('../modules/reviewInvitationModule');
 const orderModule = require('../modules/orderModule');
-
 const router = express.Router();
+const Ajv = require('ajv');
+const ajv = new Ajv();
+const addFormats = require('ajv-formats');
+addFormats(ajv);
+
+const positiveReviewSchema = {
+  type: "object",
+  properties: {
+    positive_review: { type: "boolean" }
+  },
+  required: ["positive_review"],
+  additionalProperties: false
+};
+
+const validatePositiveReview = ajv.compile(positiveReviewSchema);
+
+const formatAjvErrors = (errors = []) => {
+  return errors.map((error) => {
+    const path = error.instancePath ? error.instancePath.replace(/^\//, "") : "";
+    const field = path || error.params?.missingProperty || "";
+    return {
+      field,
+      message: error.message
+    };
+  });
+};
 
 /**
  * 获取待邀请好评的订单列表
@@ -70,17 +94,15 @@ router.post('/:orderId/invite', async (req, res) => {
  * 更新特定订单的好评状态
  * PUT /api/reviews/:orderId/status
  */
-router.put('/:orderId/status', [
-  body('positive_review')
-    .isBoolean()
-    .withMessage('好评状态必须是布尔值')
-], async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-
+router.put('/:orderId/status', async (req, res) => {
   try {
+    const isValid = validatePositiveReview(req.body);
+    if (!isValid) {
+      return res.status(400).json({
+        message: "请求数据验证失败",
+        errors: formatAjvErrors(validatePositiveReview.errors)
+      });
+    }
     const { orderId } = req.params;
     const { positive_review } = req.body;
 

@@ -214,7 +214,7 @@ router.post("/login", async (req, res) => {
                             }
                         };
                         await req.login(params);
-                        
+
                         // Reset rate limiter on successful authorisation
                         if (resUsernameAndIP !== null && resUsernameAndIP.consumedPoints > 0) {
                             await limiterConsecutiveFailsByUsernameAndIP.delete(usernameIPkey);
@@ -272,20 +272,26 @@ router.post("/send-email-verification", async (req, res, next) => {
                 const redis = redisDB.getClient();
                 // Initialize an empty array to store all values
                 const values = [];
-                // Initialize the cursor for the scan command
-                let cursor = "0";
-                // Continue scanning until the cursor is "0"
+                // Initialize the cursor for the scan command (must be string)
+                let cursor = '0';
+                // Continue scanning until the cursor is '0'
                 do {
                     // Scan for keys matching the pattern "emailVerification*"
-                    const [nextCursor, scannedKeys] = await redis.scan(cursor, "MATCH", "emailVerification*");
+                    // node-redis v4+ returns an object: { cursor, keys }
+                    const result = await redis.scan(cursor, {
+                        MATCH: "emailVerification*",
+                        COUNT: 100
+                    });
+                    cursor = result.cursor;
+                    const scannedKeys = result.keys;
+
                     // Retrieve the values for each scanned key
-                    if (scannedKeys.length > 0) {
-                        const scannedValues = await redis.mget(...scannedKeys);
+                    if (scannedKeys && scannedKeys.length > 0) {
+                        const scannedValues = await redis.mGet(scannedKeys);
                         values.push(...scannedValues);
                     }
-                    // Update the cursor for the next iteration
-                    cursor = nextCursor;
-                } while (cursor !== "0");
+                } while (cursor !== '0');
+
                 //check if this email has already be set in redis
                 if (values.indexOf(req.body.email) !== -1) {
                     console.log(`${req.body.email} is trying to verify email within 10 mins more than once.`);
@@ -294,7 +300,10 @@ router.post("/send-email-verification", async (req, res, next) => {
                     //generate email code and url path
                     const redis = redisDB.getClient();
                     const code = nanoid();
-                    await redis.set("emailVerification" + code, req.body.email, "EX", 600); //600 === 10mins
+                    // node-redis v4+ uses options object for EX
+                    await redis.set("emailVerification" + code, req.body.email, {
+                        EX: 600 // 600 seconds = 10 mins
+                    });
                     await emailJob.sendEmailVerification(code, req.body.email, "zh-Hans");
                     return res.status(200).json();
                 }
@@ -386,19 +395,24 @@ router.post("/send-pwreset-email", async (req, res, next) => {
                 // Initialize an empty array to store all values
                 const values = [];
                 // Initialize the cursor for the scan command
-                let cursor = "0";
-                // Continue scanning until the cursor is "0"
+                let cursor = 0;
+                // Continue scanning until the cursor is 0
                 do {
-                    // Scan for keys matching the pattern "resetPW*"
-                    const [nextCursor, scannedKeys] = await redis.scan(cursor, "MATCH", "resetPassword*");
+                    // Scan for keys matching the pattern "resetPassword*"
+                    // node-redis v4+ returns an object: { cursor, keys }
+                    const result = await redis.scan(cursor, {
+                        MATCH: "resetPassword*",
+                        COUNT: 100
+                    });
+                    cursor = result.cursor;
+                    const scannedKeys = result.keys;
+
                     // Retrieve the values for each scanned key
-                    if (scannedKeys.length > 0) {
-                        const scannedValues = await redis.mget(...scannedKeys);
+                    if (scannedKeys && scannedKeys.length > 0) {
+                        const scannedValues = await redis.mGet(scannedKeys);
                         values.push(...scannedValues);
                     }
-                    // Update the cursor for the next iteration
-                    cursor = nextCursor;
-                } while (cursor !== "0");
+                } while (cursor !== 0);
                 //check if this email has already be set in redis
                 if (values.indexOf(req.body.email) !== -1) {
                     console.log(`${req.body.email} is trying to send reset pw email within 1 hour more than once.`);
@@ -406,7 +420,10 @@ router.post("/send-pwreset-email", async (req, res, next) => {
                 } else {
                     //generate pw reset code and url path
                     const code = nanoid();
-                    await redis.set("resetPassword" + code, req.body.email, "EX", 3600); //3600 === 1hr
+                    // node-redis v4+ uses options object for EX
+                    await redis.set("resetPassword" + code, req.body.email, {
+                        EX: 3600 // 3600 seconds = 1 hour
+                    });
                     await emailJob.sendResetPWEmail(code, req.body.email, setup.lang['zh-Hans']);
                     return res.status(200).json();
                 }

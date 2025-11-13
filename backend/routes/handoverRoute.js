@@ -1,23 +1,189 @@
 const express =  require('express');
 const router = express.Router();
 const { query, getClient } = require('../database/postgreDB/pg');
+const db = require("../database/postgreDB/pg")
+const Ajv = require("ajv");
+const addFormats = require("ajv-formats");
+
+const ajv = new Ajv({ allErrors: true, removeAdditional: "failing", coerceTypes: true });
+addFormats(ajv);
+
+const PAYMENT_METHODS = ["现金", "微信", "微邮付", "其他"];
+
+const formatAjvErrors = (errors = []) => {
+  return errors.map((error) => {
+    const path = error.instancePath ? error.instancePath.replace(/^\//, "") : "";
+    const field = path || error.params?.missingProperty || "";
+    return {
+      field,
+      message: error.message
+    };
+  });
+};
+
+const createPaymentBucketSchema = () => {
+  return {
+    type: "object",
+    properties: PAYMENT_METHODS.reduce((acc, method) => {
+      acc[method] = { type: "number" };
+      return acc;
+    }, {}),
+    required: PAYMENT_METHODS,
+    additionalProperties: false
+  };
+};
+
+const paymentBucketSchema = createPaymentBucketSchema();
+
+const taskItemSchema = {
+  type: "object",
+  properties: {
+    id: {
+      anyOf: [
+        { type: "number" },
+        { type: "string", minLength: 1 }
+      ]
+    },
+    title: { type: "string", minLength: 1, maxLength: 255 },
+    time: { type: "string", minLength: 1, maxLength: 32 },
+    completed: { type: "boolean" },
+    type: { type: "string", enum: ["admin", "order"] }
+  },
+  required: ["title"],
+  additionalProperties: true
+};
+
+const taskListSchema = {
+  type: "array",
+  items: taskItemSchema
+};
+
+const paymentDataSchema = {
+  type: "object",
+  properties: {
+    reserve: paymentBucketSchema,
+    hotelIncome: paymentBucketSchema,
+    restIncome: paymentBucketSchema,
+    carRentIncome: paymentBucketSchema,
+    totalIncome: paymentBucketSchema,
+    hotelDeposit: paymentBucketSchema,
+    restDeposit: paymentBucketSchema,
+    totalRefundDeposit: paymentBucketSchema,
+    retainedAmount: paymentBucketSchema,
+    handoverAmount: paymentBucketSchema
+  },
+  required: [
+    "reserve",
+    "hotelIncome",
+    "restIncome",
+    "carRentIncome",
+    "totalIncome",
+    "hotelDeposit",
+    "restDeposit",
+    "retainedAmount",
+    "handoverAmount"
+  ],
+  additionalProperties: false
+};
+
+const optionalDateQuerySchema = {
+  type: "object",
+  properties: {
+    date: { type: "string", format: "date" }
+  },
+  additionalProperties: false
+};
+
+const requiredDateQuerySchema = {
+  type: "object",
+  properties: {
+    date: { type: "string", format: "date" }
+  },
+  required: ["date"],
+  additionalProperties: false
+};
+
+const dateRangeQuerySchema = {
+  type: "object",
+  properties: {
+    startDate: { type: "string", format: "date" },
+    endDate: { type: "string", format: "date" }
+  },
+  additionalProperties: false
+};
+
+const saveAdminMemoSchema = {
+  type: "object",
+  properties: {
+    date: { type: "string", format: "date" },
+    memo: { type: "string", minLength: 1, maxLength: 2000 }
+  },
+  required: ["date", "memo"],
+  additionalProperties: false
+};
+
+const completeHandoverSchema = {
+  type: "object",
+  properties: {
+    date: { type: "string", format: "date" },
+    handoverPerson: { type: "string", minLength: 1, maxLength: 100 },
+    receivePerson: { type: "string", minLength: 1, maxLength: 100 },
+    paymentData: paymentDataSchema,
+    vipCard: { type: "number", minimum: 0 },
+    taskList: taskListSchema,
+    notes: { type: "string", maxLength: 2000 }
+  },
+  required: ["date", "receivePerson", "paymentData"],
+  additionalProperties: false
+};
+
+const validateOptionalDateQuery = ajv.compile(optionalDateQuerySchema);
+const validateRequiredDateQuery = ajv.compile(requiredDateQuerySchema);
+const validateDateRangeQuery = ajv.compile(dateRangeQuerySchema);
+const validateSaveAdminMemo = ajv.compile(saveAdminMemoSchema);
+const validateCompleteHandover = ajv.compile(completeHandoverSchema);
+
+/**
+ * 清洗查询参数，去掉字符串值首尾空格
+ * @param {Record<string, unknown>} query 原始查询对象（默认空对象）
+ * @returns {Record<string, unknown>} 去除空格后的新对象
+ */
+const sanitizeQuery = (query = {}) => {
+  return Object.keys(query).reduce((acc, key) => {
+    const value = query[key];
+    if (typeof value === "string") {
+      acc[key] = value.trim();
+    } else {
+      acc[key] = value;
+    }
+    return acc;
+  }, {});
+};
 
 const {
   getShiftTable,
   getRemarks,
-  getShiftSpecialStats,
-  startHandover,
   getHandoverTableData,
   saveAdminMemoToHandover,
   getAdminMemosFromHandover,
-  checkYesterdayHandoverRecord
 } = require('../modules/handoverModule');
 
 
 // 获取交接班表格数据（计算版本）
 router.get('/table', async (req, res) => {
-  const { date } = req.query;
   try {
+    const queryData = sanitizeQuery(req.query);
+    const isValid = validateOptionalDateQuery(queryData);
+
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        message: "请求参数格式错误",
+        errors: formatAjvErrors(validateOptionalDateQuery.errors)
+      });
+    }
+
+    const { date } = queryData;
     const tableData = await getShiftTable(date);
     res.json({ success: true, data: tableData });
   } catch (error) {
@@ -28,15 +194,19 @@ router.get('/table', async (req, res) => {
 
 // 获取交接班表格数据（从handover表查询）
 router.get('/handover-table', async (req, res) => {
-  const { date } = req.query;
   try {
-    if (!date) {
+    const queryData = sanitizeQuery(req.query);
+    const isValid = validateRequiredDateQuery(queryData);
+
+    if (!isValid) {
       return res.status(400).json({
         success: false,
-        message: '缺少必需的日期参数'
+        message: "缺少必需的日期参数",
+        errors: formatAjvErrors(validateRequiredDateQuery.errors)
       });
     }
 
+    const { date } = queryData;
     const tableData = await getHandoverTableData(date);
     res.json({ success: true, data: tableData });
   } catch (error) {
@@ -50,9 +220,21 @@ router.get('/handover-table', async (req, res) => {
 
 // 获取备忘录数据
 router.get('/remarks', async (req, res) => {
-  console.log('开始获取备忘录数据')
+
   try {
-    const { date } = req.query;
+    console.log('开始获取备忘录数据')
+
+    const queryData = sanitizeQuery(req.query);
+    const isValid = validateRequiredDateQuery(queryData);
+
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        message: "缺少必需的日期参数",
+        errors: formatAjvErrors(validateRequiredDateQuery.errors)
+      });
+    }
+    const { date } = queryData;
     const data = await getRemarks({ date });
     res.json({ success: true, data });
     console.log('备忘录数据获取成功',data)
@@ -64,8 +246,55 @@ router.get('/remarks', async (req, res) => {
 // 获取交接班页面特殊统计（开房数、休息房数、好评邀/得）
 router.get('/special-stats', async (req, res) => {
   try {
-    const { date } = req.query;
-    const data = await getShiftSpecialStats(date);
+    const queryData = sanitizeQuery(req.query);
+    const isValid = validateRequiredDateQuery(queryData);
+
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        message: "缺少必需的日期参数",
+        errors: formatAjvErrors(validateRequiredDateQuery.errors)
+      });
+    }
+    const { date } = queryData;
+
+    const roomSql = `
+      SELECT
+        COUNT(*) FILTER (
+          WHERE stay_type = '客房'
+            AND check_in_date <= $1::date
+            AND check_out_date > $1::date
+        ) AS open_count,
+        COUNT(*) FILTER (
+          WHERE stay_type = '休息房'
+            AND check_in_date = $1::date
+            AND check_out_date = $1::date
+        ) AS rest_count
+      FROM orders
+      WHERE stay_type IN ('客房', '休息房')
+        AND status NOT IN ('cancelled');
+    `;
+
+    const roomResult = await db.query(roomSql, [date]);
+
+    // 统计好评邀请/得到数量 - 使用正确的字段名
+    const reviewSql = `
+      SELECT
+        COUNT(*) AS invited,
+        COUNT(*) FILTER (WHERE positive_review = true) AS positive
+      FROM review_invitations
+      WHERE invite_time::date = $1::date
+    `;
+
+    const reviewResult = await db.query(reviewSql, [date]);
+
+    const data = {
+      openCount: parseInt(roomResult.rows[0].open_count) || 0,
+      restCount: parseInt(roomResult.rows[0].rest_count) || 0,
+      invited: parseInt(reviewResult.rows[0].invited) || 0,
+      positive: parseInt(reviewResult.rows[0].positive) || 0
+    };
+
     res.json({ success: true, data });
   } catch (error) {
     console.error('获取交接班特殊统计失败:', error);
@@ -75,15 +304,19 @@ router.get('/special-stats', async (req, res) => {
 
 // 获取交接班表中的管理员备忘录
 router.get('/admin-memos', async (req, res) => {
-  try {
-    const { date } = req.query;
 
-    if (!date) {
+  try {
+    const queryData = sanitizeQuery(req.query);
+    const isValid = validateRequiredDateQuery(queryData);
+
+    if (!isValid) {
       return res.status(400).json({
         success: false,
-        message: '缺少必需的日期参数'
+        message: "缺少必需的日期参数",
+        errors: formatAjvErrors(validateRequiredDateQuery.errors)
       });
     }
+    const { date } = queryData;
 
     const memos = await getAdminMemosFromHandover(date);
     res.json({
@@ -103,11 +336,6 @@ router.get('/admin-memos', async (req, res) => {
 // 保存管理员备忘录到交接班表
 router.post('/save-admin-memo', async (req, res) => {
   try {
-    console.log('收到保存管理员备忘录请求:', {
-      body: JSON.stringify(req.body, null, 2),
-      timestamp: new Date().toISOString()
-    });
-
     // 基本数据验证
     if (!req.body || Object.keys(req.body).length === 0) {
       return res.status(400).json({
@@ -116,23 +344,27 @@ router.post('/save-admin-memo', async (req, res) => {
       });
     }
 
-    const { date, memo } = req.body;
+    const payload = {
+      date: typeof req.body.date === "string" ? req.body.date.trim() : req.body.date,
+      memo: typeof req.body.memo === "string" ? req.body.memo.trim() : req.body.memo
+    };
 
-    if (!date) {
+    console.log('收到保存管理员备忘录请求:', {
+      body: JSON.stringify(payload, null, 2),
+      timestamp: new Date().toISOString()
+    });
+
+    const isValid = validateSaveAdminMemo(payload);
+
+    if (!isValid) {
       return res.status(400).json({
         success: false,
-        message: '缺少必需的日期参数'
+        message: '请求数据格式错误',
+        errors: formatAjvErrors(validateSaveAdminMemo.errors)
       });
     }
 
-    if (!memo || !memo.trim()) {
-      return res.status(400).json({
-        success: false,
-        message: '备忘录内容不能为空'
-      });
-    }
-
-    const result = await saveAdminMemoToHandover({ date, memo: memo.trim() });
+    const result = await saveAdminMemoToHandover(payload);
 
     console.log('管理员备忘录保存成功:', result);
 
@@ -158,18 +390,20 @@ router.post('/save-admin-memo', async (req, res) => {
 });
 
 
-
-
 router.get('/check-yesterday', async (req, res) => {
-  try {
-    const { date } = req.query;
 
-    if (!date) {
+  try {
+    const queryData = sanitizeQuery(req.query);
+    const isValid = validateRequiredDateQuery(queryData);
+
+    if (!isValid) {
       return res.status(400).json({
         success: false,
-        message: '缺少必需的日期参数'
+        message: '缺少必需的日期参数',
+        errors: formatAjvErrors(validateRequiredDateQuery.errors)
       });
     }
+    const { date } = queryData;
 
     console.log('检查交接记录，查询日期:', date);
 
@@ -205,7 +439,7 @@ router.get('/check-yesterday', async (req, res) => {
     let handoverAmounts = {
       cash: 0,
       wechat: 0,
-      weyoufu: 0,
+      weiyoufu: 0,
       other: 0
     };
 
@@ -234,7 +468,7 @@ router.get('/check-yesterday', async (req, res) => {
             handoverAmounts.wechat = amount;
             break;
           case 3:
-            handoverAmounts.weyoufu = amount;
+            handoverAmounts.weiyoufu = amount;
             break;
           case 4:
             handoverAmounts.other = amount;
@@ -327,8 +561,19 @@ router.get('/query', async (req, res) => {
 
 // 根据日期范围查询交接班记录
 router.get('/query-by-range', async (req, res) => {
+
   try {
-    const { startDate, endDate } = req.query;
+    const queryData = sanitizeQuery(req.query);
+    const isValid = validateDateRangeQuery(queryData);
+
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        message: "请求参数格式错误",
+        errors: formatAjvErrors(validateDateRangeQuery.errors)
+      });
+    }
+    const { startDate, endDate } = queryData;
 
     console.log('开始按日期范围查询交接班记录:', { startDate, endDate });
 
@@ -430,169 +675,130 @@ router.get('/available-dates', async (req, res) => {
   }
 });
 
-// 完成交接班（保存完整数据并标记完成）
+// 完成交接班（优化版）
 router.post('/complete', async (req, res) => {
   let client;
 
   try {
-    console.log('收到完成交接班请求:', {
-      body: JSON.stringify(req.body, null, 2),
-      timestamp: new Date().toISOString()
-    });
+    // ✅ 使用 AJV 自动校验与类型清洗
+    const isValid = validateCompleteHandover(req.body);
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        message: '请求数据格式错误',
+        errors: formatAjvErrors(validateCompleteHandover.errors)
+      });
+    }
 
+    // Ajv 已清洗类型
     const {
       date,
-      handoverPerson,
+      handoverPerson = '系统',
       receivePerson,
       paymentData,
-      vipCard,
-      taskList,
-      notes
+      vipCard = 0,
+      taskList = [],
+      notes = ''
     } = req.body;
 
-    // 验证必需字段
-    if (!date) {
-      return res.status(400).json({
-        success: false,
-        message: '缺少必需的日期参数'
-      });
-    }
+    console.log('收到完成交接班请求:', {
+      date, handoverPerson, receivePerson,
+      vipCard, timestamp: new Date().toISOString()
+    });
 
-    if (!receivePerson || receivePerson.trim() === '') {
-      return res.status(400).json({
-        success: false,
-        message: '请输入接班人员姓名'
-      });
-    }
-
-    if (!paymentData) {
-      return res.status(400).json({
-        success: false,
-        message: '缺少支付数据'
-      });
-    }
-
-    console.log('开始保存交接班数据到数据库');
-
-    // 获取数据库连接并开启事务
     client = await getClient();
     await client.query('BEGIN');
 
-    // 支付方式映射：前端字段名 -> 数据库代码
-    const paymentTypeMapping = {
-      '现金': 1,
-      '微信': 2,
-      '微邮付': 3,
-      '其他': 4
-    };
+    const paymentTypeMapping = { '现金': 1, '微信': 2, '微邮付': 3, '其他': 4 };
 
-    // 定义要保存的支付方式
-    const paymentMethods = ['现金', '微信', '微邮付', '其他'];
+    const insertSQL = `
+      INSERT INTO handover (
+        date, handover_person, takeover_person, vip_card, payment_type,
+        reserve_cash, room_income, rest_income, rent_income, total_income,
+        room_refund, rest_refund, retained, handover, task_list, remarks
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      ON CONFLICT (date, payment_type) DO UPDATE SET
+        handover_person = EXCLUDED.handover_person,
+        takeover_person = EXCLUDED.takeover_person,
+        vip_card = EXCLUDED.vip_card,
+        reserve_cash = EXCLUDED.reserve_cash,
+        room_income = EXCLUDED.room_income,
+        rest_income = EXCLUDED.rest_income,
+        rent_income = EXCLUDED.rent_income,
+        total_income = EXCLUDED.total_income,
+        room_refund = EXCLUDED.room_refund,
+        rest_refund = EXCLUDED.rest_refund,
+        retained = EXCLUDED.retained,
+        handover = EXCLUDED.handover,
+        task_list = EXCLUDED.task_list,
+        remarks = EXCLUDED.remarks
+      RETURNING *;
+    `;
 
-    // 保存结果数组
-    const savedRecords = [];
+    // ✅ 并行保存四种支付方式记录
+    const results = await Promise.all(
+      PAYMENT_METHODS.map(method => {
+        const values = [
+          date,
+          handoverPerson || '系统',
+          receivePerson.trim(),
+          method === '现金' ? vipCard : 0,
+          paymentTypeMapping[method],
+          paymentData.reserve?.[method] || 0,
+          paymentData.hotelIncome?.[method] || 0,
+          paymentData.restIncome?.[method] || 0,
+          paymentData.carRentIncome?.[method] || 0,
+          paymentData.totalIncome?.[method] || 0,
+          paymentData.hotelDeposit?.[method] || 0,
+          paymentData.restDeposit?.[method] || 0,
+          paymentData.retainedAmount?.[method] || 0,
+          paymentData.handoverAmount?.[method] || 0,
+          method === '现金' ? JSON.stringify(taskList || []) : '[]',
+          method === '现金' ? (notes || '') : ''
+        ];
+        return client.query(insertSQL, values);
+      })
+    );
 
-    // 为每种支付方式保存一条记录
-    for (const method of paymentMethods) {
-      const sql = `
-        INSERT INTO handover (
-          date, handover_person, takeover_person, vip_card, payment_type,
-          reserve_cash, room_income, rest_income, rent_income, total_income,
-          room_refund, rest_refund, retained, handover, task_list, remarks
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-        ON CONFLICT (date, payment_type) DO UPDATE SET
-          handover_person = EXCLUDED.handover_person,
-          takeover_person = EXCLUDED.takeover_person,
-          vip_card = EXCLUDED.vip_card,
-          reserve_cash = EXCLUDED.reserve_cash,
-          room_income = EXCLUDED.room_income,
-          rest_income = EXCLUDED.rest_income,
-          rent_income = EXCLUDED.rent_income,
-          total_income = EXCLUDED.total_income,
-          room_refund = EXCLUDED.room_refund,
-          rest_refund = EXCLUDED.rest_refund,
-          retained = EXCLUDED.retained,
-          handover = EXCLUDED.handover,
-          task_list = EXCLUDED.task_list,
-          remarks = EXCLUDED.remarks
-        RETURNING *;
-      `;
-
-      // 提取当前支付方式的数据
-      const values = [
-        date,                                                      // $1: date
-        handoverPerson || '系统',                                  // $2: handover_person
-        receivePerson.trim(),                                     // $3: takeover_person
-        method === '现金' ? (vipCard || 0) : 0,                   // $4: vip_card (只在现金记录中保存)
-        paymentTypeMapping[method],                               // $5: payment_type
-        paymentData.reserve?.[method] || 0,                       // $6: reserve_cash
-        paymentData.hotelIncome?.[method] || 0,                   // $7: room_income
-        paymentData.restIncome?.[method] || 0,                    // $8: rest_income
-        paymentData.carRentIncome?.[method] || 0,                 // $9: rent_income
-        paymentData.totalIncome?.[method] || 0,                   // $10: total_income
-        paymentData.hotelDeposit?.[method] || 0,                  // $11: room_refund
-        paymentData.restDeposit?.[method] || 0,                   // $12: rest_refund
-        paymentData.retainedAmount?.[method] || 0,                // $13: retained
-        paymentData.handoverAmount?.[method] || 0,                // $14: handover
-        method === '现金' ? JSON.stringify(taskList || []) : '[]', // $15: task_list (只在现金记录中保存)
-        method === '现金' ? (notes || '') : ''                    // $16: remarks (只在现金记录中保存)
-      ];
-
-      console.log(`保存 ${method} 支付方式的记录:`, {
-        payment_type: paymentTypeMapping[method],
-        handover_person: values[1],
-        takeover_person: values[2]
-      });
-
-      const result = await client.query(sql, values);
-      savedRecords.push(result.rows[0]);
-
-      console.log(`${method} 记录保存成功，ID: ${result.rows[0].id}`);
-    }
-
-    // 提交事务
     await client.query('COMMIT');
 
-    console.log('所有交接班记录保存成功，共保存', savedRecords.length, '条记录');
+    const savedRecords = results.flatMap(r => r.rows);
+    console.log('交接班记录保存完成，共', savedRecords.length, '条');
 
-    // 准备响应数据
-    const responseData = {
+    res.json({
       success: true,
       message: '交接班完成，数据已保存',
       data: {
         date,
-        handoverPerson: handoverPerson || '系统',
+        handoverPerson,
         receivePerson: receivePerson.trim(),
         recordCount: savedRecords.length,
         records: savedRecords
       }
-    };
-
-    res.json(responseData);
+    });
 
   } catch (error) {
-    // 回滚事务
     if (client) {
       try {
         await client.query('ROLLBACK');
-        console.log('事务已回滚');
+        console.warn('事务已回滚');
       } catch (rollbackError) {
         console.error('回滚事务失败:', rollbackError);
       }
     }
 
-    console.error('完成交接班失败:', error);
+    console.error('完成交接班失败:', {
+      message: error.message,
+      stack: error.stack
+    });
+
     res.status(500).json({
       success: false,
-      message: error.message || '完成交接班失败',
-      error: error.stack
+      message: error.message || '完成交接班失败'
     });
   } finally {
-    // 释放数据库连接
-    if (client) {
-      client.release();
-    }
+    if (client) client.release();
   }
 });
 

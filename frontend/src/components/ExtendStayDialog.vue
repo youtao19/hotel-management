@@ -4,109 +4,69 @@
     @update:model-value="val => emit('update:modelValue', val)"
     persistent
   >
-    <q-card style="min-width: 450px">
+    <q-card style="min-width: 450px; max-width: 600px;">
       <q-card-section class="row items-center q-pb-none">
         <div class="text-h6">续住办理</div>
         <q-space />
         <q-btn icon="close" flat round dense v-close-popup />
       </q-card-section>
 
-      <!-- 续住说明提示 -->
-      <q-banner class="bg-blue-1 text-blue-9" dense>
-        <template v-slot:avatar>
-          <q-icon name="info" color="blue" />
-        </template>
-        续住功能将基于原订单信息创建新的订单，您可以修改客人信息、房间和入住时间。
-      </q-banner>
-
       <q-card-section>
         <!-- 原订单信息显示 -->
         <div class="q-mb-md">
-          <div class="text-subtitle2 q-mb-sm">原订单信息:</div>
-          <div class="bg-grey-2 q-pa-sm rounded-borders">
-            <div class="row q-gutter-sm">
-              <div class="col">订单号: {{ currentOrder?.orderNumber }}</div>
-              <div class="col">客人: {{ currentOrder?.guestName }}</div>
-            </div>
-            <div class="row q-gutter-sm q-mt-xs">
-              <div class="col">原房间: {{ currentOrder?.roomNumber }}</div>
-              <div class="col">房型: {{ getRoomTypeName(currentOrder?.roomType) }}</div>
-            </div>
-            <div class="row q-gutter-sm q-mt-xs">
-              <div class="col">退房日期: {{ currentOrder?.checkOutDate }}</div>
-              <div class="col">原房价: {{ formatOriginalRoomPrice(currentOrder?.roomPrice) }}</div>
+          <div class="text-subtitle2 q-mb-sm">原订单信息</div>
+          <div class="q-pa-sm rounded-borders" style="border: 1px solid #e0e0e0;">
+            <div class="row q-col-gutter-sm text-body2">
+              <div class="col-6">订单号: {{ currentOrder?.orderNumber }}</div>
+              <div class="col-6">客人: {{ currentOrder?.guestName }}</div>
+              <div class="col-6">房间: {{ currentOrder?.roomNumber }}</div>
+              <div class="col-6">房型: {{ getRoomTypeName(currentOrder?.roomType) }}</div>
             </div>
           </div>
         </div>
 
         <!-- 续住房间选择 -->
         <div class="q-mb-md">
-          <div class="text-subtitle2 q-mb-sm">选择续住房间:</div>
-
-          <!-- 原房间继续住选项 -->
-          <div class="q-mb-sm" v-if="originalRoomAvailable">
-            <q-card flat bordered class="bg-green-1">
-              <q-card-section class="q-pa-sm">
-                <div class="row items-center">
-                  <div class="col">
-                    <div class="text-body2 text-weight-medium">
-                      推荐：继续住原房间 {{ currentOrder?.roomNumber }}
-                    </div>
-                    <div class="text-caption text-grey-7">
-                      {{ getRoomTypeName(currentOrder?.roomType) }} - ¥{{ currentOrder?.roomPrice }}/晚
-                    </div>
-                  </div>
-                  <div class="col-auto">
-                    <q-btn
-                      size="sm"
-                      color="positive"
-                      label="选择原房间"
-                      @click="selectOriginalRoom"
-                      :loading="loadingRooms"
-                    />
-                  </div>
-                </div>
-              </q-card-section>
-            </q-card>
-          </div>
-
-          <div class="row items-center">
+          <div class="row items-center q-mb-sm">
             <div class="col">
-              <q-select
-                v-model="selectedRoom"
-                :options="availableRoomOptions"
-                label="选择房间"
-                filled
-                emit-value
-                map-options
-                :loading="loadingRooms"
-              >
-                <template v-slot:no-option>
-                  <q-item>
-                    <q-item-section class="text-negative">
-                      <q-icon name="warning" color="negative" />
-                      没有可用房间
-                    </q-item-section>
-                  </q-item>
-                </template>
-              </q-select>
+              <div class="text-subtitle2">续住房间</div>
             </div>
-            <div class="col-auto q-ml-md">
-              <q-chip
-                :color="availableRoomOptions.length > 0 ? (availableRoomOptions.length <= 3 ? 'warning' : 'positive') : 'negative'"
-                text-color="white"
-                icon="hotel"
-              >
-                可用: {{ availableRoomOptions.length }}间
-              </q-chip>
+            <div class="col-auto" v-if="originalRoomAvailable">
+              <q-btn
+                size="sm"
+                outline
+                color="primary"
+                label="继续住原房间"
+                @click="selectOriginalRoom"
+                :loading="loadingRooms"
+              />
             </div>
           </div>
+
+          <q-select
+            v-model="selectedRoom"
+            :options="availableRoomOptions"
+            label="选择房间"
+            filled
+            emit-value
+            map-options
+            :loading="loadingRooms"
+            :hint="`可用房间: ${availableRoomOptions.length} 间`"
+          >
+            <template v-slot:no-option>
+              <q-item>
+                <q-item-section class="text-grey">
+                  没有可用房间
+                </q-item-section>
+              </q-item>
+            </template>
+          </q-select>
         </div>
 
         <!-- 续住时间选择 -->
         <div class="q-mb-md">
-          <div class="text-subtitle2 q-mb-sm">续住时间:</div>
-          <div class="row q-gutter-md">
+          <div class="text-subtitle2 q-mb-sm">续住时间</div>
+          <div class="row q-col-gutter-md">
             <div class="col">
               <q-input
                 v-model="extendStartDate"
@@ -130,137 +90,125 @@
 
         <!-- 新订单号设置 -->
         <div class="q-mb-md">
-          <div class="text-subtitle2 q-mb-sm">新订单号:</div>
-          <div class="row q-gutter-md items-end">
+          <div class="text-subtitle2 q-mb-sm">新订单号</div>
+          <div class="row q-col-gutter-sm items-end">
             <div class="col">
               <q-input
                 v-model="newOrderNumber"
                 label="订单号"
                 filled
+                dense
                 :rules="[
                   val => !!val?.trim() || '请输入订单号',
                   val => val?.length >= 5 || '订单号至少5位字符',
                   val => val?.length <= 20 || '订单号不能超过20位字符',
                   val => !/\s/.test(val) || '订单号不能包含空格'
                 ]"
-                hint="自动生成，可手动修改"
-              >
-                <template v-slot:append>
-                  <q-icon name="edit" color="primary" />
-                </template>
-              </q-input>
+              />
             </div>
             <div class="col-auto">
               <q-btn
-                color="secondary"
+                color="primary"
                 icon="refresh"
-                label="重新生成"
                 @click="generateNewOrderNumber"
                 flat
                 dense
               >
-                <q-tooltip>重新生成订单号</q-tooltip>
+                <q-tooltip>重新生成</q-tooltip>
               </q-btn>
-            </div>
-          </div>
-          <div class="text-caption text-grey-6 q-mt-xs">
-            <div class="row items-center q-gutter-sm">
-              <span>基于原订单号: {{ currentOrder?.orderNumber }}</span>
-              <q-chip
-                v-if="newOrderNumber"
-                size="sm"
-                color="blue-1"
-                text-color="blue-9"
-                icon="preview"
-              >
-                {{ newOrderNumber }}
-              </q-chip>
             </div>
           </div>
         </div>
 
         <!-- 客人信息 -->
         <div class="q-mb-md">
-          <div class="text-subtitle2 q-mb-sm">客人信息:</div>
-          <div class="row q-gutter-md">
+          <div class="text-subtitle2 q-mb-sm">客人信息</div>
+          <div class="row q-col-gutter-md">
             <div class="col">
               <q-input
                 v-model="guestName"
                 label="客人姓名"
                 filled
+                dense
                 :rules="[val => !!val?.trim() || '请输入客人姓名']"
               />
             </div>
             <div class="col">
               <q-input
                 v-model="guestPhone"
-                label="手机号"
+                label="手机号(可选)"
                 filled
+                dense
                 mask="###-####-####"
                 unmasked-value
                 :rules="[
-                  val => !!val?.trim() || '请输入手机号',
-                  val => val?.length === 11 || '手机号必须为11位数字'
+                  val => !val || val.length === 11 || '手机号必须为11位数字'
                 ]"
               />
             </div>
           </div>
         </div>
 
+        <!-- 支付方式 -->
+        <div class="q-mb-md">
+          <div class="text-subtitle2 q-mb-sm">支付方式</div>
+          <q-select
+            v-model="paymentMethod"
+            :options="paymentMethodOptions"
+            label="选择支付方式"
+            filled
+            dense
+            emit-value
+            map-options
+            :rules="[val => !!val || '请选择支付方式']"
+          />
+        </div>
+
         <!-- 价格信息 -->
         <div class="q-mb-md" v-if="selectedRoomInfo">
-          <div class="text-subtitle2 q-mb-sm">价格信息:</div>
-          <div class="bg-blue-1 q-pa-sm rounded-borders">
-            <div class="row q-gutter-sm">
-              <div class="col">原建议单价: ¥{{ selectedRoomInfo.price }}/晚</div>
-              <div class="col">续住天数: {{ stayDays }}天</div>
-            </div>
-      <div class="row q-gutter-sm q-mt-xs" v-if="stayDays === 1">
-              <div class="col-12">
-                <q-input
-                  v-model.number="customUnitPrice"
-                  type="number"
-                  label="续住单价(可修改)"
-          dense
-          filled
-          bg-color="blue-1"
-                  :rules="singlePriceRules"
-                  hint="此价格将写入新订单 total_price（单日）"
-                >
-                  <template #prepend>
-                    <q-icon name="attach_money" color="primary" />
-                  </template>
-                </q-input>
-              </div>
-            </div>
-            <div v-else class="q-mt-xs">
-              <div class="text-caption text-grey-7 q-mb-xs">多日续住：可分别调整每天价格</div>
-        <q-markup-table flat bordered dense class="price-table-transparent">
-                <tbody>
-                  <tr v-for="d in stayDateList" :key="d">
-                    <td class="text-caption" style="width:90px">{{ formatDay(d) }}</td>
-                    <td>
-                      <q-input
-                        v-model.number="dailyPrices[d]"
-                        type="number"
-            dense
-            filled
-            bg-color="blue-1"
-                        :rules="[v=>v!==undefined && v!==null && v!=='' || '必填', v=>parseFloat(v)>0 || '需>0']"
-                        style="max-width:110px"
-                        @update:model-value="recalcTotal"
-                      >
-                        <template #prepend>
-                          <q-icon name="attach_money" color="primary" size="16px" />
-                        </template>
-                      </q-input>
-                    </td>
-                  </tr>
-                </tbody>
-              </q-markup-table>
-            </div>
-            <div class="row q-gutter-sm q-mt-xs">
-              <div class="col text-h6 text-positive">总价: ¥{{ totalPrice }}</div>
+          <div class="text-subtitle2 q-mb-sm">价格信息 (续住天数: {{ stayDays }}天)</div>
+
+          <!-- 单日续住 -->
+          <div v-if="stayDays === 1">
+            <q-input
+              v-model.number="customUnitPrice"
+              type="number"
+              label="续住单价"
+              dense
+              filled
+              :rules="singlePriceRules"
+              prefix="¥"
+              @update:model-value="userModifiedPrice = true"
+            />
+          </div>
+
+          <!-- 多日续住 -->
+          <div v-else>
+            <q-markup-table flat bordered dense>
+              <tbody>
+                <tr v-for="d in stayDateList" :key="d">
+                  <td class="text-caption" style="width:100px">{{ formatDay(d) }}</td>
+                  <td>
+                    <q-input
+                      v-model.number="dailyPrices[d]"
+                      type="number"
+                      dense
+                      filled
+                      :rules="[v=>v!==undefined && v!==null && v!=='' || '必填', v=>parseFloat(v)>0 || '需>0']"
+                      prefix="¥"
+                      @update:model-value="recalcTotal"
+                    />
+                  </td>
+                </tr>
+              </tbody>
+            </q-markup-table>
+          </div>
+
+          <!-- 总价 -->
+          <div class="q-mt-sm q-pa-sm rounded-borders" style="border: 1px solid #e0e0e0;">
+            <div class="row items-center">
+              <div class="col text-body2">总价</div>
+              <div class="col-auto text-h6 text-primary">¥{{ totalPrice }}</div>
             </div>
           </div>
         </div>
@@ -269,11 +217,11 @@
         <div class="q-mb-md">
           <q-input
             v-model="notes"
-            label="备注"
+            label="备注(可选)"
             filled
+            dense
             type="textarea"
             rows="2"
-            placeholder="可选：添加续住备注信息"
           />
         </div>
       </q-card-section>
@@ -295,6 +243,9 @@
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue'
 import { date } from 'quasar'
+import { useViewStore } from '../stores/viewStore'
+
+const viewStore = useViewStore()
 
 // Props
 const props = defineProps({
@@ -317,14 +268,20 @@ const guestPhone = ref('')
 const notes = ref('')
 const submitting = ref(false)
 const newOrderNumber = ref('')
+const paymentMethod = ref('')
 // 可编辑续住单价
 const customUnitPrice = ref(0)
+// 用户是否手动修改了价格
+const userModifiedPrice = ref(false)
 // 多日价格对象 (key=YYYY-MM-DD)
 const dailyPrices = ref({})
 const singlePriceRules = [
   val => val !== null && val !== undefined && val !== '' || '请输入房价',
   val => parseFloat(val) > 0 || '房价必须大于0'
 ]
+
+// 支付方式选项
+const paymentMethodOptions = computed(() => viewStore.paymentMethodOptions)
 
 // 监听日期变化，重新获取可用房间
 watch([extendStartDate, extendEndDate], ([newStartDate, newEndDate]) => {
@@ -374,7 +331,9 @@ const totalPrice = computed(() => {
 })
 
 const canConfirm = computed(() => {
-  if (!(selectedRoom.value && extendStartDate.value && extendEndDate.value && guestName.value.trim() && guestPhone.value.trim() && newOrderNumber.value.trim() && stayDays.value > 0)) return false
+  // 手机号变为可选，但如果填了必须是11位
+  const phoneValid = !guestPhone.value || guestPhone.value.trim().length === 11
+  if (!(selectedRoom.value && extendStartDate.value && extendEndDate.value && guestName.value.trim() && phoneValid && newOrderNumber.value.trim() && paymentMethod.value && stayDays.value > 0)) return false
   if (stayDays.value === 1) return parseFloat(customUnitPrice.value) > 0
   // 多日：所有 dailyPrices 完整且>0
   const dates = stayDateList.value
@@ -418,11 +377,25 @@ function selectOriginalRoom() {
 // 当选择房间改变时，初始化可编辑单价
 watch(selectedRoomInfo, (info) => {
   if (info) {
-    if (!customUnitPrice.value || customUnitPrice.value <= 0) {
+    // 只在用户未手动修改价格且价格为0或未设置时才自动填充
+    if (!userModifiedPrice.value && (!customUnitPrice.value || customUnitPrice.value <= 0)) {
       customUnitPrice.value = info.price
     }
+    // 同时更新多日续住的每日价格（如果当前价格为0或未设置）
+    if (stayDateList.value.length > 0) {
+      const updated = { ...dailyPrices.value }
+      stayDateList.value.forEach(d => {
+        if (!updated[d] || parseFloat(updated[d]) <= 0) {
+          updated[d] = userModifiedPrice.value ? customUnitPrice.value : info.price
+        }
+      })
+      dailyPrices.value = updated
+    }
   } else {
-    customUnitPrice.value = 0
+    // 只在用户未手动修改且没有输入时才重置为0
+    if (!userModifiedPrice.value && (!customUnitPrice.value || customUnitPrice.value <= 0)) {
+      customUnitPrice.value = 0
+    }
   }
 })
 
@@ -443,8 +416,13 @@ watch(stayDateList, (list) => {
   const current = { ...dailyPrices.value }
   // 删除不存在的
   Object.keys(current).forEach(k => { if (!list.includes(k)) delete current[k] })
-  // 新增的设默认价
-  list.forEach(d => { if (current[d] === undefined) current[d] = parseFloat(customUnitPrice.value) || selectedRoomInfo.value?.price || 0 })
+  // 新增的设默认价：优先使用 selectedRoomInfo 的价格，其次 customUnitPrice
+  const defaultPrice = selectedRoomInfo.value?.price || parseFloat(customUnitPrice.value) || 0
+  list.forEach(d => {
+    if (current[d] === undefined) {
+      current[d] = defaultPrice
+    }
+  })
   dailyPrices.value = current
 }, { immediate: true })
 
@@ -474,6 +452,9 @@ watch(() => props.modelValue, (newVal) => {
     selectedRoom.value = null
     notes.value = ''
     submitting.value = false
+
+    // 初始化支付方式（默认第一个或原订单的支付方式）
+    paymentMethod.value = props.currentOrder.paymentMethod || viewStore.paymentMethodOptions[0]?.value || ''
 
     // 生成新的订单号
     generateNewOrderNumber()
@@ -505,8 +486,10 @@ watch(() => props.modelValue, (newVal) => {
     notes.value = ''
     submitting.value = false
     newOrderNumber.value = ''
-  customUnitPrice.value = 0
-  dailyPrices.value = {}
+    paymentMethod.value = ''
+    customUnitPrice.value = 0
+    userModifiedPrice.value = false
+    dailyPrices.value = {}
   }
 })
 
@@ -521,12 +504,13 @@ async function confirmExtendStay() {
       originalOrderNumber: props.currentOrder.orderNumber,
       roomNumber: selectedRoom.value,
       roomType: selectedRoomInfo.value.type,
-  roomPrice: stayDays.value === 1 ? (parseFloat(customUnitPrice.value) || selectedRoomInfo.value.price) : { ...dailyPrices.value },
+      roomPrice: stayDays.value === 1 ? (parseFloat(customUnitPrice.value) || selectedRoomInfo.value.price) : { ...dailyPrices.value },
       checkInDate: extendStartDate.value,
       checkOutDate: extendEndDate.value,
       guestName: guestName.value.trim(),
       phone: guestPhone.value.trim(),
       idNumber: props.currentOrder.idNumber, // 从原订单继承身份证号
+      paymentMethod: paymentMethod.value, // 支付方式
       totalPrice: totalPrice.value,
       stayDays: stayDays.value,
       notes: notes.value.trim(),
@@ -541,43 +525,18 @@ async function confirmExtendStay() {
     submitting.value = false
   }
 }
-
-// 格式化原订单房价（可能为JSON）
-function formatOriginalRoomPrice(val) {
-  if (val == null) return '—'
-  if (typeof val === 'number') return `¥${val}/晚`
-  if (typeof val === 'object') {
-    const keys = Object.keys(val).sort()
-    if (!keys.length) return '—'
-    if (keys.length === 1) return `¥${val[keys[0]]}/晚`
-    // 多日：显示范围与总计
-    const prices = keys.map(k => parseFloat(val[k])||0)
-    const min = Math.min(...prices)
-    const max = Math.max(...prices)
-    const sum = prices.reduce((a,b)=>a+b,0)
-    return `¥${min===max?min:`${min}-${max}`} 共${prices.length}天 合计¥${sum}`
-  }
-  return String(val)
-}
 </script>
 
 <style scoped>
-.q-card {
-  max-width: 600px;
+.rounded-borders {
+  border-radius: 4px;
 }
 
-.price-table-transparent {
+.q-markup-table {
   background: transparent;
-  width: 100%;
-  border: 1px solid #d9e6f2;
-  border-radius: 6px;
-  overflow: hidden;
 }
-.price-table-transparent td {
-  background: #e6f1fb; /* 接近 blue-1 更柔和 */
-  border-bottom: 1px solid #d9e6f2;
-  border-right: none;
+
+.q-markup-table td {
+  padding: 8px;
 }
-.price-table-transparent tr:last-child td { border-bottom: none; }
-.price-table-transparent td:first-child { width: 90px; }
 </style>

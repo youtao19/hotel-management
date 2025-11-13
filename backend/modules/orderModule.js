@@ -1,10 +1,12 @@
 const { query, getClient } = require('../database/postgreDB/pg');
 const billModule = require('./billModule');
+const setup = require('../appSettings/setup');
+const { formatDate, formatDateTimeForDB} = require('./tools');
 
 const tableName = "orders";
 
 // 定义有效的订单状态
-const VALID_ORDER_STATES = ['pending', 'checked-in', 'checked-out', 'cancelled'];
+const VALID_ORDER_STATES = ['pending', 'reserved', 'checked-in', 'checked-out', 'occupied', 'cancelled'];
 
 /**
  * 检查orders表是否存在
@@ -41,18 +43,18 @@ function isValidOrderStatus(status) {
  * @returns {Promise<Object|null>} 存在的订单或null
  */
 async function checkExistingOrder(orderData) {
-  const { guest_name, check_in_date, check_out_date, room_type } = orderData;
+  const { guest_name, check_in_date, check_out_date, room_number } = orderData;
 
   const checkQuery = `
     SELECT * FROM ${tableName}
     WHERE guest_name = $1
     AND check_in_date = $2
     AND check_out_date = $3
-    AND room_type = $4
+    AND room_number = $4
     AND status NOT IN ('cancelled', 'checked-out')
   `;
 
-  const result = await query(checkQuery, [guest_name, check_in_date, check_out_date, room_type]);
+  const result = await query(checkQuery, [guest_name, check_in_date, check_out_date, room_number]);
   return result.rows.length > 0 ? result.rows[0] : null;
 }
 
@@ -83,7 +85,7 @@ function handleOrderCreationError(error, orderData) {
       throw new Error(`订单号 '${order_id}' 已存在`);
     }
     if (error.constraint === 'unique_order_constraint') {
-      throw new Error('该客人在相同时间段已有相同类型的房间预订');
+      throw new Error(`该客人在相同时间段已有相同房间(${room_number})的预订`);
     }
     throw new Error(`创建订单失败：数据重复 - ${error.detail}`);
   }
@@ -230,7 +232,6 @@ function validateOrderData(orderData) {
   // 1. 验证必填字段
   const requiredFields = [
     { field: 'guest_name', name: '客人姓名' },
-    { field: 'phone', name: '联系电话' },
     { field: 'room_type', name: '房间类型' },
     { field: 'room_number', name: '房间号' },
     { field: 'check_in_date', name: '入住日期' },
@@ -269,12 +270,15 @@ function validateOrderData(orderData) {
     throw error;
   }
 
-  // 4. 验证电话号码格式
-  const phoneRegex = /^1[3-9]\d{9}$/;
-  if (!phoneRegex.test(orderData.phone)) {
-    const error = new Error('无效的电话号码格式');
-    error.code = 'INVALID_PHONE_FORMAT';
-    throw error;
+  // 4. 验证电话号码格式（可选字段）
+  // 如果提供了手机号，才验证格式
+  if (orderData.phone && orderData.phone.trim() !== '') {
+    const phoneRegex = /^1[3-9]\d{9}$/;
+    if (!phoneRegex.test(orderData.phone)) {
+      const error = new Error('无效的电话号码格式');
+      error.code = 'INVALID_PHONE_FORMAT';
+      throw error;
+    }
   }
 
   // 5. 验证价格和押金
@@ -358,11 +362,6 @@ function validateOrderData(orderData) {
  */
 async function createOrder(orderData) {
   try {
-  console.log('🛠️ [createOrder] 输入原始数据:', JSON.stringify(orderData, null, 2));
-    // 1. 数据验证
-    validateOrderData(orderData);
-  console.log('✅ [createOrder] 基础验证通过');
-
     // 2. 检查是否存在重复订单
     const existingOrder = await checkExistingOrder(orderData);
     if (existingOrder) {
@@ -372,11 +371,33 @@ async function createOrder(orderData) {
       throw error;
     }
 
-    // 3. 验证房型是否存在
+    // 3. 验证房型是否存在（兼容传入房型编码或房型名称）
+    const requestedRoomType = orderData.room_type;
     const roomTypeQuery = 'SELECT * FROM room_types WHERE type_code = $1';
-    const roomTypeResult = await query(roomTypeQuery, [orderData.room_type]);
+    let roomTypeResult = await query(roomTypeQuery, [requestedRoomType]);
+
     if (roomTypeResult.rows.length === 0) {
-      const error = new Error(`房型 '${orderData.room_type}' 不存在`);
+      const roomTypeByNameResult = await query(
+        'SELECT * FROM room_types WHERE type_name = $1',
+        [requestedRoomType]
+      );
+
+      if (roomTypeByNameResult.rows.length === 0) {
+        const error = new Error(`房型 '${requestedRoomType}' 不存在`);
+        error.code = 'INVALID_ROOM_TYPE';
+        throw error;
+      }
+
+      // 使用房型名称匹配到的编码继续后续流程
+      roomTypeResult = roomTypeByNameResult;
+      orderData = {
+        ...orderData,
+        room_type: roomTypeResult.rows[0].type_code
+      };
+    }
+
+    if (!orderData.room_type) {
+      const error = new Error(`房型 '${requestedRoomType}' 无法解析`);
       error.code = 'INVALID_ROOM_TYPE';
       throw error;
     }
@@ -387,6 +408,12 @@ async function createOrder(orderData) {
     if (roomResult.rows.length === 0) {
       const error = new Error(`房间号 '${orderData.room_number}' 不存在`);
       error.code = 'INVALID_ROOM_NUMBER';
+      throw error;
+    }
+
+    if (roomResult.rows[0].type_code && roomResult.rows[0].type_code !== orderData.room_type) {
+      const error = new Error(`房间 '${orderData.room_number}' 与房型 '${requestedRoomType}' 不匹配`);
+      error.code = 'INVALID_ROOM_TYPE';
       throw error;
     }
 
@@ -456,9 +483,10 @@ async function createOrder(orderData) {
 
     // 6. 插入订单数据 - 解构订单数据
     const {
-      order_id, id_source, order_source, guest_name, phone, id_number,
+      order_id, id_source, order_source, guest_name, phone,
       room_type, room_number, check_in_date, check_out_date, status,
-      payment_method, total_price, deposit, create_time, remarks
+      payment_method, total_price, deposit, create_time, remarks,
+      is_prepaid, prepaid_amount, prepaid_at
     } = orderData;
 
     // 6.1. 根据入住退房日期自动设置住宿类型
@@ -517,55 +545,191 @@ async function createOrder(orderData) {
       }
     }
 
-    // 9. 处理日期格式，确保正确存储到数据库
-    // 将日期字符串转换为标准的 YYYY-MM-DD 格式，避免时区问题
-    const formatDateForDB = (dateInput) => {
-      if (!dateInput) return null;
+    const formattedCheckInDate = formatDate(check_in_date);
+    const formattedCheckOutDate = formatDate(check_out_date);
 
-      // 如果已经是 YYYY-MM-DD 格式，直接返回
-      if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
-        return dateInput;
-      }
-
-      // 如果是其他格式，转换为本地日期字符串
-      const date = new Date(dateInput);
-      if (isNaN(date.getTime())) {
-        throw new Error(`无效的日期格式: ${dateInput}`);
-      }
-
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    };
-
-    const formattedCheckInDate = formatDateForDB(check_in_date);
-    const formattedCheckOutDate = formatDateForDB(check_out_date);
+    // 提取每日房费明细（按日期排序），支持多日订单按日记账
+    const dailyPriceEntries = [];
+    if (processedTotalPrice && typeof processedTotalPrice === 'object' && !Array.isArray(processedTotalPrice)) {
+      Object.entries(processedTotalPrice).forEach(([dateKey, amountValue]) => {
+        if (!dateKey) return;
+        try {
+          const stayDate = formatDate(dateKey);
+          const amountNum = Number(amountValue);
+          if (!Number.isFinite(amountNum) || amountNum <= 0) return;
+          dailyPriceEntries.push({
+            stayDate,
+            amount: Number(amountNum.toFixed(2))
+          });
+        } catch (e) {
+          console.warn(`⚠️ [createOrder] 无法解析每日房价日期 '${dateKey}':`, e.message);
+        }
+      });
+      dailyPriceEntries.sort((a, b) => new Date(a.stayDate).getTime() - new Date(b.stayDate).getTime());
+    }
 
     console.log(`📅 [createOrder] 日期格式化: 入住 ${check_in_date} -> ${formattedCheckInDate}, 退房 ${check_out_date} -> ${formattedCheckOutDate}`);
+
+    const normalizeBoolean = (value) => {
+      if (typeof value === 'boolean') return value;
+      if (typeof value === 'number') return value !== 0;
+      if (typeof value === 'string') {
+        const normalized = value.trim().toLowerCase();
+        if (['true', '1', 'yes', 'y', 'on'].includes(normalized)) return true;
+        if (['false', '0', 'no', 'n', 'off', ''].includes(normalized)) return false;
+      }
+      return false;
+    };
+
+    const totalPriceValue = calculateTotalPrice(processedTotalPrice);
+
+    const normalizedDeposit = (deposit === undefined || deposit === null || deposit === '')
+      ? 0
+      : Number(deposit);
+    if (Number.isNaN(normalizedDeposit) || normalizedDeposit < 0) {
+      const err = new Error('押金金额无效');
+      err.code = 'INVALID_DEPOSIT';
+      throw err;
+    }
+
+    const prepaidFlag = normalizeBoolean(is_prepaid);
+    let prepaidAmountValue = 0;
+    let prepaidAtDate = null;
+    let prepaidAtForDB = null;
+    let prepaidStayDate = null;
+
+    if (prepaidFlag) {
+      const resolvedAmount = (prepaid_amount === undefined || prepaid_amount === null || prepaid_amount === '')
+        ? totalPriceValue
+        : Number(prepaid_amount);
+
+      if (!Number.isFinite(resolvedAmount) || resolvedAmount <= 0) {
+        const err = new Error('预收房费金额必须大于0');
+        err.code = 'INVALID_PREPAID_AMOUNT';
+        throw err;
+      }
+
+      if (totalPriceValue > 0 && resolvedAmount - totalPriceValue > 0.01) {
+        const err = new Error('预收房费金额不能超过总房费');
+        err.code = 'INVALID_PREPAID_AMOUNT';
+        throw err;
+      }
+
+      prepaidAmountValue = Number(resolvedAmount.toFixed(2));
+
+      const candidateDate = prepaid_at || create_time || new Date();
+      prepaidAtDate = new Date(candidateDate);
+      if (Number.isNaN(prepaidAtDate.getTime())) {
+        const err = new Error(`预收时间格式无效: ${candidateDate}`);
+        err.code = 'INVALID_PREPAID_AT';
+        throw err;
+      }
+
+      prepaidAtForDB = formatDateTimeForDB(prepaidAtDate);
+      prepaidStayDate = formatDate(prepaidAtDate);
+    }
+
+    const createTimeForDB = formatDateTimeForDB(create_time);
 
     // 10. 执行数据库插入操作
     const insertQuery = `
       INSERT INTO orders (
-        order_id, id_source, order_source, guest_name, phone, id_number,
+        order_id, id_source, order_source, guest_name, phone,
         room_type, room_number, check_in_date, check_out_date, status,
-        payment_method, total_price, deposit, create_time, stay_type, remarks
+        payment_method, total_price, deposit, create_time, stay_type, remarks,
+        is_prepaid, prepaid_amount, prepaid_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+        $17, $18, $19
       )
       RETURNING *;
     `;
 
     const values = [
-      order_id, id_source, order_source, guest_name, phone, id_number,
+      order_id, id_source, order_source, guest_name, phone,
       room_type, room_number, formattedCheckInDate, formattedCheckOutDate, status,
-      payment_method, calculateTotalPrice(processedTotalPrice), deposit, create_time || new Date(), stay_type, processedRemarks
+      payment_method, totalPriceValue, normalizedDeposit, createTimeForDB, stay_type, processedRemarks,
+      prepaidFlag, prepaidAmountValue, prepaidAtForDB
     ];
 
-  console.log('🗃️ [createOrder] 即将插入 values:', values.map(v => (typeof v === 'string' && v.length > 120 ? v.slice(0,120)+'…' : v)));
-  const result = await query(insertQuery, values);
-  console.log('✅ [createOrder] 插入成功 order_id=', result.rows[0]?.order_id);
-    return result.rows[0];
+    console.log('🗃️ [createOrder] 即将插入 values:', values.map(v => (typeof v === 'string' && v.length > 120 ? v.slice(0, 120) + '…' : v)));
+
+    const client = await getClient();
+    let insertedOrder;
+    try {
+      await client.query('BEGIN');
+
+      const result = await client.query(insertQuery, values);
+      insertedOrder = result.rows[0];
+
+      if (prepaidFlag && prepaidAmountValue > 0) {
+        const billInsertQuery = `
+          INSERT INTO bills (
+            order_id, room_number, guest_name, change_price, change_type,
+            pay_way, create_time, remarks, stay_type, stay_date
+          ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+          )
+          RETURNING *;
+        `;
+
+        const fallbackStayDate = prepaidStayDate || formattedCheckInDate;
+        const entriesForBilling = dailyPriceEntries.length > 0
+          ? dailyPriceEntries
+          : [{ stayDate: fallbackStayDate, amount: prepaidAmountValue }];
+
+        let remaining = prepaidAmountValue;
+        let lastStayDateUsed = fallbackStayDate;
+
+        for (const entry of entriesForBilling) {
+          if (remaining <= 0) break;
+          const stayDate = entry.stayDate || fallbackStayDate;
+          lastStayDateUsed = stayDate;
+          const plannedAmount = Number(entry.amount) || 0;
+          if (plannedAmount <= 0) continue;
+          const amountForThisBill = Math.min(plannedAmount, remaining);
+
+          await client.query(billInsertQuery, [
+            order_id,
+            String(room_number || '').slice(0, 10),
+            guest_name,
+            Number(amountForThisBill.toFixed(2)),
+            setup.changeType.roomFee,
+            payment_method,
+            prepaidAtForDB || createTimeForDB,
+            '创建订单预收房费',
+            stay_type,
+            stayDate
+          ]);
+
+          remaining = Number((remaining - amountForThisBill).toFixed(2));
+        }
+
+        if (remaining > 0.009) {
+          await client.query(billInsertQuery, [
+            order_id,
+            String(room_number || '').slice(0, 10),
+            guest_name,
+            Number(remaining.toFixed(2)),
+            setup.changeType.roomFee,
+            payment_method,
+            prepaidAtForDB || createTimeForDB,
+            '创建订单预收房费(余款)',
+            stay_type,
+            lastStayDateUsed
+          ]);
+        }
+      }
+
+      await client.query('COMMIT');
+      console.log('✅ [createOrder] 插入成功 order_id=', insertedOrder?.order_id);
+      return insertedOrder;
+    } catch (txnError) {
+      await client.query('ROLLBACK');
+      throw txnError;
+    } finally {
+      client.release();
+    }
 
   } catch (error) {
   console.error('❌ [createOrder] 失败:', error.message);
@@ -616,10 +780,6 @@ async function getOrderById(orderId) {
  * @returns {Promise<Object|null>} 更新后的订单对象或null
  */
 async function updateOrderStatus(orderId, newStatus) {
-  // 验证订单状态
-  if (!isValidOrderStatus(newStatus)) {
-    throw new Error(`无效的订单状态: ${newStatus}。有效状态: ${VALID_ORDER_STATES.join(', ')}`);
-  }
 
   const updateQuery = `UPDATE ${tableName} SET status = $1 WHERE order_id = $2 RETURNING *`;
   const queryParams = [newStatus, orderId];
@@ -659,9 +819,11 @@ async function updateOrder(orderNumber, updatedData, changedBy = 'system') {
     const values = [];
     const changes = {}; // 记录变更
     let paramIndex = 1;
+    let paymentMethodUpdated = false;
+    let newPaymentMethod = null;
 
     // 处理可更新字段
-    const updateableFields = ['guest_name', 'phone', 'id_number', 'room_type',
+    const updateableFields = ['guest_name', 'phone', 'room_type',
                             'room_number', 'check_in_date', 'check_out_date',
                             'payment_method', 'total_price', 'deposit', 'remarks'];
 
@@ -689,12 +851,20 @@ async function updateOrder(orderNumber, updatedData, changedBy = 'system') {
 
     updateableFields.forEach(field => {
       if (updatedData[field] !== undefined) {
+        const nextValue = updatedData[field];
         updates.push(`${field} = $${paramIndex}`);
-        values.push(updatedData[field]);
+        values.push(nextValue);
         changes[field] = {
           old: oldOrder[field],
-          new: updatedData[field]
+          new: nextValue
         };
+        if (field === 'payment_method') {
+          const oldPaymentMethod = oldOrder[field];
+          if (nextValue !== oldPaymentMethod) {
+            paymentMethodUpdated = true;
+            newPaymentMethod = nextValue;
+          }
+        }
         paramIndex++;
       }
     });
@@ -726,6 +896,21 @@ async function updateOrder(orderNumber, updatedData, changedBy = 'system') {
 
     values.push(orderNumber);
     const { rows: [updatedOrder] } = await client.query(updateQuery, values);
+
+    if (paymentMethodUpdated) {
+      const { rowCount: syncedCount } = await client.query(
+        `UPDATE bills
+            SET pay_way = $1
+          WHERE order_id = $2
+            AND change_type = '房费'`,
+        [newPaymentMethod, orderNumber]
+      );
+      if (syncedCount > 0) {
+        console.log(`🧾 [updateOrder] 同步更新 ${syncedCount} 条房费账单支付方式 -> ${newPaymentMethod}`);
+      } else {
+        console.log('ℹ️ [updateOrder] 未找到需要同步支付方式的房费账单');
+      }
+    }
 
     await client.query('COMMIT');
 
@@ -839,6 +1024,203 @@ async function getDepositStatus(orderId) {
 }
 
 /**
+ * 提前退房
+ * @param {string} orderNumber - 订单号
+ * @param {Object} options - 提前退房参数
+ * @param {string|Date} [options.actualCheckoutTime] - 实际退房时间
+ * @param {number|string} [options.refundAmount] - 操作员确定的退款金额
+ * @param {string} [options.refundMethod] - 退款方式
+ * @param {string} [options.changedBy='system'] - 操作人
+ * @param {string} [options.remarks] - 备注
+ * @returns {Promise<Object>} 提前退房结果
+ */
+async function earlyCheckout(orderNumber, options = {}) {
+  const {
+    actualCheckoutTime,
+    refundAmount,
+    refundMethod,
+    changedBy = 'system',
+    remarks
+  } = options;
+
+  const client = await getClient();
+
+  try {
+    await client.query('BEGIN');
+
+    const { rows: orderRows } = await client.query(
+      `SELECT * FROM ${tableName} WHERE order_id = $1 FOR UPDATE`,
+      [orderNumber]
+    );
+
+    const order = orderRows[0];
+    if (!order) {
+      const err = new Error(`订单 ${orderNumber} 不存在`);
+      err.code = 'ORDER_NOT_FOUND';
+      err.statusCode = 404;
+      throw err;
+    }
+
+    if (!['checked-in', 'occupied'].includes(order.status)) {
+      const err = new Error(`订单状态为 '${order.status}'，无法提前退房`);
+      err.code = 'EARLY_CHECKOUT_INVALID_STATE';
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const originalCheckoutDateStr = formatDate(order.check_out_date);
+    const actualCheckoutDateStr = formatDate(actualCheckoutTime || new Date());
+
+    const originalCheckoutDate = new Date(originalCheckoutDateStr);
+    const actualCheckoutDate = new Date(actualCheckoutDateStr);
+
+    if (!(actualCheckoutDate < originalCheckoutDate)) {
+      const err = new Error('实际退房日期未早于原退房日期，无法执行提前退房');
+      err.code = 'EARLY_CHECKOUT_NOT_EARLY';
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const { rows: roomFeeBills } = await client.query(
+      `SELECT bill_id, stay_date, change_price
+         FROM bills
+        WHERE order_id = $1
+          AND change_type = $2
+          AND stay_date >= $3
+        ORDER BY stay_date`,
+      [orderNumber, '房费', actualCheckoutDateStr]
+    );
+
+    const recommendedRefundRaw = roomFeeBills.reduce(
+      (sum, bill) => sum + Number(bill.change_price || 0),
+      0
+    );
+    const recommendedRefund = Number(recommendedRefundRaw.toFixed(2));
+
+    const parsedRefund = refundAmount !== undefined && refundAmount !== null && refundAmount !== ''
+      ? Number(refundAmount)
+      : recommendedRefund;
+
+    if (!Number.isFinite(parsedRefund) || parsedRefund < 0) {
+      const err = new Error('退房退款金额无效');
+      err.code = 'EARLY_CHECKOUT_INVALID_REFUND';
+      err.statusCode = 400;
+      throw err;
+    }
+
+    if (parsedRefund - recommendedRefund > 0.01) {
+      const err = new Error('退款金额不能超过可退房费');
+      err.code = 'EARLY_CHECKOUT_REFUND_TOO_HIGH';
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const finalRefund = Number(parsedRefund.toFixed(2));
+    const refundPayWay = refundMethod || order.payment_method || '现金';
+
+    const originalTotalPrice = Number(order.total_price) || 0;
+    const updatedTotalPrice = Math.max(0, Number((originalTotalPrice - finalRefund).toFixed(2)));
+
+    const { rows: [updatedOrder] } = await client.query(
+      `UPDATE ${tableName}
+          SET check_out_date = $1,
+              status = 'checked-out',
+              total_price = $2
+        WHERE order_id = $3
+        RETURNING *`,
+      [actualCheckoutDateStr, updatedTotalPrice, orderNumber]
+    );
+
+    let refundBillRow = null;
+    if (finalRefund > 0) {
+      const refundRemark = remarks || `提前退房退款（原退房日: ${originalCheckoutDateStr}）`;
+      const refundResult = await client.query(
+        `INSERT INTO bills (
+            order_id, room_number, guest_name, change_price, change_type,
+            pay_way, create_time, remarks, stay_type, stay_date
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+         RETURNING *`,
+        [
+          orderNumber,
+          String(order.room_number || '').slice(0, 10),
+          order.guest_name,
+          Number((-finalRefund).toFixed(2)),
+          '房费',
+          refundPayWay,
+          formatDateTimeForDB(),
+          refundRemark,
+          order.stay_type,
+          actualCheckoutDateStr
+        ]
+      );
+      refundBillRow = refundResult.rows[0];
+    }
+
+    await client.query(
+      `UPDATE rooms SET status = $1 WHERE room_number = $2`,
+      ['cleaning', order.room_number]
+    );
+
+    await client.query('COMMIT');
+
+    const refundedStayDates = roomFeeBills.map(bill => formatDate(bill.stay_date));
+    const changeDetails = {
+      action: 'early_checkout',
+      previous_check_out_date: originalCheckoutDateStr,
+      new_check_out_date: actualCheckoutDateStr,
+      previous_status: order.status,
+      new_status: 'checked-out',
+      recommended_refund: recommendedRefund,
+      actual_refund: finalRefund,
+      refund_method: refundPayWay,
+      refunded_stay_dates: refundedStayDates
+    };
+
+    if (originalTotalPrice !== updatedTotalPrice) {
+      changeDetails.total_price = {
+        old: originalTotalPrice,
+        new: updatedTotalPrice
+      };
+    }
+
+    try {
+      await query(
+        `INSERT INTO order_changes
+           (order_id, changed_by, changes, reason)
+         VALUES ($1, $2, $3, $4)`,
+        [
+          orderNumber,
+          changedBy,
+          JSON.stringify(changeDetails),
+          remarks || '提前退房办理'
+        ]
+      );
+      console.log(`📝 [earlyCheckout] 变更记录已保存到 order_changes 表`);
+    } catch (logError) {
+      console.warn(`⚠️ [earlyCheckout] 保存变更记录失败，但提前退房已完成:`, logError.message);
+    }
+
+    return {
+      success: true,
+      order: updatedOrder,
+      refund: {
+        recommended: recommendedRefund,
+        actual: finalRefund,
+        method: refundPayWay,
+        bill: refundBillRow
+      },
+      refundedStayDates
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error(`❌ [earlyCheckout] 提前退房失败:`, error);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * 办理入住：创建每日账单并更新订单状态
  * @param {string} orderId - 订单ID
  * @returns {Promise<Object>} - 包含创建的账单和更新后的订单
@@ -940,7 +1322,7 @@ async function checkInOrder(orderId) {
         change_price: averageDailyRate,
         change_type: '房费',
         pay_way: order.payment_method,
-        create_time: new Date(),
+        create_time: formatDateTimeForDB(),
         remarks: '办理入住创建',
         stay_type: order.stay_type,
         stay_date: stayDateStr
@@ -975,7 +1357,7 @@ async function checkInOrder(orderId) {
           change_price: Number(order.deposit),
           change_type: '收押',
           pay_way: order.payment_method,
-          create_time: new Date(),
+          create_time: formatDateTimeForDB(),
           remarks: '办理入住收押金',
           stay_type: order.stay_type,
           stay_date: stayDateStr
@@ -1042,6 +1424,220 @@ const table = {
 };
 
 /**
+ * 快速入住：在一个事务中创建已入住订单和相应账单
+ * @param {Object} orderData - 前端传递的订单数据
+ * @param {string} createdBy - 操作员用户名
+ * @returns {Promise<Object>} - 包含创建的订单和账单
+ */
+async function createCheckedInOrderWithTransaction(orderData, createdBy = 'system') {
+  // 1. 数据预处理和验证
+  console.log('🚀 [fastCheckIn] 开始快速入住流程, 操作人:', createdBy);
+  console.log('🛠️ [fastCheckIn] 输入原始数据:', JSON.stringify(orderData, null, 2));
+
+  // 强制设置订单状态为 'checked-in'
+  const dataForCreation = { ...orderData, status: 'checked-in' };
+
+  // 复用 createOrder 内部的验证逻辑
+  validateOrderData(dataForCreation);
+  console.log('✅ [fastCheckIn] 基础验证通过');
+
+  // 根据日期计算住宿类型
+  const stay_type = isRestRoom(dataForCreation) ? '休息房' : '客房';
+  dataForCreation.stay_type = stay_type;
+  console.log(`🏠 [fastCheckIn] 自动设置住宿类型: ${stay_type}`);
+
+  let client;
+  try {
+    client = await getClient();
+    await client.query('BEGIN');
+    console.log('事务开始');
+
+    // 2. 复用 createOrder 内部的冲突和可用性检查
+    const existingOrder = await checkExistingOrder(dataForCreation);
+    if (existingOrder) {
+      const error = new Error('订单重复');
+      error.code = 'DUPLICATE_ORDER';
+      error.statusCode = 409;
+      error.existingOrder = existingOrder;
+      throw error;
+    }
+
+    const roomQuery = 'SELECT * FROM rooms WHERE room_number = $1';
+    const roomResult = await client.query(roomQuery, [dataForCreation.room_number]);
+    if (roomResult.rows.length === 0) {
+      const error = new Error(`房间号 '${dataForCreation.room_number}' 不存在`);
+      error.code = 'INVALID_ROOM_NUMBER';
+      error.statusCode = 400;
+      throw error;
+    }
+    if (roomResult.rows[0].is_closed) {
+      const error = new Error(`房间 '${dataForCreation.room_number}' 已关闭，无法预订`);
+      error.code = 'ROOM_CLOSED';
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const conflictQuery = `
+        SELECT * FROM orders
+        WHERE room_number = $1
+        AND status NOT IN ('cancelled', 'checked-out')
+        AND check_in_date < $2
+        AND check_out_date > $3
+      `;
+    const conflictParams = [
+        dataForCreation.room_number,
+        dataForCreation.check_out_date,
+        dataForCreation.check_in_date
+      ];
+    const conflictResult = await client.query(conflictQuery, conflictParams);
+    if (conflictResult.rows.length > 0) {
+        const error = new Error(`房间 '${dataForCreation.room_number}' 在指定日期已被预订`);
+        error.code = 'ROOM_ALREADY_BOOKED';
+        error.statusCode = 409;
+        throw error;
+    }
+    console.log('✅ [fastCheckIn] 冲突和可用性检查通过');
+
+    // 3. 创建订单
+    const {
+      order_id, id_source, order_source, guest_name, phone,
+      room_type, room_number, check_in_date, check_out_date, status,
+      payment_method, total_price, deposit, create_time, remarks
+    } = dataForCreation;
+
+    const formattedCheckInDate = formatDate(check_in_date);
+    const formattedCheckOutDate = formatDate(check_out_date);
+
+    const insertOrderQuery = `
+      INSERT INTO orders (
+        order_id, id_source, order_source, guest_name, phone,
+        room_type, room_number, check_in_date, check_out_date, status,
+        payment_method, total_price, deposit, create_time, stay_type, remarks
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+      )
+      RETURNING *;
+    `;
+    const orderValues = [
+      order_id, id_source, order_source, guest_name, phone || '',
+      room_type, room_number, formattedCheckInDate, formattedCheckOutDate, status,
+      payment_method, calculateTotalPrice(total_price), deposit, formatDateTimeForDB(create_time), stay_type, remarks
+    ];
+
+    const orderResult = await client.query(insertOrderQuery, orderValues);
+    const newOrder = orderResult.rows[0];
+    console.log('✅ [fastCheckIn] 订单创建成功, order_id:', newOrder.order_id);
+
+    // 4. 创建账单 - 按每日创建房费账单
+    const createdBills = [];
+
+    // 4.1 计算住宿天数
+    const checkInDate = new Date(newOrder.check_in_date);
+    const checkOutDate = new Date(newOrder.check_out_date);
+    let stayDays = Math.ceil((checkOutDate - checkInDate) / (1000 * 60 * 60 * 24));
+
+    // 对于休息房等当天退房的情况（stayDays === 0），按1天计算
+    if (stayDays === 0) {
+      console.log(`📝 [fastCheckIn] 检测到休息房订单（同日入住退房），按1天计算`);
+      stayDays = 1;
+    } else if (stayDays < 0) {
+      const error = new Error('退房日期不能早于入住日期');
+      error.code = 'INVALID_DATES';
+      error.statusCode = 400;
+      throw error;
+    }
+
+    console.log(`🧮 [fastCheckIn] stayDays: ${stayDays}, total_price: ${newOrder.total_price}`);
+
+    // 4.2 计算每日房费（平均分摊）
+    const dailyPrice = stayDays > 0 ? Number((Number(newOrder.total_price) / stayDays).toFixed(2)) : 0;
+
+    // 4.3 为每一天创建房费账单
+    for (let i = 0; i < stayDays; i++) {
+      const stayDateEach = new Date(checkInDate);
+      stayDateEach.setDate(checkInDate.getDate() + i);
+      const stayDateStr = formatDate(stayDateEach);
+
+      const roomFeeBillResult = await client.query(
+        `INSERT INTO bills (order_id, room_number, guest_name, change_price, change_type, pay_way, create_time, remarks, stay_type, stay_date)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+        [
+          newOrder.order_id,
+          String(newOrder.room_number).slice(0, 10),
+          newOrder.guest_name,
+          dailyPrice,
+          setup.changeType.roomFee,
+          newOrder.payment_method,
+          formatDateTimeForDB(),
+          `第 ${i + 1} 天房费`,
+          newOrder.stay_type,
+          stayDateStr
+        ]
+      );
+      createdBills.push(roomFeeBillResult.rows[0]);
+    }
+    console.log(`✅ [fastCheckIn] 创建了 ${stayDays} 条房费账单`);
+
+    // 4.4 如果有押金，插入押金账单（仅在第一天创建）
+    const actualDeposit = Number(newOrder.deposit || 0);
+    if (actualDeposit > 0) {
+      const firstDayDate = formatDate(newOrder.check_in_date);
+      const depositBillResult = await client.query(
+        `INSERT INTO bills (order_id, room_number, guest_name, change_price, change_type, pay_way, create_time, remarks, stay_type, stay_date)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+        [
+          newOrder.order_id,
+          String(newOrder.room_number).slice(0, 10),
+          newOrder.guest_name,
+          actualDeposit,
+          setup.changeType.deposit,
+          newOrder.payment_method,
+          formatDateTimeForDB(),
+          '快速入住-押金',
+          newOrder.stay_type,
+          firstDayDate
+        ]
+      );
+      createdBills.push(depositBillResult.rows[0]);
+      console.log('✅ [fastCheckIn] 押金账单创建成功');
+    }
+
+    // 5. 更新房间状态为 'occupied'
+    await client.query("UPDATE rooms SET status = 'occupied' WHERE room_number = $1", [newOrder.room_number]);
+    console.log(`✅ [fastCheckIn] 房间 ${newOrder.room_number} 状态更新为 occupied`);
+
+    await client.query('COMMIT');
+    console.log('✅ [fastCheckIn] 事务提交成功');
+
+    return { order: newOrder, bills: createdBills };
+
+  } catch (error) {
+    if (client) {
+      await client.query('ROLLBACK');
+    }
+    console.error('❌ [fastCheckIn] 事务回滚:', error.message);
+    // 保持与路由层一致的错误抛出格式
+    if (!error.statusCode) {
+      error.statusCode = 500;
+    }
+    if (!error.code) {
+        if (/价格|日期|电话号码|押金|房型|房间号|预订|关闭/.test(error.message)) {
+            error.code = 'VALIDATION_ERROR';
+            error.statusCode = 400;
+        } else {
+            error.code = 'TRANSACTION_FAILED';
+        }
+    }
+    throw error;
+  } finally {
+    if (client) {
+      client.release();
+      console.log('数据库连接已释放');
+    }
+  }
+}
+
+/**
  * 更新订单和相关账单（联合事务）
  * @param {string} orderNumber - 订单号
  * @param {Object} updatedData - 更新数据
@@ -1064,6 +1660,24 @@ async function updateOrderWithBills(orderNumber, updatedData, billUpdates = {}, 
       throw new Error(`订单 ${orderNumber} 不存在`);
     }
 
+    const { rows: billColumnRows } = await client.query(
+      `SELECT column_name
+         FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'bills'`
+    );
+    const existingBillColumns = new Set(billColumnRows.map(row => row.column_name));
+    const hasChangePriceColumn = existingBillColumns.has('change_price');
+    const billFieldMap = {
+      room_fee: existingBillColumns.has('room_fee') ? 'room_fee' : (hasChangePriceColumn ? 'change_price' : null),
+      deposit: existingBillColumns.has('deposit') ? 'deposit' : null,
+      refund_deposit: existingBillColumns.has('refund_deposit') ? 'refund_deposit' : null,
+      total_income: existingBillColumns.has('total_income') ? 'total_income' : null,
+      pay_way: existingBillColumns.has('pay_way') ? 'pay_way' : null,
+      remarks: existingBillColumns.has('remarks') ? 'remarks' : null,
+      change_price: hasChangePriceColumn ? 'change_price' : null
+    };
+
     // 1. 更新账单表
     const billUpdateResults = [];
     for (const [stayDate, billData] of Object.entries(billUpdates)) {
@@ -1072,17 +1686,36 @@ async function updateOrderWithBills(orderNumber, updatedData, billUpdates = {}, 
 
         const updateFields = [];
         const values = [];
+        const skippedFields = [];
         let paramIndex = 1;
 
-        // 可更新的账单字段
-        const allowedBillFields = ['room_fee', 'deposit', 'refund_deposit', 'total_income', 'pay_way', 'remarks'];
+        Object.entries(billData).forEach(([field, rawValue]) => {
+          const normalizedField = typeof field === 'string' ? field.trim() : field;
+          let targetColumn = billFieldMap[normalizedField];
 
-        allowedBillFields.forEach(field => {
-          if (billData[field] !== undefined) {
-            updateFields.push(`${field} = $${paramIndex}`);
-            values.push(billData[field]);
-            paramIndex++;
+          if (!targetColumn && existingBillColumns.has(normalizedField)) {
+            targetColumn = normalizedField;
           }
+
+          if (!targetColumn) {
+            skippedFields.push(normalizedField);
+            console.warn(`⚠️ [updateOrderWithBills] 字段 ${normalizedField} 在 bills 表中不存在，已跳过`);
+            return;
+          }
+
+          let value = rawValue;
+          if (['room_fee', 'change_price', 'deposit', 'refund_deposit', 'total_income'].includes(targetColumn)) {
+            const parsed = Number(rawValue);
+            value = Number.isFinite(parsed) ? parsed : 0;
+          }
+
+          if (normalizedField === 'room_fee' && targetColumn === 'change_price') {
+            console.log('ℹ️ [updateOrderWithBills] 将 room_fee 映射为 change_price 字段');
+          }
+
+          updateFields.push(`${targetColumn} = $${paramIndex}`);
+          values.push(value);
+          paramIndex++;
         });
 
         if (updateFields.length > 0) {
@@ -1098,7 +1731,8 @@ async function updateOrderWithBills(orderNumber, updatedData, billUpdates = {}, 
           billUpdateResults.push({
             date: stayDate,
             updated: billResult.rows.length > 0,
-            data: billResult.rows[0] || null
+            data: billResult.rows[0] || null,
+            skippedFields
           });
 
           if (billResult.rows.length === 0) {
@@ -1106,12 +1740,23 @@ async function updateOrderWithBills(orderNumber, updatedData, billUpdates = {}, 
           } else {
             console.log(`✅ [updateOrderWithBills] 成功更新日期 ${stayDate} 的账单`);
           }
+        } else {
+          billUpdateResults.push({
+            date: stayDate,
+            updated: false,
+            data: null,
+            skippedFields
+          });
+          console.warn(`⚠️ [updateOrderWithBills] 日期 ${stayDate} 没有可更新字段，已跳过`);
         }
       }
     }
 
     // 2. 更新订单表
     let updatedOrder = oldOrder;
+    let paymentMethodUpdated = false;
+    let newPaymentMethod = null;
+
     if (updatedData && Object.keys(updatedData).length > 0) {
       const updates = [];
       const orderValues = [];
@@ -1119,18 +1764,23 @@ async function updateOrderWithBills(orderNumber, updatedData, billUpdates = {}, 
       let paramIndex = 1;
 
       // 处理可更新字段
-      const updateableFields = ['guest_name', 'phone', 'id_number', 'room_type',
+      const updateableFields = ['guest_name', 'phone', 'room_type',
                               'room_number', 'check_in_date', 'check_out_date',
                               'payment_method', 'total_price', 'deposit', 'remarks'];
 
       updateableFields.forEach(field => {
         if (updatedData[field] !== undefined) {
+          const nextValue = updatedData[field];
           updates.push(`${field} = $${paramIndex}`);
-          orderValues.push(updatedData[field]);
+          orderValues.push(nextValue);
           changes[field] = {
             old: oldOrder[field],
-            new: updatedData[field]
+            new: nextValue
           };
+          if (field === 'payment_method' && nextValue !== oldOrder[field]) {
+            paymentMethodUpdated = true;
+            newPaymentMethod = nextValue;
+          }
           paramIndex++;
         }
       });
@@ -1149,18 +1799,21 @@ async function updateOrderWithBills(orderNumber, updatedData, billUpdates = {}, 
         updatedOrder = orderResult;
 
         console.log(`📝 [updateOrderWithBills] 订单更新成功:`, changes);
+      }
+    }
 
-        // 记录变更到 order_changes 表
-        try {
-          const { query } = require('../database/postgreDB/pg');
-          await query(
-            `INSERT INTO order_changes (order_id, changed_by, changes, reason) VALUES ($1, $2, $3, $4)`,
-            [orderNumber, changedBy, JSON.stringify(changes), updatedData.reason || '订单和账单联合更新']
-          );
-          console.log(`📝 [updateOrderWithBills] 变更记录已保存到 order_changes 表`);
-        } catch (changeLogError) {
-          console.warn(`⚠️ [updateOrderWithBills] 保存变更记录失败，但订单更新成功:`, changeLogError.message);
-        }
+    if (paymentMethodUpdated) {
+      const { rowCount: syncedCount } = await client.query(
+        `UPDATE bills
+            SET pay_way = $1
+          WHERE order_id = $2
+            AND change_type = '房费'`,
+        [newPaymentMethod, orderNumber]
+      );
+      if (syncedCount > 0) {
+        console.log(`🧾 [updateOrderWithBills] 同步更新 ${syncedCount} 条房费账单支付方式 -> ${newPaymentMethod}`);
+      } else {
+        console.log('ℹ️ [updateOrderWithBills] 未找到需要同步支付方式的房费账单');
       }
     }
 
@@ -1182,7 +1835,10 @@ async function updateOrderWithBills(orderNumber, updatedData, billUpdates = {}, 
   }
 }
 
+
 // 添加新函数到导出对象
 table.updateOrderWithBills = updateOrderWithBills;
+table.createCheckedInOrderWithTransaction = createCheckedInOrderWithTransaction;
+table.earlyCheckout = earlyCheckout;
 
 module.exports = table;

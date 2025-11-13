@@ -14,6 +14,4 @@ COPY . .
 ENV NODE_ENV=dev
 ENV VITE_API_BASE=http://localhost:3000
 
-EXPOSE 9000
-
-CMD ["npm", "run", "dev"]
+EXPOSE 3000
