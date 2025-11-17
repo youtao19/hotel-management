@@ -1180,6 +1180,72 @@ describe('交接班接口集成测试', () => {
     expect(completeHandoverRes.body.data.recordCount).toBe(4);
   });
 
+  test('测试 11-02 开房数', async () => {
+    const targetDate = '2025-11-02';
+    const openCountRes = await request(app)
+      .get('/api/handover/special-stats')
+      .query({ date: targetDate });
+
+    expect(openCountRes.body).toHaveProperty('success', true);
+    expect(openCountRes.body.data.openCount).toBe(25);
+    expect(openCountRes.body.data.restCount).toBe(2);
+  })
+
+  test('测试 11-03 开房数', async () => {
+    const targetDate = '2025-11-03';
+    const openCountRes = await request(app)
+      .get('/api/handover/special-stats')
+      .query({ date: targetDate });
+
+    expect(openCountRes.body).toHaveProperty('success', true);
+    expect(openCountRes.body.data.openCount).toBe(28);
+    expect(openCountRes.body.data.restCount).toBe(1);
+  })
+
+  test('测试 11-04 开房数', async () => {
+    const targetDate = '2025-11-04';
+    const openCountRes = await request(app)
+      .get('/api/handover/special-stats')
+      .query({ date: targetDate });
+
+    expect(openCountRes.body).toHaveProperty('success', true);
+    expect(openCountRes.body.data.openCount).toBe(28);
+    expect(openCountRes.body.data.restCount).toBe(1);
+  })
+
+  test('测试 11-05 开房数', async () => {
+    const targetDate = '2025-11-05';
+    const openCountRes = await request(app)
+      .get('/api/handover/special-stats')
+      .query({ date: targetDate });
+
+    expect(openCountRes.body).toHaveProperty('success', true);
+    expect(openCountRes.body.data.openCount).toBe(31);
+    expect(openCountRes.body.data.restCount).toBe(1);
+  })
+
+  test('测试 11-06 开房数', async () => {
+    const targetDate = '2025-11-06';
+    const openCountRes = await request(app)
+      .get('/api/handover/special-stats')
+      .query({ date: targetDate });
+
+    expect(openCountRes.body).toHaveProperty('success', true);
+    expect(openCountRes.body.data.openCount).toBe(22);
+    expect(openCountRes.body.data.restCount).toBe(3);
+  })
+
+  test('测试 11-07 开房数', async () => {
+    const targetDate = '2025-11-07';
+    const openCountRes = await request(app)
+      .get('/api/handover/special-stats')
+      .query({ date: targetDate });
+
+    expect(openCountRes.body).toHaveProperty('success', true);
+    expect(openCountRes.body.data.openCount).toBe(33);
+    expect(openCountRes.body.data.restCount).toBe(2);
+  })
+
   afterAll(async () => {
     // 关闭数据库连接
     await query('TRUNCATE TABLE rooms RESTART IDENTITY CASCADE;');
