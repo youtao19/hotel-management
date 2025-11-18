@@ -4,8 +4,8 @@ const tableName = "bills";
 
 const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
     bill_id SERIAL PRIMARY KEY, -- 账单号
-    order_id VARCHAR(50) NOT NULL, -- 订单号
-    room_number VARCHAR(10) NOT NULL, -- 房间号
+    order_id VARCHAR(50), -- 订单号，允许为空以支持无订单的收入
+    room_number VARCHAR(10), -- 房间号，非客房收入可为空
     guest_name VARCHAR(50), -- 客人姓名
     change_price NUMERIC(10,2) DEFAULT 0, -- 统一金额字段（收入为正，支出为负）
     change_type TEXT, -- 类型：房费、收押、退押、补收、退款

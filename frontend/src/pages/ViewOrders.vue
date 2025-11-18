@@ -94,7 +94,7 @@
                   <q-tooltip>提前退房</q-tooltip>
                 </q-btn>
                 <q-btn flat round dense color="orange" icon="hotel_class" @click="openExtendStayDialog(props.row)"
-                  v-if="props.row.status === 'checked-out'">
+                  v-if="props.row.status === 'checked-out' || props.row.status === 'checked-in'">
                   <q-tooltip>续住</q-tooltip>
                 </q-btn>
                 <q-btn flat round dense color="purple" icon="account_balance_wallet" @click="openRefundDepositDialog(props.row)"
@@ -1077,10 +1077,12 @@ async function handleCheckInCompleted(checkInData) {
 async function openExtendStayDialog(order) {
   console.log('openExtendStayDialog function called for order:', order.orderNumber);
 
-  if (!order || order.status !== 'checked-out') {
+  const canExtend = ['checked-in', 'checked-out'].includes(order?.status);
+
+  if (!order || !canExtend) {
     $q.notify({
       type: 'negative',
-      message: '只有已退房的订单才能申请续住',
+      message: '只有已入住或已退房的订单才能办理续住',
       position: 'top'
     });
     return;

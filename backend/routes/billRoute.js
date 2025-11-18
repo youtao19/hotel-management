@@ -8,6 +8,8 @@ const ajv = new Ajv();
 const addFormats = require("ajv-formats");
 addFormats(ajv);
 
+const pay_way = ['现金', '微信', '微邮付', '平台'];
+
 const addBillSchema = {
   type: 'object',
   properties: {
@@ -17,13 +19,31 @@ const addBillSchema = {
       type: 'string',
       enum: ['房费', '收押', '退押', '补收', '退款']
     },
-    method: { type: 'string' },
+    method: { type: 'string',
+      enum: pay_way
+     },
     notes: { type: 'string' },
     refundTime: { type: 'string', format: 'date-time' }
   },
   required: ['order_id', 'change_price', 'change_type', 'method'],
   additionalProperties: false
 };
+
+const otherIncomeSchema = {
+  type: 'object',
+  properties: {
+    income_type: { type: 'string', minLength: 1 },
+    amount: { type: 'number' },
+    pay_way: { type: 'string', enum: pay_way },
+    income_date: { type: 'string', format: 'date-time' },
+    remarks: { type: 'string' },
+    guest_name: { type: 'string' }
+  },
+  required: ['income_type', 'amount', 'pay_way', 'income_date'],
+  additionalProperties: false
+};
+
+const validateOtherIncome = ajv.compile(otherIncomeSchema);
 
 // 获取所有账单
 router.get('/', async (req, res) => {
@@ -48,6 +68,90 @@ router.post('/add', async (req, res) => {
     res.status(201).json({ success: true, data: newBill });
   } catch (err) {
     res.status(500).json({ message: '添加账单失败', error: err.message });
+  }
+});
+
+// 添加其他收入账单（无订单号）
+router.post('/other-income', async (req, res) => {
+  try {
+    const valid = validateOtherIncome(req.body);
+    if (!valid) {
+      return res.status(400).json({ message: '请求数据格式不正确', errors: validateOtherIncome.errors });
+    }
+
+    const {
+      guest_name,
+      amount,
+      pay_way,
+      income_type,
+      income_date,
+      remarks
+    } = req.body;
+
+    const numericAmount = Number(amount);
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      return res.status(400).json({ message: 'amount 必须是大于 0 的数字' });
+    }
+
+    const incomeDateObj = income_date ? new Date(income_date) : new Date();
+    if (Number.isNaN(incomeDateObj.getTime())) {
+      return res.status(400).json({ message: 'income_date 格式不正确' });
+    }
+
+    const formatDateTimeForDB = (input) => {
+      const dateObj = input ? new Date(input) : new Date();
+      if (Number.isNaN(dateObj.getTime())) {
+        throw new Error(`无效的日期时间格式: ${input}`);
+      }
+      const year = dateObj.getFullYear();
+      const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const day = String(dateObj.getDate()).padStart(2, '0');
+      const hours = String(dateObj.getHours()).padStart(2, '0');
+      const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+      const seconds = String(dateObj.getSeconds()).padStart(2, '0');
+      const millis = String(dateObj.getMilliseconds()).padStart(3, '0');
+      const micros = `${millis}000`;
+      return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${micros}`;
+    };
+
+    const createTime = formatDateTimeForDB(incomeDateObj);
+    const stayDate = incomeDateObj.toISOString().split('T')[0];
+
+    const insertQuery = `
+      INSERT INTO bills (
+        order_id,
+        room_number,
+        guest_name,
+        change_price,
+        change_type,
+        pay_way,
+        create_time,
+        remarks,
+        stay_type,
+        stay_date
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+      RETURNING *
+    `;
+
+    const values = [
+      null, // order_id
+      null, // room_number
+      guest_name || '其他收入',
+      numericAmount, // 收入正数
+      income_type || '其他收入',
+      pay_way,
+      createTime,
+      remarks || '',
+      '租车收入',
+      stayDate
+    ];
+
+    const { rows } = await query(insertQuery, values);
+    const newBill = rows[0];
+
+    res.status(201).json({ success: true, data: newBill });
+  } catch (err) {
+    res.status(500).json({ message: '添加其他收入失败', error: err.message });
   }
 });
 

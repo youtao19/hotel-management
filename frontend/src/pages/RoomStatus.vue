@@ -6,188 +6,189 @@
       <!-- 页面标题 -->
       <!-- <h1 class="text-h4 q-mb-md">房间状态</h1> -->
 
-      <!-- 日期筛选器（始终显示） -->
-      <div class="date-filters q-mb-md">
-        <q-card flat bordered>
-          <q-card-section class="q-pa-md">
-            <div class="row q-col-gutter-md items-center">
-              <!-- 单个日期选择器 -->
-              <div class="col-md-6 col-sm-8 col-xs-12">
-                <q-input
-                  outlined
-                  dense
-                  label="查看指定日期房间状态"
-                  readonly
-                  :model-value="formattedSelectedDate || '点击选择日期'"
-                  placeholder="YYYY-MM-DD"
-                  clearable
-                  clear-icon="close"
-                  @clear="clearSelectedDate"
-                >
-                  <template v-slot:append>
-                    <q-icon name="event" class="cursor-pointer">
-                      <q-popup-proxy cover transition-show="scale" transition-hide="scale">
-                        <q-date
-                          v-model="selectedDate"
-                          default-view="Calendar"
-                          today-btn
-                          @update:model-value="onDateChange"
-                          :locale="langZhCn.date"
-                        >
-                          <div class="row items-center justify-end q-pa-sm">
-                            <q-btn v-close-popup label="确定" color="primary" flat />
-                          </div>
-                        </q-date>
-                      </q-popup-proxy>
-                    </q-icon>
-                  </template>
-                </q-input>
-              </div>
-
-              <!-- 查询按钮 -->
-              <div class="col-md-6 col-sm-4 col-xs-12">
-                <q-btn
-                  color="primary"
-                  icon="search"
-                  label="查询房间状态"
-                  @click="queryRoomStatus"
-                  :loading="roomStore.loading"
-                  class="full-width"
-                />
-              </div>
-            </div>
-          </q-card-section>
-        </q-card>
-      </div>
-
-
-
-    <!-- 简约筛选工具栏 -->
-    <div class="compact-filters q-mb-lg">
-      <q-card flat bordered>
-        <q-card-section class="q-pa-md">
-          <div class="row q-col-gutter-md items-center">
-            <!-- 房型选择 -->
-            <div class="col-lg-3 col-md-4 col-sm-6 col-xs-12">
-              <q-select
-                v-model="selectedRoomType"
-                :options="roomTypeSelectOptions"
-                label="房型筛选"
-                outlined
-                dense
-                emit-value
-                map-options
-                clearable
-                clear-icon="close"
-                @update:model-value="onRoomTypeSelect"
-              >
-                <template v-slot:prepend>
-                  <q-icon name="hotel" color="primary" />
-                </template>
-                <template v-slot:option="scope">
-                  <q-item v-bind="scope.itemProps">
-                    <q-item-section avatar>
-                      <q-icon :name="getRoomTypeIcon(scope.opt.value)" color="primary" />
-                    </q-item-section>
-                    <q-item-section>
-                      <q-item-label>{{ scope.opt.label }}</q-item-label>
-                      <q-item-label caption>
-                        可用: {{ roomStore.getAvailableRoomCountByType(scope.opt.value) }} /
-                        总数: {{ roomStore.getTotalRoomCountByType(scope.opt.value) }}
-                      </q-item-label>
-                    </q-item-section>
-                    <q-item-section side v-if="scope.opt.basePrice">
-                      <q-chip size="sm" color="primary" text-color="white">
-                        ￥{{ scope.opt.basePrice }}
-                      </q-chip>
-                    </q-item-section>
-                  </q-item>
-                </template>
-              </q-select>
-            </div>
-
-            <!-- 房间状态筛选 -->
-            <div class="col-lg-2 col-md-3 col-sm-6 col-xs-12">
-              <q-select
-                v-model="filterStatus"
-                :options="statusOptions"
-                label="状态筛选"
-                outlined
-                dense
-                emit-value
-                map-options
-                clearable
-                clear-icon="close"
-              >
-                <template v-slot:prepend>
-                  <q-icon name="assignment" color="secondary" />
-                </template>
-              </q-select>
-            </div>
-
-            <!-- 统计信息概览 -->
-            <div class="col-lg-4 col-md-5 col-sm-12 col-xs-12">
-              <div class="stats-overview">
-                <div class="row q-gutter-sm items-center">
-                  <div class="col-auto">
-                    <q-chip color="green" text-color="white" size="md" icon="check_circle">
-                      总可用: {{ totalAvailableRooms }}间
-                    </q-chip>
+      <div class="row q-col-gutter-lg items-stretch q-mb-lg filters-row">
+        <!-- 日期筛选器（始终显示） -->
+        <div class="col-12 col-lg-5">
+          <div class="date-filters h-100">
+            <q-card flat bordered class="filter-card date-card h-100">
+              <q-card-section class="q-pa-md">
+                <div class="row q-col-gutter-md items-center">
+                  <!-- 单个日期选择器 -->
+                  <div class="col-md-7 col-sm-8 col-xs-12">
+                    <q-input
+                      outlined
+                      dense
+                      label="查看指定日期房间状态"
+                      readonly
+                      :model-value="formattedSelectedDate || '点击选择日期'"
+                      placeholder="YYYY-MM-DD"
+                      clearable
+                      clear-icon="close"
+                      @clear="clearSelectedDate"
+                    >
+                      <template v-slot:append>
+                        <q-icon name="event" class="cursor-pointer">
+                          <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+                            <q-date
+                              v-model="selectedDate"
+                              default-view="Calendar"
+                              today-btn
+                              @update:model-value="onDateChange"
+                              :locale="langZhCn.date"
+                            >
+                              <div class="row items-center justify-end q-pa-sm">
+                                <q-btn v-close-popup label="确定" color="primary" flat />
+                              </div>
+                            </q-date>
+                          </q-popup-proxy>
+                        </q-icon>
+                      </template>
+                    </q-input>
                   </div>
-                  <div class="col-auto" v-if="selectedRoomType">
-                    <q-chip color="blue" text-color="white" size="md" :icon="getRoomTypeIcon(selectedRoomType)">
-                      {{ getSelectedRoomTypeName() }}: {{ roomStore.getAvailableRoomCountByType(selectedRoomType) }}间
-                    </q-chip>
-                  </div>
-                  <div class="col-auto" v-if="selectedRoomType && getSelectedRoomTypePrice()">
-                    <q-chip color="orange" text-color="white" size="md" icon="payments">
-                      ￥{{ getSelectedRoomTypePrice() }}/晚
-                    </q-chip>
-                  </div>
-                </div>
-              </div>
-            </div>
 
-            <!-- 快速切换和操作按钮 -->
-            <div class="col-lg-3 col-md-12 col-sm-12 col-xs-12">
-              <div class="quick-actions">
-                <div class="row q-gutter-xs items-center justify-end">
-                  <!-- 快速房型切换 -->
-                  <div class="col-auto">
-                    <q-btn-toggle
-                      v-model="selectedRoomType"
-                      :options="topRoomTypeToggleOptions"
+                  <!-- 查询按钮 -->
+                  <div class="col-md-5 col-sm-4 col-xs-12">
+                    <q-btn
                       color="primary"
-                      text-color="white"
-                      toggle-color="primary"
-                      size="sm"
-                      flat
-                      @update:model-value="onRoomTypeSelect"
+                      icon="search"
+                      label="查询房间状态"
+                      @click="queryRoomStatus"
+                      :loading="roomStore.loading"
+                      class="full-width search-btn"
                     />
                   </div>
-                  <!-- 重置按钮 -->
-                  <div class="col-auto">
-                    <q-btn
-                      outline
-                      color="grey"
-                      icon="restart_alt"
-                      size="sm"
-                      round
-                      @click="resetAllFilters"
+                </div>
+              </q-card-section>
+            </q-card>
+          </div>
+        </div>
+
+        <!-- 简约筛选工具栏 -->
+        <div class="col-12 col-lg-7">
+          <div class="compact-filters">
+            <q-card flat bordered class="filter-card h-100">
+              <q-card-section class="q-pa-md">
+                <div class="row q-col-gutter-md items-center">
+                  <!-- 房型选择 -->
+                  <div class="col-lg-3 col-md-4 col-sm-6 col-xs-12">
+                    <q-select
+                      v-model="selectedRoomType"
+                      :options="roomTypeSelectOptions"
+                      label="房型筛选"
+                      outlined
+                      dense
+                      emit-value
+                      map-options
+                      clearable
+                      clear-icon="close"
+                      @update:model-value="onRoomTypeSelect"
                     >
-                      <q-tooltip>重置所有筛选</q-tooltip>
-                    </q-btn>
+                      <template v-slot:prepend>
+                        <q-icon name="hotel" color="primary" />
+                      </template>
+                      <template v-slot:option="scope">
+                        <q-item v-bind="scope.itemProps">
+                          <q-item-section avatar>
+                            <q-icon :name="getRoomTypeIcon(scope.opt.value)" color="primary" />
+                          </q-item-section>
+                          <q-item-section>
+                            <q-item-label>{{ scope.opt.label }}</q-item-label>
+                            <q-item-label caption>
+                              可用: {{ roomStore.getAvailableRoomCountByType(scope.opt.value) }} /
+                              总数: {{ roomStore.getTotalRoomCountByType(scope.opt.value) }}
+                            </q-item-label>
+                          </q-item-section>
+                          <q-item-section side v-if="scope.opt.basePrice">
+                            <q-chip size="sm" color="primary" text-color="white">
+                              ￥{{ scope.opt.basePrice }}
+                            </q-chip>
+                          </q-item-section>
+                        </q-item>
+                      </template>
+                    </q-select>
+                  </div>
+
+                  <!-- 房间状态筛选 -->
+                  <div class="col-lg-2 col-md-3 col-sm-6 col-xs-12">
+                    <q-select
+                      v-model="filterStatus"
+                      :options="statusOptions"
+                      label="状态筛选"
+                      outlined
+                      dense
+                      emit-value
+                      map-options
+                      clearable
+                      clear-icon="close"
+                    >
+                      <template v-slot:prepend>
+                        <q-icon name="assignment" color="secondary" />
+                      </template>
+                    </q-select>
+                  </div>
+
+                  <!-- 统计信息概览 -->
+                  <div class="col-lg-4 col-md-5 col-sm-12 col-xs-12">
+                    <div class="stats-overview">
+                      <div class="row q-gutter-sm items-center">
+                        <div class="col-auto">
+                          <q-chip color="green" text-color="white" size="md" icon="check_circle">
+                            总可用: {{ totalAvailableRooms }}间
+                          </q-chip>
+                        </div>
+                        <div class="col-auto" v-if="selectedRoomType">
+                          <q-chip color="blue" text-color="white" size="md" :icon="getRoomTypeIcon(selectedRoomType)">
+                            {{ getSelectedRoomTypeName() }}: {{ roomStore.getAvailableRoomCountByType(selectedRoomType) }}间
+                          </q-chip>
+                        </div>
+                        <div class="col-auto" v-if="selectedRoomType && getSelectedRoomTypePrice()">
+                          <q-chip color="orange" text-color="white" size="md" icon="payments">
+                            ￥{{ getSelectedRoomTypePrice() }}/晚
+                          </q-chip>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- 快速切换和操作按钮 -->
+                  <div class="col-lg-3 col-md-12 col-sm-12 col-xs-12">
+                    <div class="quick-actions">
+                      <div class="row q-gutter-xs items-center justify-end">
+                        <!-- 快速房型切换 -->
+                        <div class="col-auto">
+                          <q-btn-toggle
+                            v-model="selectedRoomType"
+                            :options="topRoomTypeToggleOptions"
+                            color="primary"
+                            text-color="white"
+                            toggle-color="primary"
+                            size="sm"
+                            flat
+                            @update:model-value="onRoomTypeSelect"
+                          />
+                        </div>
+                        <!-- 重置按钮 -->
+                        <div class="col-auto">
+                          <q-btn
+                            outline
+                            color="grey"
+                            icon="restart_alt"
+                            size="sm"
+                            round
+                            @click="resetAllFilters"
+                          >
+                            <q-tooltip>重置所有筛选</q-tooltip>
+                          </q-btn>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
+              </q-card-section>
+            </q-card>
           </div>
-        </q-card-section>
-      </q-card>
-    </div>
-
-
-
+        </div>
+      </div>
 
 
     <!-- 房间网格视图部分 -->
@@ -2316,6 +2317,26 @@ async function showOrderRemarks(room) {
 .compact-filters .q-card {
   border-radius: 8px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+.filters-row .filter-card {
+  height: 100%;
+  border-radius: 12px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e5e7eb;
+}
+
+.filters-row .date-card {
+  background: linear-gradient(135deg, #f8fbff 0%, #eef5ff 100%);
+}
+
+.filters-row .filter-card .q-card-section {
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.filters-row .search-btn {
+  height: 42px;
 }
 
 .stats-overview .q-chip {

@@ -168,7 +168,7 @@ describe('账单金额调整接口', () => {
         order_id: TEST_ORDER_ID,
         change_price: 10,
         change_type: '补收',
-        method: '银行卡',
+        method: '平台',
         notes: '支付方式测试'
       };
 

@@ -181,6 +181,9 @@ export const billApi = {
   // 创建账单
   createBill: (billData) => api.post('/bills/add', billData),
 
+  // 创建其他收入
+  createOtherIncome: (payload) => api.post('/bills/other-income', payload),
+
   // 获得账单
   getBillByOrderId: (orderId) => api.get(`/bills/${orderId}`),
 
