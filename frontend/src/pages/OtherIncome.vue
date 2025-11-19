@@ -1,87 +1,126 @@
 <template>
   <q-page class="other-income-page">
-
-     <div class="q-pa-md">
+    <div class="q-pa-md other-income-header">
       <!-- 页面标题 -->
-      <h1 class="text-h4 q-mb-md">其他收入</h1>
-      <div class="text-caption text-grey-7 q-mt-xs">
-                录入租车或杂项收入
+      <h1 class="text-h4 q-mb-xs">其他收入</h1>
+      <div class="text-caption text-grey-7">
+        录入租车或杂项收入
       </div>
-     </div>
+    </div>
 
-     <q-card>
-       <q-card-section class="q-pa-lg">
-         <q-form @submit.prevent="handleSubmit" class="column q-gutter-lg">
-           <div class="row q-col-gutter-md">
-             <div class="col-12 col-md-6">
-               <q-input
-                 v-model="form.guestName"
-                 filled
-                 standout="bg-white text-primary"
-                 :input-style="inputStyle"
-                 stack-label
-                 label="客人姓名"
-                 placeholder="例如：张三"
-               />
-             </div>
-             <div class="col-12 col-md-6">
-               <q-input
-                 v-model.number="form.amount"
-                 type="number"
-                 filled
-                 standout="bg-white text-primary"
-                 :input-style="inputStyle"
-                 stack-label
-                 label="金额（正数收入，负数支出）"
-                 prefix="￥"
-                 @blur="formatAmount"
-               />
-             </div>
-           </div>
-
-           <div class="row q-col-gutter-md">
-             <div class="col-12 col-md-6">
-               <q-select
-                 v-model="form.payWay"
-                 :options="payWays"
-                 filled
-                 emit-value
-                 map-options
-                 standout="bg-white text-primary"
-                 :input-style="inputStyle"
-                 :popup-content-class="'rounded-popup'"
-                 stack-label
-                 label="支付方式"
-                 clearable
-               />
-             </div>
-             <div class="col-12 col-md-6">
-               <q-input
-                 v-model="form.incomeType"
-                 filled
-                 standout="bg-white text-primary"
-                 :input-style="inputStyle"
-                 stack-label
-                 label="收入类型"
-                 readonly
-               />
-             </div>
-           </div>
-
-           <div class="row q-col-gutter-md">
+    <div class="other-income-container q-pa-md">
+      <q-card class="other-income-card">
+        <q-card-section class="q-pa-xl">
+          <q-form @submit.prevent="handleSubmit" class="column q-gutter-lg">
+            <!-- 第一行：客人姓名 + 金额 -->
+            <div class="row q-col-gutter-lg">
               <div class="col-12 col-md-6">
+                <div class="text-subtitle2 text-grey-8 q-mb-xs">客人姓名</div>
                 <q-input
-                  v-model="form.incomeDateDisplay"
-                  filled
-                  standout="bg-white text-primary"
-                  :input-style="inputStyle"
-                  stack-label
-                  label="收入时间（含时分秒）"
+                  v-model="form.guestName"
+                  outlined
+                  dense
+                  color="primary"
+                  placeholder="例如：张三"
+                  bg-color="white"
+                >
+                  <template #prepend>
+                    <q-icon name="person" class="text-grey-5" />
+                  </template>
+                </q-input>
+              </div>
+              <div class="col-12 col-md-6">
+                <div class="text-subtitle2 text-grey-8 q-mb-xs">
+                  金额
+                  <span class="text-caption text-grey-5 text-weight-regular">
+                    （正数收入，负数支出）
+                  </span>
+                </div>
+                <q-input
+                  v-model.number="form.amount"
+                  type="number"
+                  outlined
+                  dense
+                  color="primary"
+                  placeholder="0.00"
+                  bg-color="white"
+                  @blur="formatAmount"
+                >
+                  <template #prepend>
+                    <span class="text-weight-bold text-grey-7">¥</span>
+                  </template>
+                </q-input>
+              </div>
+            </div>
+
+            <!-- 第二行：支付方式 + 收入类型 -->
+            <div class="row q-col-gutter-lg">
+              <div class="col-12 col-md-6">
+                <div class="text-subtitle2 text-grey-8 q-mb-xs">支付方式</div>
+                <q-select
+                  v-model="form.payWay"
+                  :options="payWays"
+                  outlined
+                  dense
+                  color="primary"
+                  emit-value
+                  map-options
+                  :popup-content-class="'rounded-popup'"
+                  clearable
+                  bg-color="white"
+                >
+                  <template #prepend>
+                    <q-icon name="credit_card" class="text-grey-5" />
+                  </template>
+                </q-select>
+              </div>
+              <div class="col-12 col-md-6">
+                <div class="text-subtitle2 text-grey-8 q-mb-xs">收入类型</div>
+                <q-input
+                  v-model="form.incomeType"
+                  outlined
+                  dense
+                  color="primary"
+                  bg-color="white"
                   readonly
                 >
+                  <template #prepend>
+                    <q-icon name="account_balance_wallet" class="text-grey-5" />
+                  </template>
+                </q-input>
+              </div>
+            </div>
+
+            <!-- 第三行：收入时间 -->
+            <div class="row q-col-gutter-lg">
+              <div class="col-12">
+                <div class="text-subtitle2 text-grey-8 q-mb-xs">收入时间</div>
+                <q-input
+                  v-model="form.incomeDateDisplay"
+                  outlined
+                  dense
+                  color="primary"
+                  bg-color="white"
+                  readonly
+                >
+                  <template #prepend>
+                    <q-icon name="event" class="cursor-pointer text-grey-5" />
+                  </template>
                   <template #append>
-                    <q-icon name="event" class="cursor-pointer">
-                      <q-popup-proxy cover transition-show="scale" transition-hide="scale" @before-show="syncDateTimeFields">
+                    <q-btn
+                      round
+                      dense
+                      flat
+                      icon="access_time"
+                      color="grey-7"
+                      class="date-icon-btn"
+                    >
+                      <q-popup-proxy
+                        cover
+                        transition-show="scale"
+                        transition-hide="scale"
+                        @before-show="syncDateTimeFields"
+                      >
                         <div class="q-pa-sm column q-gutter-sm" style="width: 320px">
                           <q-date v-model="datePart" mask="YYYY-MM-DD" minimal />
                           <q-time v-model="timePart" format24h with-seconds />
@@ -91,42 +130,55 @@
                           </div>
                         </div>
                       </q-popup-proxy>
-                    </q-icon>
+                    </q-btn>
                   </template>
                 </q-input>
               </div>
-              <div class="col-12 col-md-6">
-                <!-- 占位保持两列布局平衡，可用于未来扩展，如收款渠道备注 -->
-                <div class="placeholder-box"></div>
+            </div>
+
+            <!-- 备注 -->
+            <div class="row q-col-gutter-lg">
+              <div class="col-12">
+                <div class="text-subtitle2 text-grey-8 q-mb-xs">备注</div>
+                <q-input
+                  v-model="form.remarks"
+                  type="textarea"
+                  outlined
+                  :rows="4"
+                  color="primary"
+                  placeholder="补充说明，至少 3 行以内..."
+                  bg-color="white"
+                  counter
+                  :maxlength="200"
+                />
               </div>
             </div>
 
-           <q-input
-             v-model="form.remarks"
-             type="textarea"
-             filled
-             autogrow
-             standout="bg-white text-primary"
-             :input-style="inputStyle"
-             stack-label
-             label="备注"
-             placeholder="补充说明，至少 3 行以内"
-           />
-
-           <div class="q-mt-md flex flex-center">
-             <q-btn
-               unelevated
-               color="primary"
-               label="提交"
-               :loading="submitting"
-               type="submit"
-               class="submit-btn"
-             />
-           </div>
-         </q-form>
-       </q-card-section>
-     </q-card>
-
+            <!-- 底部按钮 -->
+            <div class="q-mt-lg q-pt-md row justify-end items-center q-gutter-sm border-top-grey">
+              <q-btn
+                flat
+                color="grey-7"
+                label="重置"
+                @click="resetForm"
+                class="q-px-md text-weight-regular"
+                no-caps
+              />
+              <q-btn
+                unelevated
+                color="primary"
+                label="提交录入"
+                :loading="submitting"
+                type="submit"
+                class="submit-btn q-px-lg"
+                icon="check"
+                no-caps
+              />
+            </div>
+          </q-form>
+        </q-card-section>
+      </q-card>
+    </div>
   </q-page>
 </template>
 
@@ -184,7 +236,6 @@ const form = ref({
 })
 
 const submitting = ref(false)
-const inputStyle = { borderRadius: '12px' }
 const datePart = ref(quasarDate.formatDate(new Date(), 'YYYY-MM-DD'))
 const timePart = ref(quasarDate.formatDate(new Date(), 'HH:mm:ss'))
 
@@ -279,19 +330,25 @@ async function handleSubmit() {
 
 <style scoped>
 .other-income-page {
-  max-width: 90%;
+  min-height: 100vh;
+  background-color: #f5f5f5;
+}
+
+.other-income-header {
+  max-width: 1120px;
   margin: 0 auto;
 }
 
-
-.form-wrapper {
-  width: 100%;
-  max-width: 980px;
+.other-income-container {
+  max-width: 1120px;
+  margin: 0 auto 32px;
 }
 
-.shadow-card {
-  border-radius: 14px;
-  box-shadow: 0 10px 24px rgba(33, 118, 255, 0.12);
+.other-income-card {
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  box-shadow: none;
+  background-color: #ffffff;
 }
 
 .submit-btn {
@@ -303,7 +360,7 @@ async function handleSubmit() {
   border-radius: 12px;
 }
 
-.placeholder-box {
-  min-height: 42px;
+.border-top-grey {
+  border-top: 1px solid #f0f0f0;
 }
 </style>
