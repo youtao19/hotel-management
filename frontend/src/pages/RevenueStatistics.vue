@@ -7,69 +7,102 @@
           <h1 class="text-h4 q-mb-none">收入统计</h1>
           <p class="text-subtitle1 text-grey-7 q-mb-none">酒店营收数据分析与统计</p>
         </div>
-        <div class="col-auto">
-          <q-btn
-            color="primary"
-            icon="refresh"
-            label="刷新数据"
-            @click="refreshAllData"
-            :loading="loading"
-          />
-        </div>
       </div>
 
-      <!-- 快速统计卡片 -->
+      <!-- 快速统计卡片（方案 A: 现代商务风格） -->
       <div class="row q-col-gutter-md q-mb-lg">
         <div class="col-lg-4 col-md-6 col-sm-12">
-          <q-card class="quick-stats-card">
-            <q-card-section class="bg-primary text-white">
-              <div class="text-h6">
-                <q-icon name="today" class="q-mr-sm" />
-                今日收入
-                <q-tooltip class="bg-white text-primary" anchor="bottom left" self="top left">
-                  按今日开房时间统计
-                </q-tooltip>
+          <q-card class="quick-stats-card modern-stat-card">
+            <q-card-section class="modern-stat-section">
+              <div class="modern-stat-header">
+                <div>
+                  <div class="modern-stat-title">今日收入</div>
+                  <div class="modern-stat-subtitle">按今日开房时间统计</div>
+                </div>
+                <div class="modern-stat-icon">
+                  <q-icon name="today" size="20px" />
+                </div>
               </div>
-            </q-card-section>
-            <q-card-section class="text-center">
-              <div class="text-h3 text-primary">¥{{ formatCurrency(quickStats.today?.total_revenue || 0) }}</div>
-              <div class="text-caption text-grey-7">订单数: {{ quickStats.today?.total_orders || 0 }}</div>
+
+              <div class="modern-stat-amount">
+                <span class="modern-stat-currency">¥</span>
+                <span class="modern-stat-value">
+                  {{ formatCurrency(quickStats.today?.total_revenue || 0) }}
+                </span>
+              </div>
+
+              <div class="modern-stat-footer">
+                <div class="modern-stat-orders">
+                  <span class="modern-stat-orders-count">
+                    {{ quickStats.today?.total_orders || 0 }}
+                  </span>
+                  <span class="modern-stat-orders-label">今日订单</span>
+                </div>
+              </div>
             </q-card-section>
           </q-card>
         </div>
 
         <div class="col-lg-4 col-md-6 col-sm-12">
-          <q-card class="quick-stats-card">
-            <q-card-section class="bg-green text-white">
-              <div class="text-h6">
-                <q-icon name="date_range" class="q-mr-sm" />
-                本周收入
-                <q-tooltip class="bg-white text-primary" anchor="bottom left" self="top left">
-                  按本周开房时间统计
-                </q-tooltip>
+          <q-card class="quick-stats-card modern-stat-card">
+            <q-card-section class="modern-stat-section">
+              <div class="modern-stat-header">
+                <div>
+                  <div class="modern-stat-title">本周收入</div>
+                  <div class="modern-stat-subtitle">按本周开房时间统计</div>
+                </div>
+                <div class="modern-stat-icon modern-stat-icon--week">
+                  <q-icon name="date_range" size="20px" />
+                </div>
               </div>
-            </q-card-section>
-            <q-card-section class="text-center">
-              <div class="text-h3 text-green">¥{{ formatCurrency(quickStats.thisWeek?.total_revenue || 0) }}</div>
-              <div class="text-caption text-grey-7">订单数: {{ quickStats.thisWeek?.total_orders || 0 }}</div>
+
+              <div class="modern-stat-amount">
+                <span class="modern-stat-currency">¥</span>
+                <span class="modern-stat-value">
+                  {{ formatCurrency(quickStats.thisWeek?.total_revenue || 0) }}
+                </span>
+              </div>
+
+              <div class="modern-stat-footer">
+                <div class="modern-stat-orders">
+                  <span class="modern-stat-orders-count">
+                    {{ quickStats.thisWeek?.total_orders || 0 }}
+                  </span>
+                  <span class="modern-stat-orders-label">本周订单</span>
+                </div>
+              </div>
             </q-card-section>
           </q-card>
         </div>
 
         <div class="col-lg-4 col-md-6 col-sm-12">
-          <q-card class="quick-stats-card">
-            <q-card-section class="bg-orange text-white">
-              <div class="text-h6">
-                <q-icon name="calendar_month" class="q-mr-sm" />
-                本月收入
-                <q-tooltip class="bg-white text-primary" anchor="bottom left" self="top left">
-                  按本月开房时间统计
-                </q-tooltip>
+          <q-card class="quick-stats-card modern-stat-card">
+            <q-card-section class="modern-stat-section">
+              <div class="modern-stat-header">
+                <div>
+                  <div class="modern-stat-title">本月收入</div>
+                  <div class="modern-stat-subtitle">按本月开房时间统计</div>
+                </div>
+                <div class="modern-stat-icon modern-stat-icon--month">
+                  <q-icon name="calendar_month" size="20px" />
+                </div>
               </div>
-            </q-card-section>
-            <q-card-section class="text-center">
-              <div class="text-h3 text-orange">¥{{ formatCurrency(quickStats.thisMonth?.total_revenue || 0) }}</div>
-              <div class="text-caption text-grey-7">订单数: {{ quickStats.thisMonth?.total_orders || 0 }}</div>
+
+              <div class="modern-stat-amount">
+                <span class="modern-stat-currency">¥</span>
+                <span class="modern-stat-value">
+                  {{ formatCurrency(quickStats.thisMonth?.total_revenue || 0) }}
+                </span>
+              </div>
+
+              <div class="modern-stat-footer">
+                <div class="modern-stat-orders">
+                  <span class="modern-stat-orders-count">
+                    {{ quickStats.thisMonth?.total_orders || 0 }}
+                  </span>
+                  <span class="modern-stat-orders-label">本月订单</span>
+                </div>
+              </div>
             </q-card-section>
           </q-card>
         </div>
@@ -97,7 +130,7 @@
                 dense
               />
             </div>
-            <div class="col-lg-3 col-md-4 col-sm-6 col-xs-12">
+            <div class="col-lg-2 col-md-4 col-sm-6 col-xs-12">
               <q-select
                 v-model="selectedPeriod"
                 :options="periodOptions"
@@ -108,288 +141,310 @@
                 map-options
               />
             </div>
-            <div class="col-lg-3 col-md-12 col-sm-6 col-xs-12">
-              <q-btn
-                color="primary"
-                icon="search"
-                label="查询"
-                @click="fetchRevenueData"
-                :loading="loading"
-                class="full-width"
-              />
+            <div class="col-lg-4 col-md-12 col-sm-12 col-xs-12">
+              <div class="row items-center justify-end q-gutter-sm filter-actions-row">
+                <div class="col-auto">
+                  <q-btn
+                    outline
+                    color="primary"
+                    label="今日"
+                    @click="setFilterToday"
+                  />
+                </div>
+                <div class="col-auto">
+                  <q-btn
+                    outline
+                    color="secondary"
+                    label="昨日"
+                    @click="setFilterYesterday"
+                  />
+                </div>
+                <div class="col-auto">
+                  <q-btn
+                    outline
+                    color="accent"
+                    label="本周"
+                    @click="setFilterThisWeek"
+                  />
+                </div>
+                <div class="col-auto">
+                  <q-btn
+                    outline
+                    color="orange"
+                    label="本月"
+                    @click="setFilterThisMonth"
+                  />
+                </div>
+                <div class="col-auto">
+                  <q-btn
+                    color="primary"
+                    icon="search"
+                    label="查询"
+                    @click="fetchRevenueAndReceipt"
+                    :loading="loading"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </q-card-section>
       </q-card>
 
-      <!-- 收入趋势图表 -->
-      <q-card class="q-mb-lg">
-        <q-card-section>
-          <div class="text-h6 q-mb-md">
-            <q-icon name="trending_up" class="q-mr-sm" />
-            收入趋势图
-            <q-tooltip class="bg-white text-primary" anchor="bottom left" self="top left">
-              <div class="text-body2">
-                <strong>统计说明</strong>：按开房时间统计收入数据
-              </div>
-            </q-tooltip>
-          </div>
-          <div class="chart-container" style="height: 400px;">
-            <canvas ref="revenueChart"></canvas>
-          </div>
-        </q-card-section>
-      </q-card>
-
-      <!-- 房型收入分布 -->
-      <div class="q-mb-lg">
-        <q-card>
-          <q-card-section>
-            <div class="text-h6 q-mb-md">
-              <q-icon name="hotel" class="q-mr-sm" />
-              房型收入分布
-              <q-tooltip class="bg-white text-primary" anchor="bottom left" self="top left">
-                <div class="text-body2">
-                  <strong>统计说明</strong>：按开房时间统计房型收入分布
+      <!-- 主内容布局：左侧房型 + 右侧每日明细与趋势 -->
+      <div class="row q-col-gutter-xl q-mb-lg">
+        <!-- 左侧：房型营收贡献 -->
+        <div class="col-12 col-lg-4">
+          <q-card>
+            <q-card-section>
+              <div class="row items-center justify-between q-mb-md">
+                <div class="text-h6">
+                  <q-icon name="hotel" class="q-mr-sm" />
+                  房型营收贡献
+                  <q-tooltip class="bg-white text-primary" anchor="bottom left" self="top left">
+                    <div class="text-body2">
+                      <strong>统计说明</strong>：按开房时间统计不同房型在当前日期范围内的收入贡献。
+                    </div>
+                  </q-tooltip>
                 </div>
-              </q-tooltip>
-            </div>
-            <div class="chart-container" style="height: 300px;">
-              <canvas ref="roomTypeChart"></canvas>
-            </div>
-          </q-card-section>
-        </q-card>
-      </div>
-
-      <!-- 收款明细表 -->
-      <q-card class="q-mb-lg">
-        <q-card-section>
-          <div class="row items-center justify-between q-mb-md">
-            <div class="text-h6">
-              <q-icon name="receipt_long" class="q-mr-sm" />
-              收款明细表
-              <q-tooltip class="bg-white text-primary" anchor="bottom left" self="top left">
-                <div class="text-body2">
-                  <strong>客房住宿</strong>：跨日期订单或房价>150元<br/>
-                  <strong>休息房</strong>：当日订单且房价≤150元<br/>
-                  <strong>查询范围</strong>：按开房时间筛选数据
-                </div>
-              </q-tooltip>
-            </div>
-            <div class="row q-gutter-xs items-center">
-              <div class="receipt-type-buttons">
                 <q-btn
-                  :color="receiptType === 'hotel' ? 'primary' : 'white'"
-                  :text-color="receiptType === 'hotel' ? 'white' : 'primary'"
-                  :outline="receiptType !== 'hotel'"
-                  unelevated
-                  size="sm"
-                  label="客房住宿"
-                  class="receipt-type-btn receipt-type-btn-left"
-                  @click="switchReceiptType('hotel')"
-                />
-                <q-btn
-                  :color="receiptType === 'rest' ? 'primary' : 'white'"
-                  :text-color="receiptType === 'rest' ? 'white' : 'primary'"
-                  :outline="receiptType !== 'rest'"
-                  unelevated
-                  size="sm"
-                  label="休息房"
-                  class="receipt-type-btn receipt-type-btn-right"
-                  @click="switchReceiptType('rest')"
-                />
-              </div>
-              <q-btn
-                color="primary"
-                icon="refresh"
-                size="sm"
-                round
-                @click="refreshReceiptDetails"
-                :loading="receiptLoading"
-              >
-                <q-tooltip>刷新明细</q-tooltip>
-              </q-btn>
-            </div>
-          </div>
-
-          <!-- 日期选择和筛选区域 -->
-          <div class="row q-col-gutter-md q-mb-md items-center">
-            <div class="col-md-3 col-xs-6">
-              <q-input
-                v-model="receiptSelectedDate"
-                filled
-                label="查看日期"
-                mask="####-##-##"
-                dense
-              >
-                <template v-slot:append>
-                  <q-icon name="event" class="cursor-pointer">
-                    <q-popup-proxy cover transition-show="scale" transition-hide="scale">
-                      <q-date
-                        v-model="receiptSelectedDate"
-                        @update:model-value="onReceiptDateChange"
-                        :locale="langZhCn.date"
-                      >
-                        <div class="row items-center justify-end">
-                          <q-btn v-close-popup label="确定" color="primary" flat />
-                        </div>
-                      </q-date>
-                    </q-popup-proxy>
-                  </q-icon>
-                </template>
-              </q-input>
-            </div>
-                         <div class="col-md-6 col-xs-12">
-               <div class="row q-gutter-sm receipt-date-controls">
-                <q-btn
-                  color="primary"
-                  icon="today"
-                  label="今天"
-                  size="sm"
-                  @click="setReceiptToday"
-                  :disable="receiptLoading"
-                />
-                <q-btn
-                  color="secondary"
-                  icon="skip_previous"
-                  label="昨天"
-                  size="sm"
-                  @click="setReceiptYesterday"
-                  :disable="receiptLoading"
-                />
-                <q-btn
-                  color="accent"
-                  icon="date_range"
-                  label="本周"
-                  size="sm"
-                  @click="setReceiptThisWeek"
-                  :disable="receiptLoading"
-                />
-                <q-btn
-                  color="orange"
-                  icon="calendar_month"
-                  label="本月"
-                  size="sm"
-                  @click="setReceiptThisMonth"
-                  :disable="receiptLoading"
-                />
-              </div>
-            </div>
-            <div class="col-md-3 col-xs-12">
-              <div class="row q-gutter-sm">
-
-                <q-chip
-                  :color="receiptIsToday ? 'positive' : 'info'"
-                  text-color="white"
-                  icon="date_range"
-                  size="sm"
-                >
-                  {{ formatReceiptDisplayDate(receiptSelectedDate) }}
-                </q-chip>
-              </div>
-            </div>
-          </div>
-
-          <!-- 收款明细表格 -->
-          <q-table
-            :rows="receiptDetails"
-            :columns="receiptColumns"
-            row-key="id"
-            :loading="receiptLoading"
-            v-model:pagination="receiptPagination"
-            :rows-per-page-options="[10, 20, 50, 100]"
-            dense
-            flat
-            bordered
-            class="receipt-table"
-          >
-            <!-- 自定义支付方式列 -->
-            <template v-slot:body-cell-paymentMethod="props">
-              <q-td :props="props">
-                <q-chip
-                  :color="getPaymentMethodColor(props.value)"
-                  text-color="white"
+                  v-if="selectedRoomType"
+                  flat
                   dense
                   size="sm"
+                  icon="close"
+                  label="清除筛选"
+                  class="text-grey-7"
+                  @click="clearSelectedRoomType"
+                />
+              </div>
+
+              <div v-if="displayRoomTypeData.length" class="column q-gutter-sm">
+                <div
+                  v-for="type in displayRoomTypeData"
+                  :key="type.room_type || type.type_name"
+                  class="room-type-item cursor-pointer"
+                  :class="{ 'room-type-item--active': selectedRoomType === type.room_type }"
+                  @click="toggleRoomType(type.room_type)"
                 >
-                  {{ props.value }}
-                </q-chip>
-              </q-td>
-            </template>
-
-            <!-- 自定义金额列 -->
-            <template v-slot:body-cell-roomFee="props">
-              <q-td :props="props" class="text-right">
-                <span class="text-weight-medium">¥{{ formatCurrency(props.value) }}</span>
-              </q-td>
-            </template>
-
-            <template v-slot:body-cell-deposit="props">
-              <q-td :props="props" class="text-right">
-                <span class="text-weight-medium">¥{{ formatCurrency(props.value) }}</span>
-              </q-td>
-            </template>
-
-            <template v-slot:body-cell-totalAmount="props">
-              <q-td :props="props" class="text-right">
-                <span class="text-weight-bold text-primary">¥{{ formatCurrency(props.value) }}</span>
-              </q-td>
-            </template>
-
-            <!-- 底部汇总行 -->
-            <template v-slot:bottom>
-              <div class="full-width q-pa-md bg-grey-1">
-                <div class="row items-center q-col-gutter-md">
-                  <div class="col-12 col-md-6">
-                    <div class="text-subtitle2 q-mb-sm">按支付方式统计：</div>
-                    <div class="row q-col-gutter-xs">
-                      <div v-for="(amount, method) in receiptPaymentSummary" :key="method" class="col-auto">
-                        <q-chip
-                          :color="getPaymentMethodColor(method)"
-                          text-color="white"
-                          size="sm"
-                        >
-                          {{ method }}：¥{{ formatCurrency(amount) }}
-                        </q-chip>
+                  <div class="row items-start justify-between q-mb-xs">
+                    <div>
+                      <div class="room-type-name">
+                        {{ type.type_name || type.room_type || '未命名房型' }}
+                        <span
+                          v-if="selectedRoomType === type.room_type"
+                          class="room-type-dot"
+                        />
+                      </div>
+                      <div class="text-caption text-grey-7 q-mt-xs">
+                        订单数：{{ type.order_count || 0 }}
+                        <span class="q-ml-md">
+                          平均每单：¥{{ formatCurrency(type.avg_revenue_per_order || 0) }}
+                        </span>
+                      </div>
+                    </div>
+                    <div class="text-right">
+                      <div class="text-subtitle1 text-primary text-weight-bold">
+                        ¥{{ formatCurrency(type.total_revenue || 0) }}
+                      </div>
+                      <div class="text-caption text-grey-7">
+                        {{ getRoomTypeShare(type) }}%
                       </div>
                     </div>
                   </div>
+                  <div class="room-type-progress">
+                    <div
+                      class="room-type-progress-bar"
+                      :style="{ width: `${getRoomTypeShare(type)}%` }"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div v-else class="text-caption text-grey-6">
+                暂无房型收入数据
+              </div>
+            </q-card-section>
+          </q-card>
+        </div>
 
-                  <div class="col-12 col-md-6">
-                    <div class="row items-center justify-end q-gutter-sm">
-                      <div class="text-caption text-grey-7 q-mr-md">共 {{ receiptDetails.length }} 条记录</div>
-                      <q-select
-                        v-model="receiptPagination.rowsPerPage"
-                        :options="[10, 20, 50, 100]"
-                        dense
-                        outlined
-                        style="width: 110px"
-                        :disable="receiptLoading"
-                        :emit-value="true"
-                        :map-options="true"
-                        :options-dense="true"
-                        :popup-content-class="'q-pa-xs'"
-                        :display-value="`${receiptPagination.rowsPerPage}/页`"
-                      />
-                      <q-pagination
-                        v-model="receiptPagination.page"
-                        :max="receiptMaxPage"
-                        max-pages="6"
-                        direction-links
-                        boundary-links
-                        dense
-                        :disable="receiptLoading || receiptMaxPage <= 1"
-                      />
+        <!-- 右侧：每日营收明细 + 收入趋势 -->
+        <div class="col-12 col-lg-8">
+          <!-- 每日营收明细（严格贴合 React 样式：仅标题 + 搜索 + 表格） -->
+          <q-card class="q-mb-lg daily-card">
+            <q-card-section>
+              <div class="row items-center justify-between q-mb-md daily-card__header">
+                <div class="col-auto">
+                  <div class="row items-center">
+                    <q-icon name="business" class="q-mr-sm text-primary" />
+                    <div class="column">
+                      <div class="daily-card__title">
+                        每日营收明细
+                        <span class="text-caption text-grey-7 q-ml-sm">
+                          （{{ activeRoomTypeLabel || '全部房型' }}）
+                        </span>
+                      </div>
                     </div>
-                    <div class="text-right q-mt-sm">
-                      <span class="text-subtitle2">总计：<span class="text-h6 text-primary">¥{{ formatCurrency(receiptTotalAmount) }}</span></span>
+                  </div>
+                </div>
+                <div class="col-auto">
+                  <div class="row items-center q-gutter-sm">
+                    <!-- 搜索房间号（前端过滤，参考 React 示例搜索框） -->
+                    <q-input
+                      v-model="receiptRoomSearch"
+                      dense
+                      outlined
+                      clearable
+                      debounce="0"
+                      placeholder="搜索房间号..."
+                      class="daily-card__search"
+                    >
+                      <template #prepend>
+                        <q-icon name="search" class="text-grey-5" />
+                      </template>
+                    </q-input>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 每日营收明细表格（React 风格：扁平表头 + 行样式） -->
+              <q-table
+                :rows="filteredReceiptDetails"
+                :columns="receiptColumns"
+                row-key="id"
+                :loading="receiptLoading"
+                v-model:pagination="receiptPagination"
+                :rows-per-page-options="[10, 20, 50, 100]"
+                flat
+                separator="horizontal"
+                class="receipt-table react-daily-table"
+              >
+                <!-- 自定义房号样式：圆角浅灰块 + 深色数字 -->
+                <template #body-cell-roomNumber="props">
+                  <q-td :props="props">
+                    <div class="daily-room-pill">
+                      {{ props.value }}
+                    </div>
+                  </q-td>
+                </template>
+
+                <!-- 自定义支付方式列 -->
+                <template v-slot:body-cell-paymentMethod="props">
+                  <q-td :props="props">
+                    <q-chip
+                      :color="getPaymentMethodColor(props.value)"
+                      text-color="white"
+                      dense
+                      size="sm"
+                    >
+                      {{ props.value }}
+                    </q-chip>
+                  </q-td>
+                </template>
+
+                <template v-slot:body-cell-totalAmount="props">
+                  <q-td :props="props" class="text-right">
+                    <span class="text-weight-bold text-dark">¥{{ formatCurrency(props.value) }}</span>
+                  </q-td>
+                </template>
+
+                <!-- 底部汇总行：使用当前筛选后的数据，并保留每页行数 + 翻页按钮 -->
+                <template v-slot:bottom>
+                  <div class="full-width q-pa-md bg-grey-1">
+                    <div class="row items-center q-col-gutter-md">
+                      <div class="col-12 col-md-6">
+                        <div class="text-subtitle2 q-mb-sm">按支付方式统计：</div>
+                        <div class="row q-col-gutter-xs">
+                          <div
+                            v-for="(amount, method) in receiptPaymentSummary"
+                            :key="method"
+                            class="col-auto"
+                          >
+                            <q-chip
+                              :color="getPaymentMethodColor(method)"
+                              text-color="white"
+                              size="sm"
+                            >
+                              {{ method }}：¥{{ formatCurrency(amount) }}
+                            </q-chip>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="col-12 col-md-6">
+                        <div class="row items-center justify-end q-gutter-sm">
+                          <div class="text-caption text-grey-7 q-mr-md">
+                            共 {{ filteredReceiptDetails.length }} 条记录
+                          </div>
+                          <q-select
+                            v-model="receiptPagination.rowsPerPage"
+                            :options="[10, 20, 50, 100]"
+                            dense
+                            outlined
+                            style="width: 110px"
+                            :disable="receiptLoading"
+                            :emit-value="true"
+                            :map-options="true"
+                            :options-dense="true"
+                            :popup-content-class="'q-pa-xs'"
+                            :display-value="`${receiptPagination.rowsPerPage}/页`"
+                          />
+                          <q-pagination
+                            v-model="receiptPagination.page"
+                            :max="receiptMaxPage"
+                            max-pages="6"
+                            direction-links
+                            boundary-links
+                            dense
+                            :disable="receiptLoading || receiptMaxPage <= 1"
+                          />
+                        </div>
+                        <div class="text-right q-mt-sm">
+                          <span class="text-subtitle2">
+                            总计：<span class="text-h6 text-primary">
+                              ¥{{ formatCurrency(receiptTotalAmount) }}
+                            </span>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+              </q-table>
+            </q-card-section>
+          </q-card>
+
+          <!-- 收入趋势图表（在每日营收明细下方，风格对齐 React 示例） -->
+          <q-card class="trend-card">
+            <q-card-section>
+              <div class="row items-center justify-between q-mb-md">
+                <div class="col-auto">
+                  <div class="row items-center">
+                    <q-icon name="trending_up" class="q-mr-sm text-primary" />
+                    <div class="column">
+                      <div class="text-subtitle1 text-weight-bold text-dark">
+                        {{ activeRoomTypeLabel ? `${activeRoomTypeLabel} - 营收趋势` : '全店营收趋势' }}
+                      </div>
+                      <div class="text-caption text-grey-6 q-mt-xs">
+                        数据按当前选择的统计周期与日期范围自动更新。
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-auto">
+                  <div class="row items-center q-gutter-xs">
+                    <div class="trend-legend-dot" />
+                    <div class="text-caption text-grey-7">
+                      {{ selectedPeriodLabel }}
                     </div>
                   </div>
                 </div>
               </div>
-            </template>
-          </q-table>
-        </q-card-section>
-      </q-card>
+              <div class="chart-container" style="height: 400px;">
+                <canvas ref="revenueChart"></canvas>
+              </div>
+            </q-card-section>
+          </q-card>
+        </div>
+      </div>
 
       <!-- 详细数据表格 -->
       <q-card>
@@ -478,6 +533,24 @@
                 {{ formatDateTime(props.value) }}
               </q-td>
             </template>
+
+            <!-- 查看备注：悬浮显示备注内容 -->
+            <template #body-cell-remarks="props">
+              <q-td :props="props">
+                <q-btn
+                  dense
+                  flat
+                  round
+                  icon="info"
+                  size="sm"
+                  :disable="!props.row.remarks"
+                >
+                  <q-tooltip v-if="props.row.remarks">
+                    {{ props.row.remarks }}
+                  </q-tooltip>
+                </q-btn>
+              </q-td>
+            </template>
           </q-table>
         </q-card-section>
       </q-card>
@@ -488,7 +561,7 @@
 <script setup>
 import { ref, computed, onMounted, nextTick, watch, onBeforeUnmount } from 'vue'
 import { useQuasar, date } from 'quasar'
-import { revenueApi } from '../api/index'
+import { revenueApi, roomApi } from '../api/index'
 import api from '../api/index'
 import Chart from 'chart.js/auto'
 import { useViewStore } from '../stores/viewStore'
@@ -506,6 +579,8 @@ const quickStats = ref({
 })
 const revenueData = ref([])
 const roomTypeData = ref([])
+const selectedRoomType = ref(null)
+const allRoomTypes = ref([])
 
 // 账单明细数据
 const billRows = ref([])
@@ -523,15 +598,16 @@ const billTableColumns = [
   { name: 'order_id', label: '订单ID', field: 'order_id', align: 'left' },
   { name: 'room_number', label: '房间号', field: 'room_number', align: 'center' },
   { name: 'guest_name', label: '客人姓名', field: 'guest_name', align: 'center' },
-  { name: 'change_price', label: '金额', field: 'change_price', align: 'right' },
-  { name: 'change_type', label: '金额类型', field: 'change_type', align: 'center' },
+  { name: 'create_time', label: '创建时间', field: 'create_time', align: 'center' },
   {
     name: 'pay_way',
     label: '支付方式',
     field: row => viewStore.getPaymentMethodName(row.pay_way) || row.pay_way,
     align: 'center'
   },
-  { name: 'create_time', label: '创建时间', field: 'create_time', align: 'center' }
+  { name: 'change_type', label: '金额类型', field: 'change_type', align: 'center' },
+  { name: 'change_price', label: '金额', field: 'change_price', align: 'right' },
+  { name: 'remarks', label: '备注', field: 'remarks', align: 'center' }
 ]
 
 // 收款明细表相关数据
@@ -540,11 +616,12 @@ const importLoading = ref(false)
 const receiptType = ref('hotel') // 'hotel' 或 'rest'
 const receiptDetails = ref([])
 const receiptSelectedDate = ref(date.formatDate(new Date(), 'YYYY-MM-DD')) // 当前选中的日期
+const receiptRoomSearch = ref('')
 
 // 收款明细分页
 const receiptPagination = ref({ page: 1, rowsPerPage: 10 })
 const receiptMaxPage = computed(() => {
-  const total = receiptDetails.value.length
+  const total = filteredReceiptDetails.value.length
   const per = receiptPagination.value.rowsPerPage || 10
   return Math.max(1, Math.ceil(total / per))
 })
@@ -574,10 +651,16 @@ let roomTypeChartInstance = null
 // 收款明细表格列定义
 const receiptColumns = [
   { name: 'roomNumber', label: '房号', field: 'room_number', align: 'center', style: 'width: 80px' },
+  {
+    name: 'roomType',
+    label: '房型',
+    field: row => row.room_type_name || row.room_type || '',
+    align: 'center',
+    style: 'width: 120px'
+  },
   { name: 'guestName', label: '客户姓名', field: 'guest_name', align: 'center', style: 'width: 100px' },
   { name: 'orderNumber', label: '单号', field: 'order_number', align: 'left', style: 'width: 120px' },
-  { name: 'roomFee', label: '房费', field: 'room_fee', align: 'right', style: 'width: 100px' },
-  { name: 'deposit', label: '押金', field: 'deposit', align: 'right', style: 'width: 100px' },
+  { name: 'stayDate', label: '入住日期', field: 'stay_date_display', align: 'center', style: 'width: 140px' },
   {
     name: 'paymentMethod',
     label: '支付方式',
@@ -585,18 +668,93 @@ const receiptColumns = [
     align: 'center',
     style: 'width: 100px'
   },
-  { name: 'totalAmount', label: '总额', field: 'total_amount', align: 'right', style: 'width: 120px' },
-  { name: 'stayDate', label: '入住日期', field: 'stay_date_display', align: 'center', style: 'width: 140px' }
+  { name: 'totalAmount', label: '实收金额', field: 'total_amount', align: 'right', style: 'width: 120px' }
 ]
 
-// 收款明细表计算属性
+// 展示用房型列表：始终包含所有房型，对没有收入的房型补 0
+const displayRoomTypeData = computed(() => {
+  if (!allRoomTypes.value.length) return roomTypeData.value
+
+  const aggMap = new Map()
+  roomTypeData.value.forEach(item => {
+    if (!item) return
+    const key = item.room_type || item.type_code
+    if (!key) return
+    aggMap.set(key, item)
+  })
+
+  return allRoomTypes.value.map(rt => {
+    const key = rt.type_code
+    const agg = aggMap.get(key)
+    if (agg) {
+      return {
+        room_type: key,
+        type_name: agg.type_name || rt.type_name,
+        order_count: Number(agg.order_count || 0),
+        total_revenue: Number(agg.total_revenue || 0),
+        avg_revenue_per_order: Number(agg.avg_revenue_per_order || 0),
+        total_room_fee: Number(agg.total_room_fee || 0),
+        total_deposit_refund: Number(agg.total_deposit_refund || 0)
+      }
+    }
+    return {
+      room_type: key,
+      type_name: rt.type_name,
+      order_count: 0,
+      total_revenue: 0,
+      avg_revenue_per_order: 0,
+      total_room_fee: 0,
+      total_deposit_refund: 0
+    }
+  })
+})
+
+// 当前选中房型名称（用于标题显示）
+const activeRoomTypeLabel = computed(() => {
+  if (!selectedRoomType.value) return ''
+  const found = displayRoomTypeData.value.find(item => item.room_type === selectedRoomType.value)
+  return found?.type_name || selectedRoomType.value
+})
+
+// 房型总收入（用于计算占比）
+const roomTypeTotalRevenue = computed(() => {
+  return displayRoomTypeData.value.reduce((sum, item) => sum + Number(item.total_revenue || 0), 0)
+})
+
+// 计算房型收入占比（保留 1 位小数）
+const getRoomTypeShare = (type) => {
+  const total = roomTypeTotalRevenue.value || 0
+  if (!total) return 0
+  const val = Number(type.total_revenue || 0)
+  return Math.round((val / total) * 1000) / 10
+}
+
+// 根据选中房型筛选每日收款明细
+const filteredReceiptDetails = computed(() => {
+  let list = receiptDetails.value
+
+  // 按房型筛选
+  if (selectedRoomType.value) {
+    list = list.filter(item => item.room_type === selectedRoomType.value)
+  }
+
+  // 按房间号搜索（参考 React 示例中的搜索框）
+  const keyword = (receiptRoomSearch.value || '').trim()
+  if (keyword) {
+    list = list.filter(item => String(item.room_number || '').includes(keyword))
+  }
+
+  return list
+})
+
+// 收款明细表计算属性（基于筛选后的数据）
 const receiptTotalAmount = computed(() => {
-  return receiptDetails.value.reduce((sum, item) => sum + (item.total_amount || 0), 0)
+  return filteredReceiptDetails.value.reduce((sum, item) => sum + (item.total_amount || 0), 0)
 })
 
 const receiptPaymentSummary = computed(() => {
   const summary = {}
-  receiptDetails.value.forEach(item => {
+  filteredReceiptDetails.value.forEach(item => {
     const methodValue = item.payment_method || 'cash'
     const methodLabel = viewStore.getPaymentMethodName(methodValue)
     summary[methodLabel] = (summary[methodLabel] || 0) + (item.total_amount || 0)
@@ -608,6 +766,16 @@ const receiptPaymentSummary = computed(() => {
 const receiptIsToday = computed(() => {
   const today = date.formatDate(new Date(), 'YYYY-MM-DD')
   return receiptSelectedDate.value === today
+})
+
+// 趋势图右上角标签（类似 React 示例中的时间范围文案）
+const selectedPeriodLabel = computed(() => {
+  const periodMap = {
+    daily: '每日统计',
+    weekly: '每周统计',
+    monthly: '每月统计'
+  }
+  return periodMap[selectedPeriod.value] || '统计周期'
 })
 
 // 工具函数
@@ -638,6 +806,16 @@ const formatDateTime = (dateTime) => {
   } catch (e) {
     return dateTime
   }
+}
+
+// 房型筛选相关
+const toggleRoomType = (roomTypeCode) => {
+  if (!roomTypeCode) return
+  selectedRoomType.value = selectedRoomType.value === roomTypeCode ? null : roomTypeCode
+}
+
+const clearSelectedRoomType = () => {
+  selectedRoomType.value = null
 }
 
 // 收款明细表日期格式化
@@ -798,22 +976,35 @@ const fetchRevenueData = async () => {
     console.log('开始获取收入数据...', {
       period: selectedPeriod.value,
       startDate: dateRange.value.start,
-      endDate: dateRange.value.end
+      endDate: dateRange.value.end,
+      roomType: selectedRoomType.value
     })
 
     let response
     switch (selectedPeriod.value) {
       case 'daily':
         console.log('调用每日收入API...')
-        response = await revenueApi.getDailyRevenue(dateRange.value.start, dateRange.value.end)
+        response = await revenueApi.getDailyRevenue(
+          dateRange.value.start,
+          dateRange.value.end,
+          selectedRoomType.value || undefined
+        )
         break
       case 'weekly':
         console.log('调用每周收入API...')
-        response = await revenueApi.getWeeklyRevenue(dateRange.value.start, dateRange.value.end)
+        response = await revenueApi.getWeeklyRevenue(
+          dateRange.value.start,
+          dateRange.value.end,
+          selectedRoomType.value || undefined
+        )
         break
       case 'monthly':
         console.log('调用每月收入API...')
-        response = await revenueApi.getMonthlyRevenue(dateRange.value.start, dateRange.value.end)
+        response = await revenueApi.getMonthlyRevenue(
+          dateRange.value.start,
+          dateRange.value.end,
+          selectedRoomType.value || undefined
+        )
         break
     }
 
@@ -852,6 +1043,22 @@ const fetchRevenueData = async () => {
     loading.value = false
     console.log('fetchRevenueData 完成')
   }
+}
+
+// 同步获取收入趋势 + 每日营收明细（按顶部日期范围）
+const fetchRevenueAndReceipt = async () => {
+  if (!dateRange.value.start || !dateRange.value.end) {
+    $q.notify({
+      type: 'warning',
+      message: '请选择日期范围',
+      position: 'top'
+    })
+    return
+  }
+  await Promise.all([
+    fetchRevenueData(),
+    fetchReceiptDetails(dateRange.value.start, dateRange.value.end)
+  ])
 }
 
 // 生成日期字符串列表 (YYYY-MM-DD) from start to end (inclusive)
@@ -915,6 +1122,38 @@ const fillMissingDailyData = (rows, start, end) => {
   }
 }
 
+// 顶部筛选：快速设置日期范围
+const setFilterToday = () => {
+  const today = date.formatDate(new Date(), 'YYYY-MM-DD')
+  dateRange.value.start = today
+  dateRange.value.end = today
+}
+
+const setFilterYesterday = () => {
+  const yesterday = date.subtractFromDate(new Date(), { days: 1 })
+  const y = date.formatDate(yesterday, 'YYYY-MM-DD')
+  dateRange.value.start = y
+  dateRange.value.end = y
+}
+
+const setFilterThisWeek = () => {
+  const today = new Date()
+  const currentDay = today.getDay() // 0为周日，1为周一
+  const mondayOffset = currentDay === 0 ? -6 : 1 - currentDay
+  const monday = date.addToDate(today, { days: mondayOffset })
+  const sunday = date.addToDate(monday, { days: 6 })
+  dateRange.value.start = date.formatDate(monday, 'YYYY-MM-DD')
+  dateRange.value.end = date.formatDate(sunday, 'YYYY-MM-DD')
+}
+
+const setFilterThisMonth = () => {
+  const today = new Date()
+  const firstDayOfMonth = date.startOfDate(today, 'month')
+  const lastDayOfMonth = date.endOfDate(today, 'month')
+  dateRange.value.start = date.formatDate(firstDayOfMonth, 'YYYY-MM-DD')
+  dateRange.value.end = date.formatDate(lastDayOfMonth, 'YYYY-MM-DD')
+}
+
 // 更新图表
 const updateCharts = () => {
   updateRevenueChart()
@@ -944,8 +1183,6 @@ const updateRevenueChart = () => {
   }).reverse()
 
   const revenues = revenueData.value.map(item => item.total_revenue || 0).reverse()
-  const orders = revenueData.value.map(item => item.order_count || 0).reverse()
-  const bills = revenueData.value.map(item => item.bill_count || 0).reverse()
 
   revenueChartInstance = new Chart(ctx, {
     type: 'line',
@@ -955,26 +1192,9 @@ const updateRevenueChart = () => {
         {
           label: '收入金额',
           data: revenues,
-          borderColor: 'rgb(25, 118, 210)',
-          backgroundColor: 'rgba(25, 118, 210, 0.1)',
+          borderColor: '#6366f1',
+          backgroundColor: 'rgba(99, 102, 241, 0.12)',
           yAxisID: 'y',
-          tension: 0.4
-        },
-        {
-          label: '订单数量',
-          data: orders,
-          borderColor: 'rgb(76, 175, 80)',
-          backgroundColor: 'rgba(76, 175, 80, 0.1)',
-          yAxisID: 'y1',
-          tension: 0.4
-        },
-        {
-          label: '账单数量',
-          data: bills,
-          borderColor: 'rgb(255, 152, 0)',
-          backgroundColor: 'rgba(255, 152, 0, 0.1)',
-          yAxisID: 'y1',
-          borderDash: [6,4],
           tension: 0.4
         }
       ]
@@ -992,6 +1212,13 @@ const updateRevenueChart = () => {
           title: {
             display: true,
             text: '时间'
+          },
+          grid: {
+            color: '#f1f5f9',
+            drawBorder: false
+          },
+          ticks: {
+            color: '#64748b'
           }
         },
         y: {
@@ -1005,30 +1232,23 @@ const updateRevenueChart = () => {
           ticks: {
             callback: function(value) {
               return '¥' + formatCurrency(value)
-            }
-          }
-        },
-        y1: {
-          type: 'linear',
-          display: true,
-          position: 'right',
-          title: {
-            display: true,
-            text: '订单数量'
+            },
+            color: '#64748b'
           },
           grid: {
-            drawOnChartArea: false,
-          },
+            color: '#f1f5f9',
+            drawBorder: false
+          }
         }
       },
       plugins: {
+        legend: {
+          display: false
+        },
         tooltip: {
           callbacks: {
             label: function(context) {
-              if (context.dataset.label === '收入金额') return `收入: ¥${formatCurrency(context.parsed.y)}`
-              if (context.dataset.label === '订单数量') return `订单: ${context.parsed.y}单`
-              if (context.dataset.label === '账单数量') return `账单: ${context.parsed.y}张`
-              return `${context.dataset.label}: ${context.parsed.y}`
+              return `收入: ¥${formatCurrency(context.parsed.y)}`
             }
           }
         }
@@ -1101,13 +1321,12 @@ const generateSampleReceiptData = (type) => {
 
 // 获取支付方式对应的颜色
 const getPaymentMethodColor = (method) => {
-  const colors = {
-    [viewStore.paymentMethodOptions[0].label]: 'orange',  // 微邮付
-    [viewStore.paymentMethodOptions[1].label]: 'green-7', // 微信
-    [viewStore.paymentMethodOptions[2].label]: 'green',   // 现金
-    '其他': 'grey'
-  }
-  return colors[method] || 'grey'
+  const label = String(method || '').trim()
+  if (label === '现金') return 'orange'      // 现金：橘色
+  if (label === '微信') return 'green'       // 微信：绿色
+  if (label === '微邮付') return 'primary'   // 微邮付：蓝色
+  if (label === '平台') return 'grey-7'      // 平台：灰色
+  return 'grey'
 }
 
 // 获取收款明细
@@ -1272,21 +1491,17 @@ onBeforeUnmount(() => {
 })
 
 
-// 刷新所有数据
-const refreshAllData = async () => {
-  await Promise.all([
-    fetchQuickStats(),
-    fetchRevenueData(),
-    fetchReceiptDetails(),
-    fetchBillDetails()
-  ])
-}
-
 // 组件挂载时初始化
 onMounted(async () => {
   await fetchQuickStats()
+  try {
+    const rtRes = await roomApi.getRoomTypes()
+    allRoomTypes.value = rtRes.data || []
+  } catch (e) {
+    console.error('获取房型列表失败:', e)
+  }
   await fetchRevenueData()
-  await fetchReceiptDetails()
+  await fetchReceiptDetails(dateRange.value.start, dateRange.value.end)
   await fetchBillDetails()
 })
 
@@ -1300,7 +1515,7 @@ const scheduleRevenueFetch = () => {
   // 避免频繁请求，做简单防抖
   if (dateRangeFetchTimer) clearTimeout(dateRangeFetchTimer)
   dateRangeFetchTimer = setTimeout(() => {
-    fetchRevenueData()
+    fetchRevenueAndReceipt()
   }, 400)
 }
 
@@ -1313,6 +1528,13 @@ watch([
   () => dateRange.value.end
 ], () => {
   scheduleRevenueFetch()
+})
+
+watch(() => selectedRoomType.value, () => {
+  // 切换房型时联动更新趋势图
+  scheduleRevenueFetch()
+  // 同时重置每日明细分页到第一页
+  receiptPagination.value.page = 1
 })
 
 // 将 hasMounted 设为 true，避免初次挂载时 watch 重复触发一次
@@ -1329,26 +1551,327 @@ onMounted(() => {
 }
 
 .quick-stats-card {
-  height: 140px;
+  height: auto;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
-  border-radius: 12px;
+  border-radius: 24px;
   overflow: hidden;
 }
 
 .quick-stats-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06);
+}
+
+/* 顶部统计卡片 - 方案 A: 现代商务风格 */
+.modern-stat-card {
+  position: relative;
+  overflow: hidden;
+  background-color: #ffffff;
+  border-radius: 1.25rem;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 2px 15px -3px rgba(0, 0, 0, 0.07),
+    0 10px 20px -2px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.3s ease, transform 0.3s ease;
+}
+
+.modern-stat-card:hover {
+  box-shadow: 0 22px 45px rgba(15, 23, 42, 0.12);
+}
+
+.modern-stat-section {
+  padding: 24px;
+}
+
+.modern-stat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.modern-stat-title {
+  font-size: 14px;
+  color: #6b7280;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.modern-stat-subtitle {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.modern-stat-icon {
+  padding: 8px;
+  border-radius: 0.75rem;
+  background-color: #eef2ff;
+  color: #4f46e5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.3s ease;
+}
+
+.modern-stat-card:hover .modern-stat-icon {
+  transform: scale(1.08);
+}
+
+.modern-stat-icon--week {
+  background-color: #ecfdf5;
+  color: #059669;
+}
+
+.modern-stat-icon--month {
+  background-color: #fff7ed;
+  color: #ea580c;
+}
+
+.modern-stat-amount {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.modern-stat-currency {
+  font-size: 20px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.modern-stat-value {
+  font-size: 34px;
+  font-weight: 700;
+  color: #111827;
+  letter-spacing: -0.03em;
+}
+
+.modern-stat-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.modern-stat-orders {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modern-stat-orders-count {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background-color: #f3f4f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #4b5563;
+}
+
+.modern-stat-orders-label {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.modern-stat-link {
+  opacity: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: #4f46e5;
+  transition: opacity 0.3s ease;
+  padding: 0;
+  min-width: 0;
+}
+
+.modern-stat-card:hover .modern-stat-link {
+  opacity: 1;
 }
 
 .chart-container {
   position: relative;
   background: white;
-  border-radius: 8px;
+  border-radius: 16px;
   padding: 16px;
 }
 
 .revenue-table {
   border-radius: 8px;
+}
+
+/* 顶部统计卡片 React 风格 */
+.react-stat-card {
+  background-color: #ffffff;
+  border: 1px solid #e5edf8;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.04);
+}
+
+.react-stat-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  background-color: #eef2ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #4f46e5;
+  font-size: 24px;
+}
+
+.react-stat-title {
+  font-size: 14px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.react-stat-subtitle {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.react-stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #111827;
+}
+
+/* 每日营收卡片（React 风格：大圆角白卡） */
+.daily-card {
+  border-radius: 24px;
+  border: 1px solid #e5edf8;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06);
+}
+
+.daily-card__header {
+  margin-bottom: 16px;
+}
+
+.daily-card__search {
+  min-width: 180px;
+}
+
+.daily-card__title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+/* 趋势图卡片（React 风格） */
+.trend-card {
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.06);
+}
+
+.trend-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background-color: #6366f1;
+}
+
+/* 顶部筛选区域：防止快捷按钮与查询按钮换行 */
+.filter-actions-row {
+  flex-wrap: nowrap;
+}
+
+/* React 风格的每日营收表格 */
+.react-daily-table :deep(.q-table__top) {
+  display: none;
+}
+
+.react-daily-table :deep(.q-table__middle) {
+  border-radius: 16px;
+}
+
+.react-daily-table :deep(thead tr) {
+  background-color: #f8fafc;
+}
+
+.react-daily-table :deep(th) {
+  font-weight: 600;
+  color: #64748b;
+  padding: 12px 24px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.react-daily-table :deep(td) {
+  padding: 16px 24px;
+  color: #1e293b;
+}
+
+.react-daily-table :deep(tbody tr:hover) {
+  background-color: #f8fafc;
+}
+
+.daily-room-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  background-color: #e5edf8;
+  color: #0f172a;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+/* 房型营收卡片样式（参考 React 设计风格） */
+.room-type-item {
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  padding: 12px 14px;
+  background-color: #ffffff;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.room-type-item:hover {
+  border-color: #6366f1;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
+  transform: translateY(-2px);
+}
+
+.room-type-item--active {
+  border-color: #4f46e5;
+  box-shadow: 0 10px 22px rgba(79, 70, 229, 0.22);
+  background: linear-gradient(135deg, #eef2ff, #ffffff);
+}
+
+.room-type-name {
+  font-weight: 600;
+  color: #0f172a;
+  display: inline-flex;
+  align-items: center;
+}
+
+.room-type-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background-color: #4f46e5;
+  margin-left: 6px;
+}
+
+.room-type-progress {
+  margin-top: 8px;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background-color: #e5e7eb;
+  overflow: hidden;
+}
+
+.room-type-progress-bar {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #6366f1, #22c55e);
+  transition: width 0.4s ease;
 }
 
 /* 卡片样式优化 */

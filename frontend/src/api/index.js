@@ -251,13 +251,16 @@ export const reviewApi = {
 // 收入统计相关接口
 export const revenueApi = {
   // 获取每日收入统计
-  getDailyRevenue: (startDate, endDate) => api.get('/revenue/daily', { params: { startDate, endDate } }),
+  getDailyRevenue: (startDate, endDate, roomType) =>
+    api.get('/revenue/daily', { params: { startDate, endDate, roomType } }),
 
   // 获取每周收入统计
-  getWeeklyRevenue: (startDate, endDate) => api.get('/revenue/weekly', { params: { startDate, endDate } }),
+  getWeeklyRevenue: (startDate, endDate, roomType) =>
+    api.get('/revenue/weekly', { params: { startDate, endDate, roomType } }),
 
   // 获取每月收入统计
-  getMonthlyRevenue: (startDate, endDate) => api.get('/revenue/monthly', { params: { startDate, endDate } }),
+  getMonthlyRevenue: (startDate, endDate, roomType) =>
+    api.get('/revenue/monthly', { params: { startDate, endDate, roomType } }),
 
   // 获取收入概览统计
   getRevenueOverview: (startDate, endDate) => api.get('/revenue/overview', { params: { startDate, endDate } }),

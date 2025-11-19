@@ -17,7 +17,7 @@ router.get('/daily', async (req, res) => {
     console.log('📊 收到每日收入统计请求');
     console.log('请求参数:', req.query);
     try {
-        const { startDate, endDate } = req.query;
+        const { startDate, endDate, roomType } = req.query;
 
         // 参数验证
         if (!startDate || !endDate) {
@@ -38,8 +38,8 @@ router.get('/daily', async (req, res) => {
             });
         }
 
-        console.log('📅 开始获取每日收入数据:', { startDate, endDate });
-        const dailyRevenue = await getDailyRevenue(startDate, endDate);
+        console.log('📅 开始获取每日收入数据:', { startDate, endDate, roomType });
+        const dailyRevenue = await getDailyRevenue(startDate, endDate, roomType);
         console.log('✅ 每日收入数据获取成功:', dailyRevenue.length, '条记录');
 
         res.json({
@@ -48,7 +48,8 @@ router.get('/daily', async (req, res) => {
             period: {
                 startDate,
                 endDate,
-                type: 'daily'
+                type: 'daily',
+                roomType: roomType || null
             }
         });
     } catch (error) {
@@ -66,7 +67,7 @@ router.get('/daily', async (req, res) => {
  */
 router.get('/weekly', async (req, res) => {
     try {
-        const { startDate, endDate } = req.query;
+        const { startDate, endDate, roomType } = req.query;
 
         // 参数验证
         if (!startDate || !endDate) {
@@ -85,7 +86,7 @@ router.get('/weekly', async (req, res) => {
             });
         }
 
-        const weeklyRevenue = await getWeeklyRevenue(startDate, endDate);
+        const weeklyRevenue = await getWeeklyRevenue(startDate, endDate, roomType);
 
         res.json({
             message: '获取每周收入统计成功',
@@ -93,7 +94,8 @@ router.get('/weekly', async (req, res) => {
             period: {
                 startDate,
                 endDate,
-                type: 'weekly'
+                type: 'weekly',
+                roomType: roomType || null
             }
         });
     } catch (error) {
@@ -111,7 +113,7 @@ router.get('/weekly', async (req, res) => {
  */
 router.get('/monthly', async (req, res) => {
     try {
-        const { startDate, endDate } = req.query;
+        const { startDate, endDate, roomType } = req.query;
 
         // 参数验证
         if (!startDate || !endDate) {
@@ -130,7 +132,7 @@ router.get('/monthly', async (req, res) => {
             });
         }
 
-        const monthlyRevenue = await getMonthlyRevenue(startDate, endDate);
+        const monthlyRevenue = await getMonthlyRevenue(startDate, endDate, roomType);
 
         res.json({
             message: '获取每月收入统计成功',
@@ -138,7 +140,8 @@ router.get('/monthly', async (req, res) => {
             period: {
                 startDate,
                 endDate,
-                type: 'monthly'
+                type: 'monthly',
+                roomType: roomType || null
             }
         });
     } catch (error) {

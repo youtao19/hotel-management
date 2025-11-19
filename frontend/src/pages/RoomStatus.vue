@@ -58,7 +58,7 @@
                   dense
                   emit-value
                   map-options
-                  clearable
+                  :clearable="showRoomTypeClear"
                   clear-icon="close"
                   input-class="filter-input"
                   popup-content-class="rounded-popup"
@@ -81,7 +81,7 @@
                   dense
                   emit-value
                   map-options
-                  clearable
+                  :clearable="showStatusClear"
                   clear-icon="close"
                   input-class="filter-input"
                   popup-content-class="rounded-popup"
@@ -113,7 +113,6 @@
                     </q-chip>
                   </div>
                   <div class="col-auto flex items-center q-gutter-sm">
-                    <q-btn flat color="primary" label="全部" class="text-btn" @click="resetAllFilters" />
                     <q-btn
                       outline
                       color="grey"
@@ -513,6 +512,10 @@ const selectedDate = ref(todayStr) // 当前选择的查询日期；默认当天
 
 // 添加简约界面相关的响应式数据
 const selectedRoomType = ref(null)  // 当前选中的房型
+
+// 清除按钮显示控制：只有选择了具体房型/状态时才显示
+const showRoomTypeClear = computed(() => selectedRoomType.value !== null)
+const showStatusClear = computed(() => filterStatus.value !== null)
 
 // 房间日历相关的响应式数据
 const showCalendarDialog = ref(false)

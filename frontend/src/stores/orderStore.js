@@ -90,6 +90,17 @@ export const useOrderStore = defineStore('order', () => {
     return viewStore.formatDate(dateString)
   }
 
+  function normalizeOrderSource(source) {
+    if (!source) return 'front_desk'
+    if (typeof source === 'string') return source
+    if (typeof source === 'object') {
+      if (source.value != null) return source.value.toString()
+      if (source.code != null) return source.code.toString()
+      if (source.label != null) return source.label.toString()
+    }
+    return source.toString() || 'front_desk'
+  }
+
   async function addOrder(order) {
     try {
       loading.value = true
@@ -182,7 +193,7 @@ export const useOrderStore = defineStore('order', () => {
         total_price: order.roomPrice,
         deposit: parseFloat(order.deposit) || 0,
         remarks: order.remarks?.toString() || '',
-        order_source: order.source?.toString() || 'front_desk',
+        order_source: normalizeOrderSource(order.source),
         id_source: order.sourceNumber?.toString() || '',
         create_time: new Date().toISOString(),
         is_prepaid: isPrepaid,
@@ -595,7 +606,7 @@ export const useOrderStore = defineStore('order', () => {
         total_price: order.roomPrice,
         deposit: parseFloat(order.deposit) || 0,
         remarks: order.remarks?.toString() || '',
-        order_source: order.source?.toString() || 'front_desk',
+        order_source: normalizeOrderSource(order.source),
         id_source: order.sourceNumber?.toString() || '',
         create_time: new Date().toISOString(),
       };

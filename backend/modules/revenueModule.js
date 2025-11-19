@@ -95,11 +95,11 @@ async function getRefundMapByDate(startDate, endDate) {
 /**
  * 获取每日收入统计
  */
-async function getDailyRevenue(startDate, endDate) {
+async function getDailyRevenue(startDate, endDate, roomType) {
     try {
         // 拉取区间内的订单
         const ordSql = `
-            SELECT order_id, check_in_date, total_price, deposit, payment_method
+            SELECT order_id, check_in_date, total_price, deposit, payment_method, room_type
             FROM orders
             WHERE DATE(check_in_date) BETWEEN $1 AND $2
         `;
@@ -111,7 +111,11 @@ async function getDailyRevenue(startDate, endDate) {
 
         // 按天聚合
         const dayAgg = new Map();
-        for (const o of ordRes.rows) {
+        const orders = roomType
+            ? ordRes.rows.filter(o => o.room_type === roomType)
+            : ordRes.rows;
+
+        for (const o of orders) {
             const day = (typeof o.check_in_date === 'string') ? o.check_in_date : (o.check_in_date?.toISOString?.().split('T')[0] || '');
             if (!day) continue;
             const roomFee = Number(o.total_price || 0); // total_price 现在是数值类型
@@ -153,13 +157,26 @@ async function getDailyRevenue(startDate, endDate) {
         }
 
         // bill_count：有账单记录的订单数量（近似）
-        const billCntSql = `
-            SELECT DATE(o.check_in_date) as date, COUNT(DISTINCT b.order_id) as cnt
-            FROM orders o LEFT JOIN bills b ON b.order_id=o.order_id
-            WHERE DATE(o.check_in_date) BETWEEN $1 AND $2
-            GROUP BY DATE(o.check_in_date)
-        `;
-        const billCntRes = await query(billCntSql, [startDate, endDate]);
+        let billCntRes;
+        if (roomType) {
+            const billCntSql = `
+                SELECT DATE(o.check_in_date) as date, COUNT(DISTINCT b.order_id) as cnt
+                FROM orders o
+                LEFT JOIN bills b ON b.order_id = o.order_id
+                WHERE DATE(o.check_in_date) BETWEEN $1 AND $2
+                  AND o.room_type = $3
+                GROUP BY DATE(o.check_in_date)
+            `;
+            billCntRes = await query(billCntSql, [startDate, endDate, roomType]);
+        } else {
+            const billCntSql = `
+                SELECT DATE(o.check_in_date) as date, COUNT(DISTINCT b.order_id) as cnt
+                FROM orders o LEFT JOIN bills b ON b.order_id=o.order_id
+                WHERE DATE(o.check_in_date) BETWEEN $1 AND $2
+                GROUP BY DATE(o.check_in_date)
+            `;
+            billCntRes = await query(billCntSql, [startDate, endDate]);
+        }
         for (const r of billCntRes.rows) {
             const day = (typeof r.date === 'string') ? r.date : (r.date?.toISOString?.().split('T')[0] || '');
             if (dayAgg.has(day)) dayAgg.get(day).bill_count = Number(r.cnt || 0);
@@ -178,16 +195,20 @@ async function getDailyRevenue(startDate, endDate) {
  * @param {string} endDate - 结束日期 (YYYY-MM-DD)
  * @returns {Promise<Array>} 每周收入统计数据
  */
-async function getWeeklyRevenue(startDate, endDate) {
+async function getWeeklyRevenue(startDate, endDate, roomType) {
     try {
-        const ordSql = `SELECT order_id, check_in_date, total_price, deposit, payment_method FROM orders WHERE DATE(check_in_date) BETWEEN $1 AND $2`;
+        const ordSql = `SELECT order_id, check_in_date, total_price, deposit, payment_method, room_type FROM orders WHERE DATE(check_in_date) BETWEEN $1 AND $2`;
         const [ordRes, payMap] = await Promise.all([
             query(ordSql, [startDate, endDate]),
             getPayWayMapByOrder(startDate, endDate)
         ]);
 
         const weekAgg = new Map();
-        for (const o of ordRes.rows) {
+        const orders = roomType
+            ? ordRes.rows.filter(o => o.room_type === roomType)
+            : ordRes.rows;
+
+        for (const o of orders) {
             const d = new Date(o.check_in_date);
             const day = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
             const weekStart = new Date(day);
@@ -243,15 +264,19 @@ async function getWeeklyRevenue(startDate, endDate) {
  * @param {string} endDate - 结束日期 (YYYY-MM-DD)
  * @returns {Promise<Array>} 每月收入统计数据
  */
-async function getMonthlyRevenue(startDate, endDate) {
+async function getMonthlyRevenue(startDate, endDate, roomType) {
     try {
-        const ordSql = `SELECT order_id, check_in_date, total_price, deposit, payment_method FROM orders WHERE DATE(check_in_date) BETWEEN $1 AND $2`;
+        const ordSql = `SELECT order_id, check_in_date, total_price, deposit, payment_method, room_type FROM orders WHERE DATE(check_in_date) BETWEEN $1 AND $2`;
         const [ordRes, payMap] = await Promise.all([
             query(ordSql, [startDate, endDate]),
             getPayWayMapByOrder(startDate, endDate)
         ]);
         const monthAgg = new Map();
-        for (const o of ordRes.rows) {
+        const orders = roomType
+            ? ordRes.rows.filter(o => o.room_type === roomType)
+            : ordRes.rows;
+
+        for (const o of orders) {
             const d = new Date(o.check_in_date);
             const key = `${d.getUTCFullYear()}-${(d.getUTCMonth()+1).toString().padStart(2,'0')}-01`;
             const roomFee = Number(o.total_price || 0); const deposit = Number(o.deposit || 0); const total = roomFee + deposit;
@@ -434,6 +459,7 @@ async function getRevenueBillDetails({ date: filterDate, roomNumber } = {}) {
                 b.change_type,
                 b.pay_way,
                 b.create_time,
+                b.remarks,
                 b.stay_date
             FROM bills b
             ${whereClause}

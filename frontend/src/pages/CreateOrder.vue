@@ -464,7 +464,7 @@ const statusOptions = [
 const sourceOptions = [
   { label: '前台录入', value: 'front_desk' },
   { label: '电话预订', value: 'phone' },
-  { label: '抖音', valuue:'douyin'},
+  { label: '抖音', value: 'douyin' },
   { label: '美团', value: 'meituan' },
   { label: '携程', value: 'ctrip' },
   { label: '飞猪', value: 'fliggy' },

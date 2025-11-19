@@ -51,6 +51,8 @@ router.get('/receipts', async (req, res) => {
         o.order_id as order_number,
         o.room_number,
         o.guest_name,
+        o.room_type,
+        rt.type_name as room_type_name,
         o.total_price as room_fee,
         o.deposit,
         (o.total_price + o.deposit) as total_amount,
@@ -59,6 +61,7 @@ router.get('/receipts', async (req, res) => {
         o.check_out_date,
         o.create_time as created_at
       FROM orders o
+      LEFT JOIN room_types rt ON o.room_type = rt.type_code
       WHERE o.check_in_date::date >= $1::date
         AND o.check_in_date::date <= $2::date
         AND o.status != 'cancelled'
@@ -81,6 +84,8 @@ router.get('/receipts', async (req, res) => {
       order_number: row.order_number || row.order_id,
       room_number: row.room_number,
       guest_name: row.guest_name || '未知客户',
+      room_type: row.room_type,
+      room_type_name: row.room_type_name,
       room_fee: parseFloat(row.room_fee || 0),
       deposit: parseFloat(row.deposit || 0),
       total_amount: parseFloat(row.total_amount || 0),
