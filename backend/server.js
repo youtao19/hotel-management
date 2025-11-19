@@ -5,6 +5,7 @@ const setup = require("./appSettings/setup");
 const posgreDB = require("./database/postgreDB/pg");
 const webServer = http.createServer(app);
 const emailSetup = require("./modules/emailSetup");
+const { startAutoBillJob } = require("./appSettings/schedulers/autoBillJob");
 
 async function bootup() {
   // 初始化数据库
@@ -14,6 +15,8 @@ async function bootup() {
   await app.initializeSession();
 
   await emailSetup.testConnection();
+
+  startAutoBillJob();
 
 
   const port = setup.port;

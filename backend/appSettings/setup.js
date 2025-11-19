@@ -43,6 +43,35 @@ for (let envName of optionalEnv) {
   }
 }
 
+const parseListEnv = (value, fallback = []) => {
+  if (Array.isArray(value)) {
+    return value.filter(Boolean);
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map(item => item.trim())
+      .filter(Boolean);
+  }
+  return Array.isArray(fallback) ? [...fallback] : [];
+};
+
+const autoBillConfig = {
+  enabled: String(process.env.AUTO_BILL_ENABLED || '').toLowerCase() !== 'false',
+  cron: process.env.AUTO_BILL_CRON || '0 18 * * *',
+  timezone: process.env.AUTO_BILL_TZ || 'Asia/Shanghai',
+  statusWhitelist: parseListEnv(
+    process.env.AUTO_BILL_STATUS_WHITELIST,
+    ['pending', 'reserved']
+  ),
+  alertEmails: (() => {
+    const fallback = process.env.ADMIN_EMAIL ? [process.env.ADMIN_EMAIL] : [];
+    const parsed = parseListEnv(process.env.AUTO_BILL_ALERT_EMAILS, fallback);
+    return parsed.length > 0 ? parsed : fallback;
+  })(),
+  monitorWithEmailOnly: true
+};
+
 const setup = {
   opanaiKey: process.env.OPENAI_O_KEY,
   openaiHost: process.env.OPENAI_HOST,
@@ -99,6 +128,7 @@ const setup = {
   task: {
     sampleSizeMax: 22,
   },
+  autoBillJob: autoBillConfig,
   workers: [],
   totalWorkerNum: 20,
   changeType: {

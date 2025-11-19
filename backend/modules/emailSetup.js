@@ -67,9 +67,50 @@ async function sendEmailVerification(code, to, lan) {
   return await emailTransport.sendMail(message);
 }
 
+function resolveRecipients(to) {
+  if (Array.isArray(to)) {
+    return to.map(item => String(item || '').trim()).filter(Boolean);
+  }
+  if (typeof to === 'string') {
+    return to
+      .split(',')
+      .map(item => item.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+
+/**
+ * 发送系统邮件
+ * @param {to: string|string[]} to - 收件人邮箱地址，支持逗号分隔的字符串或字符串数组
+ * @param {string} subject - 邮件主题
+ * @param {string} text - 邮件文本内容
+ * @param {string} html - 邮件HTML内容
+ * @returns {Promise} - 发送邮件的结果
+ */
+async function sendSystemEmail({ to, subject, text, html }) {
+  const recipients = resolveRecipients(to && to.length ? to : [setup.adminEmail]);
+  if (!recipients.length) {
+    console.warn('[emailSetup] 无有效的收件人，取消发送系统邮件');
+    return null;
+  }
+
+  const message = {
+    from: `古城云阙酒店 <${setup.adminEmail}>`,
+    to: recipients.join(','),
+    subject: subject || `${setup.appName} 系统通知`,
+    text: text || '',
+    html
+  };
+
+  return await emailTransport.sendMail(message);
+}
+
 const emailJob = {
   sendEmailVerification,
   sendResetPWEmail,
+  sendSystemEmail,
   testConnection
 }
 

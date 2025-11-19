@@ -123,7 +123,29 @@ docker compose up -d
 *   **客户评价:**
     *   用于管理客户评价的系统。
 
-## 4. 如何开始
+## 4. 自动账单任务（18:00）
+
+为了确保 “仅创建了订单但尚未入住/取消” 的房单也能在当天记账，后端引入了 `autoBillJob` 定时任务：
+
+- 默认在每天 **18:00（Asia/Shanghai）** 通过 `node-cron` 触发。
+- 过滤规则：`check_in_date <= 目标日 < check_out_date` 且订单状态位于白名单（默认 `pending,reserved`）。
+- 若尚未存在相应日期的 `房费` 账单，则按照订单的总房费 / 住宿晚数生成当日账单（只写账单，不改变订单状态）。
+- 幂等：同一订单+日期只会生成一次，重复运行会直接跳过。
+- 监控：仅通过邮件将执行摘要发送至 `AUTO_BILL_ALERT_EMAILS` 指定的地址列表。
+
+**环境变量（`dev.env` / `.env.test` / `docker.dev.env` 均已包含）**
+
+| 变量 | 说明 | 默认值 |
+| --- | --- | --- |
+| `AUTO_BILL_ENABLED` | 是否启用定时任务 | `true` |
+| `AUTO_BILL_CRON` | cron 表达式 | `0 18 * * *` |
+| `AUTO_BILL_TZ` | 时区 | `Asia/Shanghai` |
+| `AUTO_BILL_STATUS_WHITELIST` | 需要扫描的订单状态，逗号分隔 | `pending,reserved` |
+| `AUTO_BILL_ALERT_EMAILS` | 汇总邮件收件人，逗号分隔。为空时回退到 `ADMIN_EMAIL` | （空） |
+
+若需手动触发，可在服务器中引入 `runAutoBillJobOnce`（`backend/appSettings/schedulers/autoBillJob.js`）或直接调用 `autoBillService.runAutoBillJob()` 并传递目标日期。
+
+## 5. 如何开始
 
 1.  **安装依赖（workspaces）:**
     ```bash
@@ -163,7 +185,7 @@ docker compose up -d
     docker compose logs -f backend
     ```
 
-## 5. 目录总览（简）
+## 6. 目录总览（简）
 
 ```
 hotel-management-system/
