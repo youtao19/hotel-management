@@ -325,14 +325,17 @@ const checkDataRef = ref(null)
 const savedCheckData = ref({
   hotelRoomData: [],
   restRoomData: [],
+  carIncomeData: [],
   hotelSummary: { roomFee: 0, deposit: 0, refundDeposit: 0, otherCharges: 0 },
-  restSummary: { roomFee: 0, deposit: 0, refundDeposit: 0, otherCharges: 0 }
+  restSummary: { roomFee: 0, deposit: 0, refundDeposit: 0, otherCharges: 0 },
+  carSummary: { roomFee: 0, deposit: 0, refundDeposit: 0, otherCharges: 0 }
 })
 
 // 保存步骤3的汇总数据对象（用于步骤4展示）
 const savedSummaryDataObject = ref({
   hotelIncome: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
   restIncome: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
+  carRentIncome: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
   hotelRefundDeposit: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },  // 包含退押和退款
   restRefundDeposit: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }   // 包含退押和退款
 })
@@ -568,7 +571,7 @@ const confirmationData = computed(() => {
     const reserveValue = toDecimal(reserve[key])
     const hotelIncomeValue = toDecimal(summaryData.hotelIncome[key])
     const restIncomeValue = toDecimal(summaryData.restIncome[key])
-    const carIncomeValue = new Decimal(0) // 暂无租车收入数据
+    const carIncomeValue = toDecimal(summaryData.carRentIncome?.[key] || 0)
 
     const rowTotalDecimal = reserveValue.plus(hotelIncomeValue).plus(restIncomeValue).plus(carIncomeValue)
     totalAmount[key] = toAmountNumber(rowTotalDecimal)
@@ -626,7 +629,7 @@ const confirmationData = computed(() => {
       reserve,
       hotelIncome: summaryData.hotelIncome,
       restIncome: summaryData.restIncome,
-      carRentIncome: { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }, // 暂无数据
+      carRentIncome: summaryData.carRentIncome || { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 },
       totalIncome: totalAmount,
       hotelRefundDeposit: summaryData.hotelRefundDeposit,
       restRefundDeposit: summaryData.restRefundDeposit,
@@ -1035,7 +1038,9 @@ const nextStep = async () => {
         hotelRoomData: [...hotelData],
         restRoomData: [...restData],
         hotelSummary: checkDataRef.value.hotelSummary,
-        restSummary: checkDataRef.value.restSummary
+        restSummary: checkDataRef.value.restSummary,
+        carIncomeData: checkDataRef.value.carIncomeData || [],
+        carSummary: checkDataRef.value.carSummary || {}
       }
 
       // 保存汇总数据对象（用于步骤4展示）

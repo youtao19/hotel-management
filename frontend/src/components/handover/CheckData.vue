@@ -136,10 +136,10 @@
           </div>
 
           <!-- 无数据提示 -->
-          <div v-if="restRoomData.length === 0" class="no-data-hint q-pa-md text-center">
-            <q-icon name="info" size="32px" color="grey-5" />
-            <div class="text-body2 text-grey-6 q-mt-sm">今日暂无休息房账单数据</div>
-          </div>
+        <div v-if="restRoomData.length === 0" class="no-data-hint q-pa-md text-center">
+          <q-icon name="info" size="32px" color="grey-5" />
+          <div class="text-body2 text-grey-6 q-mt-sm">今日暂无休息房账单数据</div>
+        </div>
 
           <q-table
             v-else
@@ -201,6 +201,93 @@
                 </div>
                 <div class="col-auto text-primary text-h6">
                   合计: ¥{{ restSummary.totalAmount.toFixed(2) }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 租车收入 -->
+        <div class="data-check-section q-mb-lg">
+          <div class="section-header row items-center justify-between q-mb-sm">
+            <div class="text-subtitle1 text-weight-medium">租车收入</div>
+            <q-btn
+              size="sm"
+              color="positive"
+              outline
+              icon="done_all"
+              label="一键确认"
+              @click="confirmAllRows('car')"
+              :disable="isCarBulkConfirmDisabled"
+            >
+              <q-tooltip>确认所有租车收入</q-tooltip>
+            </q-btn>
+          </div>
+
+          <div v-if="carIncomeData.length === 0" class="no-data-hint q-pa-md text-center">
+            <q-icon name="info" size="32px" color="grey-5" />
+            <div class="text-body2 text-grey-6 q-mt-sm">今日暂无租车收入数据</div>
+          </div>
+
+          <q-table
+            v-else
+            :rows="carIncomeData"
+            :columns="roomColumns"
+            row-key="billId"
+            flat
+            bordered
+            hide-pagination
+            :pagination="{ rowsPerPage: 0 }"
+            class="data-check-table"
+          >
+            <template v-slot:body-cell-actions="props">
+              <q-td :props="props" class="text-center">
+                <div class="action-buttons">
+                  <q-btn
+                    size="sm"
+                    round
+                    dense
+                    color="positive"
+                    icon="check"
+                    @click="confirmRow(props.row, 'car')"
+                    :disable="props.row.confirmed"
+                    class="q-mr-xs"
+                  >
+                    <q-tooltip>确认收入无误</q-tooltip>
+                  </q-btn>
+                  <q-btn
+                    size="sm"
+                    round
+                    dense
+                    color="primary"
+                    icon="edit"
+                    @click="editRow(props.row)"
+                  >
+                    <q-tooltip>修改数据</q-tooltip>
+                  </q-btn>
+                </div>
+              </q-td>
+            </template>
+            <template v-slot:body-cell-billId="props">
+              <q-td :props="props">
+                <span :class="props.row.confirmed ? 'text-positive' : ''">
+                  {{ props.value }}
+                </span>
+              </q-td>
+            </template>
+          </q-table>
+
+          <div class="summary-row q-pa-md bg-grey-1">
+            <div class="text-weight-medium">
+              <div class="row items-center q-mb-xs">
+                <div class="col-2">汇总</div>
+                <div class="col">
+                  <span v-for="(amount, type) in carSummary.byType" :key="type" class="q-mr-md">
+                    {{ type }}: ¥{{ amount.toFixed(2) }}
+                  </span>
+                </div>
+                <div class="col-auto text-primary text-h6">
+                  合计: ¥{{ carSummary.totalAmount.toFixed(2) }}
                 </div>
               </div>
             </div>
@@ -349,7 +436,8 @@ const createSummaryBuckets = () => ({
   hotelIncome: createPaywayBucket(),
   restIncome: createPaywayBucket(),
   hotelRefundDeposit: createPaywayBucket(),
-  restRefundDeposit: createPaywayBucket()
+  restRefundDeposit: createPaywayBucket(),
+  carRentIncome: createPaywayBucket()
 })
 
 /**
@@ -472,6 +560,9 @@ const hotelRoomData = ref([])
 // 休息房数据
 const restRoomData = ref([])
 
+// 租车收入数据
+const carIncomeData = ref([])
+
 // 编辑对话框数据
 const editDialog = ref({
   show: false,
@@ -523,13 +614,17 @@ const hotelSummary = computed(() => summarizeRoomData(hotelRoomData.value))
 // 计算属性 - 休息房汇总
 const restSummary = computed(() => summarizeRoomData(restRoomData.value))
 
+// 计算属性 - 租车收入汇总
+const carSummary = computed(() => summarizeRoomData(carIncomeData.value))
+
 // 计算属性 - 是否所有数据都已确认
 const allDataConfirmed = computed(() => {
   const hotelData = hotelRoomData.value || []
   const restData = restRoomData.value || []
+  const carData = carIncomeData.value || []
 
   // 如果没有数据，返回 true（允许跳过）
-  const totalCount = hotelData.length + restData.length
+  const totalCount = hotelData.length + restData.length + carData.length
   if (totalCount === 0) {
     return true
   }
@@ -537,8 +632,9 @@ const allDataConfirmed = computed(() => {
   // 检查所有数据是否都已确认
   const allHotelConfirmed = hotelData.every(item => item.confirmed)
   const allRestConfirmed = restData.every(item => item.confirmed)
+  const allCarConfirmed = carData.every(item => item.confirmed)
 
-  return allHotelConfirmed && allRestConfirmed
+  return allHotelConfirmed && allRestConfirmed && allCarConfirmed
 })
 
 const isHotelBulkConfirmDisabled = computed(() => {
@@ -549,6 +645,11 @@ const isHotelBulkConfirmDisabled = computed(() => {
 const isRestBulkConfirmDisabled = computed(() => {
   const restData = restRoomData.value || []
   return restData.length === 0 || restData.every(item => item.confirmed)
+})
+
+const isCarBulkConfirmDisabled = computed(() => {
+  const carData = carIncomeData.value || []
+  return carData.length === 0 || carData.every(item => item.confirmed)
 })
 
 
@@ -730,11 +831,11 @@ const calculateSummaryData = () => {
     }
   })
 
-  // 统计休息房数据
-  restRoomData.value.forEach(bill => {
-    const payWay = bill.payWay || '其他'
-    const changeType = bill.changeType
-    const amount = bill.amount || 0
+    // 统计休息房数据
+    restRoomData.value.forEach(bill => {
+      const payWay = bill.payWay || '其他'
+      const changeType = bill.changeType
+      const amount = bill.amount || 0
 
     // 确保支付方式存在于对象中
     const normalizedPayWay = normalizePayWay(payWay)
@@ -754,6 +855,14 @@ const calculateSummaryData = () => {
     }
   })
 
+  // 统计租车收入
+  carIncomeData.value.forEach(bill => {
+    const payWay = bill.payWay || '其他'
+    const amount = bill.amount || 0
+    const normalizedPayWay = normalizePayWay(payWay)
+    incrementBucket(summaryDataObject.value.carRentIncome, normalizedPayWay, amount)
+  })
+
   console.log('📊 [汇总对象更新]:', JSON.parse(JSON.stringify(summaryDataObject.value)))
   console.log('📊 [客房退押详情]:', summaryDataObject.value.hotelRefundDeposit)
   console.log('📊 [休息退押详情]:', summaryDataObject.value.restRefundDeposit)
@@ -767,13 +876,20 @@ const confirmRow = (row, type) => {
 }
 
 const confirmAllRows = (type) => {
-  const isRest = type === 'rest'
-  const targetData = isRest ? restRoomData.value : hotelRoomData.value
+  let targetData = hotelRoomData.value
+  let label = '客房账单'
+  if (type === 'rest') {
+    targetData = restRoomData.value
+    label = '休息房账单'
+  } else if (type === 'car') {
+    targetData = carIncomeData.value
+    label = '租车收入'
+  }
 
   if (!targetData || targetData.length === 0) {
     $q.notify({
       type: 'info',
-      message: isRest ? '暂无休息房账单可以确认' : '暂无客房账单可以确认',
+      message: `暂无${label}可以确认`,
       position: 'top'
     })
     return
@@ -784,7 +900,7 @@ const confirmAllRows = (type) => {
   if (pendingRows.length === 0) {
     $q.notify({
       type: 'info',
-      message: isRest ? '休息房账单已全部确认' : '客房账单已全部确认',
+      message: `${label}已全部确认`,
       position: 'top'
     })
     return
@@ -798,7 +914,7 @@ const confirmAllRows = (type) => {
 
   $q.notify({
     type: 'positive',
-    message: isRest ? '休息房账单已全部确认' : '客房账单已全部确认',
+    message: `${label}已全部确认`,
     position: 'top'
   })
 }
@@ -1099,6 +1215,7 @@ const loadBillsData = async (targetDate) => {
       const {
         hotelBills = [],
         restBills = [],
+        carBills = [],
         totalCount = 0
       } = response.data || {}
 
@@ -1107,19 +1224,23 @@ const loadBillsData = async (targetDate) => {
         restBills: restBills.length,
         totalCount,
         hotelBillsData: hotelBills,
-        restBillsData: restBills
+        restBillsData: restBills,
+        carBillsData: carBills
       })
 
       const hotelRows = buildTableRows(hotelBills, checkDateStr)
       const restRows = buildTableRows(restBills, checkDateStr)
+      const carRows = buildTableRows(carBills, checkDateStr)
 
       hotelRoomData.value = hotelRows
       restRoomData.value = restRows
+      carIncomeData.value = carRows
 
       console.log('✅ [CheckData] 数据转换完成:', {
         checkDate: checkDateStr,
         hotelCount: hotelRoomData.value.length,
         restCount: restRoomData.value.length,
+        carCount: carIncomeData.value.length,
         totalCount,
         hotelAggregatedCount: hotelRows.filter(item => item.isAggregatedRoomFee).length,
         restAggregatedCount: restRows.filter(item => item.isAggregatedRoomFee).length
@@ -1153,8 +1274,10 @@ onMounted(() => {
 defineExpose({
   hotelRoomData,
   restRoomData,
+  carIncomeData,
   hotelSummary,
   restSummary,
+  carSummary,
   dataCheckCompleted,
   allDataConfirmed,
   summaryDataObject,  // 暴露汇总数据对象给步骤4使用

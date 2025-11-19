@@ -202,13 +202,13 @@ router.get('/by-date/:date', async (req, res) => {
         b.bill_id,
         b.order_id,
         b.stay_date,
-        o.stay_type,
+        COALESCE(b.stay_type, o.stay_type) AS stay_type,
         b.change_price,
         b.change_type,
         b.pay_way,
         b.create_time,
-        o.room_number,
-        o.guest_name,
+        COALESCE(b.room_number, o.room_number) AS room_number,
+        COALESCE(b.guest_name, o.guest_name) AS guest_name,
         o.phone,
         o.status as order_status
       FROM bills b
@@ -240,6 +240,11 @@ router.get('/by-date/:date', async (req, res) => {
 
     const hotelBills = allBills.filter(bill => bill.stay_type === '客房');
     const restBills = allBills.filter(bill => bill.stay_type === '休息房');
+    const carBills = allBills.filter(bill =>
+      bill.stay_type === '租车收入' ||
+      bill.change_type === '租车收入' ||
+      (!bill.order_id && (bill.stay_type === '其他' || !bill.stay_type))
+    );
 
     console.log(`🏨 [by-date] 账单分组统计:`, {
       总账单数: allBills.length,
@@ -256,6 +261,7 @@ router.get('/by-date/:date', async (req, res) => {
       data: {
         hotelBills,
         restBills,
+        carBills,
         totalCount: allBills.length
       },
       message: `成功获取 ${date} 的账单数据`
