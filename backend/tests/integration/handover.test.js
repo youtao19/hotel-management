@@ -348,11 +348,16 @@ const buildFrontEndTableModel = ({ date, hotelRows, restRows, summaryData }) => 
 
 describe('交接班接口集成测试', () => {
   beforeAll(async () => {
-    // 获取 CSV 文件路径
-    const roomsCsvPath = path.resolve(__dirname, '../../../sql/rooms.csv');
-    const roomTypeCsvPath = path.resolve(__dirname, '../../../sql/room_types.csv');
-    const ordersCsvPath = path.resolve(__dirname, '../../../sql/orders.csv');
-    const billsCsvPath = path.resolve(__dirname, '../../../sql/bills.csv');
+    const roomsSqlPath = path.resolve(__dirname, '../../../sql/rooms.sql');
+    const roomTypesSqlPath = path.resolve(__dirname, '../../../sql/room_types.sql');
+    const ordersSqlPath = path.resolve(__dirname, '../../../sql/orders.sql');
+    const billsSqlPath = path.resolve(__dirname, '../../../sql/bills.sql');
+    const executeSqlFile = async (filePath) => {
+      const sql = fs.readFileSync(filePath, 'utf8').trim();
+      if (sql) {
+        await query(sql);
+      }
+    };
 
     // 清空相关表，防止主键冲突
     await query('TRUNCATE TABLE bills RESTART IDENTITY CASCADE;');
@@ -360,37 +365,10 @@ describe('交接班接口集成测试', () => {
     await query('TRUNCATE TABLE rooms RESTART IDENTITY CASCADE;');
     await query('TRUNCATE TABLE room_types RESTART IDENTITY CASCADE;');
 
-    // 动态读取 room_types.csv 首行作为列名
-    const roomTypesHeaderLine = fs.readFileSync(roomTypeCsvPath, 'utf8').split('\n')[0].trim();
-    await query(`
-      COPY room_types(${roomTypesHeaderLine})
-      FROM '${roomTypeCsvPath}'
-      DELIMITER ',' CSV HEADER;
-    `);
-
-    // 动态读取 rooms.csv 首行作为列名
-    const roomsHeaderLine = fs.readFileSync(roomsCsvPath, 'utf8').split('\n')[0].trim();
-    await query(`
-      COPY rooms(${roomsHeaderLine})
-      FROM '${roomsCsvPath}'
-      DELIMITER ',' CSV HEADER;
-    `);
-
-    // 动态读取 orders.csv 首行作为列名
-    const ordersHeaderLine = fs.readFileSync(ordersCsvPath, 'utf8').split('\n')[0].trim();
-    await query(`
-      COPY orders(${ordersHeaderLine})
-      FROM '${ordersCsvPath}'
-      DELIMITER ',' CSV HEADER;
-    `);
-
-    // 动态读取 orders.csv 首行作为列名
-    const billsHeaderLine = fs.readFileSync(billsCsvPath, 'utf8').split('\n')[0].trim();
-    await query(`
-      COPY bills(${billsHeaderLine})
-      FROM '${billsCsvPath}'
-      DELIMITER ',' CSV HEADER;
-    `);
+    await executeSqlFile(roomTypesSqlPath);
+    await executeSqlFile(roomsSqlPath);
+    await executeSqlFile(ordersSqlPath);
+    await executeSqlFile(billsSqlPath);
   });
 
 

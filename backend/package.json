@@ -5,9 +5,10 @@
   "scripts": {
     "dev": "dotenv -e ../dev.env -- cross-env NODE_ENV=dev nodemon server.js",
     "start": "dotenv -e ../dev.env -- node server.js",
-    "test": "dotenv -e ../.env.test -- cross-env NODE_ENV=test jest --runInBand --rootDir=.",
-    "test:watch": "dotenv -e ../.env.test -- cross-env NODE_ENV=test jest --watch --runInBand",
-    "test:coverage": "dotenv -e ../.env.test -- cross-env NODE_ENV=test jest --coverage --runInBand",
+    "test": "dotenv --overload -e ../.env.test -- cross-env NODE_ENV=test jest --runInBand --rootDir=.",
+    "test:watch": "dotenv --overload -e ../.env.test -- cross-env NODE_ENV=test jest --watch --runInBand",
+    "test:coverage": "dotenv --overload -e ../.env.test -- cross-env NODE_ENV=test jest --coverage --runInBand",
+    "test:ci": "dotenv --overload -e ../.env.test -- cross-env NODE_ENV=test jest --runInBand --rootDir=.",
     "export-schema": "node scripts/exportSchema.js",
     "export-structure": "node scripts/exportStructure.js",
     "export-all": "node scripts/exportAll.js",

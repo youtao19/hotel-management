@@ -5,50 +5,44 @@ on:
     branches: [master]
   pull_request:
     branches: [master]
+  workflow_dispatch:
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    # 👇 1. 在这里添加全局环境变量，让 Node.js 知道使用中国时间
+    env:
+      TZ: 'Asia/Shanghai'
+
     services:
       postgres:
-        image: postgres:15
+        image: postgres:17.6-alpine
         ports:
           - 5432:5432
         env:
-          POSTGRES_USER: postgres
+          POSTGRES_USER: peach
           POSTGRES_PASSWORD: 1219
-          POSTGRES_DB: hotel_test
+          POSTGRES_DB: hotel_db_test
+          # 👇 2. 让 Postgres 数据库也使用中国时区
+          TZ: 'Asia/Shanghai'
+          PGTZ: 'Asia/Shanghai'
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-
-    env:
-      NODE_ENV: test
-      NODE_PORT: 3000
-      PGUSER: postgres
-      PGPASSWORD: 1219
-      PGDATABASE: hotel_test
-      PGHOST: localhost
-      PGPORT: 5432
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PW: ghost@2023
-      OPENAI_HOST: staging.woyaochatgpt.com
-      OPENAI_KEY: wk-87f95f4b7eb976334fc42eaf03a5a52550cee4e464a53772d01673c3251a4907
-      OPENAI_CHAT_COMPLETION_PATH: /api/openai/v1/chat/completions
-      OPENAI_IMAGE_PATH: /api/openai/v1/images
-      OPENAI_O_KEY: ""
-      ADMIN_EMAIL: support@ghost-writer.com
-      APP_URL: http://localhost:9000
-      APP_NAME: hotelManagement
-      EMAIL_HOST: smtp.gmail.com
-      EMAIL_PORT: 587
-      EMAIL_USER: admin
-      EMAIL_PW: faqttg78
-
-
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        # 👇 3. (可选) Redis 时区
+        env:
+          TZ: 'Asia/Shanghai'
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Checkout repository
@@ -57,18 +51,14 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '22' # 改为你当前本地 Node 版本
+          node-version: '22'
 
       - name: Install dependencies
         run: npm install
 
-      - name: Wait for PostgreSQL to be ready
-        run: |
-          for i in {1..10}; do
-            pg_isready -h localhost -p 5432 && break
-            echo "Waiting for PostgreSQL..."
-            sleep 3
-          done
+      # - name: Install dotenv-cli
+      #   run: npm install -g dotenv-cli
 
-      - name: Run Jest tests
-        run: npm test
+      - name: Run Jest tests (CI env)
+        # 运行测试
+        run: npm --workspace backend run test:ci

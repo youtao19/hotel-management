@@ -92,16 +92,16 @@
         </q-toolbar>
 
         <!-- 导航标签栏 -->
-        <q-tabs align="left" dense>
-          <q-route-tab to="/Dash-board" label="仪表盘" />
-          <q-route-tab to="/CreateOrder" label="创建订单" />
-          <q-route-tab to="/room-status" label="房间状态" />
-          <q-route-tab to="/room-management" label="房间管理" />
-          <q-route-tab to="/ViewOrders" label="查看订单" />
-          <q-route-tab to="/review-management" label="好评管理" />
-          <q-route-tab to="/revenue-statistics" label="收入统计" />
-          <q-route-tab to="/handover" label="交接班" />
-          <q-route-tab to="/other-income" label="其他收入" />
+        <q-tabs align="left" dense inline-label>
+          <q-route-tab to="/Dash-board" label="仪表盘" icon="dashboard" />
+          <q-route-tab to="/CreateOrder" label="创建订单" icon="note_add" />
+          <q-route-tab to="/room-status" label="房间状态" icon="meeting_room" />
+          <q-route-tab to="/room-management" label="房间管理" icon="home_work" />
+          <q-route-tab to="/ViewOrders" label="查看订单" icon="receipt_long" />
+          <q-route-tab to="/review-management" label="好评管理" icon="sentiment_satisfied_alt" />
+          <q-route-tab to="/revenue-statistics" label="收入统计" icon="bar_chart" />
+          <q-route-tab to="/handover" label="交接班" icon="swap_horiz" />
+          <q-route-tab to="/other-income" label="其他收入" icon="payments" />
         </q-tabs>
       </q-header>
 
