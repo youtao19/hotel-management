@@ -1040,7 +1040,8 @@ async function earlyCheckout(orderNumber, options = {}) {
     refundAmount,
     refundMethod,
     changedBy = 'system',
-    remarks
+    remarks,
+    hasStayed = true
   } = options;
 
   const client = await getClient();
@@ -1068,11 +1069,129 @@ async function earlyCheckout(orderNumber, options = {}) {
       throw err;
     }
 
+    const hasStayedFlag = !(hasStayed === false || hasStayed === 'false');
     const originalCheckoutDateStr = formatDate(order.check_out_date);
     const actualCheckoutDateStr = formatDate(actualCheckoutTime || new Date());
 
     const originalCheckoutDate = new Date(originalCheckoutDateStr);
     const actualCheckoutDate = new Date(actualCheckoutDateStr);
+
+    if (!hasStayedFlag) {
+    let parsedRefund = refundAmount !== undefined && refundAmount !== null && refundAmount !== ''
+      ? Number(refundAmount)
+      : null;
+
+    if (!hasStayedFlag && (parsedRefund === null || Number.isNaN(parsedRefund))) {
+      const { rows: [billSumRow] } = await client.query(
+        `SELECT COALESCE(SUM(change_price), 0) AS net_paid FROM bills WHERE order_id = $1`,
+        [orderNumber]
+      );
+      const netPaid = Number(billSumRow?.net_paid || 0);
+      const depositFallback = Number(order.deposit || 0);
+      const totalPriceFallback = Number(order.total_price || 0);
+
+      parsedRefund = Math.max(0, Number(netPaid.toFixed(2)));
+      if (parsedRefund === 0 && depositFallback > 0) {
+        parsedRefund = depositFallback;
+      }
+      if (parsedRefund === 0 && totalPriceFallback > 0) {
+        parsedRefund = totalPriceFallback;
+      }
+    }
+
+    if (!Number.isFinite(parsedRefund) || parsedRefund < 0) {
+      const err = new Error('退房退款金额无效');
+      err.code = 'EARLY_CHECKOUT_INVALID_REFUND';
+      err.statusCode = 400;
+      throw err;
+    }
+
+      const finalRefund = Number(parsedRefund.toFixed(2));
+      const refundPayWay = refundMethod || order.payment_method || '现金';
+
+      const { rows: [updatedOrder] } = await client.query(
+        `UPDATE ${tableName}
+            SET check_out_date = $1,
+                status = 'cancelled',
+                total_price = 0
+          WHERE order_id = $2
+          RETURNING *`,
+        [actualCheckoutDateStr, orderNumber]
+      );
+
+      let refundBillRow = null;
+      if (finalRefund > 0) {
+        const refundRemark = remarks || '未入住退房退款';
+        const refundResult = await client.query(
+          `INSERT INTO bills (
+              order_id, room_number, guest_name, change_price, change_type,
+              pay_way, create_time, remarks, stay_type, stay_date
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+           RETURNING *`,
+          [
+            orderNumber,
+            String(order.room_number || '').slice(0, 10),
+            order.guest_name,
+            Number((-finalRefund).toFixed(2)),
+            '退款',
+            refundPayWay,
+            formatDateTimeForDB(),
+            refundRemark,
+            order.stay_type,
+            actualCheckoutDateStr
+          ]
+        );
+        refundBillRow = refundResult.rows[0];
+      }
+
+      await client.query(
+        `UPDATE rooms SET status = $1 WHERE room_number = $2`,
+        ['available', order.room_number]
+      );
+
+      await client.query('COMMIT');
+
+      const changeDetails = {
+        action: 'cancel_after_checkin',
+        has_stayed: false,
+        previous_status: order.status,
+        new_status: 'cancelled',
+        actual_checkout_date: actualCheckoutDateStr,
+        refund_amount: finalRefund,
+        refund_method: refundPayWay,
+        previous_total_price: Number(order.total_price) || 0,
+        new_total_price: 0
+      };
+
+      try {
+        await query(
+          `INSERT INTO order_changes
+             (order_id, changed_by, changes, reason)
+           VALUES ($1, $2, $3, $4)`,
+          [
+            orderNumber,
+            changedBy,
+            JSON.stringify(changeDetails),
+            remarks || '未入住退房办理'
+          ]
+        );
+        console.log(`📝 [earlyCheckout] 未入住退房变更记录已保存到 order_changes 表`);
+      } catch (logError) {
+        console.warn(`⚠️ [earlyCheckout] 保存未入住退房变更记录失败，但退房已完成:`, logError.message);
+      }
+
+      return {
+        success: true,
+        order: updatedOrder,
+        refund: {
+          actual: finalRefund,
+          method: refundPayWay,
+          bill: refundBillRow
+        },
+        refundedStayDates: [],
+        cancelled: true
+      };
+    }
 
     if (!(actualCheckoutDate < originalCheckoutDate)) {
       const err = new Error('实际退房日期未早于原退房日期，无法执行提前退房');

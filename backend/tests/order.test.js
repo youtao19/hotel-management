@@ -86,6 +86,7 @@ describe('办理退房接口', () => {
 
   afterEach(async () => {
     await query('DELETE FROM bills WHERE order_id LIKE $1', [`${CHECKOUT_PREFIX}%`]);
+    await query('DELETE FROM order_changes WHERE order_id LIKE $1', [`${CHECKOUT_PREFIX}%`]);
     await query('DELETE FROM orders WHERE order_id LIKE $1', [`${CHECKOUT_PREFIX}%`]);
   });
 
@@ -137,5 +138,76 @@ describe('办理退房接口', () => {
     const storedOrder = await query('SELECT status FROM orders WHERE order_id = $1', [orderId]);
     expect(storedOrder.rows.length).toBe(1);
     expect(storedOrder.rows[0].status).toBe('checked-in');
+  });
+});
+
+describe('提前退房 - 未入住直接取消', () => {
+  const NO_STAY_PREFIX = 'TEST_NO_STAY_';
+  const buildOrderId = (label) => `${NO_STAY_PREFIX}${label}_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+
+  beforeAll(async () => {
+    await query('TRUNCATE bills, orders, rooms, room_types RESTART IDENTITY CASCADE');
+    await addRoomType(roomTypes);
+    await addRoom(rooms);
+  });
+
+  afterEach(async () => {
+    await query('DELETE FROM bills WHERE order_id LIKE $1', [`${NO_STAY_PREFIX}%`]);
+    await query('DELETE FROM order_changes WHERE order_id LIKE $1', [`${NO_STAY_PREFIX}%`]);
+    await query('DELETE FROM orders WHERE order_id LIKE $1', [`${NO_STAY_PREFIX}%`]);
+    await query('UPDATE rooms SET status = $1 WHERE room_number = $2', ['available', 'TEST_ROOM_101']);
+  });
+
+  afterAll(async () => {
+    await query('TRUNCATE bills, orders, rooms, room_types RESTART IDENTITY CASCADE');
+  });
+
+  test('未入住退房会取消订单并释放房间', async () => {
+    const orderId = buildOrderId('CANCEL');
+    const orderData = {
+      ...mockOrders[0],
+      order_id: orderId,
+      status: 'checked-in',
+      room_number: 'TEST_ROOM_101',
+      room_type: 'TEST_STD_ROOM',
+      deposit: 200,
+      payment_method: '现金',
+      check_in_date: '2025-10-01',
+      check_out_date: '2025-10-03',
+      stay_type: '客房'
+    };
+
+    await createOrder([orderData]);
+    await query('UPDATE rooms SET status = $1 WHERE room_number = $2', ['occupied', orderData.room_number]);
+
+    const refundAmount = 200;
+    const response = await request(app)
+      .post(`/api/orders/${orderId}/early-checkout`)
+      .send({
+        actualCheckoutTime: new Date().toISOString(),
+        refundAmount,
+        refundMethod: '现金',
+        hasStayed: false,
+        remarks: '看房未入住'
+      });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.order).toBeDefined();
+    expect(response.body.data.order.status).toBe('cancelled');
+
+    const storedOrder = await query('SELECT status, total_price FROM orders WHERE order_id = $1', [orderId]);
+    expect(storedOrder.rows.length).toBe(1);
+    expect(storedOrder.rows[0].status).toBe('cancelled');
+    expect(Number(storedOrder.rows[0].total_price)).toBe(0);
+
+    const roomStatus = await query('SELECT status FROM rooms WHERE room_number = $1', [orderData.room_number]);
+    expect(roomStatus.rows[0].status).toBe('available');
+
+    const refundBills = await query('SELECT change_price, change_type, pay_way FROM bills WHERE order_id = $1', [orderId]);
+    const hasRefundBill = refundBills.rows.some(
+      bill => bill.change_type === '退款' && Number(bill.change_price) === -refundAmount && bill.pay_way === '现金'
+    );
+    expect(hasRefundBill).toBe(true);
   });
 });

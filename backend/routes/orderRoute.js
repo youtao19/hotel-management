@@ -78,6 +78,7 @@ const earlyCheckoutSchema = {
     },
     refundMethod: { type: 'string' },
     operator: { type: 'string' },
+    hasStayed: { type: 'boolean' },
     remarks: { type: 'string' }
   },
   required: ['refundAmount'],
@@ -364,7 +365,7 @@ router.post('/:orderNumber/early-checkout', authenticationMiddleware, async (req
       });
     }
 
-    const { actualCheckoutTime, refundAmount, refundMethod, operator, remarks } = req.body;
+    const { actualCheckoutTime, refundAmount, refundMethod, operator, remarks, hasStayed } = req.body;
     const changedBy = operator || req.user?.username || 'system';
 
     const result = await orderModule.earlyCheckout(orderNumber, {
@@ -372,7 +373,8 @@ router.post('/:orderNumber/early-checkout', authenticationMiddleware, async (req
       refundAmount,
       refundMethod,
       changedBy,
-      remarks
+      remarks,
+      hasStayed
     });
 
     return res.status(200).json({

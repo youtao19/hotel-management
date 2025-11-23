@@ -29,6 +29,18 @@
         </q-banner>
 
         <q-form @submit.prevent="handleSubmit" class="q-gutter-md">
+          <q-option-group
+            v-model="hasStayed"
+            type="radio"
+            color="primary"
+            :options="[
+              { label: '是，客人已入住', value: true },
+              { label: '否，未入住直接退房', value: false }
+            ]"
+            inline
+            label="是否入住"
+          />
+
           <q-input
             v-model="actualCheckoutTime"
             type="datetime-local"
@@ -63,7 +75,7 @@
               </div>
             </template>
             <template #message>
-              按照剩余房费计算，共 {{ refundableNights.length }} 天可退
+              {{ hasStayed ? `按照剩余房费计算，共 ${refundableNights.length} 天可退` : '未入住按已收金额退款（押金/房费）' }}
             </template>
           </q-field>
 
@@ -170,6 +182,7 @@ const manualAmountTouched = ref(false)
 const submitting = ref(false)
 const loadingBills = ref(false)
 const orderBills = ref([])
+const hasStayed = ref(true)
 
 const paymentMethodOptions = viewStore.paymentMethodOptions
 
@@ -184,6 +197,7 @@ const actualCheckoutDateYMD = computed(() => {
 })
 
 const recommendedBills = computed(() => {
+  if (!hasStayed.value) return []
   if (!props.order || !actualCheckoutDateYMD.value) return []
   const cutoff = actualCheckoutDateYMD.value
   return (orderBills.value || []).filter(b => {
@@ -196,7 +210,27 @@ const recommendedBills = computed(() => {
   }))
 })
 
+const totalPaid = computed(() => {
+  const bills = orderBills.value || []
+  const orderDepositRaw = Number(props.order?.deposit)
+  const orderDeposit = Number.isFinite(orderDepositRaw) && orderDepositRaw > 0 ? orderDepositRaw : 0
+  const orderTotalRaw = Number(props.order?.roomPrice ?? props.order?.total_price)
+  const orderTotal = Number.isFinite(orderTotalRaw) && orderTotalRaw > 0 ? orderTotalRaw : 0
+  if (!bills.length) {
+    return Math.max(0, orderDeposit, orderTotal)
+  }
+  const net = bills.reduce((sum, b) => sum + Number(b?.change_price || 0), 0)
+  const normalizedNet = Math.max(0, Number(net.toFixed(2)))
+  if (normalizedNet === 0) {
+    return Math.max(0, orderDeposit, orderTotal)
+  }
+  return normalizedNet
+})
+
 const recommendedRefund = computed(() => {
+  if (!hasStayed.value) {
+    return totalPaid.value
+  }
   return recommendedBills.value.reduce((sum, item) => sum + Number(item.amount), 0)
 })
 
@@ -211,6 +245,7 @@ const refundDiffText = computed(() => {
 })
 
 const showNotEarlyWarning = computed(() => {
+  if (!hasStayed.value) return false
   if (!props.order?.checkOutDate || !actualCheckoutTime.value) return false
   return new Date(actualCheckoutTime.value) >= new Date(props.order.checkOutDate)
 })
@@ -294,6 +329,7 @@ async function loadBills() {
 
 function initializeForm() {
   if (!props.order) return
+  hasStayed.value = true
   const now = new Date()
   const planned = props.order.checkOutDate ? new Date(props.order.checkOutDate) : null
   let base = now
@@ -321,7 +357,8 @@ async function handleSubmit() {
       refundAmount: Number(refundAmount.value || 0),
       refundMethod: refundMethod.value,
       operator: userStore.user?.username || 'system',
-      remarks: remarks.value
+      remarks: remarks.value,
+      hasStayed: hasStayed.value
     }
 
     const result = await orderStore.earlyCheckout(props.order.orderNumber, payload)
@@ -354,6 +391,16 @@ watch(
   (val) => {
     if (!manualAmountTouched.value) {
       refundAmount.value = Number(val.toFixed(2))
+    }
+  }
+)
+
+watch(
+  () => hasStayed.value,
+  (val) => {
+    if (!val) {
+      manualAmountTouched.value = false
+      refundAmount.value = Number(recommendedRefund.value.toFixed(2))
     }
   }
 )
