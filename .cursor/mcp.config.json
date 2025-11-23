@@ -1,0 +1,8 @@
+{
+  "tools": {
+    "postgres-mcp": {
+      "type": "server",
+      "url": "http://localhost:8001"
+    }
+  }
+}

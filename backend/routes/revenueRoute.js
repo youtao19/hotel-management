@@ -250,6 +250,7 @@ router.get('/room-type', async (req, res) => {
 /**
  * 获取快速统计数据（今日、本周、本月）
  * GET /api/revenue/quick-stats
+ * 用于收入统计页面的今日收入等卡片
  */
 router.get('/quick-stats', async (req, res) => {
     console.log('🚀 收到快速统计请求');

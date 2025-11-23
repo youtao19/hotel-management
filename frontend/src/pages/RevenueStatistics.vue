@@ -144,36 +144,36 @@
             <div class="col-lg-4 col-md-12 col-sm-12 col-xs-12">
               <div class="row items-center justify-end q-gutter-sm filter-actions-row">
                 <div class="col-auto">
-                  <q-btn
-                    outline
-                    color="primary"
-                    label="今日"
-                    @click="setFilterToday"
-                  />
-                </div>
-                <div class="col-auto">
-                  <q-btn
-                    outline
-                    color="secondary"
-                    label="昨日"
-                    @click="setFilterYesterday"
-                  />
-                </div>
-                <div class="col-auto">
-                  <q-btn
-                    outline
-                    color="accent"
-                    label="本周"
-                    @click="setFilterThisWeek"
-                  />
-                </div>
-                <div class="col-auto">
-                  <q-btn
-                    outline
-                    color="orange"
-                    label="本月"
-                    @click="setFilterThisMonth"
-                  />
+                  <div class="date-filter-group">
+                    <div
+                      class="date-filter-item"
+                      :class="{ 'active': currentFilterType === 'today' }"
+                      @click="setFilterToday"
+                    >
+                      今日
+                    </div>
+                    <div
+                      class="date-filter-item"
+                      :class="{ 'active': currentFilterType === 'yesterday' }"
+                      @click="setFilterYesterday"
+                    >
+                      昨日
+                    </div>
+                    <div
+                      class="date-filter-item"
+                      :class="{ 'active': currentFilterType === 'week' }"
+                      @click="setFilterThisWeek"
+                    >
+                      本周
+                    </div>
+                    <div
+                      class="date-filter-item"
+                      :class="{ 'active': currentFilterType === 'month' }"
+                      @click="setFilterThisMonth"
+                    >
+                      本月
+                    </div>
+                  </div>
                 </div>
                 <div class="col-auto">
                   <q-btn
@@ -182,6 +182,7 @@
                     label="查询"
                     @click="fetchRevenueAndReceipt"
                     :loading="loading"
+                    unelevated
                   />
                 </div>
               </div>
@@ -268,7 +269,6 @@
 
         <!-- 右侧：每日营收明细 + 收入趋势 -->
         <div class="col-12 col-lg-8">
-          <!-- 每日营收明细（严格贴合 React 样式：仅标题 + 搜索 + 表格） -->
           <q-card class="q-mb-lg daily-card">
             <q-card-section>
               <div class="row items-center justify-between q-mb-md daily-card__header">
@@ -287,7 +287,6 @@
                 </div>
                 <div class="col-auto">
                   <div class="row items-center q-gutter-sm">
-                    <!-- 搜索房间号（前端过滤，参考 React 示例搜索框） -->
                     <q-input
                       v-model="receiptRoomSearch"
                       dense
@@ -305,7 +304,7 @@
                 </div>
               </div>
 
-              <!-- 每日营收明细表格（React 风格：扁平表头 + 行样式） -->
+              <!-- 每日营收明细表格 -->
               <q-table
                 :rows="filteredReceiptDetails"
                 :columns="receiptColumns"
@@ -1153,6 +1152,41 @@ const setFilterThisMonth = () => {
   dateRange.value.start = date.formatDate(firstDayOfMonth, 'YYYY-MM-DD')
   dateRange.value.end = date.formatDate(lastDayOfMonth, 'YYYY-MM-DD')
 }
+
+const currentFilterType = computed(() => {
+  const start = dateRange.value.start
+  const end = dateRange.value.end
+  if (!start || !end) return 'custom'
+
+  const today = new Date()
+  const todayStr = date.formatDate(today, 'YYYY-MM-DD')
+
+  // Today
+  if (start === todayStr && end === todayStr) return 'today'
+
+  // Yesterday
+  const yesterday = date.subtractFromDate(today, { days: 1 })
+  const yesterdayStr = date.formatDate(yesterday, 'YYYY-MM-DD')
+  if (start === yesterdayStr && end === yesterdayStr) return 'yesterday'
+
+  // This Week
+  const currentDay = today.getDay()
+  const mondayOffset = currentDay === 0 ? -6 : 1 - currentDay
+  const monday = date.addToDate(today, { days: mondayOffset })
+  const sunday = date.addToDate(monday, { days: 6 })
+  const mondayStr = date.formatDate(monday, 'YYYY-MM-DD')
+  const sundayStr = date.formatDate(sunday, 'YYYY-MM-DD')
+  if (start === mondayStr && end === sundayStr) return 'week'
+
+  // This Month
+  const firstDay = date.startOfDate(today, 'month')
+  const lastDay = date.endOfDate(today, 'month')
+  const firstDayStr = date.formatDate(firstDay, 'YYYY-MM-DD')
+  const lastDayStr = date.formatDate(lastDay, 'YYYY-MM-DD')
+  if (start === firstDayStr && end === lastDayStr) return 'month'
+
+  return 'custom'
+})
 
 // 更新图表
 const updateCharts = () => {
@@ -2086,5 +2120,38 @@ onMounted(() => {
 
 :deep(.q-table__container)::-webkit-scrollbar-thumb:hover {
   background: #a8a8a8;
+}
+
+/* 日期筛选按钮组样式 (仿 Segmented Control) */
+.date-filter-group {
+  display: flex;
+  align-items: center;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 4px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.date-filter-item {
+  padding: 6px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #64748b;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.date-filter-item:hover {
+  color: #0f172a;
+  background-color: #f8fafc;
+}
+
+.date-filter-item.active {
+  background-color: #eef2ff;
+  color: #4f46e5;
+  font-weight: 600;
 }
 </style>
