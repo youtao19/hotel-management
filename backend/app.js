@@ -88,8 +88,6 @@ async function initializeSession() {
     const revenueRoute = require("./routes/revenueRoute");
     app.use("/api/revenue", revenueRoute);
 
-    const revenueStatisticsRoute = require("./routes/revenueStatisticsRoute");
-    app.use("/api/revenue-statistics", revenueStatisticsRoute);
 
     const dashboardMemoRoute = require("./routes/dashboardMemoRoute");
     app.use("/api/dashboard/memos", dashboardMemoRoute);

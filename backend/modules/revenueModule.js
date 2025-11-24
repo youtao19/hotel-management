@@ -2,6 +2,9 @@
 
 const { query } = require('../database/postgreDB/pg');
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+const TIMEZONE = 'Asia/Shanghai';
+
 // 支付方式标准化到中文标签
 function normalizePaymentMethod(method) {
   if (!method) return '现金';
@@ -34,6 +37,37 @@ async function getPayWayMapByOrder(startDate, endDate) {
   return map;
 }
 
+const DATE_FORMATTER_CACHE = new Map();
+
+function getFormatter(timezone = TIMEZONE) {
+  if (!DATE_FORMATTER_CACHE.has(timezone)) {
+    DATE_FORMATTER_CACHE.set(timezone, new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }));
+  }
+  return DATE_FORMATTER_CACHE.get(timezone);
+}
+
+function formatDateOnly(dateInput, timezone = TIMEZONE) {
+  const d = dateInput instanceof Date ? dateInput : new Date(dateInput || Date.now());
+  return getFormatter(timezone).format(d); // YYYY-MM-DD
+}
+
+function toDateOnlyInTz(dateInput, timezone = TIMEZONE) {
+  const d = dateInput instanceof Date ? dateInput : new Date(dateInput || Date.now());
+  const formatted = getFormatter(timezone).format(d); // YYYY-MM-DD in target TZ
+  return new Date(`${formatted}T00:00:00Z`); // treat as date-only anchor
+}
+
+function addDays(date, days) {
+  const d = new Date(date);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d;
+}
+
 
 
 async function getRefundMapByDate(startDate, endDate) {
@@ -45,7 +79,10 @@ async function getRefundMapByDate(startDate, endDate) {
     [startDate, endDate]
   );
   const map = new Map();
-  for (const r of res.rows) map.set(r.date.toISOString ? r.date.toISOString().split('T')[0] : String(r.date), Number(r.amount || 0));
+  for (const r of res.rows) {
+    const key = formatDateOnly(r.date);
+    map.set(key, Number(r.amount || 0));
+  }
   return map;
 }
 
@@ -73,7 +110,7 @@ async function getDailyRevenue(startDate, endDate, roomType) {
       : ordRes.rows;
 
     for (const o of orders) {
-      const day = (typeof o.check_in_date === 'string') ? o.check_in_date : (o.check_in_date?.toISOString?.().split('T')[0] || '');
+      const day = formatDateOnly(o.check_in_date);
       if (!day) continue;
       const roomFee = Number(o.total_price || 0); // total_price 现在是数值类型
       const deposit = Number(o.deposit || 0);
@@ -135,7 +172,7 @@ async function getDailyRevenue(startDate, endDate, roomType) {
       billCntRes = await query(billCntSql, [startDate, endDate]);
     }
     for (const r of billCntRes.rows) {
-      const day = (typeof r.date === 'string') ? r.date : (r.date?.toISOString?.().split('T')[0] || '');
+      const day = formatDateOnly(r.date);
       if (dayAgg.has(day)) dayAgg.get(day).bill_count = Number(r.cnt || 0);
     }
 
@@ -166,12 +203,10 @@ async function getWeeklyRevenue(startDate, endDate, roomType) {
       : ordRes.rows;
 
     for (const o of orders) {
-      const d = new Date(o.check_in_date);
-      const day = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-      const weekStart = new Date(day);
-      weekStart.setUTCDate(weekStart.getUTCDate() - weekStart.getUTCDay());
-      const weekEnd = new Date(weekStart); weekEnd.setUTCDate(weekStart.getUTCDate() + 6);
-      const wkKey = weekStart.toISOString().split('T')[0];
+      const dayStart = toDateOnlyInTz(o.check_in_date); // anchor to Asia/Shanghai
+      const weekStart = addDays(dayStart, -dayStart.getUTCDay());
+      const weekEnd = addDays(weekStart, 6);
+      const wkKey = formatDateOnly(weekStart);
 
       const roomFee = Number(o.total_price || 0); const deposit = Number(o.deposit || 0); const total = roomFee + deposit;
       const method = payMap.get(o.order_id) || normalizePaymentMethod(o.payment_method);
@@ -179,9 +214,9 @@ async function getWeeklyRevenue(startDate, endDate, roomType) {
       if (!weekAgg.has(wkKey)) {
         weekAgg.set(wkKey, {
           week_start: wkKey,
-          week_end: weekEnd.toISOString().split('T')[0],
-          year: d.getUTCFullYear(),
-          week_number: null,
+          week_end: formatDateOnly(weekEnd),
+          year: dayStart.getUTCFullYear(),
+          week_number: null, // 留空，未使用
           order_count: 0,
           bill_count: 0,
           total_revenue: 0,
@@ -234,15 +269,15 @@ async function getMonthlyRevenue(startDate, endDate, roomType) {
       : ordRes.rows;
 
     for (const o of orders) {
-      const d = new Date(o.check_in_date);
-      const key = `${d.getUTCFullYear()}-${(d.getUTCMonth() + 1).toString().padStart(2, '0')}-01`;
+      const monthAnchor = toDateOnlyInTz(o.check_in_date);
+      const key = `${monthAnchor.getUTCFullYear()}-${(monthAnchor.getUTCMonth() + 1).toString().padStart(2, '0')}-01`;
       const roomFee = Number(o.total_price || 0); const deposit = Number(o.deposit || 0); const total = roomFee + deposit;
       const method = payMap.get(o.order_id) || normalizePaymentMethod(o.payment_method);
       if (!monthAgg.has(key)) {
         monthAgg.set(key, {
           month_start: key,
-          year: d.getUTCFullYear(),
-          month: d.getUTCMonth() + 1,
+          year: monthAnchor.getUTCFullYear(),
+          month: monthAnchor.getUTCMonth() + 1,
           order_count: 0,
           bill_count: 0,
           total_revenue: 0,
@@ -283,51 +318,134 @@ async function getMonthlyRevenue(startDate, endDate, roomType) {
  */
 async function getRevenueOverview(startDate, endDate) {
   try {
-    // 查询区间内订单的房费、押金、支付方式
-    const ordSql = `SELECT order_id, total_price, deposit, payment_method FROM orders WHERE DATE(check_in_date) BETWEEN $1 AND $2`;
+    // 查询与日期区间有交集的订单（跨日住宿也会被统计进来）
+    // 条件解释：
+    // check_in_date <= 结束日
+    // check_out_date > 开始日（退房日不计费，因此 > 而不是 >=）
+    // 排除已取消订单
+    const ordSql = `
+      SELECT order_id, total_price, deposit, payment_method, check_in_date, check_out_date
+      FROM orders
+      WHERE check_in_date::date <= $2::date
+        AND check_out_date::date > $1::date
+        AND NOT status IN ('cancelled')
+    `;
+
+    // 同时查询：
+    // ① 区间内的订单
+    // ② 每个订单的支付方式映射（优先账单中的支付方式）
+    // ③ 区间内所有退押退款金额
     const [ordRes, payMap, refundRes] = await Promise.all([
       query(ordSql, [startDate, endDate]),
-      getPayWayMapByOrder(startDate, endDate), // 优先账单中记录的支付方式
-      query(`SELECT SUM(COALESCE(change_price,0) * -1) AS refund FROM bills WHERE change_type IN ('退押', '退款') AND create_time::date BETWEEN $1 AND $2`, [startDate, endDate])
+      getPayWayMapByOrder(startDate, endDate),
+      query(
+        `SELECT SUM(COALESCE(change_price,0) * -1) AS refund
+         FROM bills
+         WHERE change_type IN ('退押', '退款')
+           AND create_time::date BETWEEN $1 AND $2`,
+        [startDate, endDate]
+      )
     ]);
 
-    // 概览初始值
+    // 初始化概览统计对象，所有字段为累加器
     const overview = {
-      total_orders: 0,
-      total_revenue: 0,
-      avg_order_value: 0,
-      total_deposit_refund: Number(refundRes.rows?.[0]?.refund || 0),
-      total_room_fee: 0,
-      max_order_value: 0,
-      min_order_value: 0,
+      total_orders: 0,          // 订单数量（按贡献天数计算后仍然算一个订单）
+      total_revenue: 0,         // 汇总收入（房费 + 押金贡献）
+      avg_order_value: 0,       // 平均订单金额
+      total_deposit_refund: Number(refundRes.rows?.[0]?.refund || 0), // 退押退款总额
+      total_room_fee: 0,        // 房费部分（按区间天数拆分）
+      max_order_value: 0,       // 区间内单订单最高贡献额
+      min_order_value: 0,       // 区间内单订单最低贡献额
+      // 支付方式统计
       cash_orders: 0, wechat_orders: 0, alipay_orders: 0, credit_card_orders: 0,
       cash_revenue: 0, wechat_revenue: 0, alipay_revenue: 0, credit_card_revenue: 0
     };
 
-    // 遍历订单累计各类指标
+    // 将区间起止转换为时区内的“日期零点”
+    const rangeStart = toDateOnlyInTz(startDate);
+    const rangeEnd = toDateOnlyInTz(endDate);
+
+    // 遍历所有符合条件的订单，计算其在区间内的真实收入贡献
     for (const o of ordRes.rows) {
-      const roomFee = Number(o.total_price || 0);
-      const deposit = Number(o.deposit || 0);
-      const total = roomFee + deposit;
+      // 将订单信息转化为数值与日期，避免出现字符串或时区偏移问题
+      const roomFee = Number(o.total_price || 0);   // 整单房费
+      const deposit = Number(o.deposit || 0);       // 入住押金
+      const checkIn = toDateOnlyInTz(o.check_in_date);
+      const checkOut = toDateOnlyInTz(o.check_out_date);
+      const stayLastChargeDate = addDays(checkOut, -1); // 退房日不计费，因此减一天
+
+      // 计算订单住宿天数（nights）
+      let nights = Math.round((checkOut.getTime() - checkIn.getTime()) / DAY_MS);
+      if (nights <= 0) nights = 1; // 最少算一天
+
+      // **计算订单在查询区间内的重叠天数**
+      const overlapStart = rangeStart > checkIn ? rangeStart : checkIn;
+      const overlapEnd = rangeEnd < stayLastChargeDate ? rangeEnd : stayLastChargeDate;
+
+      // 若重叠区间无效，则该订单对本区间没有收入贡献
+      if (overlapStart > overlapEnd) continue;
+
+      // 计算订单在该区间内的具体天数
+      const overlapDays =
+        Math.floor((overlapEnd.getTime() - overlapStart.getTime()) / DAY_MS) + 1;
+
+      // → 房费按天拆分为 nightly price
+      const perNightRoomFee = nights
+        ? Number((roomFee / nights).toFixed(2))
+        : roomFee;
+
+      // → 房费在本区间的贡献
+      const roomContribution = perNightRoomFee * overlapDays;
+
+      // → 押金贡献规则：只有在区间内的入住日，押金才算进收入
+      const depositContribution =
+        (checkIn >= rangeStart && checkIn <= rangeEnd) ? deposit : 0;
+
+      // → 订单此区间总贡献
+      const total = roomContribution + depositContribution;
+
+      // → 支付方式优先取账单映射，否则 fallback 为订单上的 payment_method
       const method = payMap.get(o.order_id) || normalizePaymentMethod(o.payment_method);
+
+      // 累计概览数据
       overview.total_orders += 1;
       overview.total_revenue += total;
-      overview.total_room_fee += roomFee;
+      overview.total_room_fee += roomContribution;
+
+      // 更新最高单、最低单金额
       overview.max_order_value = Math.max(overview.max_order_value, total);
-      overview.min_order_value = overview.min_order_value === 0 ? total : Math.min(overview.min_order_value, total);
-      const inc = (f, v) => overview[f] = (overview[f] || 0) + v; // 累加工具函数
+      overview.min_order_value =
+        overview.min_order_value === 0
+          ? total
+          : Math.min(overview.min_order_value, total);
+
+      // 累加支付方式
+      const inc = (f, v) => (overview[f] = (overview[f] || 0) + v);
       switch (method) {
-        case '现金': inc('cash_orders', 1); inc('cash_revenue', total); break;
-        case '微信': inc('wechat_orders', 1); inc('wechat_revenue', total); break;
-        case '微邮付': inc('alipay_orders', 1); inc('alipay_revenue', total); break;
+        case "现金":
+          inc("cash_orders", 1);
+          inc("cash_revenue", total);
+          break;
+        case "微信":
+          inc("wechat_orders", 1);
+          inc("wechat_revenue", total);
+          break;
+        case "微邮付":
+          inc("alipay_orders", 1);
+          inc("alipay_revenue", total);
+          break;
       }
     }
 
-    // 平均订单金额
-    overview.avg_order_value = overview.total_orders ? (overview.total_revenue / overview.total_orders) : 0;
+    // 计算平均订单金额
+    overview.avg_order_value =
+      overview.total_orders
+        ? overview.total_revenue / overview.total_orders
+        : 0;
+
     return overview;
   } catch (error) {
-    console.error('获取收入概览数据库错误:', error);
+    console.error("获取收入概览数据库错误:", error);
     throw error;
   }
 }

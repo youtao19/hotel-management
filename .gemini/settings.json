@@ -1,13 +1,21 @@
 {
   "mcpServers": {
-    "postgres": {
-      "command": "postgres-mcp",
+    "postgres-docker": {
+      "command": "npx",
       "args": [
-        "--access-mode=unrestricted"
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "postgresql://peach:1219@localhost:5432/hotel_db"
+      ]
+    },
+    "postgres": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "postgresql://peach:1219@localhost:5432/hotel_db"
       ],
-      "env": {
-        "DATABASE_URI": "postgresql://peach:1219@localhost:5432/hotel_db"
-      }
+      "trust": true
     }
   }
 }

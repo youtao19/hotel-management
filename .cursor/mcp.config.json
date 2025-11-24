@@ -1,8 +1,12 @@
 {
-  "tools": {
-    "postgres-mcp": {
-      "type": "server",
-      "url": "http://localhost:8001"
+  "mcpServers": {
+    "postgres-1": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "postgresql://peach:1219@localhost:5432/hotel_db"
+      ]
     }
   }
 }

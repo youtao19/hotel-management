@@ -42,7 +42,6 @@ npm start
 npm test
 ```
 
-此命令将运行 Jest 测试套件。
 
 **4. 数据库初始化和迁移:**
 
@@ -62,3 +61,4 @@ npm test
 *   **前端组件:** 前端被组织成页面 (pages)、组件 (components) 和状态管理 (stores/Pinia)。
 *   **状态管理:** 使用 Pinia 进行全局状态管理，状态存储在 `src/stores/` 目录中。
 *   **环境变量:** 使用 `.env` 文件来配置环境变量。
+*   **编写测试:** 测试文件位于`backend/tests/`目录中，使用 Jest 进行测试编写和运行。

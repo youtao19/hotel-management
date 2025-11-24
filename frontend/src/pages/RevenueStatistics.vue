@@ -411,7 +411,7 @@
             </q-card-section>
           </q-card>
 
-          <!-- 收入趋势图表（在每日营收明细下方，风格对齐 React 示例） -->
+          <!-- 收入趋势图表（在每日营收明细下方） -->
           <q-card class="trend-card">
             <q-card-section>
               <div class="row items-center justify-between q-mb-md">
@@ -592,6 +592,7 @@ const billPagination = ref({ rowsPerPage: 10 })
 let suppressBillWatch = false
 let billRoomFilterTimer = null
 
+
 const billTableColumns = [
   { name: 'bill_id', label: '账单ID', field: 'bill_id', align: 'left' },
   { name: 'order_id', label: '订单ID', field: 'order_id', align: 'left' },
@@ -737,7 +738,7 @@ const filteredReceiptDetails = computed(() => {
     list = list.filter(item => item.room_type === selectedRoomType.value)
   }
 
-  // 按房间号搜索（参考 React 示例中的搜索框）
+  // 按房间号搜索
   const keyword = (receiptRoomSearch.value || '').trim()
   if (keyword) {
     list = list.filter(item => String(item.room_number || '').includes(keyword))
@@ -761,13 +762,8 @@ const receiptPaymentSummary = computed(() => {
   return summary
 })
 
-// 收款明细表计算属性
-const receiptIsToday = computed(() => {
-  const today = date.formatDate(new Date(), 'YYYY-MM-DD')
-  return receiptSelectedDate.value === today
-})
 
-// 趋势图右上角标签（类似 React 示例中的时间范围文案）
+// 趋势图右上角标签
 const selectedPeriodLabel = computed(() => {
   const periodMap = {
     daily: '每日统计',
@@ -817,15 +813,6 @@ const clearSelectedRoomType = () => {
   selectedRoomType.value = null
 }
 
-// 收款明细表日期格式化
-const formatReceiptDisplayDate = (dateStr) => {
-  if (!dateStr) return ''
-  try {
-    return date.formatDate(new Date(dateStr), 'MM-DD')
-  } catch (e) {
-    return dateStr
-  }
-}
 
 const extractBillList = (payload) => {
   if (Array.isArray(payload)) return payload
@@ -835,6 +822,7 @@ const extractBillList = (payload) => {
   return []
 }
 
+// 获取详细收入数据表的数据
 const fetchBillDetails = async () => {
   billLoading.value = true
   try {
@@ -904,6 +892,7 @@ const fetchBillDetails = async () => {
   }
 }
 
+
 const applyBillFilters = async () => {
   if (billRoomFilterTimer) {
     clearTimeout(billRoomFilterTimer)
@@ -930,7 +919,7 @@ const resetBillFilters = async () => {
   }
 }
 
-// 获取快速统计数据
+// 获取快速统计数据，前三张卡片的数据
 const fetchQuickStats = async () => {
   try {
     console.log('开始获取快速统计数据...')
@@ -952,7 +941,10 @@ const fetchQuickStats = async () => {
   }
 }
 
-// 获取收入数据
+/**
+ * 在收入统计页面点击查询或切换日期范围/周期/房型后
+ * 这个函数触发，刷新表格/卡片数据，并更新图表（折线、柱状等）显示新的收入走势和房型占比
+ */
 const fetchRevenueData = async () => {
   console.log('fetchRevenueData 被调用')
   console.log('日期范围检查:', {
@@ -1128,6 +1120,7 @@ const setFilterToday = () => {
   dateRange.value.end = today
 }
 
+// 昨天
 const setFilterYesterday = () => {
   const yesterday = date.subtractFromDate(new Date(), { days: 1 })
   const y = date.formatDate(yesterday, 'YYYY-MM-DD')
@@ -1135,6 +1128,7 @@ const setFilterYesterday = () => {
   dateRange.value.end = y
 }
 
+// 本周（周一到周日）
 const setFilterThisWeek = () => {
   const today = new Date()
   const currentDay = today.getDay() // 0为周日，1为周一
@@ -1145,6 +1139,7 @@ const setFilterThisWeek = () => {
   dateRange.value.end = date.formatDate(sunday, 'YYYY-MM-DD')
 }
 
+// 本月（本月第一天到最后一天）
 const setFilterThisMonth = () => {
   const today = new Date()
   const firstDayOfMonth = date.startOfDate(today, 'month')
@@ -1153,6 +1148,8 @@ const setFilterThisMonth = () => {
   dateRange.value.end = date.formatDate(lastDayOfMonth, 'YYYY-MM-DD')
 }
 
+
+// 根据日期范围判断当前筛选类型（今天/昨天/本周/本月/自定义）
 const currentFilterType = computed(() => {
   const start = dateRange.value.start
   const end = dateRange.value.end
@@ -1363,7 +1360,12 @@ const getPaymentMethodColor = (method) => {
   return 'grey'
 }
 
-// 获取收款明细
+/**
+ * 获取每日营收明细
+ * 用于每日营收明细表
+ * @param customStartDate 开始时间
+ * @param customEndDate 结束时间
+ */
 const fetchReceiptDetails = async (customStartDate = null, customEndDate = null) => {
   receiptLoading.value = true
   try {
@@ -1387,7 +1389,7 @@ const fetchReceiptDetails = async (customStartDate = null, customEndDate = null)
       }
     }
 
-    const response = await api.get('/revenue-statistics/receipts', {
+    const response = await api.get('/revenue/receipts', {
       params: {
         type: receiptType.value,
         startDate: startDate,
@@ -1444,68 +1446,6 @@ const fetchReceiptDetails = async (customStartDate = null, customEndDate = null)
   }
 }
 
-// 切换收款明细类型
-const switchReceiptType = async (type) => {
-  if (type && type !== receiptType.value) {
-    receiptType.value = type
-    await fetchReceiptDetails()
-  } else if (!type) {
-    // 如果没有传递参数，说明是从 q-btn-toggle 调用的
-    await fetchReceiptDetails()
-  }
-}
-
-// 刷新收款明细
-const refreshReceiptDetails = async () => {
-  await fetchReceiptDetails()
-}
-
-// 收款明细日期变化处理
-const onReceiptDateChange = async () => {
-  await fetchReceiptDetails()
-}
-
-// 快捷日期选择方法
-const setReceiptToday = async () => {
-  const today = date.formatDate(new Date(), 'YYYY-MM-DD')
-  receiptSelectedDate.value = today
-  await fetchReceiptDetails()
-}
-
-const setReceiptYesterday = async () => {
-  const yesterday = date.subtractFromDate(new Date(), { days: 1 })
-  receiptSelectedDate.value = date.formatDate(yesterday, 'YYYY-MM-DD')
-  await fetchReceiptDetails()
-}
-
-const setReceiptThisWeek = async () => {
-  const today = new Date()
-  const currentDay = today.getDay() // 0为周日，1为周一
-  const mondayOffset = currentDay === 0 ? -6 : 1 - currentDay // 计算到周一的偏移
-
-  const monday = date.addToDate(today, { days: mondayOffset })
-  const sunday = date.addToDate(monday, { days: 6 })
-
-  const startDate = date.formatDate(monday, 'YYYY-MM-DD')
-  const endDate = date.formatDate(sunday, 'YYYY-MM-DD')
-
-  // 设置显示日期为今天
-  receiptSelectedDate.value = date.formatDate(new Date(), 'YYYY-MM-DD')
-  await fetchReceiptDetails(startDate, endDate)
-}
-
-const setReceiptThisMonth = async () => {
-  const today = new Date()
-  const firstDayOfMonth = date.startOfDate(today, 'month')
-  const lastDayOfMonth = date.endOfDate(today, 'month')
-
-  const startDate = date.formatDate(firstDayOfMonth, 'YYYY-MM-DD')
-  const endDate = date.formatDate(lastDayOfMonth, 'YYYY-MM-DD')
-
-  // 设置显示日期为今天
-  receiptSelectedDate.value = date.formatDate(new Date(), 'YYYY-MM-DD')
-await fetchReceiptDetails(startDate, endDate)
-}
 
 watch(() => billFilters.value.date, () => {
   if (suppressBillWatch) return
