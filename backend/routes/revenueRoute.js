@@ -382,10 +382,10 @@ router.get('/receipts', async (req, res) => {
             SELECT
                 to_char(b.create_time, 'YYYY-MM-DD') as bill_date,
                 b.order_id,
-                string_agg(DISTINCT b.room_number::text, ', ') as room_number,
+                b.room_number,
                 MAX(b.guest_name) as guest_name,
                 SUM(b.change_price) as total_amount,
-                string_agg(DISTINCT b.pay_way, ', ') as payment_method,
+                b.pay_way as payment_method,
                 MAX(o.room_type) as room_type,
                 MAX(rt.type_name) as room_type_name,
                 MAX(o.check_in_date) as stay_date,
@@ -396,7 +396,7 @@ router.get('/receipts', async (req, res) => {
             LEFT JOIN room_types rt ON o.room_type = rt.type_code
             WHERE b.create_time::date >= $1::date
               AND b.create_time::date <= $2::date
-            GROUP BY to_char(b.create_time, 'YYYY-MM-DD'), b.order_id
+            GROUP BY to_char(b.create_time, 'YYYY-MM-DD'), b.order_id ,b.room_number, b.pay_way
             ORDER BY bill_date DESC, created_at DESC
         `;
 

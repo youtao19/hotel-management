@@ -660,7 +660,7 @@ const receiptColumns = [
   },
   { name: 'guestName', label: '客户姓名', field: 'guest_name', align: 'center', style: 'width: 100px' },
   { name: 'orderNumber', label: '单号', field: 'order_number', align: 'left', style: 'width: 120px' },
-  { name: 'stayDate', label: '入住日期', field: 'stay_date_display', align: 'center', style: 'width: 140px' },
+  { name: 'stayDate', label: '收款日期', field: 'stay_date_display', align: 'center', style: 'width: 140px' },
   {
     name: 'paymentMethod',
     label: '支付方式',
@@ -1402,7 +1402,8 @@ const fetchReceiptDetails = async (customStartDate = null, customEndDate = null)
     }
 
     receiptDetails.value = response.data.map(item => {
-      const raw = item.stay_date
+      // 方案A：统一使用账单日期作为收款日期，缺失时回退到入住或创建时间
+      const raw = item.bill_date || item.stay_date || item.created_at
       let stayDateDisplay = ''
       if (raw) {
         if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
