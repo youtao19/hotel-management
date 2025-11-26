@@ -58,6 +58,7 @@ import { ref, watch, computed } from 'vue';
 import { useQuasar } from 'quasar';
 import api from 'src/api';
 import { useViewStore } from 'src/stores/viewStore'; // 1. 导入 viewStore
+import Decimal from 'decimal.js';
 
 const props = defineProps({
   modelValue: Boolean,
@@ -69,6 +70,10 @@ const emit = defineEmits(['update:modelValue', 'success']);
 const $q = useQuasar();
 const loading = ref(false);
 const viewStore = useViewStore(); // 2. 实例化 store
+const toDecimal = (v) => {
+  try { return new Decimal(v || 0) } catch { return new Decimal(0) }
+};
+const toAmountNumber = (v) => Number(toDecimal(v).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toString());
 
 const adjustment = ref({
   amount: null,
@@ -99,7 +104,7 @@ async function handleSubmit() {
   try {
     const payload = {
       order_id: props.order.orderNumber,
-      change_price: parseFloat(adjustment.value.amount),
+      change_price: toAmountNumber(adjustment.value.amount),
       change_type: adjustment.value.type,
       method: adjustment.value.paymentMethod,
       notes: adjustment.value.notes

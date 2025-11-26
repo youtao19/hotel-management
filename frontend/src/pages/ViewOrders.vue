@@ -232,6 +232,7 @@ import RefundDepositDialog from 'src/components/RefundDepositDialog.vue';
 import CheckInConfirmDialog from 'src/components/CheckInConfirmDialog.vue';
 import EarlyCheckoutDialog from 'src/components/EarlyCheckoutDialog.vue';
 import { watch } from 'vue'
+import Decimal from 'decimal.js'
 
 
 // 初始化 stores
@@ -522,38 +523,48 @@ const checkInOrder_ref = ref(null)
 // 退押按钮可见性的本地缓存：true 可退；false 不可退；未定义 表示尚未计算
 const refundableMap = ref({})
 
+const toDecimal = (val) => {
+  try {
+    return new Decimal(val || 0)
+  } catch (e) {
+    return new Decimal(0)
+  }
+}
+const toAmountNumber = (val) => Number(toDecimal(val).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toString())
+
 // 计算单个订单是否可退押（异步，结果写入 refundableMap）
 async function computeRefundable(order) {
   try {
     if (!order) return;
     const key = String(order.orderNumber);
     // 仅对已退房且押金>0的订单计算
-    const deposit = Number(order.deposit) || 0;
-    if (!allowedRefundStatuses.includes(order.status) || deposit <= 0) {
+    const deposit = toDecimal(order.deposit);
+    if (!allowedRefundStatuses.includes(order.status) || deposit.lte(0)) {
       refundableMap.value[key] = false;
       return;
     }
 
     // 拉取该订单的账单
     const bills = await billStore.getBillsByOrderId(key);
-    let refundedFromBills = 0;
+    let refundedFromBills = new Decimal(0);
     let hasRefundRow = false;
     (bills || []).forEach(b => {
       if (b?.change_type === '退押') {
         hasRefundRow = true;
-        const cp = Number(b?.change_price) || 0;
-        if (cp < 0) refundedFromBills += -cp;
+        const cp = toDecimal(b?.change_price);
+        if (cp.isNegative()) refundedFromBills = refundedFromBills.plus(cp.abs());
       }
     });
     const legacyRefund = (bills || []).reduce((sum, b) => {
-      const rd = Number(b?.refund_deposit);
-      if (!isNaN(rd) && rd < 0) return sum + (-rd);
+      const rd = toDecimal(b?.refund_deposit);
+      if (rd.isNegative()) return sum.plus(rd.abs());
       return sum;
-    }, 0);
-    const totalRefunded = Math.max(refundedFromBills + legacyRefund, Number(order.refundedDeposit || 0));
+    }, new Decimal(0));
+    const refundedDeposit = toDecimal(order.refundedDeposit || 0);
+    const totalRefunded = Decimal.max(refundedFromBills.plus(legacyRefund), refundedDeposit);
 
     // 规则：发生过退押记录或累计退额>=押金，则不可再次退押
-    refundableMap.value[key] = !(hasRefundRow || totalRefunded >= deposit);
+    refundableMap.value[key] = !(hasRefundRow || totalRefunded.greaterThanOrEqualTo(deposit));
   } catch (e) {
     console.warn('computeRefundable 失败，按不可退处理:', e);
     if (order?.orderNumber) refundableMap.value[String(order.orderNumber)] = false;
@@ -1145,10 +1156,10 @@ async function handleExtendStay(extendStayData) {
       if (priceData && typeof priceData === 'object' && !Array.isArray(priceData)) {
         return { ...priceData };
       }
-      const nightlyTotal = typeof priceData === 'number' ? Number(priceData) : Number(extendStayData.totalPrice);
+      const nightlyTotal = typeof priceData === 'number' ? toDecimal(priceData) : toDecimal(extendStayData.totalPrice);
       const checkInDate = extendStayData.checkInDate;
-      if (checkInDate && !Number.isNaN(nightlyTotal) && nightlyTotal > 0) {
-        return { [checkInDate]: nightlyTotal };
+      if (checkInDate && nightlyTotal.gt(0)) {
+        return { [checkInDate]: toAmountNumber(nightlyTotal) };
       }
       return {};
     })();
@@ -1446,7 +1457,7 @@ async function loadInitialData() {
     // 计算所有候选订单的退押可见性
     const list = Array.isArray(orderStore.orders) ? orderStore.orders : [];
     const tasks = list
-      .filter(o => allowedRefundStatuses.includes(o.status) && Number(o.deposit) > 0)
+      .filter(o => allowedRefundStatuses.includes(o.status) && toDecimal(o.deposit).gt(0))
       .map(o => computeRefundable(o));
     if (tasks.length) await Promise.allSettled(tasks);
   } catch (error) {
@@ -1463,7 +1474,7 @@ watch(() => orderStore.orders, (newOrders) => {
   if (Array.isArray(newOrders)) {
     // 重新计算所有候选订单的退押可见性
     const tasks = newOrders
-      .filter(o => allowedRefundStatuses.includes(o.status) && Number(o.deposit) > 0)
+      .filter(o => allowedRefundStatuses.includes(o.status) && toDecimal(o.deposit).gt(0))
       .map(o => computeRefundable(o));
     if (tasks.length) {
       Promise.allSettled(tasks).catch(e => {

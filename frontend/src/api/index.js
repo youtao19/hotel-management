@@ -263,7 +263,7 @@ export const revenueApi = {
     api.get('/revenue/monthly', { params: { startDate, endDate, roomType } }),
 
   // 获取收入概览统计
-  getRevenueOverview: (startDate, endDate) => api.get('/revenue/overview', { params: { startDate, endDate } }),
+  getRevenueOverview: (startDate, endDate) => api.get('/revenue/getOverview', { params: { startDate, endDate } }),
 
   // 获取房型收入统计
   getRoomTypeRevenue: (startDate, endDate) => api.get('/revenue/room-type', { params: { startDate, endDate } }),

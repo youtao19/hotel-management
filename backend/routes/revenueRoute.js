@@ -6,9 +6,9 @@ const {
     getDailyRevenue,
     getWeeklyRevenue,
     getMonthlyRevenue,
-    getRevenueOverview,
     getRoomTypeRevenue,
-    getRevenueBillDetails
+    getRevenueBillDetails,
+    getOverview
 } = require('../modules/revenueModule');
 
 /**
@@ -180,7 +180,7 @@ router.get('/overview', async (req, res) => {
             });
         }
 
-        const overview = await getRevenueOverview(startDate, endDate);
+        const overview = await getOverview(startDate, endDate);
 
         res.json({
             message: '获取收入概览成功',
@@ -280,9 +280,9 @@ router.get('/quick-stats', async (req, res) => {
 
         // 并行获取今日、本周、本月数据
         const [todayStats, weekStats, monthStats] = await Promise.all([
-            getRevenueOverview(today, today),
-            getRevenueOverview(thisWeekStartStr, today),
-            getRevenueOverview(thisMonthStartStr, today)
+            getOverview(today, today),
+            getOverview(thisWeekStartStr, today),
+            getOverview(thisMonthStartStr, today)
         ]);
 
         console.log('📊 统计结果:', { todayStats, weekStats, monthStats });

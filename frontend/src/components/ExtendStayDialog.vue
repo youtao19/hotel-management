@@ -244,6 +244,7 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import { date } from 'quasar'
 import { useViewStore } from '../stores/viewStore'
+import Decimal from 'decimal.js'
 
 const viewStore = useViewStore()
 
@@ -258,6 +259,11 @@ const props = defineProps({
 
 // Emits
 const emit = defineEmits(['update:modelValue', 'extend-stay', 'refresh-rooms'])
+
+const toDecimal = (val) => {
+  try { return new Decimal(val || 0) } catch { return new Decimal(0) }
+}
+const toAmountNumber = (val) => Number(toDecimal(val).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toString())
 
 // 响应式数据
 const selectedRoom = ref(null)
@@ -277,7 +283,7 @@ const userModifiedPrice = ref(false)
 const dailyPrices = ref({})
 const singlePriceRules = [
   val => val !== null && val !== undefined && val !== '' || '请输入房价',
-  val => parseFloat(val) > 0 || '房价必须大于0'
+  val => toDecimal(val).gt(0) || '房价必须大于0'
 ]
 
 // 支付方式选项
@@ -324,21 +330,22 @@ const stayDays = computed(() => {
 const totalPrice = computed(() => {
   if (!selectedRoomInfo.value || !stayDays.value) return 0
   if (stayDays.value === 1) {
-    const unit = parseFloat(customUnitPrice.value) || 0
-    return unit
+    const unit = toDecimal(customUnitPrice.value)
+    return toAmountNumber(unit)
   }
-  return Object.values(dailyPrices.value).reduce((s,v)=> s + (parseFloat(v)||0),0)
+  const sum = Object.values(dailyPrices.value).reduce((acc, v) => acc.plus(toDecimal(v)), new Decimal(0))
+  return toAmountNumber(sum)
 })
 
 const canConfirm = computed(() => {
   // 手机号变为可选，但如果填了必须是11位
   const phoneValid = !guestPhone.value || guestPhone.value.trim().length === 11
   if (!(selectedRoom.value && extendStartDate.value && extendEndDate.value && guestName.value.trim() && phoneValid && newOrderNumber.value.trim() && paymentMethod.value && stayDays.value > 0)) return false
-  if (stayDays.value === 1) return parseFloat(customUnitPrice.value) > 0
+  if (stayDays.value === 1) return toDecimal(customUnitPrice.value).gt(0)
   // 多日：所有 dailyPrices 完整且>0
   const dates = stayDateList.value
   if (!dates.length) return false
-  return dates.every(d => parseFloat(dailyPrices.value[d]) > 0)
+  return dates.every(d => toDecimal(dailyPrices.value[d]).gt(0))
 })
 
 // 检查原房间是否在可用房间列表中
@@ -417,7 +424,7 @@ watch(stayDateList, (list) => {
   // 删除不存在的
   Object.keys(current).forEach(k => { if (!list.includes(k)) delete current[k] })
   // 新增的设默认价：优先使用 selectedRoomInfo 的价格，其次 customUnitPrice
-  const defaultPrice = selectedRoomInfo.value?.price || parseFloat(customUnitPrice.value) || 0
+  const defaultPrice = selectedRoomInfo.value?.price || toAmountNumber(customUnitPrice.value) || 0
   list.forEach(d => {
     if (current[d] === undefined) {
       current[d] = defaultPrice
@@ -471,9 +478,9 @@ watch(() => props.modelValue, (newVal) => {
       const rp = props.currentOrder.roomPrice
       if (rp && typeof rp === 'object') {
         const keys = Object.keys(rp).sort()
-        if (keys.length) customUnitPrice.value = parseFloat(rp[keys[keys.length-1]]) || parseFloat(rp[keys[0]]) || 0
+        if (keys.length) customUnitPrice.value = toAmountNumber(rp[keys[keys.length-1]]) || toAmountNumber(rp[keys[0]]) || 0
       } else if (typeof rp === 'number') {
-        customUnitPrice.value = rp
+        customUnitPrice.value = toAmountNumber(rp)
       }
     } catch(e){ customUnitPrice.value = selectedRoomInfo.value?.price || 0 }
   } else if (!newVal) {
@@ -504,7 +511,9 @@ async function confirmExtendStay() {
       originalOrderNumber: props.currentOrder.orderNumber,
       roomNumber: selectedRoom.value,
       roomType: selectedRoomInfo.value.type,
-      roomPrice: stayDays.value === 1 ? (parseFloat(customUnitPrice.value) || selectedRoomInfo.value.price) : { ...dailyPrices.value },
+      roomPrice: stayDays.value === 1
+        ? (toAmountNumber(customUnitPrice.value) || selectedRoomInfo.value.price)
+        : Object.fromEntries(Object.entries(dailyPrices.value).map(([k, v]) => [k, toAmountNumber(v)])),
       checkInDate: extendStartDate.value,
       checkOutDate: extendEndDate.value,
       guestName: guestName.value.trim(),

@@ -170,9 +170,14 @@ import { ref, watch, computed } from 'vue';
 import { useQuasar } from 'quasar';
 import { billApi, orderApi } from '../api';
 import { useViewStore } from '../stores/viewStore';
+import Decimal from 'decimal.js';
 
 const $q = useQuasar();
 const viewStore = useViewStore();
+const toDecimal = (val) => {
+  try { return new Decimal(val || 0); } catch { return new Decimal(0); }
+};
+const toAmountNumber = (val) => Number(toDecimal(val).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toString());
 
 // 通用日期格式化函数，避免时区问题
 function formatDateFromDB(dateString) {
@@ -208,7 +213,8 @@ const paymentMethodOptions = computed(() => viewStore.paymentMethodOptions);
 // 计算总房费
 const totalRoomPrice = computed(() => {
   if (!editableOrder.value || !editableOrder.value.roomPrice) return 0;
-  return Object.values(editableOrder.value.roomPrice).reduce((sum, price) => sum + (Number(price) || 0), 0);
+  const sum = Object.values(editableOrder.value.roomPrice).reduce((acc, price) => acc.plus(toDecimal(price)), new Decimal(0));
+  return toAmountNumber(sum);
 });
 
 // 格式化日期显示
@@ -261,9 +267,9 @@ watch(() => props.order, async (newOrder) => {
 
     // Initialize roomPrice from order's roomPrice field (from orderStore)
     // 注意：orderStore 将 API 的 total_price 映射为 roomPrice
-    const price = Number(clonedOrder.roomPrice)
-                  || Number(clonedOrder.total_price)
-                  || 0;
+    const price = toDecimal(clonedOrder.roomPrice)
+                  .plus(toDecimal(clonedOrder.total_price))
+                  .toNumber();
     console.log('💰 订单总房价:', price);
     console.log('📅 入住日期:', clonedOrder.checkInDate, '离店日期:', clonedOrder.checkOutDate);
 
@@ -273,16 +279,17 @@ watch(() => props.order, async (newOrder) => {
 
     if (stayDates.length > 0) {
       const nights = stayDates.length;
-      const average = nights > 0 ? price / nights : price;
-      let cumulated = 0;
+      const priceDec = toDecimal(price);
+      const average = nights > 0 ? priceDec.div(nights) : priceDec;
+      let cumulated = new Decimal(0);
 
       stayDates.forEach((date, index) => {
         const baseValue = index === nights - 1
-          ? price - cumulated
+          ? priceDec.minus(cumulated)
           : average;
-        const normalized = Number((baseValue || 0).toFixed(2));
+        const normalized = toAmountNumber(baseValue);
         clonedOrder.roomPrice[date] = normalized;
-        cumulated += normalized;
+        cumulated = cumulated.plus(normalized);
       });
       console.log('📊 初始房费分配:', clonedOrder.roomPrice);
     } else {
@@ -301,21 +308,21 @@ watch(() => props.order, async (newOrder) => {
       if (response.success && response.data.length > 0) {
         billData.value = response.data; // 存储账单数据
         const newRoomPrice = {};
-        let totalDeposit = 0;
+        let totalDeposit = new Decimal(0);
         let hasValidRoomFee = false; // 标记是否有有效的房费数据
 
         response.data.forEach(bill => {
           // 使用通用日期格式化函数
           const stayDate = formatDateFromDB(bill.stay_date);
           if (stayDate) {
-            const roomFee = Number(bill.room_fee) || 0;
-            newRoomPrice[stayDate] = roomFee;
-            if (roomFee > 0) {
+            const roomFee = toDecimal(bill.room_fee);
+            newRoomPrice[stayDate] = toAmountNumber(roomFee);
+            if (roomFee.gt(0)) {
               hasValidRoomFee = true; // 有非零房费
             }
             console.log(`📅 账单日期处理: ${bill.stay_date} -> ${stayDate}, 房费: ${bill.room_fee}`);
           }
-          totalDeposit += Number(bill.deposit) || 0;
+          totalDeposit = totalDeposit.plus(toDecimal(bill.deposit));
         });
 
         if (editableOrder.value) {
@@ -329,8 +336,8 @@ watch(() => props.order, async (newOrder) => {
           }
 
           // 押金总是使用账单中的数据
-          if (totalDeposit > 0) {
-            editableOrder.value.deposit = totalDeposit;
+          if (totalDeposit.gt(0)) {
+            editableOrder.value.deposit = toAmountNumber(totalDeposit);
           }
         }
       } else {
@@ -377,7 +384,7 @@ async function submitChange() {
     const isRoomChanged = editableOrder.value.roomNumber !== originalRoomNumber.value;
 
     // 计算总房费
-    const totalPrice = Object.values(editableOrder.value.roomPrice || {}).reduce((sum, price) => sum + Number(price || 0), 0);
+    const totalPrice = toAmountNumber(Object.values(editableOrder.value.roomPrice || {}).reduce((sum, price) => sum.plus(toDecimal(price || 0)), new Decimal(0)));
 
     // 准备订单更新数据
     const orderData = {
@@ -386,7 +393,7 @@ async function submitChange() {
       id_number: editableOrder.value.idNumber,
       room_number: editableOrder.value.roomNumber,
       remarks: editableOrder.value.remarks,
-      deposit: editableOrder.value.deposit,
+      deposit: toAmountNumber(editableOrder.value.deposit),
       total_price: totalPrice,
       payment_method: editableOrder.value.paymentMethod
     };
@@ -406,14 +413,14 @@ async function submitChange() {
 
     // 检查每个日期的房费是否有变化
     Object.keys(editableOrder.value.roomPrice || {}).forEach(date => {
-      const newRoomFee = parseFloat(editableOrder.value.roomPrice[date]) || 0;
+      const newRoomFee = toDecimal(editableOrder.value.roomPrice[date]);
       const originalBill = originalBillsByDate[date];
 
       if (originalBill) {
-        const originalRoomFee = parseFloat(originalBill.room_fee) || 0;
-        if (Math.abs(newRoomFee - originalRoomFee) > 0.01) { // 避免浮点数精度问题
-          billUpdates[date] = { room_fee: newRoomFee };
-          console.log(`📝 检测到${date}房费变化: ${originalRoomFee} -> ${newRoomFee}`);
+        const originalRoomFee = toDecimal(originalBill.room_fee);
+        if (!newRoomFee.equals(originalRoomFee)) { // 避免浮点数精度问题
+          billUpdates[date] = { room_fee: toAmountNumber(newRoomFee) };
+          console.log(`📝 检测到${date}房费变化: ${originalRoomFee.toString()} -> ${newRoomFee.toString()}`);
         }
       } else {
         console.warn(`⚠️ 未找到日期 ${date} 的原始账单数据`);
@@ -424,21 +431,21 @@ async function submitChange() {
     const originalDepositBill = billData.value.find(bill => {
       const changeType = bill.change_type;
       const isOrderBill = changeType === '订单账单' || changeType === null || changeType === '';
-      return isOrderBill && bill.deposit !== null && bill.deposit !== undefined && parseFloat(bill.deposit) > 0;
+      return isOrderBill && bill.deposit !== null && bill.deposit !== undefined && toDecimal(bill.deposit).gt(0);
     });
 
     if (originalDepositBill) {
-      const originalDeposit = parseFloat(originalDepositBill.deposit) || 0;
-      const newDeposit = parseFloat(editableOrder.value.deposit) || 0;
+      const originalDeposit = toDecimal(originalDepositBill.deposit);
+      const newDeposit = toDecimal(editableOrder.value.deposit);
 
-      if (Math.abs(newDeposit - originalDeposit) > 0.01) {
+      if (!newDeposit.equals(originalDeposit)) {
         // 使用通用日期格式化函数
         const billDate = formatDateFromDB(originalDepositBill.stay_date);
         if (billDate) {
           if (!billUpdates[billDate]) {
             billUpdates[billDate] = {};
           }
-          billUpdates[billDate].deposit = newDeposit;
+          billUpdates[billDate].deposit = toAmountNumber(newDeposit);
           console.log(`📝 检测到押金变化: ${originalDeposit} -> ${newDeposit}`);
         }
       }

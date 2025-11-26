@@ -255,6 +255,7 @@
 <script setup>
 import { ref, toRefs, computed } from 'vue';
 import BillAdjustmentDialog from './BillAdjustmentDialog.vue'; // 1. 导入新组件
+import Decimal from 'decimal.js';
 
 const props = defineProps({
   modelValue: Boolean,
@@ -268,6 +269,11 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['update:modelValue', 'check-in', 'change-room', 'checkout', 'refund-deposit', 'change-order', 'early-checkout', 'refresh']);
+
+const toDecimal = (val) => {
+  try { return new Decimal(val || 0) } catch { return new Decimal(0) }
+};
+const toAmountNumber = (val) => Number(toDecimal(val).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toString());
 
 // 2. 添加控制对话框显示的状态
 const showAdjustmentDialog = ref(false);
@@ -308,20 +314,20 @@ function canRefundDeposit(order) {
   const allowedStatuses = ['checked-out']
   if (!allowedStatuses.includes(order.status)) return false
   // 优先使用订单字段
-  let deposit = Number(order.deposit) || 0
+  let deposit = toDecimal(order.deposit)
   const billsForOrder = billStore.bills.filter(b => b.order_id === order.orderNumber)
-  if (deposit === 0) {
-    const bWithDep = billsForOrder.find(b => Number(b.deposit) > 0)
-    if (bWithDep) deposit = Number(bWithDep.deposit) || 0
+  if (deposit.eq(0)) {
+    const bWithDep = billsForOrder.find(b => toDecimal(b.deposit).gt(0))
+    if (bWithDep) deposit = toDecimal(bWithDep.deposit)
   }
-  if (deposit <= 0) return false
+  if (deposit.lte(0)) return false
   // 计算已退金额
-  let refunded = 0
+  let refunded = new Decimal(0)
   billsForOrder.forEach(b => {
-    refunded += Math.abs(Number(b.refund_deposit) || 0)
-    if (b.change_type === '退押') refunded += Math.abs(Number(b.change_price) || 0)
+    refunded = refunded.plus(toDecimal(b.refund_deposit).abs())
+    if (b.change_type === '退押') refunded = refunded.plus(toDecimal(b.change_price).abs())
   })
-  return refunded === 0
+  return refunded.eq(0)
 }
 
 // ====== 详情页显示用的押金/退款信息 ======
@@ -331,35 +337,36 @@ const billsForThisOrder = computed(() => {
 })
 
 const depositAmount = computed(() => {
-  const dep = Number(props.currentOrder?.deposit) || 0
-  if (dep > 0) return dep
-  const b = billsForThisOrder.value.find(x => Number(x.deposit) > 0)
-  return b ? Number(b.deposit) || 0 : 0
+  const dep = toDecimal(props.currentOrder?.deposit)
+  if (dep.gt(0)) return toAmountNumber(dep)
+  const b = billsForThisOrder.value.find(x => toDecimal(x.deposit).gt(0))
+  return b ? toAmountNumber(b.deposit) : 0
 })
 
 const refundRecords = computed(() => {
   const recs = []
   billsForThisOrder.value.forEach(b => {
     if (b && b.change_type === '退押') {
-      const amount = Math.abs(Number(b.change_price) || 0)
-      if (amount > 0) {
-        recs.push({ amount, method: b.pay_way, time: b.create_time })
+      const amount = toDecimal(b.change_price).abs()
+      if (amount.gt(0)) {
+        recs.push({ amount: toAmountNumber(amount), method: b.pay_way, time: b.create_time })
       }
-    } else if (typeof b?.refund_deposit === 'number' && Number(b.refund_deposit) < 0) {
+    } else if (b?.refund_deposit !== undefined && toDecimal(b.refund_deposit).lt(0)) {
       // 兼容旧结构（refund_deposit 为负表示退押）
-      const amount = Math.abs(Number(b.refund_deposit) || 0)
-      if (amount > 0) recs.push({ amount, method: b.pay_way, time: b.refund_time || b.create_time })
+      const amount = toDecimal(b.refund_deposit).abs()
+      if (amount.gt(0)) recs.push({ amount: toAmountNumber(amount), method: b.pay_way, time: b.refund_time || b.create_time })
     }
   })
   return recs.sort((a, c) => new Date(a.time) - new Date(c.time))
 })
 
 const refundedAmount = computed(() => {
-  return refundRecords.value.reduce((s, r) => s + (Number(r.amount) || 0), 0)
+  const sum = refundRecords.value.reduce((s, r) => s.plus(toDecimal(r.amount)), new Decimal(0))
+  return toAmountNumber(sum)
 })
 
 const remainingDeposit = computed(() => {
-  const left = (Number(depositAmount.value) || 0) - (Number(refundedAmount.value) || 0)
-  return left > 0 ? Number(left.toFixed(2)) : 0
+  const left = toDecimal(depositAmount.value).minus(toDecimal(refundedAmount.value))
+  return left.gt(0) ? toAmountNumber(left) : 0
 })
 </script>
