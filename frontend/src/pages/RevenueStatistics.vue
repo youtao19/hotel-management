@@ -16,27 +16,27 @@
             <q-card-section class="modern-stat-section">
               <div class="modern-stat-header">
                 <div>
-                  <div class="modern-stat-title">今日收入</div>
-                  <div class="modern-stat-subtitle">按今日开房时间统计</div>
+                  <div class="modern-stat-title">{{ selectedRangeTitle }}</div>
+                  <div class="modern-stat-subtitle">{{ selectedRangeSubtitle }}</div>
                 </div>
                 <div class="modern-stat-icon">
-                  <q-icon name="today" size="20px" />
+                  <q-icon :name="selectedRangeIcon" size="20px" />
                 </div>
               </div>
 
               <div class="modern-stat-amount">
                 <span class="modern-stat-currency">¥</span>
                 <span class="modern-stat-value">
-                  {{ formatCurrency(quickStats.today?.total_revenue || 0) }}
+                  {{ formatCurrency(selectedRangeStats.total_revenue || 0) }}
                 </span>
               </div>
 
               <div class="modern-stat-footer">
                 <div class="modern-stat-orders">
                   <span class="modern-stat-orders-count">
-                    {{ quickStats.today?.total_orders || 0 }}
+                    {{ selectedRangeStats.total_orders || 0 }}
                   </span>
-                  <span class="modern-stat-orders-label">今日订单</span>
+                  <span class="modern-stat-orders-label">{{ selectedRangeOrderLabel }}</span>
                 </div>
               </div>
             </q-card-section>
@@ -576,6 +576,8 @@ const quickStats = ref({
   thisWeek: { total_revenue: 0, total_orders: 0 },
   thisMonth: { total_revenue: 0, total_orders: 0 }
 })
+// 所选日期范围的统计数据（第一个卡片动态显示）
+const selectedRangeStats = ref({ total_revenue: 0, total_orders: 0 })
 const revenueData = ref([])
 const roomTypeData = ref([])
 const selectedRoomType = ref(null)
@@ -733,12 +735,9 @@ const getRoomTypeShare = (type) => {
 const filteredReceiptDetails = computed(() => {
   let list = receiptDetails.value
 
-  // 按房型筛选
-  if (selectedRoomType.value) {
-    list = list.filter(item => item.room_type === selectedRoomType.value)
-  }
+  // 房型筛选已在后端处理，此处无需重复过滤
 
-  // 按房间号搜索
+  // 按房间号搜索（前端实时过滤）
   const keyword = (receiptRoomSearch.value || '').trim()
   if (keyword) {
     list = list.filter(item => String(item.room_number || '').includes(keyword))
@@ -1048,8 +1047,42 @@ const fetchRevenueAndReceipt = async () => {
   }
   await Promise.all([
     fetchRevenueData(),
-    fetchReceiptDetails(dateRange.value.start, dateRange.value.end)
+    fetchReceiptDetails(dateRange.value.start, dateRange.value.end),
+    fetchSelectedRangeStats()
   ])
+}
+
+// 获取所选日期范围的统计数据（用于第一个卡片动态显示，只显示单日）
+const fetchSelectedRangeStats = async () => {
+  try {
+    // 标准化日期格式，确保比较正确
+    const startDate = String(dateRange.value.start || '').trim()
+    const endDate = String(dateRange.value.end || '').trim()
+    const todayStr = date.formatDate(new Date(), 'YYYY-MM-DD')
+
+    // 卡片只显示单日数据：选择单日时显示该日，选择多日时显示今天
+    const isSingleDay = startDate === endDate && startDate !== ''
+    const displayDate = isSingleDay ? startDate : todayStr
+
+    console.log('🎯 获取单日统计:', { startDate, endDate, isSingleDay, displayDate })
+
+    const response = await revenueApi.getOverview(displayDate, displayDate)
+    console.log('🎯 单日统计API响应:', response)
+
+    // API返回格式: { message, data: { total_revenue, total_orders }, period }
+    const statsData = response?.data || response || { total_revenue: 0, total_orders: 0 }
+    console.log('🎯 解析后的统计数据:', statsData)
+
+    selectedRangeStats.value = {
+      total_revenue: Number(statsData.total_revenue || 0),
+      total_orders: Number(statsData.total_orders || 0)
+    }
+
+    console.log('🎯 更新后的 selectedRangeStats:', selectedRangeStats.value)
+  } catch (error) {
+    console.error('获取单日统计失败:', error)
+    selectedRangeStats.value = { total_revenue: 0, total_orders: 0 }
+  }
 }
 
 // 生成日期字符串列表 (YYYY-MM-DD) from start to end (inclusive)
@@ -1183,6 +1216,81 @@ const currentFilterType = computed(() => {
   if (start === firstDayStr && end === lastDayStr) return 'month'
 
   return 'custom'
+})
+
+// 判断当前是否选择了单日
+const isSingleDaySelected = computed(() => {
+  const startDate = String(dateRange.value.start || '').trim()
+  const endDate = String(dateRange.value.end || '').trim()
+  return startDate === endDate && startDate !== ''
+})
+
+// 获取卡片应该显示的日期（单日时显示选择的日期，多日时显示今天）
+const cardDisplayDate = computed(() => {
+  if (isSingleDaySelected.value) {
+    return String(dateRange.value.start || '').trim()
+  }
+  return date.formatDate(new Date(), 'YYYY-MM-DD')
+})
+
+// 动态计算第一个卡片的标题（只显示单日）
+const selectedRangeTitle = computed(() => {
+  const today = date.formatDate(new Date(), 'YYYY-MM-DD')
+  const yesterday = date.formatDate(date.subtractFromDate(new Date(), { days: 1 }), 'YYYY-MM-DD')
+  const displayDate = cardDisplayDate.value
+
+  if (displayDate === today) {
+    return '今日收入'
+  } else if (displayDate === yesterday) {
+    return '昨日收入'
+  } else {
+    return `${displayDate} 收入`
+  }
+})
+
+// 动态计算第一个卡片的副标题
+const selectedRangeSubtitle = computed(() => {
+  const today = date.formatDate(new Date(), 'YYYY-MM-DD')
+  const yesterday = date.formatDate(date.subtractFromDate(new Date(), { days: 1 }), 'YYYY-MM-DD')
+  const displayDate = cardDisplayDate.value
+
+  if (displayDate === today) {
+    return '按今日开房时间统计'
+  } else if (displayDate === yesterday) {
+    return '按昨日开房时间统计'
+  } else {
+    return `${displayDate} 开房统计`
+  }
+})
+
+// 动态计算第一个卡片的图标
+const selectedRangeIcon = computed(() => {
+  const today = date.formatDate(new Date(), 'YYYY-MM-DD')
+  const yesterday = date.formatDate(date.subtractFromDate(new Date(), { days: 1 }), 'YYYY-MM-DD')
+  const displayDate = cardDisplayDate.value
+
+  if (displayDate === today) {
+    return 'today'
+  } else if (displayDate === yesterday) {
+    return 'history'
+  } else {
+    return 'event_note'
+  }
+})
+
+// 动态计算第一个卡片的订单标签
+const selectedRangeOrderLabel = computed(() => {
+  const today = date.formatDate(new Date(), 'YYYY-MM-DD')
+  const yesterday = date.formatDate(date.subtractFromDate(new Date(), { days: 1 }), 'YYYY-MM-DD')
+  const displayDate = cardDisplayDate.value
+
+  if (displayDate === today) {
+    return '今日订单'
+  } else if (displayDate === yesterday) {
+    return '昨日订单'
+  } else {
+    return '当日订单'
+  }
 })
 
 // 更新图表
@@ -1361,85 +1469,51 @@ const getPaymentMethodColor = (method) => {
 }
 
 /**
- * 获取每日营收明细
- * 用于每日营收明细表
+ * 获取每日营收明细（从订单表获取）
+ * 用于每日营收明细表，与顶部日期选择器同步
  * @param customStartDate 开始时间
  * @param customEndDate 结束时间
  */
 const fetchReceiptDetails = async (customStartDate = null, customEndDate = null) => {
   receiptLoading.value = true
   try {
-    // 确定查询的日期范围
-    let startDate, endDate
+    // 使用顶部日期选择器的范围，与收入趋势图保持一致
+    const startDate = customStartDate || dateRange.value.start
+    const endDate = customEndDate || dateRange.value.end
 
-    if (customStartDate && customEndDate) {
-      // 使用自定义日期范围（用于本周、本月等查询）
-      startDate = customStartDate
-      endDate = customEndDate
-    } else {
-      // 使用选中的日期（单天查询）
-      try {
-        const formattedDate = date.formatDate(new Date(receiptSelectedDate.value), 'YYYY-MM-DD')
-        startDate = endDate = formattedDate
-      } catch (e) {
-        // 如果日期无效，使用今天的日期
-        const today = date.formatDate(new Date(), 'YYYY-MM-DD')
-        receiptSelectedDate.value = today
-        startDate = endDate = today
-      }
-    }
+    console.log('获取每日营收明细，日期范围:', { startDate, endDate, roomType: selectedRoomType.value })
 
-    const response = await api.get('/revenue/receipts', {
+    const response = await api.get('/revenue/daily-details', {
       params: {
-        type: receiptType.value,
         startDate: startDate,
-        endDate: endDate
+        endDate: endDate,
+        roomType: selectedRoomType.value || undefined
       }
     })
 
     if (!response.success) {
-      throw new Error(response.message || '获取收款明细失败')
+      throw new Error(response.message || '获取每日营收明细失败')
     }
 
     receiptDetails.value = response.data.map(item => {
-      // 方案A：统一使用账单日期作为收款日期，缺失时回退到入住或创建时间
-      const raw = item.bill_date || item.stay_date || item.created_at
-      let stayDateDisplay = ''
-      if (raw) {
-        if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-          stayDateDisplay = raw
-        } else {
-          // ISO 字符串情况，转为本地日期（不受时区减一天影响）
-            try {
-              const dt = new Date(raw)
-              const y = dt.getFullYear()
-              const m = String(dt.getMonth()+1).padStart(2,'0')
-              const d = String(dt.getDate()).padStart(2,'0')
-              stayDateDisplay = `${y}-${m}-${d}`
-            } catch { stayDateDisplay = String(raw).substring(0,10) }
-        }
-      }
       return {
         ...item,
-        room_fee: parseFloat(item.room_fee || 0),
-        deposit: parseFloat(item.deposit || 0),
         total_amount: parseFloat(item.total_amount || 0),
         guest_name: item.guest_name || '未知客户',
-        stay_date_display: stayDateDisplay
+        stay_date_display: item.stay_date_display || item.stay_date
       }
     })
 
     // 重置分页到第一页，避免页码越界
     receiptPagination.value.page = 1
 
-    console.log(`获取到 ${receiptDetails.value.length} 条${receiptType.value === 'hotel' ? '客房' : '休息房'}明细`)
+    console.log(`获取到 ${receiptDetails.value.length} 条营收明细`)
   } catch (error) {
-    console.error('获取收款明细失败:', error)
-    // 生成示例数据用于演示
-    receiptDetails.value = generateSampleReceiptData(receiptType.value)
+    console.error('获取每日营收明细失败:', error)
+    receiptDetails.value = []
     $q.notify({
       type: 'warning',
-      message: '获取收款明细失败，显示示例数据',
+      message: '获取每日营收明细失败: ' + error.message,
       position: 'top'
     })
   } finally {
@@ -1477,6 +1551,7 @@ onMounted(async () => {
   }
   await fetchRevenueData()
   await fetchReceiptDetails(dateRange.value.start, dateRange.value.end)
+  await fetchSelectedRangeStats() // 获取所选日期范围的统计
   await fetchBillDetails()
 })
 
@@ -1501,7 +1576,8 @@ watch(() => selectedPeriod.value, () => {
 watch([
   () => dateRange.value.start,
   () => dateRange.value.end
-], () => {
+], ([newStart, newEnd]) => {
+  console.log('日期范围变化:', { newStart, newEnd, isSame: newStart === newEnd })
   scheduleRevenueFetch()
 })
 
