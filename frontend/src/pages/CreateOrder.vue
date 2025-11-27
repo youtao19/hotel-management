@@ -16,7 +16,7 @@
             <div class="row q-col-gutter-md">
               <!-- 订单号输入框 -->
               <div class="col-md-4 col-xs-12">
-                <q-input v-model="orderData.orderNumber" label="订单号" filled :rules="[val => !!val || '请输入订单号']"
+                <q-input v-model="orderData.order_id" label="订单号" filled :rules="[val => !!val || '请输入订单号']"
                   hint="自动生成，可手动修改" />
               </div>
               <!-- 订单状态选择框 -->
@@ -26,7 +26,7 @@
               </div>
               <!-- 订单来源选择框 -->
               <div class="col-md-4 col-xs-12">
-                <q-select v-model="orderData.source" :options="sourceOptions" label="订单来源" filled emit-value
+                <q-select v-model="orderData.order_source" :options="sourceOptions" label="订单来源" filled emit-value
                   map-options />
               </div>
               <!-- 来源编号输入框 -->
@@ -42,7 +42,7 @@
             <div class="row q-col-gutter-md">
               <!-- 姓名输入框 -->
               <div class="col-md-4 col-xs-12">
-                <q-input v-model="orderData.guestName" label="姓名" filled :rules="[val => !!val || '请输入姓名']" />
+                <q-input v-model="orderData.guest_name" label="姓名" filled :rules="[val => !!val || '请输入姓名']" />
               </div>
               <!-- 手机号输入框（可选） -->
               <div class="col-md-4 col-xs-12">
@@ -375,6 +375,7 @@ import { useRoomStore } from '../stores/roomStore' // 导入房间 store
 import { useViewStore } from '../stores/viewStore' // 导入视图 store
 import langZhCn from 'quasar/lang/zh-CN' // 导入中文语言包
 import CheckInConfirmDialog from '../components/CheckInConfirmDialog.vue' // 导入入住确认对话框
+import { orderApi } from '../api'
 
 // 获取路由和store
 const router = useRouter()
@@ -413,9 +414,6 @@ let isApplyingPreselectedRoom = false
 let shouldAutoSelectRoom = false
 let pendingRoomTypeChange = null
 
-// 检查是否为开发环境
-const isDev = ref(process.env.NODE_ENV === 'development')
-
 // roomStore 已导入，可以直接使用其方法
 
 const availableRoomsByDate = ref([]); // 存储当前时间范围下所有可用房间
@@ -450,8 +448,6 @@ function getCurrentTimeToMinute() {
   return now
 }
 
-// 今天的日期字符串，格式为YYYY-MM-DD
-const today = date.formatDate(new Date(), 'YYYY-MM-DD')
 
 // 订单状态选项数组 - 从viewStore获取
 const statusOptions = [
@@ -474,22 +470,23 @@ const sourceOptions = [
 
 // 订单表单数据 - 使用响应式引用，包含所有订单字段
 const orderData = ref({
-  orderNumber: generateOrderNumber(),  // 自动生成订单号
+  order_id: generateOrderNumber(),  // 自动生成订单号
   status: 'pending',                   // 默认状态为"待入住"
-  source: 'front_desk',                // 默认订单来源为前台录入
+  order_source: 'front_desk',                // 默认订单来源为前台录入
   sourceNumber: '',                    // 来源编号（可选）
-  guestName: '',                       // 客人姓名
+  guest_name: '',                       // 客人姓名
   phone: '',                           // 手机号
   roomType: null,                      // 房间类型
   roomNumber: null,                    // 房间号
   checkInDate: date.formatDate(getCurrentTimeToMinute(), 'YYYY-MM-DD'),  // 入住日期，默认今天
   checkOutDate: date.formatDate(date.addToDate(getCurrentTimeToMinute(), { days: 1 }), 'YYYY-MM-DD'), // 离店日期，默认明天
   deposit: 0,                          // 押金默认0元，办理入住时才收取
-  paymentMethod: viewStore.paymentMethodOptions[0]?.value || 'cash',    // 支付方式使用 value
-  roomPrice: 0,                        // 房间价格，会根据选择的房间自动设置
+  paymentMethod: viewStore.paymentMethodOptions[0]?.value || '现金',    // 支付方式使用 value
+  roomPrice: {},                        // 房间价格，会根据选择的房间自动设置
   remarks: '',                         // 备注信息（可选）
   createTime: date.formatDate(getCurrentTimeToMinute(), 'YYYY-MM-DD HH:mm:ss'), // 创建时间
-  isRestRoom: false,                   // 是否为休息房
+  stayType: '客房',                        // 住宿类型（休息房/客房)
+  isRestRoom: false,                  // 是否为休息房
   isPrepaid: false,                    // 是否在创建时收房费
   prepaidAmount: 0                     // 预收房费金额
 })
@@ -575,6 +572,8 @@ const dateList = computed(() => {
   return dates;
 });
 
+
+//
 function sumDailyPricesDecimal() {
   if (!Array.isArray(dateList.value) || dateList.value.length === 0) {
     return new Decimal(0)
@@ -595,17 +594,6 @@ const firstDatePrice = computed(() => {
   return dailyPrices.value[dateList.value[0]] || 0;
 });
 
-
-/**
- * 日期选项函数 - 控制日期选择器可选择的日期
- * 只允许选择今天及以后的日期
- * @param {string} dateStr - 日期字符串，格式为YYYY-MM-DD
- * @returns {boolean} 如果日期可选则返回true，否则返回false
- */
-const dateOptions = (dateStr) => {
-  const currentDate = date.formatDate(new Date(), 'YYYY-MM-DD')
-  return dateStr >= currentDate
-}
 
 
 /**
@@ -689,6 +677,7 @@ function scheduleUpdateRooms() {
   }, 250);
 }
 
+// 验证完整日期格式 YYYY-MM-DD
 function isValidFullDate(str) {
   if (!str) return false;
   const s = String(str).trim();
@@ -699,6 +688,7 @@ function isValidFullDate(str) {
 }
 
 const minDate = date.formatDate(new Date(), 'YYYY-MM-DD');
+
 
 function normalizeInputDate(field) {
   let v = orderData.value[field];
@@ -729,7 +719,6 @@ const checkoutAfterCheckinRule = (val) => {
   return val >= orderData.value.checkInDate || '离店日期不能早于入住日期';
 };
 
-// removed old normalizeAndValidate (replaced by normalizeInputDate)
 
 watch(() => orderData.value.checkInDate, async () => {
   if (!isValidFullDate(orderData.value.checkInDate)) return; // 等待完整输入
@@ -948,10 +937,7 @@ watch(
     applyPreselectedRoom();
   }
 );
-// // 从roomStore获取房间类型选项数组和可用房间数量
-// const roomTypeOptionsWithCountFromStore = computed(
-//   () => roomStore.getRoomTypeOptionsWithCount()
-// );
+
 
 // 根据房间数量获取对应的颜色
 const getRoomCountColor = roomStore.getRoomCountColor;
@@ -1175,9 +1161,6 @@ async function submitOrder() {
     return
   }
 
-  // 构建价格数据（统一使用 dailyPrices）
-  const roomPriceData = { ...dailyPrices.value }
-
   // 验证所有日期都有价格
   const missingPrices = dateList.value.filter(date => !dailyPrices.value[date] || dailyPrices.value[date] <= 0)
   if (missingPrices.length > 0) {
@@ -1189,18 +1172,9 @@ async function submitOrder() {
     return
   }
 
-  // 最终验证价格数据
-  if (!roomPriceData || Object.keys(roomPriceData).length === 0) {
-    $q.notify({
-      type: 'negative',
-      message: '价格数据异常，请重新设置价格',
-      position: 'top'
-    });
-    return;
-  }
+  console.log(`📅 ${dateList.value.length === 1 ? '单日' : '多日'}订单价格数据：`, dailyPrices.value);
 
-  console.log(`📅 ${dateList.value.length === 1 ? '单日' : '多日'}订单价格数据：`, roomPriceData);
-
+  // 如果是立即支付，验证预收房费金额
   if (orderData.value.isPrepaid) {
     const totalPriceValue = toDecimal(totalPrice.value);
     const prepaidAmount = toDecimal(orderData.value.prepaidAmount);
@@ -1212,7 +1186,7 @@ async function submitOrder() {
       });
       return;
     }
-    if (totalPriceValue.gt(0) && prepaidAmount.minus(totalPriceValue).gt(0.01)) {
+    if (totalPriceValue.gt(0) && prepaidAmount.gt(totalPriceValue)) {
       $q.notify({
         type: 'negative',
         message: '预收房费金额不能超过房费总额',
@@ -1222,45 +1196,11 @@ async function submitOrder() {
     }
   }
 
-  // 获取选择的房间 (client-side check before API call)
-  const selectedRoom = roomStore.getRoomByNumber(orderData.value.roomNumber)
-
-  // 检查房间是否存在
-  if (!selectedRoom) {
-    $q.notify({
-      type: 'negative',
-      message: `房间 ${orderData.value.roomNumber} 不存在`,
-      position: 'top'
-    });
-    return
-  }
-
-  // 检查房间是否关闭
-  if (selectedRoom.is_closed) {
-    $q.notify({
-      type: 'negative',
-      message: `房间 ${orderData.value.roomNumber} 已关闭，无法预订`,
-      position: 'top'
-    });
-    return
-  }
-
-  // 注意：移除了对房间状态的严格检查，允许清扫中的房间创建订单
-  // 冲突检测将由后端API处理，确保不会创建真正冲突的订单
-
   // 构建要提交的订单数据
-  const prepaidAtISO = orderData.value.isPrepaid ? new Date().toISOString() : null;
   const submitData = {
     ...orderData.value,
-    createTime: date.formatDate(now, 'YYYY-MM-DD HH:mm:ss'),
-    paymentMethod: typeof orderData.value.paymentMethod === 'object' ?
-      orderData.value.paymentMethod.value :
-      orderData.value.paymentMethod,
-    roomPrice: roomPriceData, // 发送JSON格式的价格数据
-    deposit: Number(orderData.value.deposit),
-    isPrepaid: orderData.value.isPrepaid,
-    prepaidAmount: orderData.value.isPrepaid ? Number(orderData.value.prepaidAmount) : 0,
-    ...(orderData.value.isPrepaid && prepaidAtISO ? { prepaidAt: prepaidAtISO } : {})
+    createTime: date.formatDate(now, 'YYYY-MM-DDTHH:mm:ssZ'),
+    roomPrice: dailyPrices.value, // 发送JSON格式的价格数据
   };
 
   // 如果订单状态是"已入住"，需要先确认入住信息
@@ -1289,16 +1229,16 @@ async function submitOrder() {
   // 普通订单创建流程
   try {
     // 使用 orderStore.addOrder 创建订单
-    await orderStore.addOrder(submitData);
-
-    // 刷新房间状态
-    await roomStore.refreshData();
+    await orderApi.addOrder(submitData);
 
     $q.notify({
       type: 'positive',
       message: '订单创建成功！',
       position: 'top'
     });
+
+    // 刷新房间状态
+    await roomStore.refreshData();
 
     // 导航到订单列表页面
     router.push('/ViewOrders');
@@ -1342,42 +1282,6 @@ async function submitOrder() {
   }
 }
 
-// 组件挂载时执行的钩子函数
-onMounted(async () => {
-  console.log('CreateOrder组件已挂载，开始初始化数据')
-
-  // 首先获取房型数据，确保房型选择列表是最新的
-  await roomStore.fetchRoomTypes()
-
-  // 然后获取房间数据
-  await roomStore.fetchAllRooms()
-
-  // 页面加载时，主动拉取一次可用房间，保证房型数量能显示
-  await updateAvailableRooms()
-
-  isDataInitialized.value = true
-  await applyPreselectedRoom()
-
-  console.log('CreateOrder组件数据初始化完成')
-});
-
-
-/**
- * 检查是否为休息房
- * 如果入住日期和离店日期是同一天，则为休息房
- * @returns {boolean} 是否为休息房
- */
-function checkIfRestRoom() {
-  return orderData.value.checkInDate === orderData.value.checkOutDate
-}
-
-/**
- * 更新休息房状态并处理相关逻辑
- */
-function updateRestRoomStatus() {
-  // 仅同步标志，实际价格/押金调整在 watch(isRestRoom) 中集中处理
-  orderData.value.isRestRoom = checkIfRestRoom();
-}
 
 /**
  * 离店日期变化时的处理函数
@@ -1397,21 +1301,15 @@ async function onCheckInDateChange() {
     // 设置为入住日期（允许同一天，即休息房）
   orderData.value.checkOutDate = orderData.value.checkInDate;
   }
-
-  // 更新休息房状态
-  updateRestRoomStatus();
-
   // 更新可用房间
   await updateAvailableRooms();
 }
 
-/**
- * 日期范围变化时的处理函数
- */
-// 移除日期范围选择器，使用两个独立 date 输入
+
 
 // 计算属性：休息房状态
-const isRestRoom = computed(() => orderData.value.checkInDate === orderData.value.checkOutDate);
+const isRestRoom = computed(
+  () => orderData.value.checkInDate === orderData.value.checkOutDate);
 
 // 清理不再使用的多日价格键
 watch(dateList, (newList) => {
@@ -1428,6 +1326,10 @@ const totalPrice = computed(() => {
   return Number(totalDecimal.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toString());
 });
 
+
+/**
+ * 计算属性：平均每日价格
+ */
 const averageDailyPrice = computed(() => {
   const days = dateList.value.length;
   if (!days) return 0;
@@ -1435,22 +1337,25 @@ const averageDailyPrice = computed(() => {
   return Number(avgDecimal.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toString());
 });
 
+/**
+ * 监听预付房费状态变化，自动调整预付金额
+ * 如果是true，预付金额设为总价；否则设为0
+ * @param {boolean} now - 监听值变化后的新值
+ */
 watch(() => orderData.value.isPrepaid, (now) => {
   if (now) {
     const total = toDecimal(totalPrice.value);
+    // 如果大于 0 则设为总价，否则设为 0
     orderData.value.prepaidAmount = total.gt(0) ? toAmountNumber(total) : 0;
   } else {
     orderData.value.prepaidAmount = 0;
   }
 });
 
-watch(totalPrice, (val) => {
-  if (!orderData.value.isPrepaid) return;
-  const total = toDecimal(val);
-  orderData.value.prepaidAmount = total.gt(0) ? toAmountNumber(total) : 0;
-});
 
-// 监听休息房状态变化，自动处理价格和备注
+/**
+ * 监听休息房状态变化，自动调整备注和住宿类型
+ */
 watch(isRestRoom, (now, prev) => {
   if (now === prev) return;
   if (now) {
@@ -1458,13 +1363,34 @@ watch(isRestRoom, (now, prev) => {
     if (!orderData.value.remarks.includes('【休息房】')) {
       orderData.value.remarks = orderData.value.remarks ? `【休息房】${orderData.value.remarks}` : '【休息房】';
     }
-    // 价格调整已在 initializeDailyPrices 中处理，这里不需要额外操作
+    orderData.value.stayType = '休息房';
   } else {
     // 退出休息房模式：移除备注标记
     orderData.value.remarks = orderData.value.remarks.replace(/【休息房】/g, '').trim();
-    // 价格调整已在 initializeDailyPrices 中处理，这里不需要额外操作
+    orderData.value.stayType = '客房';
   }
 });
+
+
+// 组件挂载时执行的钩子函数
+onMounted(async () => {
+  console.log('CreateOrder组件已挂载，开始初始化数据')
+
+  // 首先获取房型数据，确保房型选择列表是最新的
+  await roomStore.fetchRoomTypes()
+
+  // 然后获取房间数据
+  await roomStore.fetchAllRooms()
+
+  // 页面加载时，主动拉取一次可用房间，保证房型数量能显示
+  await updateAvailableRooms()
+
+  isDataInitialized.value = true
+  await applyPreselectedRoom()
+
+  console.log('CreateOrder组件数据初始化完成')
+});
+
 </script>
 
 <style scoped>

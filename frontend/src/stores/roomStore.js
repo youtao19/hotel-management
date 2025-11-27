@@ -890,33 +890,6 @@ export const useRoomStore = defineStore('room', () => {
     }
   }
 
-  // 监听订单变化
-  function watchOrderChanges() {
-    // 使用 orderStore.orders 来监听订单变化
-    orderStore.$subscribe((mutation, state) => {
-      console.log('订单状态发生变化，同步房间状态')
-      syncAllRoomStatus()
-    })
-  }
-
-  // 初始化函数
-  function initialize() {
-    console.log('初始化房间数据...')
-
-    // 先获取订单，再加载房间数据
-    fetchActiveOrders()
-      .then(() => fetchAllRooms())
-      .then(() => fetchRoomTypes())
-      .then(() => {
-        console.log('初始化完成')
-        watchOrderChanges() // 设置订单变化监听
-      })
-      .catch(err => {
-        console.error('初始化失败:', err)
-      })
-  }
-
-
 
   return {
     // 状态常量 - 导出给组件使用

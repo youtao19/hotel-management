@@ -301,7 +301,7 @@ async function getAvailableRooms(startDate, endDate, typeCode = null) {
       return endDate.toISOString().split('T')[0];
     })();
 
-    const sqlQuery = `
+    let sqlQuery = `
       SELECT r.room_number, r.type_code, r.status, r.price, r.is_closed
       FROM rooms r
       WHERE r.is_closed = FALSE
@@ -329,7 +329,7 @@ async function getAvailableRooms(startDate, endDate, typeCode = null) {
     }
 
     // 添加排序
-    sqlQuery += ' ORDER BY r.room_number';
+    sqlQuery += 'ORDER BY r.room_number';
 
 
     const result = await query(sqlQuery, queryParams);

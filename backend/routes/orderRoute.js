@@ -19,20 +19,20 @@ const createOrderSchema = {
   type: 'object',
   properties: {
     order_id: { type: 'string' },
-    id_source: { type: 'string' },
+    sourceNumber: { type: 'string' },
     order_source: { type: 'string' },
     guest_name: { type: 'string' },
-    room_type: { type: 'string' },
-    room_number: { type: 'string' },
-    check_in_date: { type: 'string', format: 'date' },
-    check_out_date: { type: 'string', format: 'date' },
+    roomType: { type: 'string' },
+    roomNumber: { type: 'string' },
+    checkInDate: { type: 'string', format: 'date' },
+    checkOutDate: { type: 'string', format: 'date' },
     status: { type: 'string', enum: VALID_ORDER_STATES },
-    payment_method: { type: 'string' },
+    paymentMethod: { type: 'string' },
     phone: {
       type: 'string',
       pattern: '^$|^1[3-9]\\d{9}$'
      },
-    total_price: {
+    roomPrice: {
       type: 'object',
       minProperties: 1,
       propertyNames: { type: 'string', format: 'date' },
@@ -44,15 +44,14 @@ const createOrderSchema = {
       }
     },
     deposit: { type: 'number' },
-    is_prepaid: { type: 'boolean' },
-    prepaid_amount: { type: 'number', minimum: 0 },
-    prepaid_at: { type: 'string', format: 'date-time' },
-    stay_type: { type: 'string' , enum: ['客房', '休息房'] },
-    create_time: { type: 'string', format: 'date-time' },
+    isPrepaid: { type: 'boolean' },
+    prepaidAmount: { type: 'number', minimum: 0 },
+    stayType: { type: 'string' , enum: ['客房', '休息房'] },
+    createTime: { type: 'string', format: 'date-time' },
     remarks: { type: 'string' }
   },
-  required: ['order_id', 'order_source', 'guest_name', 'room_type', 'room_number', 'check_in_date', 'check_out_date', 'status', 'payment_method', 'total_price'],
-  additionalProperties: false
+  required: ['order_id', 'order_source', 'guest_name', 'roomType', 'roomNumber', 'checkInDate', 'checkOutDate', 'status', 'paymentMethod', 'roomPrice', 'stayType'],
+  additionalProperties: true
 };
 
 const updateOrderStatusSchema = {

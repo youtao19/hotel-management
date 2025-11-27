@@ -1,4 +1,5 @@
 "use strict";
+const Decimal = require('decimal.js');
 
 // 判断是否为休息房
 function isRestRoom(check_in_date, check_out_date) {
@@ -54,9 +55,34 @@ function formatDateTimeForDB(input) {
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${micros}`;
 }
 
+Decimal.set({
+  precision: 20,
+  rounding: Decimal.ROUND_HALF_UP
+})
+
+function toDecimal(value) {
+  if (Decimal.isDecimal(value)) {
+    return value
+  }
+  if (value === undefined || value === null || value === '') {
+    return new Decimal(0)
+  }
+  try {
+    return new Decimal(value)
+  } catch (error) {
+    return new Decimal(0)
+  }
+}
+
+function toAmountNumber(value) {
+  const decimalValue = Decimal.isDecimal(value) ? value : toDecimal(value)
+  return Number(decimalValue.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toString())
+}
+
 module.exports = {
   isRestRoom,
   formatDate,
-  formatDateTimeForDB
-
+  formatDateTimeForDB,
+  toDecimal,
+  toAmountNumber
 };
