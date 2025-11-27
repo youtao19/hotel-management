@@ -13,8 +13,8 @@ const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
     create_time TIMESTAMP NOT NULL, -- 创建时间
     remarks TEXT, -- 备注
     stay_type TEXT, -- 入住类型
-    stay_date DATE, -- 入住日期
-    FOREIGN KEY (order_id) REFERENCES orders(order_id) -- 订单号外键
+    stay_date DATE -- 入住日期
+    -- 注意：移除了 order_id 外键约束，因为多日分行结构中 order_id 不再是唯一的
 )`;
 
 const dropQuery = `DROP TABLE IF EXISTS ${tableName}`;

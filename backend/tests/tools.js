@@ -1,4 +1,6 @@
 const db = require('../database/postgreDB/pg');
+const request = require('supertest');
+const app = require('../app');
 
 const roomTypes = [
   {
@@ -119,395 +121,48 @@ const rooms = [
 
 const mockOrders = [
   {
-    order_id: "ORD20251027001",
-    id_source: "web",
-    order_source: "官网预订",
-    guest_name: "张伟",
+    order_id: "TEST_ORDER_1",
+    id_source: null,
+    order_source: "test",
+    guest_name: "测试用户A",
+    phone: "13800000001",
+    room_type: "TEST_STD_ROOM",
+    room_number: "TEST_ROOM_101",
+    check_in_date: "2024-01-01",
+    check_out_date: "2024-01-02",
+    status: "pending",
+    payment_method: "现金",
+    total_price: 100.00,
+    deposit: 200.00,
+    is_prepaid: false,
+    prepaid_amount: 0,
+    create_time: new Date(),
+    stay_type: "客房",
+    remarks: "测试订单"
+  },
+  {
+    order_id: "TEST_ORDER_2",
+    id_source: null,
+    order_source: "test",
+    guest_name: "测试用户B",
+    phone: "13800000002",
     room_type: "asu_xiao_zhu",
-    room_number: "101",
-    check_in_date: "2025-10-28",
-    check_out_date: "2025-10-30",
-    status: "reserved",
-    payment_method: "支付宝",
-    phone: "13800138000",
-    total_price: 576.00,
-    deposit: 200.00,
-    stay_type: "客房",
-    create_time: "2025-10-27T09:30:00Z",
-    remarks: "提前入住，请准备好房卡"
-  },
-  {
-    order_id: "ORD20251027002",
-    id_source: "wechat",
-    order_source: "微信小程序",
-    guest_name: "李娜",
-    room_type: "bo_ye_shuang",
-    room_number: "207",
-    check_in_date: "2025-10-29",
-    check_out_date: "2025-10-31",
-    status: "reserved",
-    payment_method: "微信支付",
-    phone: "13911223344",
-    total_price: 516.00,
-    deposit: 150.00,
-    stay_type: "客房",
-    create_time: "2025-10-27T10:10:00Z",
-    remarks: "两位客人，需额外毛巾"
-  },
-  {
-    order_id: "ORD20251027003",
-    id_source: "frontdesk",
-    order_source: "前台办理",
-    guest_name: "王强",
-    room_type: "nuan_ju_jiating",
-    room_number: "210",
-    check_in_date: "2025-10-27",
-    check_out_date: "2025-10-28",
-    status: "occupied",
+    room_number: "102",
+    check_in_date: "2024-01-03",
+    check_out_date: "2024-01-03",
+    status: "pending",
     payment_method: "现金",
-    phone: "13799887766",
-    total_price: 368.00,
+    total_price: 288.00,
     deposit: 100.00,
-    stay_type: "客房",
-    create_time: "2025-10-27T08:00:00Z",
-    remarks: "带儿童一名"
-  },
-  {
-    order_id: "ORD20251027004",
-    id_source: "web",
-    order_source: "官网预订",
-    guest_name: "陈晨",
-    room_type: "sheng_sheng_man",
-    room_number: "203",
-    check_in_date: "2025-10-31",
-    check_out_date: "2025-11-02",
-    status: "reserved",
-    payment_method: "支付宝",
-    phone: "13666778899",
-    total_price: 696.00,
-    deposit: 200.00,
-    stay_type: "客房",
-    create_time: "2025-10-27T09:45:00Z",
-    remarks: "喜欢安静房间"
-  },
-  {
-    order_id: "ORD20251027005",
-    id_source: "wechat",
-    order_source: "微信小程序",
-    guest_name: "赵敏",
-    room_type: "yun_ju_ying_yin",
-    room_number: "401",
-    check_in_date: "2025-10-28",
-    check_out_date: "2025-10-29",
-    status: "reserved",
-    payment_method: "微信支付",
-    phone: "13544556677",
-    total_price: 428.00,
-    deposit: 150.00,
-    stay_type: "客房",
-    create_time: "2025-10-27T11:00:00Z",
-    remarks: "生日入住，需布置气球"
-  },
-  {
-    order_id: "ORD20251027006",
-    id_source: "frontdesk",
-    order_source: "前台办理",
-    guest_name: "刘洋",
-    room_type: "you_ge_yuan_zi",
-    room_number: "115",
-    check_in_date: "2025-10-27",
-    check_out_date: "2025-10-28",
-    status: "occupied",
-    payment_method: "现金",
-    phone: "13900001111",
-    total_price: 388.00,
-    deposit: 100.00,
-    stay_type: "客房",
-    create_time: "2025-10-27T08:15:00Z",
-    remarks: "上午退房"
-  },
-  {
-    order_id: "ORD20251027007",
-    id_source: "web",
-    order_source: "官网预订",
-    guest_name: "孙梅",
-    room_type: "xing_yun_ge",
-    room_number: "403",
-    check_in_date: "2025-11-01",
-    check_out_date: "2025-11-03",
-    status: "reserved",
-    payment_method: "支付宝",
-    phone: "13855557777",
-    total_price: 776.00,
-    deposit: 200.00,
-    stay_type: "客房",
-    create_time: "2025-10-27T12:00:00Z",
-    remarks: "两晚不含早餐"
-  },
-  {
-    order_id: "ORD20251027008",
-    id_source: "wechat",
-    order_source: "微信小程序",
-    guest_name: "周杰",
-    room_type: "yi_jiang_nan",
-    room_number: "311",
-    check_in_date: "2025-10-29",
-    check_out_date: "2025-10-30",
-    status: "reserved",
-    payment_method: "微信",
-    phone: "13733445566",
-    total_price: 268.00,
-    deposit: 100.00,
-    stay_type: "客房",
-    create_time: "2025-10-27T09:10:00Z",
-    remarks: "晚到达，请留房"
-  },
-  {
-    order_id: "ORD20251027009",
-    id_source: "frontdesk",
-    order_source: "前台办理",
-    guest_name: "黄凯",
-    room_type: "zui_shan_tang",
-    room_number: "112",
-    check_in_date: "2025-10-27",
-    check_out_date: "2025-10-27",
-    status: "occupied",
-    payment_method: "现金",
-    phone: "13899998888",
-    total_price: 398.00,
-    deposit: 100.00,
+    is_prepaid: false,
+    prepaid_amount: 0,
+    create_time: new Date(),
     stay_type: "休息房",
-    create_time: "2025-10-27T13:30:00Z",
-    remarks: "临时入住四小时"
-  },
-  {
-    order_id: "ORD20251027010",
-    id_source: "web",
-    order_source: "官网预订",
-    guest_name: "林涛",
-    room_type: "bo_ye_shuang",
-    room_number: "206",
-    check_in_date: "2025-10-30",
-    check_out_date: "2025-10-31",
-    status: "reserved",
-    payment_method: "现金",
-    phone: "13977889900",
-    total_price: 258.00,
-    deposit: 100.00,
-    stay_type: "客房",
-    create_time: "2025-10-27T14:00:00Z",
-    remarks: "早班机离店"
+    remarks: "测试订单"
   }
 ];
 
-const ORDERS = [
-  {
-    order_id: "ORD20251027001",
-    id_source: "web",
-    order_source: "官网预订",
-    guest_name: "张伟",
-    room_type: "阿苏晓筑",
-    room_number: "101",
-    check_in_date: "2025-10-28",
-    check_out_date: "2025-10-30",
-    status: "reserved",
-    payment_method: "微邮付",
-    phone: "13800138000",
-    total_price: {
-      '2025-10-28': 288.00,
-      '2025-10-29': 288.00
-    },
-    deposit: 200.00,
-    stay_type: "客房",
-    create_time: "2025-10-27T09:30:00Z",
-    remarks: "提前入住，请准备好房卡"
-  },
-  {
-    order_id: "ORD20251027002",
-    id_source: "wechat",
-    order_source: "微信小程序",
-    guest_name: "李娜",
-    room_type: "泊野双床",
-    room_number: "207",
-    check_in_date: "2025-10-29",
-    check_out_date: "2025-10-31",
-    status: "reserved",
-    payment_method: "微信",
-    phone: "13911223344",
-    total_price: {
-      '2025-10-29': 258.00,
-      '2025-10-30': 258.00
-    },
-    deposit: 150.00,
-    stay_type: "客房",
-    create_time: "2025-10-27T10:10:00Z",
-    remarks: "两位客人，需额外毛巾"
-  },
-  {
-    order_id: "ORD20251027003",
-    id_source: "frontdesk",
-    order_source: "前台办理",
-    guest_name: "王强",
-    room_type: "暖居家庭房",
-    room_number: "210",
-    check_in_date: "2025-10-27",
-    check_out_date: "2025-10-28",
-    status: "occupied",
-    payment_method: "现金",
-    phone: "13799887766",
-    total_price: {
-      '2025-10-27': 368.00
-    },
-    deposit: 100.00,
-    stay_type: "客房",
-    create_time: "2025-10-27T08:00:00Z",
-    remarks: "带儿童一名"
-  },
-  {
-    order_id: "ORD20251027004",
-    id_source: "web",
-    order_source: "官网预订",
-    guest_name: "陈晨",
-    room_type: "声声慢投影大床",
-    room_number: "203",
-    check_in_date: "2025-10-31",
-    check_out_date: "2025-11-02",
-    status: "reserved",
-    payment_method: "微邮付",
-    phone: "13666778899",
-    total_price: {
-      '2025-10-31': 348.00,
-      '2025-11-01': 348.00
-    },
-    deposit: 200.00,
-    stay_type: "客房",
-    create_time: "2025-10-27T09:45:00Z",
-    remarks: "喜欢安静房间"
-  },
-  {
-    order_id: "ORD20251027005",
-    id_source: "wechat",
-    order_source: "微信小程序",
-    guest_name: "赵敏",
-    room_type: "云居云端影音房",
-    room_number: "401",
-    check_in_date: "2025-10-28",
-    check_out_date: "2025-10-29",
-    status: "reserved",
-    payment_method: "微信",
-    phone: "13544556677",
-    total_price: {
-      '2025-10-28': 428.00
-    },
-    deposit: 150.00,
-    stay_type: "客房",
-    create_time: "2025-10-27T11:00:00Z",
-    remarks: "生日入住，需布置气球"
-  },
-  {
-    order_id: "ORD20251027006",
-    id_source: "frontdesk",
-    order_source: "前台办理",
-    guest_name: "刘洋",
-    room_type: "有个院子",
-    room_number: "115",
-    check_in_date: "2025-10-27",
-    check_out_date: "2025-10-28",
-    status: "occupied",
-    payment_method: "现金",
-    phone: "13900001111",
-    total_price: {
-      '2025-10-27': 388.00
-    },
-    deposit: 100.00,
-    stay_type: "客房",
-    create_time: "2025-10-27T08:15:00Z",
-    remarks: "上午退房"
-  },
-  {
-    order_id: "ORD20251027007",
-    id_source: "web",
-    order_source: "官网预订",
-    guest_name: "孙梅",
-    room_type: "行云阁",
-    room_number: "403",
-    check_in_date: "2025-11-01",
-    check_out_date: "2025-11-03",
-    status: "reserved",
-    payment_method: "微邮付",
-    phone: "13855557777",
-    total_price: {
-      '2025-11-01': 388.00,
-      '2025-11-02': 388.00
-    },
-    deposit: 200.00,
-    stay_type: "客房",
-    create_time: "2025-10-27T12:00:00Z",
-    remarks: "两晚不含早餐"
-  },
-  {
-    order_id: "ORD20251027008",
-    id_source: "wechat",
-    order_source: "微信小程序",
-    guest_name: "周杰",
-    room_type: "忆江南大床房",
-    room_number: "311",
-    check_in_date: "2025-10-29",
-    check_out_date: "2025-10-30",
-    status: "reserved",
-    payment_method: "微信",
-    phone: "13733445566",
-    total_price: {
-      '2025-10-29': 268.00
-    },
-    deposit: 100.00,
-    stay_type: "客房",
-    create_time: "2025-10-27T09:10:00Z",
-    remarks: "晚到达，请留房"
-  },
-  {
-    order_id: "ORD20251027009",
-    id_source: "frontdesk",
-    order_source: "前台办理",
-    guest_name: "黄凯",
-    room_type: "醉山塘",
-    room_number: "112",
-    check_in_date: "2025-10-27",
-    check_out_date: "2025-10-27",
-    status: "occupied",
-    payment_method: "现金",
-    phone: "13899998888",
-    total_price: {
-      '2025-10-27': 398.00
-    },
-    deposit: 100.00,
-    stay_type: "休息房",
-    create_time: "2025-10-27T13:30:00Z",
-    remarks: "临时入住四小时"
-  },
-  {
-    order_id: "ORD20251027010",
-    id_source: "web",
-    order_source: "官网预订",
-    guest_name: "林涛",
-    room_type: "泊野双床",
-    room_number: "206",
-    check_in_date: "2025-10-30",
-    check_out_date: "2025-10-31",
-    status: "reserved",
-    payment_method: "现金",
-    phone: "13977889900",
-    total_price: {
-      '2025-10-30': 258.00
-    },
-    deposit: 100.00,
-    stay_type: "客房",
-    create_time: "2025-10-27T14:00:00Z",
-    remarks: "早班机离店"
-  }
-];
-
-
+const ORDERS = mockOrders;
 
 async function addRoomType(roomTypes) {
   // Implementation for adding a room type
@@ -531,33 +186,106 @@ async function addRoom(rooms) {
   }
 }
 
-async function createOrder(mockOrders) {
-  // Implementation for creating an order
-  for (const order of mockOrders) {
-    await db.query(
-      `INSERT INTO orders (order_id, id_source, order_source, guest_name, room_type, room_number,
-        check_in_date, check_out_date, status, payment_method, phone, total_price, deposit,
-        stay_type, create_time, remarks)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
-      [
-        order.order_id,
-        order.id_source,
-        order.order_source,
-        order.guest_name,
-        order.room_type,
-        order.room_number,
-        order.check_in_date,
-        order.check_out_date,
-        order.status,
-        order.payment_method,
-        order.phone,
-        order.total_price,
-        order.deposit,
-        order.stay_type,
-        order.create_time,
-        order.remarks
-      ]
-    );
+async function createOrder(orders) {
+  const toArray = Array.isArray(orders) ? orders : [orders];
+
+  const normalizeDate = (d) => {
+    if (!d) return d;
+    return typeof d === "string" ? d.substring(0, 10) : new Date(d).toISOString().split("T")[0];
+  };
+
+  const buildStayDates = (start, end) => {
+    const startDate = new Date(start);
+    const endDate = new Date(end || start);
+    let nights = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
+    if (nights <= 0) nights = 1;
+    const days = [];
+    for (let i = 0; i < nights; i++) {
+      const d = new Date(startDate);
+      d.setDate(d.getDate() + i);
+      days.push(d.toISOString().split("T")[0]);
+    }
+    return days;
+  };
+
+  const buildTotalPrice = (raw, stayDates) => {
+    if (raw && typeof raw.total_price === "object" && raw.total_price !== null && !Array.isArray(raw.total_price)) {
+      return raw.total_price;
+    }
+    const fallback = raw?.total_price ?? raw?.price ?? raw?.room_price ?? 0;
+    const numeric = Number(fallback);
+    const safePrice = Number.isFinite(numeric) && numeric > 0 ? numeric : 1;
+    return stayDates.reduce((acc, day) => {
+      acc[day] = safePrice;
+      return acc;
+    }, {});
+  };
+
+  for (const raw of toArray) {
+    // 仅保留 schema 允许的字段，避免 additionalProperties 校验失败
+    const payload = {
+      order_id: raw.order_id,
+      id_source: raw.id_source,
+      order_source: raw.order_source,
+      guest_name: raw.guest_name,
+      room_type: raw.room_type,
+      room_number: raw.room_number,
+      check_in_date: raw.check_in_date,
+      check_out_date: raw.check_out_date,
+      status: raw.status,
+      payment_method: raw.payment_method,
+      phone: raw.phone,
+      total_price: raw.total_price,
+      deposit: raw.deposit,
+      is_prepaid: raw.is_prepaid,
+      prepaid_amount: raw.prepaid_amount,
+      prepaid_at: raw.prepaid_at,
+      stay_type: raw.stay_type,
+      create_time: raw.create_time,
+      remarks: raw.remarks
+    };
+
+    // 规范 id_source（AJV 仅接受字符串）
+    if (payload.id_source === undefined || payload.id_source === null || payload.id_source === '') {
+      delete payload.id_source;
+    } else {
+      payload.id_source = String(payload.id_source);
+    }
+
+    payload.order_id = payload.order_id || `TEST_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    payload.order_source = payload.order_source || "test";
+    payload.payment_method = payload.payment_method || "现金";
+    payload.status = payload.status || "pending";
+    payload.phone = payload.phone || "13800000000";
+    payload.guest_name = payload.guest_name || "测试用户";
+    payload.check_in_date = normalizeDate(payload.check_in_date || new Date());
+    payload.check_out_date = normalizeDate(payload.check_out_date || payload.check_in_date);
+
+    const stayDates = buildStayDates(payload.check_in_date, payload.check_out_date);
+    payload.total_price = buildTotalPrice(raw, stayDates);
+
+    payload.stay_type = payload.stay_type || (payload.check_in_date === payload.check_out_date ? "休息房" : "客房");
+    payload.create_time = payload.create_time ? new Date(payload.create_time).toISOString() : new Date().toISOString();
+    payload.deposit = payload.deposit === undefined ? 0 : Number(payload.deposit);
+    payload.is_prepaid = Boolean(payload.is_prepaid);
+    payload.prepaid_amount = payload.prepaid_amount === undefined ? 0 : Number(payload.prepaid_amount);
+
+    // 移除 undefined/null 字段，避免 AJV 将 null 视为不合法类型
+    Object.keys(payload).forEach((key) => {
+      if (payload[key] === undefined || payload[key] === null) {
+        delete payload[key];
+      }
+    });
+
+    const response = await request(app)
+      .post('/api/orders/new')
+      .send(payload);
+
+    if (response.statusCode >= 400) {
+      const err = new Error(`创建测试订单失败: ${response.statusCode} ${response.text}`);
+      err.response = response;
+      throw err;
+    }
   }
 }
 

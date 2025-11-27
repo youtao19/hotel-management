@@ -255,7 +255,6 @@ export const useOrderStore = defineStore('order', () => {
         sourceNumber: newOrderFromApi.id_source,
         isPrepaid: Boolean(newOrderFromApi.is_prepaid),
         prepaidAmount: parseFloat(newOrderFromApi.prepaid_amount) || 0,
-        prepaidAt: newOrderFromApi.prepaid_at
       };
 
       console.log('🔍 映射后的订单数据:', newOrderMapped);

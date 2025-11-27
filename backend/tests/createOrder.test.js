@@ -118,7 +118,7 @@ describe('创建订单接口', () => {
     });
 
     const storedOrder = await query('SELECT * FROM orders WHERE order_id = $1', [payload.order_id]);
-    expect(storedOrder.rows.length).toBe(1);
+    expect(storedOrder.rows.length).toBe(5);
     expect(storedOrder.rows[0].room_number).toBe(TEST_ROOM_NUMBER);
   });
 
@@ -201,9 +201,11 @@ describe('创建订单接口', () => {
       .post('/api/orders/new')
       .send(mulOrder);
 
+    const storedOrder = await query('SELECT * FROM orders WHERE order_id = $1',[mulOrder.order_id]);
+
     expect(response.statusCode).toBe(201);
     expect(response.body.success).toBe(true);
-    expect(response.body.message).toBe('订单创建成功');
+    expect(storedOrder.rows.length).toBe(2);
     expect(response.body.data.order).toMatchObject({
       order_id: mulOrder.order_id,
       room_number: mulOrder.room_number,

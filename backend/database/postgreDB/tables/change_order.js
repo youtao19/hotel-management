@@ -9,8 +9,8 @@ const createQuery = `
 		changed_at TIMESTAMP WITH TIME ZONE DEFAULT now(), -- 变更时间
 		changed_by VARCHAR(50), -- 变更人
 		changes JSONB, -- 变更内容
-		reason TEXT, -- 变更原因
-		FOREIGN KEY (order_id) REFERENCES orders(order_id)
+		reason TEXT -- 变更原因
+		-- 注意：移除了 order_id 外键约束，因为多日分行结构中 order_id 不再是唯一的
 	);
 `;
 

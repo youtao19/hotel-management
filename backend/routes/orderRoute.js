@@ -117,6 +117,26 @@ router.get('/', async (req, res) => {
 });
 
 /**
+ * 获取所有订单的每日明细
+ * GET /api/orders/daily
+ */
+router.get('/daily', async (req, res) => {
+  try {
+    console.log('获取所有订单每日明细请求');
+    const orders = await orderModule.getAllOrdersDaily();
+    console.log(`成功获取 ${orders.length} 条每日明细数据`);
+    res.status(200).json({ data: orders });
+  } catch (err) {
+    console.error('获取订单每日明细错误:', err);
+    res.status(500).json({
+      message: '服务器错误',
+      error: err.message,
+      stack: process.env.NODE_ENV === 'dev' ? err.stack : undefined
+    });
+  }
+});
+
+/**
  * 获取特定ID的订单
  * GET /api/orders/:id
  */
@@ -197,7 +217,7 @@ router.post('/new', async (req, res) => {
       case 'INVALID_PRICE_DATE_FORMAT':
       case 'INVALID_PRICE_DATE_RANGE':
       case 'INVALID_DEPOSIT':
-  case 'INVALID_STAY_TYPE':
+      case 'INVALID_STAY_TYPE':
       case 'INVALID_ROOM_TYPE':
       case 'INVALID_ROOM_NUMBER':
       case 'ROOM_CLOSED':
@@ -328,6 +348,37 @@ router.put('/:orderNumber', authenticationMiddleware, async (req, res) => {
   } catch (error) {
     console.error(`更新订单 ${orderNumber} 失败:`, error);
     res.status(500).json({ success: false, message: '更新订单失败', error: error.message });
+  }
+});
+
+/**
+ * 更新订单特定日期的房间号（多日分行结构支持）
+ * PUT /api/orders/:orderNumber/day-room
+ * 请求体: { stayDate: 'YYYY-MM-DD', newRoomNumber: '101' }
+ */
+router.put('/:orderNumber/day-room', authenticationMiddleware, async (req, res) => {
+  const { orderNumber } = req.params;
+  const { stayDate, newRoomNumber } = req.body;
+
+  if (!stayDate || !newRoomNumber) {
+    return res.status(400).json({
+      success: false,
+      message: '缺少必要参数: stayDate 和 newRoomNumber'
+    });
+  }
+
+  try {
+    const changedBy = req.user?.username || 'system';
+    const updatedRow = await orderModule.updateOrderDayRoom(orderNumber, stayDate, newRoomNumber, changedBy);
+    res.json({
+      success: true,
+      message: `订单 ${orderNumber} 的 ${stayDate} 房间已更换为 ${newRoomNumber}`,
+      data: updatedRow
+    });
+  } catch (error) {
+    console.error(`更新订单 ${orderNumber} 日期 ${stayDate} 房间失败:`, error);
+    res.status(error.message.includes('不存在') || error.message.includes('占用') || error.message.includes('不匹配') ? 400 : 500)
+      .json({ success: false, message: error.message });
   }
 });
 

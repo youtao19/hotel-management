@@ -274,6 +274,7 @@ describe('获取可用房间列表', () => {
   });
 
   test('同一天入住退房时，已被占用的房间不会在可用列表中', async () => {
+    // 创建一个休息订单
     await insertTestOrder({
       orderId: 'TEST_AVAIL_REST_1',
       roomNumber: 'A201',
@@ -281,6 +282,7 @@ describe('获取可用房间列表', () => {
       checkOutDate: '2024-12-01'
     });
 
+    // 查询该天的可用房间
     const response = await request(app)
       .get('/api/rooms/available')
       .query({ startDate: '2024-12-01', endDate: '2024-12-01' });

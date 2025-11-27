@@ -9,7 +9,7 @@ const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
   positive_review BOOLEAN DEFAULT NULL,
   invite_time TIMESTAMP DEFAULT NULL,
   update_time TIMESTAMP DEFAULT NULL,
-  FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE,
+  -- 注意：移除了 order_id 外键约束，因为多日分行结构中 order_id 不再是唯一的
   UNIQUE(order_id)
 )`;
 
