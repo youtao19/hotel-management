@@ -1,7 +1,8 @@
 const app = require('../app');
 const request = require('supertest');
 
-const {roomTypes,rooms,mockOrders,addRoomType,addRoom,createOrder} = require('./tools');
+const {roomTypes,rooms,ORDERS,addRoomType,addRoom} = require('./tools');
+const {createOrder} = require('../modules/orderModule');
 
 describe('工具测试', () => {
   test('添加房间类型', async () => {
@@ -27,15 +28,17 @@ describe('工具测试', () => {
   });
 
   test('创建订单', async () => {
-    await createOrder(mockOrders);
+
+    for (const order of ORDERS) {
+      await createOrder(order);
+    }
 
     const response = await request(app)
       .get('/api/orders/');
 
     expect(response.statusCode).toBe(200);
     expect(Array.isArray(response.body.data)).toBe(true);
-    expect(response.body.data.length).toBe(mockOrders.length);
+    expect(response.body.data.length).toBe(ORDERS.length);
   });
-  
-});
 
+});

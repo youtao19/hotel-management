@@ -378,6 +378,7 @@ export const useOrderStore = defineStore('order', () => {
     }
   }
 
+  // 办理入住
   async function checkIn(orderNumber, depositAmount) {
     try {
       loading.value = true;
@@ -415,21 +416,21 @@ export const useOrderStore = defineStore('order', () => {
 
       // Prepare data (similar to addOrder)
       const orderData = {
-        order_id: order.orderNumber?.toString(),
-        guest_name: order.guestName?.toString(),
+        orderId: order.orderNumber?.toString(),
+        guestName: order.guestName?.toString(),
         phone: order.phone?.toString() || '',
-        room_type: order.roomType?.toString(),
-        room_number: order.roomNumber?.toString(),
-        check_in_date: formatOrderDate(order.checkInDate),
-        check_out_date: formatOrderDate(order.checkOutDate),
+        roomType: order.roomType?.toString(),
+        roomNumber: order.roomNumber?.toString(),
+        checkInDate: formatOrderDate(order.checkInDate),
+        checkOutDate: formatOrderDate(order.checkOutDate),
         status: 'checked-in', // This is the key for the new API
-        payment_method: viewStore.normalizePaymentMethodForDB(typeof order.paymentMethod === 'object' ? order.paymentMethod.value?.toString() : order.paymentMethod?.toString()),
-        total_price: order.roomPrice,
+        paymentMethod: viewStore.normalizePaymentMethodForDB(typeof order.paymentMethod === 'object' ? order.paymentMethod.value?.toString() : order.paymentMethod?.toString()),
+        roomPrice: order.roomPrice,
         deposit: parseFloat(order.deposit) || 0,
         remarks: order.remarks?.toString() || '',
-        order_source: normalizeOrderSource(order.source),
-        id_source: order.sourceNumber?.toString() || '',
-        create_time: new Date().toISOString(),
+        orderSource: normalizeOrderSource(order.source),
+        idSource: order.sourceNumber?.toString() || '',
+        createTime: new Date().toISOString(),
       };
 
       // Call the new API

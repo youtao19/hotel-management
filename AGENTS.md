@@ -40,3 +40,5 @@ This workspace houses a Quasar frontend and an Express backend maintained via np
 
 - Copy `dev.env.template` to `dev.env` (and `docker.dev.env` when containerizing) before running services.
 - Never commit secrets or personal data; rotate any exposed credentials immediately.
+
+## always answer me in Chinese

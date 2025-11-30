@@ -1,6 +1,7 @@
 const db = require('../database/postgreDB/pg');
 const request = require('supertest');
 const app = require('../app');
+const { createOrder } = require('../modules/orderModule');
 
 const roomTypes = [
   {
@@ -119,50 +120,78 @@ const rooms = [
   { room_number: "403", type_code: "xing_yun_ge", status: "available", price: 388.00, is_closed: false }
 ];
 
-const mockOrders = [
+const ORDERS = [
   {
-    order_id: "TEST_ORDER_1",
-    id_source: null,
-    order_source: "test",
-    guest_name: "测试用户A",
-    phone: "13800000001",
-    room_type: "TEST_STD_ROOM",
-    room_number: "TEST_ROOM_101",
-    check_in_date: "2024-01-01",
-    check_out_date: "2024-01-02",
-    status: "pending",
-    payment_method: "现金",
-    total_price: 100.00,
-    deposit: 200.00,
-    is_prepaid: false,
-    prepaid_amount: 0,
-    create_time: new Date(),
-    stay_type: "客房",
-    remarks: "测试订单"
+    "orderId": "ORDER-20251129-001",
+    "sourceNumber": "MT-883921",
+    "orderSource": "美团",
+    "guestName": "张三",
+    "roomType": "xing_yun_ge",
+    "roomNumber": "403",
+    "checkInDate": "2025-11-30",
+    "checkOutDate": "2025-12-02",
+    "status": "pending",
+    "paymentMethod": "微信",
+    "phone": "13812345678",
+    "roomPrice": {
+      "2025-11-30": 268,
+      "2025-12-01": 288
+    },
+    "deposit": 200,
+    "isPrepaid": false,
+    "prepaidAmount": 0,
+    "stayType": "客房",
+    "createTime": "2025-11-29T10:30:00+08:00",
+    "remarks": "需要安静房间，尽量高楼层"
   },
-  {
-    order_id: "TEST_ORDER_2",
-    id_source: null,
-    order_source: "test",
-    guest_name: "测试用户B",
-    phone: "13800000002",
-    room_type: "asu_xiao_zhu",
-    room_number: "102",
-    check_in_date: "2024-01-03",
-    check_out_date: "2024-01-03",
-    status: "pending",
-    payment_method: "现金",
-    total_price: 288.00,
-    deposit: 100.00,
-    is_prepaid: false,
-    prepaid_amount: 0,
-    create_time: new Date(),
-    stay_type: "休息房",
-    remarks: "测试订单"
-  }
-];
-
-const ORDERS = mockOrders;
+  { // 休息房，当天入住当天离店，部分预付
+    "orderId": "ORDER-20251129-002",
+    "sourceNumber": "QTT-20251129-02",
+    "orderSource": "前台",
+    "guestName": "李四",
+    "roomType": "yi_jiang_nan",
+    "roomNumber": "205",
+    "checkInDate": "2025-11-29",
+    "checkOutDate": "2025-11-29",
+    "status": "reserved",
+    "paymentMethod": "微信支付",
+    "phone": "13987654321",
+    "roomPrice": {
+      "2025-11-29": "120.00"
+    },
+    "deposit": 100,
+    "isPrepaid": true,
+    "prepaidAmount": 50,
+    "stayType": "休息房",
+    "createTime": "2025-11-29T09:15:23+08:00",
+    "remarks": "预计停留 4 小时"
+  },
+  { // 长住订单，多日不同房价，未留手机号
+    "orderId": "ORDER-20251201-003",
+    "sourceNumber": "CTRIP-99123",
+    "orderSource": "携程",
+    "guestName": "王五",
+    "roomType": "nuan_ju_jiating",
+    "roomNumber": "210",
+    "checkInDate": "2025-12-01",
+    "checkOutDate": "2025-12-05",
+    "status": "pending",
+    "paymentMethod": "预付",
+    "phone": "",
+    "roomPrice": {
+      "2025-12-01": 320,
+      "2025-12-02": 320,
+      "2025-12-03": 350.5,
+      "2025-12-04": 360.00
+    },
+    "deposit": 400,
+    "isPrepaid": true,
+    "prepaidAmount": 1280,
+    "stayType": "客房",
+    "createTime": "2025-11-28T21:00:00+08:00",
+    "remarks": "商务客户，含早餐"
+  },
+]
 
 async function addRoomType(roomTypes) {
   // Implementation for adding a room type
@@ -186,115 +215,20 @@ async function addRoom(rooms) {
   }
 }
 
-async function createOrder(orders) {
-  const toArray = Array.isArray(orders) ? orders : [orders];
+const buildOrderPayload = (overrides = {}) => ({
+  ...ORDERS[0],
+  orderId: `TEST_ORDER_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+  ...overrides
+});
 
-  const normalizeDate = (d) => {
-    if (!d) return d;
-    return typeof d === "string" ? d.substring(0, 10) : new Date(d).toISOString().split("T")[0];
-  };
 
-  const buildStayDates = (start, end) => {
-    const startDate = new Date(start);
-    const endDate = new Date(end || start);
-    let nights = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
-    if (nights <= 0) nights = 1;
-    const days = [];
-    for (let i = 0; i < nights; i++) {
-      const d = new Date(startDate);
-      d.setDate(d.getDate() + i);
-      days.push(d.toISOString().split("T")[0]);
-    }
-    return days;
-  };
-
-  const buildTotalPrice = (raw, stayDates) => {
-    if (raw && typeof raw.total_price === "object" && raw.total_price !== null && !Array.isArray(raw.total_price)) {
-      return raw.total_price;
-    }
-    const fallback = raw?.total_price ?? raw?.price ?? raw?.room_price ?? 0;
-    const numeric = Number(fallback);
-    const safePrice = Number.isFinite(numeric) && numeric > 0 ? numeric : 1;
-    return stayDates.reduce((acc, day) => {
-      acc[day] = safePrice;
-      return acc;
-    }, {});
-  };
-
-  for (const raw of toArray) {
-    // 仅保留 schema 允许的字段，避免 additionalProperties 校验失败
-    const payload = {
-      order_id: raw.order_id,
-      id_source: raw.id_source,
-      order_source: raw.order_source,
-      guest_name: raw.guest_name,
-      room_type: raw.room_type,
-      room_number: raw.room_number,
-      check_in_date: raw.check_in_date,
-      check_out_date: raw.check_out_date,
-      status: raw.status,
-      payment_method: raw.payment_method,
-      phone: raw.phone,
-      total_price: raw.total_price,
-      deposit: raw.deposit,
-      is_prepaid: raw.is_prepaid,
-      prepaid_amount: raw.prepaid_amount,
-      prepaid_at: raw.prepaid_at,
-      stay_type: raw.stay_type,
-      create_time: raw.create_time,
-      remarks: raw.remarks
-    };
-
-    // 规范 id_source（AJV 仅接受字符串）
-    if (payload.id_source === undefined || payload.id_source === null || payload.id_source === '') {
-      delete payload.id_source;
-    } else {
-      payload.id_source = String(payload.id_source);
-    }
-
-    payload.order_id = payload.order_id || `TEST_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-    payload.order_source = payload.order_source || "test";
-    payload.payment_method = payload.payment_method || "现金";
-    payload.status = payload.status || "pending";
-    payload.phone = payload.phone || "13800000000";
-    payload.guest_name = payload.guest_name || "测试用户";
-    payload.check_in_date = normalizeDate(payload.check_in_date || new Date());
-    payload.check_out_date = normalizeDate(payload.check_out_date || payload.check_in_date);
-
-    const stayDates = buildStayDates(payload.check_in_date, payload.check_out_date);
-    payload.total_price = buildTotalPrice(raw, stayDates);
-
-    payload.stay_type = payload.stay_type || (payload.check_in_date === payload.check_out_date ? "休息房" : "客房");
-    payload.create_time = payload.create_time ? new Date(payload.create_time).toISOString() : new Date().toISOString();
-    payload.deposit = payload.deposit === undefined ? 0 : Number(payload.deposit);
-    payload.is_prepaid = Boolean(payload.is_prepaid);
-    payload.prepaid_amount = payload.prepaid_amount === undefined ? 0 : Number(payload.prepaid_amount);
-
-    // 移除 undefined/null 字段，避免 AJV 将 null 视为不合法类型
-    Object.keys(payload).forEach((key) => {
-      if (payload[key] === undefined || payload[key] === null) {
-        delete payload[key];
-      }
-    });
-
-    const response = await request(app)
-      .post('/api/orders/new')
-      .send(payload);
-
-    if (response.statusCode >= 400) {
-      const err = new Error(`创建测试订单失败: ${response.statusCode} ${response.text}`);
-      err.response = response;
-      throw err;
-    }
-  }
-}
 
 module.exports = {
   roomTypes,
   rooms,
-  mockOrders,
   ORDERS,
   addRoomType,
   addRoom,
-  createOrder
+  createOrder,
+  buildOrderPayload
 };

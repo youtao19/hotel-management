@@ -1,12 +1,13 @@
 const request = require('supertest');
 const app = require('../app');
 const { query } = require('../database/postgreDB/pg');
-const {roomTypes,rooms,addRoom,addRoomType,mockOrders,createOrder} = require('./tools');
+const {roomTypes,rooms,ORDERS,addRoom,addRoomType} = require('./tools');
+const { createOrder } = require('../modules/orderModule');
 
 describe('创建订单后更换房间接口', () => {
   const orderTemplate = {
-    ...mockOrders[0],
-    order_id: 'TEST_CHANGE_ROOM_ORDER',
+    ...ORDERS[0],
+    orderId: 'TEST_CHANGE_ROOM_ORDER',
     status: 'pending'
   };
 
@@ -19,12 +20,12 @@ describe('创建订单后更换房间接口', () => {
 
   test('创建订单后更换房间', async () => {
     const targetOrder = orderTemplate;
-    const orderNumber = targetOrder.order_id;
-    const oldRoomNumber = targetOrder.room_number;
+    const orderNumber = targetOrder.orderId;
+    const oldRoomNumber = targetOrder.roomNumber;
     const newRoom = rooms.find(
       room =>
-        room.type_code === targetOrder.room_type &&
-        room.room_number !== oldRoomNumber &&
+        room.type_code === targetOrder.roomType &&
+        room.roomNumber !== oldRoomNumber &&
         room.status === 'available'
     );
 
@@ -35,7 +36,7 @@ describe('创建订单后更换房间接口', () => {
       .send({
         orderNumber,
         oldRoomNumber,
-        newRoomNumber: newRoom.room_number
+        newRoomNumber: newRoom.roomNumber
       });
 
     expect(response.statusCode).toBe(200);

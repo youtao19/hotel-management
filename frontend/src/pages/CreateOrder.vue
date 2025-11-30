@@ -16,7 +16,7 @@
             <div class="row q-col-gutter-md">
               <!-- 订单号输入框 -->
               <div class="col-md-4 col-xs-12">
-                <q-input v-model="orderData.order_id" label="订单号" filled :rules="[val => !!val || '请输入订单号']"
+                <q-input v-model="orderData.orderId" label="订单号" filled :rules="[val => !!val || '请输入订单号']"
                   hint="自动生成，可手动修改" />
               </div>
               <!-- 订单状态选择框 -->
@@ -26,7 +26,7 @@
               </div>
               <!-- 订单来源选择框 -->
               <div class="col-md-4 col-xs-12">
-                <q-select v-model="orderData.order_source" :options="sourceOptions" label="订单来源" filled emit-value
+                <q-select v-model="orderData.orderSource" :options="sourceOptions" label="订单来源" filled emit-value
                   map-options />
               </div>
               <!-- 来源编号输入框 -->
@@ -42,7 +42,7 @@
             <div class="row q-col-gutter-md">
               <!-- 姓名输入框 -->
               <div class="col-md-4 col-xs-12">
-                <q-input v-model="orderData.guest_name" label="姓名" filled :rules="[val => !!val || '请输入姓名']" />
+                <q-input v-model="orderData.guestName" label="姓名" filled :rules="[val => !!val || '请输入姓名']" />
               </div>
               <!-- 手机号输入框（可选） -->
               <div class="col-md-4 col-xs-12">
@@ -370,7 +370,6 @@ import { ref, onMounted, computed, nextTick, watch } from 'vue'
 import { date, useQuasar } from 'quasar'
 import { useRouter, useRoute } from 'vue-router'
 import Decimal from 'decimal.js'
-import { useOrderStore } from '../stores/orderStore' // 导入订单 store
 import { useRoomStore } from '../stores/roomStore' // 导入房间 store
 import { useViewStore } from '../stores/viewStore' // 导入视图 store
 import langZhCn from 'quasar/lang/zh-CN' // 导入中文语言包
@@ -380,7 +379,6 @@ import { orderApi } from '../api'
 // 获取路由和store
 const router = useRouter()
 const route = useRoute()
-const orderStore = useOrderStore()
 const roomStore = useRoomStore()
 const viewStore = useViewStore()
 const $q = useQuasar() // For notifications
@@ -470,11 +468,11 @@ const sourceOptions = [
 
 // 订单表单数据 - 使用响应式引用，包含所有订单字段
 const orderData = ref({
-  order_id: generateOrderNumber(),  // 自动生成订单号
+  orderId: generateOrderNumber(),  // 自动生成订单号
   status: 'pending',                   // 默认状态为"待入住"
-  order_source: 'front_desk',                // 默认订单来源为前台录入
+  orderSource: 'front_desk',                // 默认订单来源为前台录入
   sourceNumber: '',                    // 来源编号（可选）
-  guest_name: '',                       // 客人姓名
+  guestName: '',                       // 客人姓名
   phone: '',                           // 手机号
   roomType: null,                      // 房间类型
   roomNumber: null,                    // 房间号
@@ -1088,25 +1086,48 @@ function getPaymentMethodName(value) {
 }
 
 /**
- * 处理入住确认
+ * 快速入住确认
  * 在 CheckInConfirmDialog 中点击确认后调用
  * @param {Object} orderWithDeposit - 包含押金信息的订单数据
  */
 async function handleCheckInConfirm(orderWithDeposit) {
   try {
-    console.log('🚀 准备使用快速入住API，数据:', orderWithDeposit);
+    console.log('🚀 准备直接调用快速入住API，数据:', orderWithDeposit)
 
-    // 直接调用新的 fastCheckIn action
-    const result = await orderStore.fastCheckIn(orderWithDeposit);
+    const payload = {
+      orderId: orderWithDeposit.orderId || orderWithDeposit.orderNumber || orderWithDeposit.order_id,
+      sourceNumber: orderWithDeposit.sourceNumber || orderWithDeposit.idSource || '',
+      orderSource: orderWithDeposit.orderSource,
+      guestName: orderWithDeposit.guestName,
+      phone: orderWithDeposit.phone || '',
+      roomType: orderWithDeposit.roomType,
+      roomNumber: orderWithDeposit.roomNumber,
+      checkInDate: orderWithDeposit.checkInDate,
+      checkOutDate: orderWithDeposit.checkOutDate,
+      status: 'checked-in',
+      paymentMethod: orderWithDeposit.paymentMethod,
+      roomPrice: orderWithDeposit.roomPrice || dailyPrices.value,
+      deposit: toAmountNumber(orderWithDeposit.deposit || 0),
+      stayType: orderWithDeposit.stayType,
+      isPrepaid: Boolean(orderWithDeposit.isPrepaid),
+      prepaidAmount: toAmountNumber(orderWithDeposit.prepaidAmount || 0),
+      createTime: orderWithDeposit.createTime || new Date().toISOString(),
+      remarks: orderWithDeposit.remarks || ''
+    }
 
-    console.log('✅ 快速入住成功，后端返回:', result);
+    const response = await orderApi.fastCheckIn(payload)
+    const result = response?.data || response
+    if (result?.success === false) {
+      throw new Error(result.message || '快速入住失败')
+    }
+    console.log('✅ 快速入住成功，后端返回:', result)
 
     // 刷新房间状态
-    await roomStore.refreshData();
+    await roomStore.refreshData()
 
     // 关闭对话框
-    showCheckInDialog.value = false;
-    pendingCheckInOrder.value = null;
+    showCheckInDialog.value = false
+    pendingCheckInOrder.value = null
 
     $q.notify({
       type: 'positive',
@@ -1115,11 +1136,11 @@ async function handleCheckInConfirm(orderWithDeposit) {
     });
 
     // 导航到订单列表页面
-    router.push('/ViewOrders');
+    router.push('/ViewOrders')
 
   } catch (error) {
-    console.error('快速入住失败:', error);
-    let errorMessage = '操作失败，请稍后再试。';
+    console.error('快速入住失败:', error)
+    let errorMessage = '操作失败，请稍后再试。'
 
     // 错误处理逻辑保持不变
     if (error.response?.data) {
@@ -1228,7 +1249,7 @@ async function submitOrder() {
 
   // 普通订单创建流程
   try {
-    // 使用 orderStore.addOrder 创建订单
+    // 直接调用接口创建订单
     await orderApi.addOrder(submitData);
 
     $q.notify({

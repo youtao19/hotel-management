@@ -3,9 +3,8 @@ const router = express.Router();
 router.use(express.json());
 const orderModule = require('../modules/orderModule');
 const { authenticationMiddleware } = require('../modules/authentication');
-const { query, getClient } = require('../database/postgreDB/pg');
 const setup = require('../appSettings/setup');
-const { formatDate } = require('../modules/tools');
+const { toAmountNumber } = require('../modules/tools');
 const Ajv = require('ajv');
 const ajv = new Ajv();
 const addFormats = require("ajv-formats");
@@ -18,10 +17,10 @@ const VALID_ORDER_STATES = ['pending', 'reserved', 'checked-in', 'checked-out', 
 const createOrderSchema = {
   type: 'object',
   properties: {
-    order_id: { type: 'string' },
+    orderId: { type: 'string' },
     sourceNumber: { type: 'string' },
-    order_source: { type: 'string' },
-    guest_name: { type: 'string' },
+    orderSource: { type: 'string' },
+    guestName: { type: 'string' },
     roomType: { type: 'string' },
     roomNumber: { type: 'string' },
     checkInDate: { type: 'string', format: 'date' },
@@ -50,7 +49,7 @@ const createOrderSchema = {
     createTime: { type: 'string', format: 'date-time' },
     remarks: { type: 'string' }
   },
-  required: ['order_id', 'order_source', 'guest_name', 'roomType', 'roomNumber', 'checkInDate', 'checkOutDate', 'status', 'paymentMethod', 'roomPrice', 'stayType'],
+  required: ['orderId', 'orderSource', 'guestName', 'roomType', 'roomNumber', 'checkInDate', 'checkOutDate', 'status', 'paymentMethod', 'roomPrice', 'stayType'],
   additionalProperties: true
 };
 
@@ -254,54 +253,7 @@ router.post('/new', async (req, res) => {
   }
 });
 
-/**
- * 快速入住：创建已入住订单和账单（使用事务）
- * POST /api/orders/fast-check-in
- */
-router.post('/fast-check-in', async (req, res) => {
-  try {
-    // 验证请求数据
-    const validate = ajv.compile(createOrderSchema);
-    const valid = validate(req.body);
-    if (!valid) {
-      console.error('快速入住请求参数验证失败:', validate.errors);
-      return res.status(400).json({
-        success: false,
-        message: '请求参数验证失败',
-        errors: validate.errors
-      });
-    }
 
-    const orderData = req.body;
-    const depositAmount = parseFloat(req.body.deposit) || 0;
-
-    console.log('🚀 收到快速入住请求:', {
-      order_id: orderData.order_id,
-      guest_name: orderData.guest_name,
-      room_number: orderData.room_number,
-      deposit: depositAmount
-    });
-
-    // 调用业务逻辑函数
-    const result = await orderModule.createCheckedInOrderWithTransaction(orderData, depositAmount);
-
-    console.log('✅ 快速入住成功:', result.order.order_id);
-
-    return res.status(200).json({
-      success: true,
-      message: '快速入住成功',
-      data: result
-    });
-
-  } catch (error) {
-    console.error('❌ 快速入住失败:', error);
-    return res.status(500).json({
-      success: false,
-      message: '快速入住失败',
-      error: error.message
-    });
-  }
-});
 
 /**
  * 更新订单状态
@@ -499,227 +451,94 @@ router.get('/:order_id/deposit-info', async (req, res) => {
  * 请求体: { deposit: number } - 实际收取的押金金额
  */
 router.post('/:orderId/check-in', async (req, res) => {
-  let client;
   try {
     const { orderId } = req.params;
-    const { deposit, dailyPrices } = req.body || {}; // 从请求体获取押金金额和每日房价
-    client = await getClient();
-    console.log('✅ [check-in] 获取数据库连接成功');
-    await client.query('BEGIN');
-    console.log('✅ [check-in] 事务开始');
+    const { deposit } = req.body;
 
-    // 1. 获取订单信息
-    const orderResult = await client.query('SELECT * FROM orders WHERE order_id = $1', [orderId]);
-    console.log(`📝 [check-in] 查询订单结果: 找到 ${orderResult.rows.length} 条记录`);
-
-    if (orderResult.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ success: false, message: '订单不存在' });
-    }
-
-    const order = orderResult.rows[0];
-
-    // 2. 检查订单状态
-    if (order.status !== 'pending') {
-      await client.query('ROLLBACK');
-      return res.status(400).json({
-        success: false,
-        message: `订单状态为 '${order.status}'，无法办理入住，只有待入住订单可以办理`
-      });
-    }
-
-    // 3. 更新订单的押金金额（使用前端传入的押金）
-    const actualDeposit = deposit !== undefined ? Number(deposit) : Number(order.deposit || 0);
-
-    if (actualDeposit !== Number(order.deposit)) {
-      await client.query(
-        'UPDATE orders SET deposit = $1 WHERE order_id = $2',
-        [actualDeposit, orderId]
-      );
-      console.log(`📝 更新订单 ${orderId} 押金: ${order.deposit} -> ${actualDeposit}`);
-    }
-
-    // 4. 格式化日期（确保是 YYYY-MM-DD 格式）
-    const stayDate = formatDate(order.check_in_date);
-    const stayType = order.stay_type || '客房'; // 默认值为客房
-
-    const totalRoomFee = Number(order.total_price) || 0;
-    const existingRoomFeeResult = await client.query(
-      `SELECT COALESCE(SUM(change_price), 0) AS total_room_fee
-         FROM bills
-        WHERE order_id = $1
-          AND change_type = $2`,
-      [orderId, setup.changeType.roomFee]
-    );
-    const alreadyCollectedRoomFee = parseFloat(existingRoomFeeResult.rows[0]?.total_room_fee) || 0;
-    const remainingRoomFee = Math.max(0, Number((totalRoomFee - alreadyCollectedRoomFee).toFixed(2)));
-
-    // 5. 按日期为每一天创建房费账单（可自定义每日价格）
-    const checkInDate = new Date(order.check_in_date);
-    const checkOutDate = new Date(order.check_out_date);
-    let stayDays = Math.ceil((checkOutDate - checkInDate) / (1000 * 60 * 60 * 24));
-
-    // 对于休息房等当天退房的情况（stayDays === 0），按1天计算
-    if (stayDays === 0) {
-      console.log(`📝 [check-in] 检测到休息房订单（同日入住退房），按1天计算`);
-      stayDays = 1;
-    } else if (stayDays < 0) {
-      await client.query('ROLLBACK');
-      return res.status(400).json({
-        success: false,
-        message: '退房日期不能早于入住日期'
-      });
-    }
-
-    console.log('🧮 [check-in] stayDays:', stayDays, 'total_price:', order.total_price, 'dailyPrices:', dailyPrices, 'alreadyCollectedRoomFee:', alreadyCollectedRoomFee, 'remainingRoomFee:', remainingRoomFee);
-
-    // 如果前端提供了每日房价数组，则使用；否则平均分摊剩余房费
-    let customPrices = [];
-    if (stayDays > 0 && remainingRoomFee > 0) {
-      if (Array.isArray(dailyPrices) && dailyPrices.length === stayDays) {
-        customPrices = dailyPrices.map(price => Number(price) || 0);
-        const providedTotal = customPrices.reduce((sum, val) => sum + val, 0);
-        const diff = Number((remainingRoomFee - providedTotal).toFixed(2));
-
-        if (Math.abs(diff) > 0.01) {
-          if (diff < 0) {
-            await client.query('ROLLBACK');
-            return res.status(400).json({
-              success: false,
-              message: '提供的房费总额超过未结算房费'
-            });
-          }
-          customPrices[0] = Number((customPrices[0] + diff).toFixed(2));
-        }
-      } else {
-        const averagePrice = Number((remainingRoomFee / stayDays).toFixed(2));
-        customPrices = Array(stayDays).fill(averagePrice);
-        const distributedTotal = customPrices.reduce((sum, val) => sum + val, 0);
-        const adjustDiff = Number((remainingRoomFee - distributedTotal).toFixed(2));
-        if (Math.abs(adjustDiff) > 0.01) {
-          customPrices[0] = Number((customPrices[0] + adjustDiff).toFixed(2));
-        }
-      }
-    }
-
-    const createdBills = [];
-
-    for (let i = 0; i < stayDays && customPrices.length; i++) {
-      const price = customPrices[i];
-      if (!price || price <= 0) continue;
-
-      const stayDateEach = new Date(checkInDate);
-      stayDateEach.setDate(checkInDate.getDate() + i);
-
-      const insertRoomFeeBillQuery = `
-        INSERT INTO bills (
-          order_id, room_number, guest_name, change_price, change_type,
-          pay_way, create_time, remarks, stay_type, stay_date
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-        RETURNING *
-      `;
-
-      const roomFeeBillResult = await client.query(insertRoomFeeBillQuery, [
-        orderId,
-        String(order.room_number).slice(0, 10),
-        order.guest_name,
-        price,
-        setup.changeType.roomFee,
-        order.payment_method,
-        new Date(),
-        `第 ${i + 1} 天房费`,
-        stayType,
-        formatDate(stayDateEach)
-      ]);
-
-      createdBills.push(roomFeeBillResult.rows[0]);
-    }
-
-    // 6. 如果有押金，插入押金账单（使用实际收取的押金金额）
-    if (actualDeposit && Number(actualDeposit) > 0) {
-      const insertDepositBillQuery = `
-        INSERT INTO bills (
-          order_id, room_number, guest_name, change_price, change_type,
-          pay_way, create_time, remarks, stay_type, stay_date
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-        RETURNING *
-      `;
-
-      const depositBillResult = await client.query(insertDepositBillQuery, [
-        orderId,
-        String(order.room_number).slice(0, 10), // 截断到 10 个字符以适应 bills 表
-        order.guest_name,
-        Number(actualDeposit), // 使用实际收取的押金金额
-        setup.changeType.deposit,
-        order.payment_method,
-        new Date(),
-        '办理入住押金',
-        stayType,
-        stayDate
-      ]);
-
-      createdBills.push(depositBillResult.rows[0]);
-      console.log(`💰 创建押金账单: ¥${actualDeposit}`);
-    } else {
-      console.log('💰 未收取押金，不创建押金账单');
-    }
-
-    // 7. 更新订单状态为已入住
-    const updateOrderQuery = `
-      UPDATE orders
-      SET status = 'checked-in'
-      WHERE order_id = $1
-      RETURNING *
-    `;
-    const updatedOrderResult = await client.query(updateOrderQuery, [orderId]);
-    const updatedOrder = updatedOrderResult.rows[0];
-
-    // 8. 更新房间状态为已入住 (occupied)
-    const updateRoomQuery = `
-      UPDATE rooms
-      SET status = 'occupied'
-      WHERE room_number = $1
-      RETURNING *
-    `;
-    await client.query(updateRoomQuery, [order.room_number]);
-
-    // 提交事务
-    await client.query('COMMIT');
-
-    // 格式化账单中的日期字段
-    const formattedBills = createdBills.map(bill => ({
-      ...bill,
-      stay_date: formatDate(bill.stay_date)
-    }));
+    await orderModule.checkIn(orderId, deposit);
 
     return res.status(200).json({
       success: true,
-      message: '办理入住成功',
-      data: {
-        order: updatedOrder,
-        bills: formattedBills,
-        totals: {
-          totalRoomFee,
-          alreadyCollectedRoomFee,
-          remainingRoomFee
-        }
-      }
+      message: '办理入住成功'
+    });
+  } catch (error) {
+    console.error('❌ [check-in] 办理入住失败:', error);
+    const status = error.statusCode || 500;
+    return res.status(status).json({
+      success: false,
+      message: status === 500 ? '办理入住失败' : error.message,
+      error: error.message
+    });
+  }
+})
+
+/**
+ * 快速入住：创建已入住订单和账单（使用事务）
+ * POST /api/orders/fast-check-in
+ */
+router.post('/fast-check-in', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const orderData = {
+      orderId: body.orderId || body.order_id,
+      sourceNumber: body.sourceNumber || body.idSource || body.id_source || '',
+      orderSource: body.orderSource || body.order_source,
+      guestName: body.guestName || body.guest_name,
+      phone: body.phone,
+      roomType: body.room_types || body.roomType || body.room_type,
+      roomNumber: body.roomNumber || body.room_number,
+      checkInDate: body.checkInDate || body.check_in_date,
+      checkOutDate: body.checkOutDate || body.check_out_date,
+      status: body.status || 'checked-in',
+      paymentMethod: body.paymentMethod || body.payment_method,
+      roomPrice: body.roomPrice || body.total_price,
+      deposit: body.deposit,
+      isPrepaid: body.isPrepaid,
+      prepaidAmount: body.prepaidAmount || body.prepaid_amount,
+      stayType: body.stayType || body.stay_type,
+      createTime: body.createTime || body.create_time,
+      remarks: body.remarks
+    };
+
+    // 验证请求数据
+    const validate = ajv.compile(createOrderSchema);
+    const valid = validate(orderData);
+    if (!valid) {
+      console.error('快速入住请求参数验证失败:', validate.errors);
+      return res.status(400).json({
+        success: false,
+        message: '请求参数验证失败',
+        errors: validate.errors
+      });
+    }
+
+    const depositAmount = toAmountNumber(orderData.deposit || 0);
+
+    console.log('🚀 收到快速入住请求:', {
+      order_id: orderData.orderId,
+      guest_name: orderData.guestName,
+      room_number: orderData.roomNumber,
+      deposit: depositAmount
+    });
+
+    // 调用业务逻辑函数
+    const result = await orderModule.fastCheckIn(orderData, req.user?.name || 'system');
+
+    console.log('✅ 快速入住成功:', result.order.order_id);
+
+    return res.status(200).json({
+      success: true,
+      message: '快速入住成功',
+      data: result
     });
 
   } catch (error) {
-    if (client) {
-      await client.query('ROLLBACK');
-    }
-    console.error('办理入住失败:', error);
+    console.error('❌ 快速入住失败:', error);
     return res.status(500).json({
       success: false,
-      message: '办理入住失败',
+      message: '快速入住失败',
       error: error.message
     });
-  } finally {
-    if (client) {
-      client.release();
-    }
   }
 });
 
