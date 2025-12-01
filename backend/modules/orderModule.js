@@ -927,37 +927,39 @@ async function earlyCheckout(orderNumber, options = {}) {
 async function checkIn(orderId, depositAmount, client) {
   const manageTx = !client;
   const runner = client || await getClient();
-
-  const { rows: orderRows } = await runner.query(
-    'SELECT * FROM orders WHERE order_id = $1 ORDER BY stay_date',
-    [orderId]
-  );
-  console.log('📝 [check-in] 获取订单:', orderId, orderRows.length ? '找到订单' : '订单不存在');
-
-  if (orderRows.length === 0) {
-    const err = new Error('订单不存在');
-    err.statusCode = 404;
-    err.code = 'ORDER_NOT_FOUND';
-    throw err;
-  }
-
-  const firstOrder = orderRows[0];
-
-  if (firstOrder.status !== 'pending') {
-    const err = new Error(`订单状态为 '${firstOrder.status}'，无法办理入住，只有待入住订单可以办理`);
-    err.statusCode = 400;
-    err.code = 'INVALID_STATUS_FOR_CHECK_IN';
-    throw err;
-  }
+  let txStarted = false;
 
   const createdBills = [];
   const parsedDeposit = toAmountNumber(depositAmount || 0);
   const hasDeposit = parsedDeposit > 0;
 
   try {
+    const { rows: orderRows } = await runner.query(
+      'SELECT * FROM orders WHERE order_id = $1 ORDER BY stay_date',
+      [orderId]
+    );
+    console.log('📝 [check-in] 获取订单:', orderId, orderRows.length ? '找到订单' : '订单不存在');
+
+    if (orderRows.length === 0) {
+      const err = new Error('订单不存在');
+      err.statusCode = 404;
+      err.code = 'ORDER_NOT_FOUND';
+      throw err;
+    }
+
+    const firstOrder = orderRows[0];
+
+    if (firstOrder.status !== 'pending') {
+      const err = new Error(`订单状态为 '${firstOrder.status}'，无法办理入住，只有待入住订单可以办理`);
+      err.statusCode = 400;
+      err.code = 'INVALID_STATUS_FOR_CHECK_IN';
+      throw err;
+    }
+
     console.log('✅ [check-in] 获取数据库连接成功');
     if (manageTx) {
       await runner.query('BEGIN');
+      txStarted = true;
       console.log('✅ [check-in] 事务开始');
     }
 
@@ -1026,7 +1028,7 @@ async function checkIn(orderId, depositAmount, client) {
 
     return createdBills;
   } catch (error) {
-    if (manageTx) {
+    if (manageTx && txStarted) {
       await runner.query('ROLLBACK');
       console.log('❌ [check-in] 事务回滚成功');
     }

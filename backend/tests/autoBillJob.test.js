@@ -1,5 +1,6 @@
 const { query } = require('../database/postgreDB/pg');
 const { runAutoBillJob } = require('../modules/autoBillService');
+const { buildOrderPayload, createOrder } = require('./tools');
 
 const TEST_ROOM_TYPE = 'AUTO_BILL_TYPE';
 const TEST_ROOM_NUMBER = 'AUTO_R01';
@@ -35,20 +36,27 @@ describe('自动账单定时任务', () => {
     await query('DELETE FROM bills WHERE order_id = $1', [testOrderId]);
     await query('DELETE FROM orders WHERE order_id = $1', [testOrderId]);
 
-    await query(
-      `INSERT INTO orders (
-        order_id, id_source, order_source, guest_name, phone,
-        room_type, room_number, check_in_date, check_out_date,
-        status, payment_method, total_price, deposit, create_time,
-        stay_type, remarks, is_prepaid, prepaid_amount, prepaid_at
-      ) VALUES (
-        $1, '', 'front_desk', 'Auto Guest', '13800138000',
-        $2, $3, $4::date, $5::date,
-        'pending', '微信', 400.00, 0, NOW(),
-        '客房', '自动化测试订单', false, 0, NULL
-      )`,
-      [testOrderId, TEST_ROOM_TYPE, TEST_ROOM_NUMBER, '2025-05-01', '2025-05-03']
-    );
+    const payload = buildOrderPayload({
+      orderId: testOrderId,
+      guestName: 'Auto Guest',
+      roomType: TEST_ROOM_TYPE,
+      roomNumber: TEST_ROOM_NUMBER,
+      checkInDate: '2025-05-01',
+      checkOutDate: '2025-05-03',
+      roomPrice: {
+        '2025-05-01': 200,
+        '2025-05-02': 200
+      },
+      status: 'pending',
+      paymentMethod: '微信',
+      deposit: 0,
+      stayType: '客房',
+      remarks: '自动化测试订单',
+      isPrepaid: false,
+      prepaidAmount: 0
+    });
+
+    await createOrder(payload);
 
     const firstRun = await runAutoBillJob({
       targetDate: TARGET_DATE,

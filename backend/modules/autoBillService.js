@@ -82,6 +82,12 @@ function calculateDailyAmount(order = {}) {
   if (!Number.isFinite(totalPrice) || totalPrice <= 0) {
     return 0;
   }
+
+  // 如果订单已经按日拆分（存在 stay_date），直接使用当日价格
+  if (order.stay_date) {
+    return Number(totalPrice.toFixed(2));
+  }
+
   const nights = calculateStayNights(order);
   const amount = totalPrice / nights;
   return Number(amount.toFixed(2));
@@ -95,6 +101,7 @@ async function fetchCandidateOrders(targetDate, statuses) {
       guest_name,
       check_in_date,
       check_out_date,
+      stay_date,
       status,
       payment_method,
       total_price,
