@@ -1,7 +1,14 @@
 const app = require('../app');
 const request = require('supertest');
 const { query } = require('../database/postgreDB/pg');
-const {rooms, addRoom, roomTypes, addRoomType} = require('./tools');
+const {
+  rooms,
+  addRoom,
+  roomTypes,
+  addRoomType,
+  buildOrderPayload,
+  createOrder
+} = require('./tools');
 
 const VALID_ROOM_STATES = ['available', 'occupied', 'cleaning', 'repair', 'reserved'];
 
@@ -192,6 +199,29 @@ describe('获取可用房间列表', () => {
   const AVAILABLE_TYPE = 'TEST_TYPE_AVAILABLE';
   const AVAILABLE_ROOMS = ['A201', 'A202', 'A203', 'A204'];
 
+  const buildRoomPriceMap = (startDate, endDate) => {
+    const prices = {};
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    // 休息房（同日进出）也需要一条价格
+    if (start.getTime() === end.getTime()) {
+      prices[startDate] = 200;
+      return prices;
+    }
+
+    let cursor = new Date(start);
+    let dayIndex = 0;
+    while (cursor < end) {
+      const dateKey = cursor.toISOString().split('T')[0];
+      prices[dateKey] = 200 + dayIndex * 10;
+      cursor.setDate(cursor.getDate() + 1);
+      dayIndex += 1;
+    }
+
+    return prices;
+  };
+
   const resetTestRooms = async () => {
     await query('DELETE FROM orders WHERE room_number = ANY($1::text[])', [AVAILABLE_ROOMS]);
     await query('DELETE FROM rooms WHERE room_number = ANY($1::text[])', [AVAILABLE_ROOMS]);
@@ -217,42 +247,21 @@ describe('获取可用房间列表', () => {
     checkOutDate,
     status = 'pending'
   }) => {
-    const guestName = `测试客人-${orderId}`;
-    const params = [
+    const payload = buildOrderPayload({
       orderId,
-      guestName,
-      AVAILABLE_TYPE,
+      guestName: `测试客人-${orderId}`,
+      roomType: AVAILABLE_TYPE,
       roomNumber,
       checkInDate,
       checkOutDate,
-      status ?? 'pending'
-    ];
+      status: status ?? 'pending',
+      paymentMethod: '现金',
+      deposit: 50,
+      roomPrice: buildRoomPriceMap(checkInDate, checkOutDate),
+      stayType: '客房'
+    });
 
-    if (params.some(value => value === undefined)) {
-      throw new Error(`insertTestOrder 缺少必填字段: ${JSON.stringify({
-        orderId,
-        roomNumber,
-        checkInDate,
-        checkOutDate,
-        status
-      })}`);
-    }
-
-    await query(`
-      INSERT INTO orders (
-        order_id, order_source, guest_name, room_type, room_number,
-        check_in_date, check_out_date, status, payment_method,
-        total_price, deposit, create_time, stay_type
-      ) VALUES (
-        $1, 'test', $2, $3, $4,
-        $5::date, $6::date, $7, 'cash',
-        100, 50, NOW(), 'test-stay'
-      )
-      ON CONFLICT (order_id) DO UPDATE
-        SET check_in_date = EXCLUDED.check_in_date,
-            check_out_date = EXCLUDED.check_out_date,
-            status = EXCLUDED.status;
-    `, params);
+    await createOrder(payload);
   };
 
   beforeAll(async () => {

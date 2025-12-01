@@ -1,7 +1,7 @@
 const request = require("supertest");
 const app = require("../app");
 const { query } = require("../database/postgreDB/pg");
-const { addRoomType, addRoom, createOrder } = require("./tools");
+const { addRoomType, addRoom, createOrder, buildOrderPayload } = require("./tools");
 
 const TEST_ROOM_TYPE = {
   type_code: "REVIEW_TEST_TYPE",
@@ -21,33 +21,26 @@ const TEST_ROOM = {
 
 const ORDER_PREFIX = "REVIEW_TEST_ORDER_"; // 订单ID前缀，便于测试数据清理
 
-const baseOrder = {
-  id_source: "unit_test",
-  order_source: "评价路由测试",
-  guest_name: "评价测试住客",
-  room_type: TEST_ROOM_TYPE.type_code,
-  room_number: TEST_ROOM.room_number,
-  check_in_date: "2025-01-01",
-  check_out_date: "2025-01-02",
-  status: "reserved",
-  payment_method: "测试支付",
-  phone: "13900000000",
-  total_price: 188.0,
-  deposit: 100.0,
-  stay_type: "客房",
-  create_time: "2025-01-01T10:00:00Z",
-  remarks: "评价接口测试订单"
-};
-
-const buildOrderPayload = (overrides = {}) => ({
-  ...baseOrder,
-  order_id: overrides.order_id || `${ORDER_PREFIX}${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-  ...overrides
-});
-
 const createTestOrder = async (overrides = {}) => {
-  const payload = buildOrderPayload(overrides);
-  await createOrder([payload]);
+  const orderId = overrides.order_id || `${ORDER_PREFIX}${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+  const payload = buildOrderPayload({
+    orderId,
+    roomType: TEST_ROOM_TYPE.type_code,
+    roomNumber: TEST_ROOM.room_number,
+    checkInDate: "2025-01-01",
+    checkOutDate: "2025-01-02",
+    paymentMethod: "测试支付",
+    roomPrice: {
+      "2025-01-01": 188.0
+    },
+    deposit: 100.0,
+    stayType: "客房",
+    guestName: "评价测试住客",
+    orderSource: "评价路由测试",
+    ...overrides,
+    order_id: orderId
+  });
+  await createOrder(payload);
   return payload;
 };
 
@@ -70,12 +63,14 @@ describe("POST /api/reviews/:orderId/invite", () => {
   test("成功邀请已有订单", async () => {
     const order = await createTestOrder();
 
+    const guestName = order.guestName || order.guest_name;
+
     const response = await request(app)
       .post(`/api/reviews/${order.order_id}/invite`)
       .send();
 
     expect(response.statusCode).toBe(200);
-    expect(response.body.message).toBe(`已成功邀请客户 ${order.guest_name} 参与好评`);
+    expect(response.body.message).toBe(`已成功邀请客户 ${guestName} 参与好评`);
     expect(response.body.order).toMatchObject({
       order_id: order.order_id,
       review_invited: true
@@ -105,6 +100,8 @@ describe("PUT /api/reviews/:orderId/status", () => {
   test("设置好评状态成功", async () => {
     const order = await createTestOrder();
 
+    const guestName = order.guestName || order.guest_name;
+
     const inviteResponse = await request(app)
       .post(`/api/reviews/${order.order_id}/invite`)
       .send();
@@ -116,7 +113,7 @@ describe("PUT /api/reviews/:orderId/status", () => {
       .send({ positive_review: true });
 
     expect(response.statusCode).toBe(200);
-    expect(response.body.message).toBe(`已将客户 ${order.guest_name} 的评价设置为好评`);
+    expect(response.body.message).toBe(`已将客户 ${guestName} 的评价设置为好评`);
     expect(response.body.order).toMatchObject({
       order_id: order.order_id,
       positive_review: true

@@ -1,11 +1,9 @@
 const request = require('supertest');
 const { query } = require('../database/postgreDB/pg');
 const app = require('../app');
-const {createOrder} = require('../modules/orderModule');
 
 const { roomTypes, rooms, ORDERS, addRoom, addRoomType } = require('./tools');
-const TEST_ROOM_TYPE = 'TEST_STD_ROOM';
-const TEST_ROOM_NUMBER = 'TEST_ROOM_101';
+
 
 const baseOrderData = ORDERS[0]
 

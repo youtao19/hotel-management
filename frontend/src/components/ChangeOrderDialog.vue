@@ -371,10 +371,6 @@ const roomOptions = computed(() => {
   });
 });
 
-function handleRoomChange(newValue) {
-  // When room changes, let user manually update the price.
-  // No automatic price change to avoid unexpected behavior.
-}
 
 async function submitChange() {
   if (!editableOrder.value) return;
