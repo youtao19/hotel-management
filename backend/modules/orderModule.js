@@ -925,9 +925,9 @@ async function earlyCheckout(orderNumber, options = {}) {
  * @returns {Promise<Array>} 创建的账单记录
  */
 async function checkIn(orderId, depositAmount, client) {
-  const manageTx = !client;
+  const manageTx = !client; // 是否需要自行管理事务
   const runner = client || await getClient();
-  let txStarted = false;
+  let txStarted = false; // 事务是否已开始
 
   const createdBills = [];
   const parsedDeposit = toAmountNumber(depositAmount || 0);
@@ -957,7 +957,7 @@ async function checkIn(orderId, depositAmount, client) {
     }
 
     console.log('✅ [check-in] 获取数据库连接成功');
-    if (manageTx) {
+    if (manageTx) { // 需要自行管理事务
       await runner.query('BEGIN');
       txStarted = true;
       console.log('✅ [check-in] 事务开始');
@@ -1042,8 +1042,6 @@ async function checkIn(orderId, depositAmount, client) {
   }
 }
 
-
-
 /**
  * 快速入住：在一个事务中创建已入住订单和相应账单（支持多日分行结构）
  * @param {Object} orderData - 前端传递的订单数据
@@ -1110,6 +1108,64 @@ async function fastCheckIn(orderData, createdBy = 'system') {
     }
   } catch (error){
     console.error('❌ [fastCheckIn] 处理失败:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * 办理退房：更新订单状态并将房间设为清洁中
+ * @param {string} orderId
+ */
+async function checkOut(orderId,client) {
+  try {
+    const manageTx = !client; // 是否需要自行管理事务
+    console.log(`🚪 [checkOut] 办理退房，订单号: ${orderId}, 管理事务: ${manageTx}`);
+    const runner = client || await getClient();
+    let txStarted = false;
+
+    try {
+      // 开启事务
+      if (manageTx) {
+        await runner.query('BEGIN');
+        txStarted = true;
+      }
+
+      // update order status
+      await updateOrderStatus(orderId, 'checked-out', runner);
+      console.log(`✅ [checkOut] 订单 ${orderId} 状态更新为已退房`);
+
+      const { rows: orderRows } = await runner.query(
+        `SELECT * FROM orders WHERE order_id = $1 ORDER BY stay_date`,
+        [orderId]
+      );
+
+      // update room status to 'cleaning'
+      for (const ord of orderRows) {
+        await runner.query(
+          `UPDATE rooms SET status = $1 WHERE room_number = $2`,
+          ['cleaning', ord.room_number]
+        );
+      }
+
+      // commit transaction
+      if (manageTx) {
+        await runner.query('COMMIT');
+      }
+
+      return await getOrderById(orderId);
+    } catch (error) {
+      if (manageTx && txStarted) {
+        await runner.query('ROLLBACK');
+        console.log('❌ [checkOut] 事务回滚成功');
+      }
+      throw error;
+    } finally {
+      if (manageTx) {
+        runner.release();
+      }
+    }
+  } catch (error) {
+    console.error('❌ [checkOut] 办理退房失败:', error);
     throw error;
   }
 }
@@ -1328,7 +1384,8 @@ const table = {
   earlyCheckout,
   updateOrderWithBills,
   checkIn,
-  fastCheckIn
+  fastCheckIn,
+  checkOut
 };
 
 module.exports = table;

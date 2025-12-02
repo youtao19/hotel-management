@@ -542,4 +542,31 @@ router.post('/fast-check-in', async (req, res) => {
   }
 });
 
+/**
+ * 办理退房：更修订单状态，并将房间状态设置为“cleaning“
+ * POST /api/orders/:orderId/check-out
+ */
+router.post('/:orderId/check-out', async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    const result = await orderModule.checkOut(orderId);
+    console.log('✅ 办理退房成功:', orderId);
+
+    return res.status(200).json({
+      success: true,
+      data: result,
+      message: '办理退房成功'
+    });
+  } catch (error) {
+    console.error('❌ [check-out] 办理退房失败:', error);
+    const status = error.statusCode || 500;
+    return res.status(status).json({
+      success: false,
+      message: status === 500 ? '办理退房失败' : error.message,
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;

@@ -223,6 +223,7 @@ import { useViewStore } from '../stores/viewStore' // 导入视图 store
 import { useBillStore } from '../stores/billStore' // 导入账单 store
 import { roomApi } from '../api/index.js' // 导入房间API
 import { billApi } from '../api/index.js' // 导入账单API
+import { orderApi } from '../api/index.js' // 导入订单API
 import OrderDetailsDialog from 'src/components/OrderDetailsDialog.vue';
 import ChangeOrderDialog from 'src/components/ChangeOrderDialog.vue';
 import ChangeRoomDialog from 'src/components/ChangeRoomDialog.vue';
@@ -600,51 +601,23 @@ async function performCheckOut(order) {
   loadingOrders.value = true;
   try {
     console.log('办理退房:', order.orderNumber, '房间:', order.roomNumber);
-
-    // 更新订单状态为已退房
-    const updatedOrderFromApi = await orderStore.updateOrderStatusViaApi(order.orderNumber, 'checked-out');
-
-    if (!updatedOrderFromApi) {
+    const response = await orderApi.checkOut(order.orderNumber);
+    console.log('办理退房API响应:', response);
+    if (response.success) {
+      $q.notify({
+        type: 'positive',
+        message: '退房成功'
+      });
+      // 刷新订单列表
+      await fetchAllOrders();
+    } else {
       $q.notify({
         type: 'negative',
-        message: '办理退房失败，请重试',
-        position: 'top'
+        message: response.message || '退房失败'
       });
-      return;
     }
 
-    // 获取房间并将状态更改为清洁中
-    const room = roomStore.getRoomByNumber(order.roomNumber);
-    if (room && room.room_number) {
-      const roomUpdateSuccess = await roomStore.checkOutRoom(room.room_number);
-      if (!roomUpdateSuccess) {
-        $q.notify({
-          type: 'warning',
-          message: '订单已退房，但更新房间状态为清洁中失败，请检查房间状态！',
-          position: 'top',
-          multiLine: true
-        });
-      } else {
-        await roomStore.fetchAllRooms(); // 刷新房间列表
-      }
-    }
-
-    // 更新当前正在查看的订单详情
-    if (currentOrder.value && currentOrder.value.orderNumber === order.orderNumber) {
-      const latest = await orderStore.getOrderByNumber(order.orderNumber)
-      if (latest) currentOrder.value = { ...latest }
-    }
-
-    // 刷新订单列表，确保退房状态实时更新
-    await fetchAllOrders();
-
-    $q.notify({
-      type: 'positive',
-      message: '退房成功',
-      position: 'top'
-    });
-
-  } catch (error) {
+  } catch(error) {
     console.error('办理退房操作失败:', error);
     const errorMessage = error.response?.data?.message || error.message || '未知错误';
     $q.notify({
@@ -657,6 +630,7 @@ async function performCheckOut(order) {
     loadingOrders.value = false;
   }
 }
+
 
 // 从详情页办理退房
 function checkoutOrderFromDetails() {
