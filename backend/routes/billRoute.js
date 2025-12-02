@@ -6,9 +6,11 @@ const { query } = require('../database/postgreDB/pg');
 const Ajv = require('ajv');
 const ajv = new Ajv();
 const addFormats = require("ajv-formats");
+const { getOrderById } = require('../modules/orderModule');
 addFormats(ajv);
 
-const pay_way = ['现金', '微信', '微邮付', '平台'];
+const PAY_WAY = ['现金', '微信', '微邮付', '平台'];
+const CHANGE_TYPE = ['房费', '收押', '退押', '补收', '退款'];
 
 const addBillSchema = {
   type: 'object',
@@ -17,10 +19,10 @@ const addBillSchema = {
     change_price: { type: 'number' },
     change_type: {
       type: 'string',
-      enum: ['房费', '收押', '退押', '补收', '退款']
+      enum: CHANGE_TYPE
     },
     method: { type: 'string',
-      enum: pay_way
+      enum: PAY_WAY
      },
     notes: { type: 'string' },
     refundTime: { type: 'string', format: 'date-time' }
@@ -34,7 +36,7 @@ const otherIncomeSchema = {
   properties: {
     income_type: { type: 'string', minLength: 1 },
     amount: { type: 'number' },
-    pay_way: { type: 'string', enum: pay_way },
+    pay_way: { type: 'string', enum: PAY_WAY },
     income_date: { type: 'string', format: 'date-time' },
     remarks: { type: 'string' },
     guest_name: { type: 'string' }
@@ -57,14 +59,35 @@ router.get('/', async (req, res) => {
 
 // 添加账单
 router.post('/add', async (req, res) => {
-
   try {
     const validate = ajv.compile(addBillSchema);
     const valid = validate(req.body);
     if (!valid) {
       return res.status(400).json({ message: '请求数据格式不正确', errors: validate.errors });
     }
-    const newBill = await billModule.addBill(req.body);
+
+    const { order_id } = req.body;
+    let room_number = null;
+    let guest_name = null;
+    let stay_type = null;
+
+    // 如果订单存在，补全房间、客人、入住类型信息
+    const orderRows = await getOrderById(order_id);
+    if (orderRows && orderRows.length) {
+      room_number = orderRows[0].room_number || null;
+      guest_name = orderRows[0].guest_name || null;
+      stay_type = orderRows[0].stay_type || null;
+    }
+
+    const newBill = await billModule.addBill({
+      ...req.body,
+      pay_way: req.body.pay_way || req.body.method,
+      remarks: req.body.remarks || req.body.notes || null,
+      room_number,
+      guest_name,
+      stay_type,
+      create_time: req.body.create_time || req.body.refundTime || new Date()
+    });
     res.status(201).json({ success: true, data: newBill });
   } catch (err) {
     res.status(500).json({ message: '添加账单失败', error: err.message });
@@ -276,5 +299,40 @@ router.get('/by-date/:date', async (req, res) => {
     });
   }
 });
+
+router.post('/adjustment', async (req, res) => {
+  try {
+    const validate = ajv.compile(addBillSchema);
+    const valid = validate(req.body);
+    if (!valid) {
+      return res.status(400).json({ message: '请求数据格式不正确', errors: validate.errors });
+    }
+    // 获取订单信息
+    const orderRes = await getOrderById(req.body.order_id);
+    if (!orderRes || orderRes.length === 0) {
+      return res.status(400).json({ message: `订单号 '${req.body.order_id}' 不存在，无法调整金额` });
+    }
+
+    const data = {
+      ...req.body,
+      room_number: orderRes[0].room_number,
+      pay_way: req.body.pay_way || req.body.method,
+      remarks: req.body.remarks || req.body.notes || null,
+      guest_name: orderRes[0].guest_name,
+      stay_type: orderRes[0].stay_type,
+      stay_date: new Date().toISOString().split('T')[0],
+      create_time: req.body.create_time || new Date()
+    }
+
+    // 插入调整账单
+    const newBill = await billModule.addBill(data);
+    console.log('💰金额调整账单已添加:', newBill);
+    res.status(201).json({ success: true, data: newBill });
+
+  } catch (err) {
+    res.status(500).json({ message: '金额调整失败', error: err.message });
+    throw err;
+  }
+})
 
 module.exports = router;

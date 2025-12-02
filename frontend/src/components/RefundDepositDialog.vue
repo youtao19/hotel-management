@@ -83,7 +83,7 @@
               val => val > 0 || '退押金金额必须大于0',
               val => val <= availableRefundAmount || `退押金金额不能超过¥${availableRefundAmount}`
             ]"
-            hint="可退押金金额上限：¥{{ availableRefundAmount }}"
+            :hint="'可退押金金额上限：¥' + availableRefundAmount"
           >
             <template v-slot:append>
               <q-btn
@@ -207,7 +207,7 @@ const refundForm = ref({
   method: '',
   deductAmount: 0,
   notes: '',
-  operator: userStore.currentUser?.username || '系统操作员'
+  operator: userStore.user?.username || '系统操作员'
 })
 
 // 从 viewStore 获取支付方式选项，用作退押金方式
@@ -268,7 +268,7 @@ watch(() => props.modelValue, async (newVal) => {
       ),
       deductAmount: 0,
       notes: '',
-      operator: userStore.currentUser?.username || '系统操作员'
+      operator: userStore.user?.username || '系统操作员'
     }
   }
 })
@@ -337,23 +337,16 @@ async function handleRefundDeposit() {
     const refundData = {
       order_id: props.order.orderNumber,
       change_price: actualRefundAmount.value, // 退款金额
-      method: refundForm.value.method,
+      pay_way: refundForm.value.method,
       notes: refundForm.value.notes,
       operator: refundForm.value.operator,
-      refundTime: new Date()
+      create_time: new Date()
     }
 
     console.log('@@@@@@退押组件',refundData.order_id);
 
     // 发出退押金事件
     emit('refund-deposit', refundData)
-
-    // 显示成功消息
-    $q.notify({
-      type: 'positive',
-      message: `退押金申请已提交，实际退款金额：¥${actualRefundAmount.value}`,
-      position: 'top'
-    })
 
     // 关闭对话框
     closeDialog()

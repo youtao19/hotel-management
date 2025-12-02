@@ -199,7 +199,7 @@ async function getAllOrdersDaily() {
 /**
  * 根据 order_id 获取订单（聚合视图）
  * @param {string} orderId - 订单ID
- * @returns {Promise<Object|null>} 订单对象（含每日明细）或null
+ * @returns {Array} 订单数组（含每日明细）或null
  */
 async function getOrderById(orderId) {
   try {
@@ -519,21 +519,41 @@ async function refundDeposit(refundData) {
 
     // 获取订单信息
     const order = await getOrderById(refundData.order_id);
+    console.log('关联订单信息:', order);
+
+    // 确保退押金额不超过押金
+    if (refundData.change_price > order[0].deposit) {
+      throw new Error('退押金额不能超过订单押金');
+    }
 
     if (!order) {
       console.log('！！！！获取订单失败');
       throw new Error(`订单号 '${refundData.order_id}' 不存在`);
     }
 
-    // 验证订单状态（只有已退房或已取消的订单才能退押金）
-    if (!['checked-out', 'cancelled'].includes(order.status)) {
+    const allowed = ['checked-out', 'cancelled'];
+    // order 是数组
+    if (!order.every(o => allowed.includes(o.status))) {
       throw new Error('只有已退房或已取消的订单才能退押金');
     }
 
     refundData.change_type = '退押';
     refundData.change_price = -Math.abs(refundData.change_price || 0); // 确保为负数
 
-    const billRes = await billModule.addBill(refundData)
+    const dpData = {
+      ...refundData,
+      change_type: '退押',
+      change_price: refundData.change_price,
+      room_number: order[0].room_number,
+      guest_name: order[0].guest_name,
+      remarks: refundData.remarks || `订单退押`,
+      stay_type: order[0].stay_type,
+      stay_date: order[0].check_out_date
+    }
+    console.log('准备创建退押金账单，数据如下:', dpData);
+
+
+    const billRes = await billModule.addBill(dpData);
 
     if (!billRes) {
       throw new Error('创建账单失败', billRes);

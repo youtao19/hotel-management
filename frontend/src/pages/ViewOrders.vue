@@ -548,10 +548,8 @@ async function computeRefundable(order) {
     // 拉取该订单的账单
     const bills = await billStore.getBillsByOrderId(key);
     let refundedFromBills = new Decimal(0);
-    let hasRefundRow = false;
     (bills || []).forEach(b => {
       if (b?.change_type === '退押') {
-        hasRefundRow = true;
         const cp = toDecimal(b?.change_price);
         if (cp.isNegative()) refundedFromBills = refundedFromBills.plus(cp.abs());
       }
@@ -564,8 +562,8 @@ async function computeRefundable(order) {
     const refundedDeposit = toDecimal(order.refundedDeposit || 0);
     const totalRefunded = Decimal.max(refundedFromBills.plus(legacyRefund), refundedDeposit);
 
-    // 规则：发生过退押记录或累计退额>=押金，则不可再次退押
-    refundableMap.value[key] = !(hasRefundRow || totalRefunded.greaterThanOrEqualTo(deposit));
+    // 规则：仅当剩余可退押金>0时继续展示退押按钮
+    refundableMap.value[key] = deposit.minus(totalRefunded).greaterThan(0);
   } catch (e) {
     console.warn('computeRefundable 失败，按不可退处理:', e);
     if (order?.orderNumber) refundableMap.value[String(order.orderNumber)] = false;

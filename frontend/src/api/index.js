@@ -205,6 +205,9 @@ export const billApi = {
   // 更新账单
   updateBill: (billId, updateData) => api.put(`/bills/${billId}`, updateData),
 
+  // 添加账单调整
+  adjustment: (adjustmentData) => api.post('/bills/adjustment', adjustmentData),
+
 }
 
 // 仪表盘备忘录相关接口

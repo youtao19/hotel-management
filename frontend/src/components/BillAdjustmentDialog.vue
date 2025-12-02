@@ -56,9 +56,9 @@
 <script setup>
 import { ref, watch, computed } from 'vue';
 import { useQuasar } from 'quasar';
-import api from 'src/api';
 import { useViewStore } from 'src/stores/viewStore'; // 1. 导入 viewStore
 import Decimal from 'decimal.js';
+import { billApi } from '../api';
 
 const props = defineProps({
   modelValue: Boolean,
@@ -110,7 +110,7 @@ async function handleSubmit() {
       notes: adjustment.value.notes
     };
 
-    const billRes = await api.post('/bills/add', payload);
+    const billRes = await billApi.adjustment(payload);
     console.log('💰金额调整',billRes);
     if(!billRes){
       $q.notify({

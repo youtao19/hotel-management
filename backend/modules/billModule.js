@@ -127,6 +127,9 @@ async function getAllBills() {
 async function addBill(billData, client){
   try {
     const runner = client || query;
+    const createTime = formatDateTimeForDB(billData.create_time) || formatDateTimeForDB();
+    const stayDate = createTime.slice(0, 10);
+
     const insertQuery = `
         INSERT INTO bills (
             order_id,
@@ -150,10 +153,10 @@ async function addBill(billData, client){
       toAmountNumber(billData.change_price),
       billData.change_type,
       billData.pay_way,
-      billData.create_time,
+      createTime,
       billData.remarks || null,
       billData.stay_type,
-      billData.stay_date,
+      stayDate,
     ];
 
     // 退款和退押必须为负数，补收与收押必须为正数
@@ -163,7 +166,12 @@ async function addBill(billData, client){
       values[3] = Math.abs(values[3]);
     }
 
-    const result = await runner.query(insertQuery, values);
+    let result;
+    if (!client) {
+      result = await runner(insertQuery, values);
+    } else {
+      result = await client.query(insertQuery, values);
+    }
     return result.rows[0];
   } catch (error) {
     console.error('添加账单失败:', error);
