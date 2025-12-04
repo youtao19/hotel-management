@@ -1,5 +1,4 @@
 -- 初始化房间类型数据
--- 表结构已在 00-init-schema.sql 中创建
 
 INSERT INTO room_types (type_code, type_name, base_price, description, is_closed) VALUES 
 ('sheng_sheng_man', '声声慢投影大床', 348.00, '配备投影设备的大床房，适合观影休闲', false),

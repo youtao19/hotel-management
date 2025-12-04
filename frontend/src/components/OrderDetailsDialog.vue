@@ -130,8 +130,8 @@
               </q-item>
               <q-item>
                 <q-item-section>
-                  <q-item-label caption>房间金额</q-item-label>
-                  <q-item-label class="text-primary text-weight-medium">¥{{ currentOrder.roomPrice }}</q-item-label>
+                  <q-item-label caption>总房费</q-item-label>
+                  <q-item-label class="text-primary text-weight-medium">¥{{ totalRoomFee }}</q-item-label>
                 </q-item-section>
               </q-item>
               <q-item>
@@ -362,6 +362,34 @@ const refundRecords = computed(() => {
 
 const refundedAmount = computed(() => {
   const sum = refundRecords.value.reduce((s, r) => s.plus(toDecimal(r.amount)), new Decimal(0))
+  return toAmountNumber(sum)
+})
+
+// 订单总收房费（以账单为准，兼容旧字段 room_fee）
+const totalRoomFee = computed(() => {
+  const orderId = props.currentOrder?.orderNumber
+  if (!orderId) return 0
+
+  const relatedBills = billStore.bills.filter(b => b.order_id === orderId)
+  if (!relatedBills.length) {
+    // 回退到订单字段：如果是对象则求和，否则直接取数值
+    const rp = props.currentOrder?.roomPrice
+    if (rp && typeof rp === 'object') {
+      const sum = Object.values(rp).reduce((acc, v) => acc.plus(toDecimal(v)), new Decimal(0))
+      return toAmountNumber(sum)
+    }
+    return toAmountNumber(rp)
+  }
+
+  const sum = relatedBills.reduce((acc, bill) => {
+    const isRoomFee = bill.change_type === '房费'
+    const roomFeeField = bill.room_fee
+    const amount = isRoomFee
+      ? toDecimal(bill.change_price)
+      : toDecimal(roomFeeField)
+    return acc.plus(amount)
+  }, new Decimal(0))
+
   return toAmountNumber(sum)
 })
 

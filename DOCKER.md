@@ -74,7 +74,7 @@ docker compose logs -f postgres
 
 PostgreSQL 容器首次启动时会**自动执行**以下操作：
 
-1. **创建数据库表结构** (`00-init-schema.sql`)
+1. **创建数据库表结构** 
    - 创建所有表（account, room_types, rooms, orders, bills 等）
    - 创建索引和约束
    - 启用必要的扩展（ltree, pg_trgm）
@@ -90,7 +90,6 @@ PostgreSQL 容器首次启动时会**自动执行**以下操作：
 ```
 sql/
 └── init/
-    ├── 00-init-schema.sql        # 表结构
     ├── 01-init-room-types.sql    # 房间类型数据
     └── 02-init-rooms.sql         # 房间数据
 ```
@@ -237,7 +236,6 @@ hotel-management/
 │   └── ...
 ├── sql/
 │   ├── init/                   # 数据库初始化脚本
-│   │   ├── 00-init-schema.sql
 │   │   ├── 01-init-room-types.sql
 │   │   └── 02-init-rooms.sql
 │   └── README.md

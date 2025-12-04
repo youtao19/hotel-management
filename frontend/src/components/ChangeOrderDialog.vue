@@ -366,12 +366,35 @@ const roomOptions = computed(() => {
     return {
       label: `${room.room_number} (${typeLabel}) - ¥${room.price}`,
       value: room.room_number,
-      price: Number(room.price) || 0
+      price: Number(room.price) || 0,
+      type: room.type_code
     };
   });
 });
 
+/**
+ *  处理房间号变更：更新房型和每日房价
+ * @param newRoomNumber
+ */
+function handleRoomChange(newRoomNumber) {
+  if (!editableOrder.value) return;
 
+  const selectedRoom = roomOptions.value.find(room => room.value === newRoomNumber);
+  if (!selectedRoom) return;
+
+  editableOrder.value.roomType = selectedRoom.type || editableOrder.value.roomType;
+
+  const stayDates = getStayDates(editableOrder.value.checkInDate, editableOrder.value.checkOutDate);
+  if (!stayDates.length) return;
+
+  const updatedPrices = {};
+  stayDates.forEach(date => {
+    updatedPrices[date] = toAmountNumber(selectedRoom.price);
+  });
+  editableOrder.value.roomPrice = updatedPrices;
+}
+
+// 修改订单提交
 async function submitChange() {
   if (!editableOrder.value) return;
 

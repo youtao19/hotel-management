@@ -1,5 +1,4 @@
 -- 初始化房间数据
--- 表结构已在 00-init-schema.sql 中创建
 -- 房间类型数据已在 01-init-room-types.sql 中插入
 
 INSERT INTO rooms (room_number, type_code, status, price, is_closed) VALUES 
