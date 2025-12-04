@@ -1,7 +1,7 @@
 const { query, getClient } = require('../database/postgreDB/pg');
 const billModule = require('./billModule');
 const setup = require('../appSettings/setup');
-const { formatDate, formatDateTimeForDB} = require('./tools');
+const { formatDate, formatDateTimeForDB } = require('./tools');
 const { toDecimal, toAmountNumber } = require('./tools');
 
 const tableName = "orders";
@@ -37,11 +37,11 @@ async function checkTableExists() {
 function isRestRoom(orderData) {
   const toLocalYMD = (d) => {
     if (d == null) return '';
-    if (typeof d === 'string') return d.slice(0,10); // 已经是 'YYYY-MM-DD'
+    if (typeof d === 'string') return d.slice(0, 10); // 已经是 'YYYY-MM-DD'
     const dt = (d instanceof Date) ? d : new Date(d);
     const y = dt.getFullYear();
-    const m = String(dt.getMonth()+1).padStart(2,'0');
-    const day = String(dt.getDate()).padStart(2,'0');
+    const m = String(dt.getMonth() + 1).padStart(2, '0');
+    const day = String(dt.getDate()).padStart(2, '0');
     return `${y}-${m}-${day}`;
   };
   const checkInDateStr = toLocalYMD(orderData.check_in_date);
@@ -98,20 +98,20 @@ async function createOrder(orderData, client) {
 
       // 获得日期列表
       const dateList = Object.keys(roomPrice);
-      for(let i=0; i<stayDays; i++){
+      for (let i = 0; i < stayDays; i++) {
         const stay_date = formatDate(dateList[i]);
         const total_price = toAmountNumber(roomPrice[stay_date]);
 
         // 如果是预付，预付金额放在第一天的订单
         let prepaidAmountForThisDay = 0;
-        if(isPrepaid){
+        if (isPrepaid) {
           prepaidAmountForThisDay = (i === 0) ? toAmountNumber(prepaidAmount) : 0;
         }
 
         let value = [orderId, sourceNumber, orderSource, guestName, phone,
-        roomType, roomNumber, checkInDate, checkOutDate, stay_date, status,
-        paymentMethod, total_price, deposit,isPrepaid, prepaidAmountForThisDay,
-        createTime, stayType, remarks]
+          roomType, roomNumber, checkInDate, checkOutDate, stay_date, status,
+          paymentMethod, total_price, deposit, isPrepaid, prepaidAmountForThisDay,
+          createTime, stayType, remarks]
         await runner.query(insertQuery, value);
       }
 
@@ -238,12 +238,15 @@ async function getOrderRowById(id) {
  * @returns {Promise<Object|null>} 更新后的第一条订单记录或null
  */
 async function updateOrderStatus(orderId, newStatus, client) {
-  const runner = client || query;
-  const updateQuery = `UPDATE ${tableName} SET status = $1 WHERE order_id = $2 RETURNING *`;
-  const queryParams = [newStatus, orderId];
-
   try {
-    const result = await runner.query(updateQuery, queryParams);
+    const updateQuery = `UPDATE ${tableName} SET status = $1 WHERE order_id = $2 RETURNING *`;
+    const queryParams = [newStatus, orderId];
+    let result;
+    if (!client) {
+      result = await query(updateQuery, queryParams);
+    } else {
+      result = await client.query(updateQuery, queryParams);
+    }
     return result.rows.length > 0 ? result.rows[0] : null;
   } catch (error) {
     console.error(`更新订单(ID: ${orderId})状态为 '${newStatus}' 失败:`, error);
@@ -286,7 +289,7 @@ async function updateOrder(orderNumber, updatedData, changedBy = 'system') {
     // 处理可更新字段（注意：多日分行结构下，某些字段的更新逻辑需要特殊处理）
     // room_number、check_in_date、check_out_date、total_price 在多日分行结构下需要特别处理
     const updateableFields = ['guest_name', 'phone', 'room_type',
-                            'payment_method', 'remarks'];
+      'payment_method', 'remarks'];
 
     // 检查是否需要重新计算stay_type（如果日期发生变化）
     let shouldUpdateStayType = false;
@@ -453,7 +456,7 @@ async function updateOrderDayRoom(orderNumber, stayDate, newRoomNumber, changedB
 
     // 验证新房间存在且类型匹配
     const { rows: [room] } = await client.query(
-      `SELECT room_number, type_name FROM rooms WHERE room_number = $1`,
+      `SELECT room_number, type_code FROM rooms WHERE room_number = $1`,
       [newRoomNumber]
     );
 
@@ -461,17 +464,14 @@ async function updateOrderDayRoom(orderNumber, stayDate, newRoomNumber, changedB
       throw new Error(`房间 ${newRoomNumber} 不存在`);
     }
 
-    if (room.type_name !== oldRow.room_type) {
-      throw new Error(`房间 ${newRoomNumber} 类型为 ${room.type_name}，与订单房型 ${oldRow.room_type} 不匹配`);
-    }
-
-    // 更新房间号
+    // 更新房间号及房型，允许跨房型更换
     const { rows: [updatedRow] } = await client.query(`
       UPDATE ${tableName}
-      SET room_number = $1
-      WHERE order_id = $2 AND stay_date = $3
+      SET room_number = $1,
+          room_type = $2
+      WHERE order_id = $3 AND stay_date = $4
       RETURNING *
-    `, [newRoomNumber, orderNumber, stayDate]);
+    `, [newRoomNumber, room.type_code, orderNumber, stayDate]);
 
     await client.query('COMMIT');
 
@@ -559,7 +559,7 @@ async function refundDeposit(refundData) {
       throw new Error('创建账单失败', billRes);
     }
 
-  return billRes;
+    return billRes;
 
   } catch (error) {
     console.error('退押金处理失败:', error);
@@ -1126,7 +1126,7 @@ async function fastCheckIn(orderData, createdBy = 'system') {
     } finally {
       client.release();
     }
-  } catch (error){
+  } catch (error) {
     console.error('❌ [fastCheckIn] 处理失败:', error.message);
     throw error;
   }
@@ -1136,7 +1136,7 @@ async function fastCheckIn(orderData, createdBy = 'system') {
  * 办理退房：更新订单状态并将房间设为清洁中
  * @param {string} orderId
  */
-async function checkOut(orderId,client) {
+async function checkOut(orderId, client) {
   try {
     const manageTx = !client; // 是否需要自行管理事务
     console.log(`🚪 [checkOut] 办理退房，订单号: ${orderId}, 管理事务: ${manageTx}`);
@@ -1318,8 +1318,8 @@ async function updateOrderWithBills(orderNumber, updatedData, billUpdates = {}, 
 
       // 处理可更新字段
       const updateableFields = ['guest_name', 'phone', 'room_type',
-                              'room_number', 'check_in_date', 'check_out_date',
-                              'payment_method', 'total_price', 'deposit', 'remarks'];
+        'room_number', 'check_in_date', 'check_out_date',
+        'payment_method', 'total_price', 'deposit', 'remarks'];
 
       updateableFields.forEach(field => {
         if (updatedData[field] !== undefined) {

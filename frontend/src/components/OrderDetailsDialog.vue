@@ -169,6 +169,29 @@
               </q-item>
             </q-list>
           </div>
+          <!-- 每日房间安排 -->
+          <div class="col-md-12 col-xs-12" v-if="currentOrder.dailyOrders && currentOrder.dailyOrders.length > 0">
+            <div class="text-subtitle1 q-mb-sm">每日房间安排</div>
+            <q-list bordered separator>
+              <q-item v-for="(day, index) in currentOrder.dailyOrders" :key="index">
+                <q-item-section>
+                  <q-item-label>{{ day.stayDate }}</q-item-label>
+                </q-item-section>
+                <q-item-section>
+                  <q-item-label>{{ day.roomNumber }}</q-item-label>
+                  <q-item-label caption>{{ getRoomTypeName(day.roomType) }}</q-item-label>
+                </q-item-section>
+                <q-item-section side>
+                   <q-btn 
+                    v-if="currentOrder.status !== 'cancelled' && currentOrder.status !== 'checked-out'"
+                    flat round dense color="primary" icon="edit" @click="openDailyRoomDialog(day)">
+                     <q-tooltip>更换房间</q-tooltip>
+                   </q-btn>
+                </q-item-section>
+              </q-item>
+            </q-list>
+          </div>
+
           <!-- 备注信息 -->
           <div class="col-md-12 col-xs-12" v-if="currentOrder.remarks">
             <q-list bordered>
@@ -249,12 +272,23 @@
       :order="currentOrder"
       @success="handleAdjustmentSuccess"
     />
+
+    <!-- 每日房间修改对话框 -->
+    <EditDailyRoomDialog
+      v-model="showDailyRoomDialog"
+      :orderNumber="currentOrder?.orderNumber"
+      :stayDate="selectedDay?.stayDate"
+      :currentRoomNumber="selectedDay?.roomNumber"
+      :currentRoomType="selectedDay?.roomType"
+      @success="handleDailyRoomChangeSuccess"
+    />
   </q-dialog>
 </template>
 
 <script setup>
 import { ref, toRefs, computed } from 'vue';
 import BillAdjustmentDialog from './BillAdjustmentDialog.vue'; // 1. 导入新组件
+import EditDailyRoomDialog from './EditDailyRoomDialog.vue';
 import Decimal from 'decimal.js';
 
 const props = defineProps({
@@ -281,6 +315,19 @@ const showAdjustmentDialog = ref(false);
 function handleAdjustmentSuccess() {
   showAdjustmentDialog.value = false;
   emit('refresh'); // 通知父组件刷新数据
+}
+
+// 每日房间修改逻辑
+const showDailyRoomDialog = ref(false)
+const selectedDay = ref(null)
+
+function openDailyRoomDialog(day) {
+  selectedDay.value = day
+  showDailyRoomDialog.value = true
+}
+
+function handleDailyRoomChangeSuccess() {
+  emit('refresh')
 }
 
 function emitChangeOrder() {

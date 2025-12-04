@@ -30,7 +30,7 @@ const createOrderSchema = {
     phone: {
       type: 'string',
       pattern: '^$|^1[3-9]\\d{9}$'
-     },
+    },
     roomPrice: {
       type: 'object',
       minProperties: 1,
@@ -45,7 +45,7 @@ const createOrderSchema = {
     deposit: { type: 'number' },
     isPrepaid: { type: 'boolean' },
     prepaidAmount: { type: 'number', minimum: 0 },
-    stayType: { type: 'string' , enum: ['客房', '休息房'] },
+    stayType: { type: 'string', enum: ['客房', '休息房'] },
     createTime: { type: 'string', format: 'date-time' },
     remarks: { type: 'string' }
   },
@@ -192,10 +192,10 @@ router.post('/new', async (req, res) => {
     });
 
   } catch (error) {
-  console.error('创建订单失败(路由层):', error.code || 'NO_CODE', error.message);
+    console.error('创建订单失败(路由层):', error.code || 'NO_CODE', error.message);
 
     // 处理不同类型的错误
-    switch(error.code) {
+    switch (error.code) {
       case 'DUPLICATE_ORDER':
         return res.status(409).json({
           success: false,
@@ -262,29 +262,29 @@ router.post('/new', async (req, res) => {
  */
 router.post('/:orderNumber/status', async (req, res) => {
   try {
-        // 请求参数验证
-        const validate = ajv.compile(updateOrderStatusSchema);
-        const valid = validate(req.body);
-        if (!valid) {
-          console.error('更新订单状态请求参数验证失败:', validate.errors);
-          return res.status(400).json({
-            success: false,
-            message: '请求参数验证失败',
-            errors: validate.errors
-          });
-        }
-
-        const { orderNumber } = req.params;
-        const { newStatus, checkInTime, checkOutTime } = req.body;
-        const updatedOrder = await orderModule.updateOrderStatus(orderNumber, newStatus, { checkInTime, checkOutTime });
-        if (!updatedOrder) {
-            return res.status(404).json({ message: '未找到订单或更新失败' });
-        }
-        res.json({ message: '订单状态更新成功', order: updatedOrder });
-    } catch (error) {
-        console.error(`更新订单 ${orderNumber} 状态为 ${newStatus} 失败:`, error);
-        res.status(500).json({ message: '更新订单状态失败', error: error.message });
+    // 请求参数验证
+    const validate = ajv.compile(updateOrderStatusSchema);
+    const valid = validate(req.body);
+    if (!valid) {
+      console.error('更新订单状态请求参数验证失败:', validate.errors);
+      return res.status(400).json({
+        success: false,
+        message: '请求参数验证失败',
+        errors: validate.errors
+      });
     }
+
+    const { orderNumber } = req.params;
+    const { newStatus } = req.body;
+    const updatedOrder = await orderModule.updateOrderStatus(orderNumber, newStatus);
+    if (!updatedOrder) {
+      return res.status(404).json({ message: '未找到订单或更新失败' });
+    }
+    res.json({ message: '订单状态更新成功', order: updatedOrder });
+  } catch (error) {
+    console.error(`更新订单 ${req.params?.orderNumber || ''} 状态失败:`, error);
+    res.status(500).json({ message: '更新订单状态失败', error: error.message });
+  }
 });
 
 /**
@@ -312,14 +312,14 @@ router.put('/:orderNumber/day-room', authenticationMiddleware, async (req, res) 
   const { orderNumber } = req.params;
   const { stayDate, newRoomNumber } = req.body;
 
-  if (!stayDate || !newRoomNumber) {
-    return res.status(400).json({
-      success: false,
-      message: '缺少必要参数: stayDate 和 newRoomNumber'
-    });
-  }
-
   try {
+
+    if (!stayDate || !newRoomNumber) {
+      return res.status(400).json({
+        success: false,
+        message: '缺少必要参数: stayDate 和 newRoomNumber'
+      });
+    }
     const changedBy = req.user?.username || 'system';
     const updatedRow = await orderModule.updateOrderDayRoom(orderNumber, stayDate, newRoomNumber, changedBy);
     res.json({
@@ -401,7 +401,7 @@ router.post('/:orderNumber/early-checkout', authenticationMiddleware, async (req
  * 退押金
  * POST /api/orders/:order_id/refund-deposit
  */
-router.post('/:order_id/refund-deposit',  async (req, res) => {
+router.post('/:order_id/refund-deposit', async (req, res) => {
   try {
     const refundData = req.body;
     // 调用退押金方法

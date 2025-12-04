@@ -66,8 +66,8 @@ export const useOrderStore = defineStore('order', () => {
         }
 
         const errorMessage = typeof err.message === 'string' && err.message.startsWith('<!DOCTYPE html>')
-                          ? '获取订单数据失败: 后端返回HTML错误页面'
-                          : (err.response?.data?.message || err.message || '获取订单数据失败')
+          ? '获取订单数据失败: 后端返回HTML错误页面'
+          : (err.response?.data?.message || err.message || '获取订单数据失败')
 
         error.value = errorMessage
         if (!orders.value.length) {
@@ -173,6 +173,51 @@ export const useOrderStore = defineStore('order', () => {
     }
   }
 
+
+  /**
+   * 更新订单中特定日期的房间号
+   * @async
+   * @function updateOrderDayRoom
+   * @param {string} orderNumber - 要更新的订单号
+   * @param {string} stayDate - 要更新房间的特定日期 (格式: YYYY-MM-DD)
+   * @param {string} newRoomNumber - 要分配的新房间号
+   * @returns {Promise<Object>} API调用的响应结果
+   * @throws {Error} 当API调用失败或出现验证错误时抛出异常
+   * @description 此函数用于更新订单中特定日期的房间分配。
+   * 它调用后端API并更新本地状态以反映更改。
+   * 该函数还处理加载状态和错误管理。
+   */
+  async function updateOrderDayRoom(orderNumber, stayDate, newRoomNumber) {
+    try {
+      loading.value = true
+      error.value = null
+      console.log(`更新订单 ${orderNumber} 日期 ${stayDate} 房间为 ${newRoomNumber}`)
+
+      const response = await orderApi.updateOrderDayRoom(orderNumber, { stayDate, newRoomNumber })
+      const updatedRow = response?.data
+
+      // 更新本地 dailyOrders
+      const index = orders.value.findIndex(o => o.orderNumber === orderNumber)
+      if (index !== -1 && orders.value[index].dailyOrders) {
+        const dayIndex = orders.value[index].dailyOrders.findIndex(d => d.stayDate === stayDate)
+        if (dayIndex !== -1) {
+          orders.value[index].dailyOrders[dayIndex].roomNumber = newRoomNumber
+          if (updatedRow?.room_type) {
+            orders.value[index].dailyOrders[dayIndex].roomType = updatedRow.room_type
+          }
+        }
+      }
+
+      return response
+    } catch (err) {
+      console.error('更新每日房间失败:', err.response ? err.response.data : err.message)
+      error.value = err.response?.data?.message || err.message || '更新每日房间失败'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
   async function getOrderByNumber(orderNumber, forceRefresh = false) {
     if (!forceRefresh) {
       const localOrder = orders.value.find(order => order.orderNumber === orderNumber)
@@ -185,32 +230,44 @@ export const useOrderStore = defineStore('order', () => {
       const orderData = response.data
 
       if (orderData) {
+        // Handle array response (backend returns array of daily rows)
+        const mainOrder = Array.isArray(orderData) ? orderData[0] : orderData;
+        const dailyList = Array.isArray(orderData) ? orderData : [orderData];
+
         const mappedOrder = {
-          orderNumber: orderData.order_id,
-          guestName: orderData.guest_name,
-          phone: orderData.phone,
-          roomType: orderData.room_type,
-          roomNumber: orderData.room_number,
-          checkInDate: formatOrderDate(orderData.check_in_date),
-          checkOutDate: formatOrderDate(orderData.check_out_date),
-          status: orderData.status,
-          paymentMethod: orderData.payment_method,
-          roomPrice: orderData.total_price,
-          deposit: orderData.deposit,
-          refundedDeposit: orderData.refunded_deposit || 0,
+          orderNumber: mainOrder.order_id,
+          guestName: mainOrder.guest_name,
+          phone: mainOrder.phone,
+          roomType: mainOrder.room_type,
+          roomNumber: mainOrder.room_number,
+          checkInDate: formatOrderDate(mainOrder.check_in_date),
+          checkOutDate: formatOrderDate(mainOrder.check_out_date),
+          status: mainOrder.status,
+          paymentMethod: mainOrder.payment_method,
+          roomPrice: mainOrder.total_price,
+          deposit: mainOrder.deposit,
+          refundedDeposit: mainOrder.refunded_deposit || 0,
           refundRecords: [],
-          createTime: orderData.create_time,
-          remarks: orderData.remarks,
-          source: orderData.order_source,
-          sourceNumber: orderData.id_source,
-          isPrepaid: Boolean(orderData.is_prepaid),
-          prepaidAmount: parseFloat(orderData.prepaid_amount) || 0,
-          prepaidAt: orderData.prepaid_at
+          createTime: mainOrder.create_time,
+          remarks: mainOrder.remarks,
+          source: mainOrder.order_source,
+          sourceNumber: mainOrder.id_source,
+          isPrepaid: Boolean(mainOrder.is_prepaid),
+          prepaidAmount: parseFloat(mainOrder.prepaid_amount) || 0,
+          prepaidAt: mainOrder.prepaid_at,
+          // Add daily orders details
+          dailyOrders: dailyList.map(d => ({
+            stayDate: formatOrderDate(d.stay_date),
+            roomNumber: d.room_number,
+            roomType: d.room_type,
+            price: d.total_price,
+            status: d.status
+          })).sort((a, b) => new Date(a.stayDate) - new Date(b.stayDate))
         }
 
         const index = orders.value.findIndex(o => o.orderNumber === orderNumber)
         if (index !== -1) {
-          orders.value[index] = mappedOrder
+          orders.value[index] = { ...orders.value[index], ...mappedOrder }
         } else {
           orders.value.push(mappedOrder)
         }
@@ -536,6 +593,7 @@ export const useOrderStore = defineStore('order', () => {
     updateOrderStatusViaApi,
     updateOrderCheckOutLocally,
     updateOrderRoom,
+    updateOrderDayRoom,
     updateOrder,
     getOrderByNumber,
     getActiveOrderByRoomNumber,

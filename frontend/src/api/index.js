@@ -150,6 +150,9 @@ export const orderApi = {
 
   // 提前退房
   earlyCheckout: (orderId, payload) => api.post(`/orders/${orderId}/early-checkout`, payload),
+
+  // 更新订单特定日期的房间
+  updateOrderDayRoom: (orderId, data) => api.put(`/orders/${orderId}/day-room`, data),
 }
 
 // 用户相关接口

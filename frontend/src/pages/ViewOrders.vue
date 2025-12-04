@@ -146,6 +146,7 @@
       @refund-deposit="openRefundDepositFromDetails"
       @change-order="openChangeOrderDialog"
       @early-checkout="openEarlyCheckoutFromDetails"
+      @refresh="handleOrderRefresh"
     />
 
 
@@ -426,11 +427,20 @@ const earlyCheckoutOrder = ref(null)
 const availableRoomOptions = ref([]); // 用于存储从API获取的可用房间选项
 
 // 查看订单详情
-function viewOrderDetails(order) {
+async function viewOrderDetails(order) {
   currentOrder.value = order;
-  console.log('Viewing order details. Status:', currentOrder.value ? currentOrder.value.status : 'currentOrder is null');
-  console.log('currentOrder', currentOrder.value)
   showOrderDetails.value = true;
+  
+  if (order && order.orderNumber) {
+    try {
+      const fullOrder = await orderStore.getOrderByNumber(order.orderNumber, true);
+      if (fullOrder) {
+        currentOrder.value = fullOrder;
+      }
+    } catch (e) {
+      console.error('Failed to fetch full order details:', e);
+    }
+  }
 }
 
 function openEarlyCheckoutDialog(order) {
@@ -442,6 +452,14 @@ function openEarlyCheckoutDialog(order) {
 function openEarlyCheckoutFromDetails() {
   if (currentOrder.value) {
     openEarlyCheckoutDialog(currentOrder.value)
+  }
+}
+
+async function handleOrderRefresh() {
+  await fetchAllOrders()
+  if (currentOrder.value && currentOrder.value.orderNumber) {
+    const latest = await orderStore.getOrderByNumber(currentOrder.value.orderNumber, true)
+    if (latest) currentOrder.value = latest
   }
 }
 
