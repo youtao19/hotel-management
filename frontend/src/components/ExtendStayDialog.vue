@@ -523,6 +523,8 @@ async function confirmExtendStay() {
       totalPrice: totalPrice.value,
       stayDays: stayDays.value,
       notes: notes.value.trim(),
+      orderSource: props.currentOrder?.orderSource || '续住',
+      stayType: props.currentOrder?.stayType || '客房',
       // 从原订单继承的信息
       originalGuestName: props.currentOrder.guestName,
       originalRoomNumber: props.currentOrder.roomNumber,

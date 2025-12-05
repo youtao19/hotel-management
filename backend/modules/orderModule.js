@@ -67,6 +67,12 @@ async function createOrder(orderData, client) {
       isPrepaid, prepaidAmount, stayType
     } = orderData;
 
+    const normalizedOrderSource = orderSource || orderData.order_source || 'front_desk';
+    const normalizedStayType = stayType || orderData.stay_type || '客房';
+    const normalizedIsPrepaid = Boolean(isPrepaid);
+    const normalizedPrepaidAmount = toAmountNumber(prepaidAmount || 0);
+    const normalizedCreateTime = formatDateTimeForDB(createTime || new Date());
+
     const formattedCheckInDate = formatDate(checkInDate);
     const formattedCheckOutDate = formatDate(checkOutDate);
     // 计算住宿天数
@@ -99,19 +105,19 @@ async function createOrder(orderData, client) {
       // 获得日期列表
       const dateList = Object.keys(roomPrice);
       for (let i = 0; i < stayDays; i++) {
-        const stay_date = formatDate(dateList[i]);
+        const stay_date = formatDate(dateList[i] || new Date(checkInDateObj.getTime() + i * 24 * 60 * 60 * 1000));
         const total_price = toAmountNumber(roomPrice[stay_date]);
 
         // 如果是预付，预付金额放在第一天的订单
         let prepaidAmountForThisDay = 0;
-        if (isPrepaid) {
-          prepaidAmountForThisDay = (i === 0) ? toAmountNumber(prepaidAmount) : 0;
+        if (normalizedIsPrepaid) {
+          prepaidAmountForThisDay = (i === 0) ? normalizedPrepaidAmount : 0;
         }
 
-        let value = [orderId, sourceNumber, orderSource, guestName, phone,
+        let value = [orderId, sourceNumber, normalizedOrderSource, guestName, phone,
           roomType, roomNumber, checkInDate, checkOutDate, stay_date, status,
-          paymentMethod, total_price, deposit, isPrepaid, prepaidAmountForThisDay,
-          createTime, stayType, remarks]
+          paymentMethod, total_price, deposit, normalizedIsPrepaid, prepaidAmountForThisDay || normalizedPrepaidAmount,
+          normalizedCreateTime, normalizedStayType, remarks]
         await runner.query(insertQuery, value);
       }
 

@@ -430,7 +430,7 @@ const availableRoomOptions = ref([]); // 用于存储从API获取的可用房间
 async function viewOrderDetails(order) {
   currentOrder.value = order;
   showOrderDetails.value = true;
-  
+
   if (order && order.orderNumber) {
     try {
       const fullOrder = await orderStore.getOrderByNumber(order.orderNumber, true);
@@ -1156,7 +1156,9 @@ async function handleExtendStay(extendStayData) {
 
     // 创建新订单数据，使用 addOrder 期望的格式
     const newOrderData = {
-      orderNumber: newOrderNumber,
+      orderId: newOrderNumber,
+      sourceNumber: extendStayData.originalOrderNumber || '',
+      orderSource: extendStayData.orderSource || '续住',
       guestName: extendStayGuestName, // 使用带唯一标识的客人姓名
       phone: extendStayData.phone,
       roomType: extendStayData.roomType,
@@ -1167,9 +1169,12 @@ async function handleExtendStay(extendStayData) {
       paymentMethod: extendStayData.paymentMethod || 'cash', // 使用用户选择的支付方式
       roomPrice: normalizedRoomPrice,
       deposit: 0, // 续住默认押金为0
+      stayType: extendStayData.stayType || '客房',
+      isPrepaid: false,
+      prepaidAmount: 0,
+      createTime: new Date().toISOString(),
       remarks: `续住订单，原客人：${extendStayData.guestName}，原订单号：${extendStayData.originalOrderNumber}。${extendStayData.notes || ''}`.trim(),
       source: 'extend_stay', // 标记为续住来源
-      sourceNumber: extendStayData.originalOrderNumber || ''
     };
 
     console.log('🔍 续住数据调试:', {
@@ -1182,7 +1187,7 @@ async function handleExtendStay(extendStayData) {
     console.log('📋 准备创建续住订单:', newOrderData);
 
     // 使用 addOrder 方法创建新订单
-    const createdOrder = await orderStore.addOrder(newOrderData);
+    const createdOrder = await orderApi.addOrder(newOrderData);
 
     if (createdOrder) {
       // 关闭对话框
@@ -1194,7 +1199,7 @@ async function handleExtendStay(extendStayData) {
       $q.notify({
         type: 'positive',
         message: `🎉 续住订单创建成功！
-订单号：${newOrderNumber}`,
+        订单号：${newOrderNumber}`,
         position: 'top',
         multiLine: true,
         timeout: 5000,
