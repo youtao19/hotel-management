@@ -91,8 +91,8 @@ export const useRoomStore = defineStore('room', () => {
       if (!Array.isArray(response.data)) {
         throw new Error('订单数据格式错误，期望数组但得到: ' + JSON.stringify(response.data))
       }
-  // 统一订单状态，避免中文/英文导致的判断偏差
-  const allOrders = response.data.map(o => ({ ...o, status: normalizeOrderStatus(o.status) }))
+      // 统一订单状态，避免中文/英文导致的判断偏差
+      const allOrders = response.data.map(o => ({ ...o, status: normalizeOrderStatus(o.status) }))
 
       // 筛选活跃订单（待入住和已入住）
       activeOrders.value = allOrders.filter(order =>

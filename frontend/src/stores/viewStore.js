@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 
 export const useViewStore = defineStore('view', () => {
   // 房间类型选项数组，用于类型筛选下拉框
