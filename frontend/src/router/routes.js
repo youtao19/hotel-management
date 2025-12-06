@@ -25,7 +25,7 @@ const routes = [
       { path: 'ViewOrders', component: () => import('pages/OrderManagement/index.vue') },
       { path: 'CreateOrder', component: () => import('pages/CreateOrder.vue') },
       { path: 'review-management', component: () => import('pages/ReviewManagement.vue') },
-      { path: 'revenue-statistics', component: () => import('pages/RevenueStatistics.vue') },
+      { path: 'revenue-statistics', component: () => import('pages/Revenue/index.vue') },
       { path: 'handover', component: () => import('pages/Handover.vue') },
       { path: 'other-income', component: () => import('pages/OtherIncome.vue') }
     ]
