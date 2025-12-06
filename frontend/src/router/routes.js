@@ -21,7 +21,7 @@ const routes = [
       { path: '', redirect: '/Dash-board' },
       { path: 'Dash-board', component: () => import('pages/Dash-board.vue') },
       { path: 'room-status', component: () => import('pages/RoomStatus/index.vue') },
-      { path: 'room-management', component: () => import('pages/RoomManagement.vue') },
+      { path: 'room-management', component: () => import('pages/RoomManagement/index.vue') },
       { path: 'ViewOrders', component: () => import('pages/OrderManagement/index.vue') },
       { path: 'CreateOrder', component: () => import('pages/CreateOrder.vue') },
       { path: 'review-management', component: () => import('pages/ReviewManagement.vue') },
