@@ -288,7 +288,7 @@
 <script setup>
 import { ref, toRefs, computed } from 'vue';
 import BillAdjustmentDialog from './BillAdjustmentDialog.vue'; // 1. 导入新组件
-import EditDailyRoomDialog from './EditDailyRoomDialog.vue';
+import EditDailyRoomDialog from '../pages/OrderManagement/components/EditDailyRoomDialog.vue';
 import Decimal from 'decimal.js';
 
 const props = defineProps({

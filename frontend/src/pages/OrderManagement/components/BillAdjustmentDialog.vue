@@ -58,7 +58,7 @@ import { ref, watch, computed } from 'vue';
 import { useQuasar } from 'quasar';
 import { useViewStore } from 'src/stores/viewStore'; // 1. 导入 viewStore
 import Decimal from 'decimal.js';
-import { billApi } from '../api';
+import { billApi } from '../../../api';
 
 const props = defineProps({
   modelValue: Boolean,
