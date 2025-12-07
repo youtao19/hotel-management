@@ -105,6 +105,7 @@ docker compose up -d
 
 *   **订单管理:**
     *   创建、查看和管理客户预订/订单。
+    *   提前退房：前端弹窗使用 `frontend/src/pages/OrderManagement/components/EarlyCheckoutDialog.vue`，核心计算在 `composables/useEarlyCheckoutLogic.js`，会基于账单按入住日期聚合剩余房费生成建议退款与可退日期，支持未入住/已入住两种路径。
 
 *   **账单与收入:**
     *   为客户住宿生成和管理账单。

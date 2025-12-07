@@ -960,6 +960,7 @@ async function checkIn(orderId, depositAmount, client) {
   const hasDeposit = parsedDeposit > 0;
 
   try {
+    // 查询订单信息
     const { rows: orderRows } = await runner.query(
       'SELECT * FROM orders WHERE order_id = $1 ORDER BY stay_date',
       [orderId]
@@ -1042,6 +1043,7 @@ async function checkIn(orderId, depositAmount, client) {
         stay_type: ord.stay_type,
         stay_date: ord.stay_date
       };
+      console.log('!!!!!账单日期是:', billData.stay_date);
       const roomBill = await billModule.addBill(billData, runner);
       createdBills.push(roomBill);
       console.log(`📝 [check-in] 插入房费账单，金额: ${ord.total_price}，入住日期: ${ord.stay_date}`);

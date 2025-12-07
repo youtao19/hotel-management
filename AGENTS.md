@@ -30,6 +30,10 @@ This workspace houses a Quasar frontend and an Express backend maintained via np
 - Name files with `.test.js` or `.spec.js`; share fixtures through `backend/tests/__mocks__`.
 - Ensure both success and failure paths are covered; confirm coverage with `npm test -- --coverage`.
 
+## Feature Notes
+
+- 提前退房前端逻辑封装在 `frontend/src/pages/OrderManagement/composables/useEarlyCheckoutLogic.js`，组件 `components/EarlyCheckoutDialog.vue` 仅负责展示。逻辑基于账单按入住日期聚合计算建议退款，需保持日期聚合（Map 逻辑）以避免重复日期。
+
 ## Commit & Pull Request Guidelines
 
 - Write imperative commit subjects (≤72 chars) and prefix with scope when useful, e.g., `backend/orders: fix deposit balance`.

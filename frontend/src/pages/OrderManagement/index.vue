@@ -63,9 +63,11 @@
       <ExtendStayDialog
         v-model="showExtendStayDialog"
         :currentOrder="extendStayOrder"
+        :availableRoomOptions="extendStayRoomOptions"
         :getRoomTypeName="viewStore.getRoomTypeName"
         :loadingRooms="loadingExtendStayRooms"
         @extend-stay="handleExtendStay"
+        @refresh-rooms="handleRefreshExtendStayRooms"
       />
 
       <RefundDepositDialog
@@ -181,8 +183,8 @@ const {
 
 // 续住
 const {
-  showExtendStayDialog, extendStayOrder, loadingExtendStayRooms,
-  openExtendStayDialog, handleExtendStay
+  showExtendStayDialog, extendStayOrder, extendStayRoomOptions, loadingExtendStayRooms,
+  openExtendStayDialog, handleExtendStay, handleRefreshExtendStayRooms
 } = useExtendStay(fetchAllOrders)
 
 // 换房
@@ -271,18 +273,14 @@ async function openChangeOrderDialog() {
   } catch(e) { console.warn(e); changeOrderRooms.value = [] }
 }
 
-async function handleOrderUpdated(data) {
+async function handleOrderUpdated() {
   dialogs.changeOrder = false
   loadingOrders.value = true
   try {
-    await orderStore.updateOrder(data.orderNumber, data)
-    $q.notify({ type: 'positive', message: '更新成功' })
-    if (currentOrder.value?.orderNumber === data.orderNumber) {
-      const updated = orderStore.orders.find(o => o.orderNumber === data.orderNumber)
-      if (updated) currentOrder.value = updated
-    }
-  } catch(e) {
-    $q.notify({ type: 'negative', message: '更新失败' })
+    await handleOrderRefresh()
+    await roomStore.fetchAllRooms()
+  } catch (e) {
+    $q.notify({ type: 'negative', message: '刷新订单失败' })
   } finally { loadingOrders.value = false }
 }
 
@@ -295,17 +293,16 @@ function openEarlyCheckoutDialog(order) {
 }
 
 async function handleEarlyCheckoutSuccess(data) {
-  // 处理逻辑可以进一步封装到 useOrderActions 或 useEarlyCheckoutLogic 中
-  // 这里暂时保留 API 调用逻辑以确保最小破坏
   try {
     loadingOrders.value = true
     dialogs.earlyCheckout = false
-    await orderStore.checkout(data) // 假设 store 有此方法或调用 API
-    $q.notify({ type: 'positive', message: '提前退房成功' })
+    earlyCheckoutOrder.value = null
     await fetchAllOrders()
     await roomStore.fetchAllRooms()
+    $q.notify({ type: 'positive', message: '提前退房成功' })
   } catch (e) {
-    $q.notify({ type: 'negative', message: '提前退房失败: ' + e.message })
+    const msg = e?.message || '提前退房失败'
+    $q.notify({ type: 'negative', message: '提前退房失败: ' + msg })
   } finally {
     loadingOrders.value = false
   }

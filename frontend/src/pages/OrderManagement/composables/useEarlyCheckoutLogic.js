@@ -1,126 +1,276 @@
-// src/pages/OrderManagement/composables/useEarlyCheckoutLogic.js
-import { ref, computed, watch, reactive } from 'vue'
-import { date } from 'quasar'
+// 提前退房逻辑封装
+import { ref, computed, watch } from 'vue'
+import { useQuasar } from 'quasar'
+import { useOrderStore } from 'src/stores/orderStore'
 import { useBillStore } from 'src/stores/billStore'
-import Decimal from 'decimal.js'
+import { useUserStore } from 'src/stores/userStore'
+import { useViewStore } from 'src/stores/viewStore'
 
 export function useEarlyCheckoutLogic(props, emit) {
+  const $q = useQuasar()
+  const orderStore = useOrderStore()
   const billStore = useBillStore()
+  const userStore = useUserStore()
+  const viewStore = useViewStore()
 
-  // --- 表单状态 ---
-  const form = reactive({
-    newCheckOutDate: '',
-    penaltyAmount: 0,
-    refundMethod: 'wechat', // 默认退款方式
-    remarks: ''
+  const actualCheckoutTime = ref('')
+  const refundAmount = ref(0)
+  const refundMethod = ref('')
+  const remarks = ref('')
+  const manualAmountTouched = ref(false)
+  const submitting = ref(false)
+  const loadingBills = ref(false)
+  const orderBills = ref([])
+  const hasStayed = ref(true)
+
+  const paymentMethodOptions = viewStore.paymentMethodOptions
+
+  const actualCheckoutDateYMD = computed(() => {
+    if (!actualCheckoutTime.value) return null
+    return actualCheckoutTime.value.slice(0, 10)
   })
 
-  // --- 辅助计算 ---
-  const toDecimal = (val) => {
-    try { return new Decimal(val || 0) } catch { return new Decimal(0) }
-  }
-
-  // 1. 获取当前订单的总已付金额 (房费 + 押金? 或者仅房费，视业务而定)
-  // 通常提前退房主要涉及房费的结算，押金可能单独退或一起算。
-  // 这里假设我们计算的是 "剩余应退房费"。
-  const totalPaidRoomFee = computed(() => {
-    if (!props.order) return 0
-    const bills = billStore.bills.filter(b => b.order_id === props.order.orderNumber)
-
-    // 简单的逻辑：所有“房费”类型的入账 - 出账
-    // 如果没有账单，可能需要回退到 order.roomPrice (视系统逻辑而定)
-    let total = new Decimal(0)
-    bills.forEach(b => {
-      if (b.change_type === '房费' || b.type === 'income') { // 假设 income 是收款
-         total = total.plus(toDecimal(b.change_price))
-      }
+  const recommendedBills = computed(() => {
+    if (!hasStayed.value) return []
+    if (!props.order || !actualCheckoutDateYMD.value) return []
+    const cutoff = actualCheckoutDateYMD.value
+    const grouped = new Map()
+    ;(orderBills.value || []).forEach(b => {
+      if (!b || b.change_type !== '房费') return
+      const stayDate = formatDateOnly(b.stay_date || b.stayDate)
+      if (!stayDate || stayDate < cutoff) return
+      const amount = Number(b.change_price || b.room_fee || 0)
+      const prev = grouped.get(stayDate) || 0
+      grouped.set(stayDate, Number((prev + amount).toFixed(2)))
     })
+    return Array.from(grouped.entries())
+      .map(([stayDate, amount]) => ({ stayDate, amount }))
+      .sort((a, b) => a.stayDate.localeCompare(b.stayDate))
+  })
 
-    // 如果账单为空，且订单有价格，回退使用订单总价
-    if (total.eq(0) && props.order.roomPrice) {
-       return toDecimal(props.order.roomPrice)
+  const totalPaid = computed(() => {
+    const bills = orderBills.value || []
+    const orderDepositRaw = Number(props.order?.deposit)
+    const orderDeposit = Number.isFinite(orderDepositRaw) && orderDepositRaw > 0 ? orderDepositRaw : 0
+    const orderTotalRaw = Number(props.order?.roomPrice ?? props.order?.total_price)
+    const orderTotal = Number.isFinite(orderTotalRaw) && orderTotalRaw > 0 ? orderTotalRaw : 0
+    if (!bills.length) {
+      return Math.max(0, orderDeposit, orderTotal)
     }
-    return total
-  })
-
-  // 2. 计算实际入住天数
-  const actualDays = computed(() => {
-    if (!props.order || !form.newCheckOutDate) return 0
-    const start = new Date(props.order.checkInDate)
-    const end = new Date(form.newCheckOutDate)
-    const diff = date.getDateDiff(end, start, 'days')
-    return diff > 0 ? diff : 0 // 至少算0天（或者1天，视业务规则）
-  })
-
-  // 3. 计算实际应收房费 (简单按单价 * 天数估算，实际可能需要复杂计费)
-  const actualRoomCost = computed(() => {
-    // 尝试获取单价：总价 / 原定天数
-    if (!props.order || !props.order.checkInDate || !props.order.checkOutDate) return 0
-
-    const originalStart = new Date(props.order.checkInDate)
-    const originalEnd = new Date(props.order.checkOutDate)
-    const originalDays = date.getDateDiff(originalEnd, originalStart, 'days') || 1
-
-    const unitPrice = totalPaidRoomFee.value.div(originalDays)
-    return unitPrice.mul(actualDays.value)
-  })
-
-  // 4. 计算建议退款金额
-  const refundAmount = computed(() => {
-    // 已付 - 实际应收 - 违约金
-    const refund = totalPaidRoomFee.value
-      .minus(actualRoomCost.value)
-      .minus(toDecimal(form.penaltyAmount))
-
-    return refund.isNegative() ? 0 : Number(refund.toDecimalPlaces(2).toString())
-  })
-
-  // --- 初始化与重置 ---
-  watch(() => props.order, (newOrder) => {
-    if (newOrder) {
-      // 默认新离店日期为今天 (如果今天在入住日期之后)
-      const today = new Date()
-      const checkIn = new Date(newOrder.checkInDate)
-
-      if (today > checkIn) {
-        form.newCheckOutDate = date.formatDate(today, 'YYYY-MM-DD')
-      } else {
-        form.newCheckOutDate = date.formatDate(checkIn, 'YYYY-MM-DD')
-      }
-
-      form.penaltyAmount = 0
-      form.remarks = ''
-
-      // 确保账单数据已加载
-      if (billStore.bills.length === 0) {
-        billStore.fetchAllBills()
-      }
+    const net = bills.reduce((sum, b) => sum + Number(b?.change_price || 0), 0)
+    const normalizedNet = Math.max(0, Number(net.toFixed(2)))
+    if (normalizedNet === 0) {
+      return Math.max(0, orderDeposit, orderTotal)
     }
-  }, { immediate: true })
+    return normalizedNet
+  })
 
-  // --- 提交 ---
-  function submit() {
-    const submitData = {
-      orderNumber: props.order.orderNumber,
-      newCheckOutDate: form.newCheckOutDate,
-      penaltyAmount: Number(form.penaltyAmount),
-      refundAmount: refundAmount.value,
-      refundMethod: form.refundMethod,
-      remarks: form.remarks
+  const recommendedRefund = computed(() => {
+    if (!hasStayed.value) {
+      return totalPaid.value
     }
-    emit('success', submitData) // 父组件监听 @success 处理 API 调用
+    return recommendedBills.value.reduce((sum, item) => sum + Number(item.amount), 0)
+  })
+
+  const refundableNights = computed(() => recommendedBills.value)
+
+  const refundAmountRules = [
+    val => val !== null && val !== undefined && val >= 0 || '退款金额必须大于或等于0',
+    val => val <= recommendedRefund.value + 0.01 || `退款金额不能超过¥${recommendedRefund.value.toFixed(2)}`
+  ]
+
+  const refundDiffText = computed(() => {
+    const diff = Number(refundAmount.value || 0) - recommendedRefund.value
+    if (Math.abs(diff) < 0.01) return '与建议金额一致'
+    return diff > 0
+      ? `多退 ¥${diff.toFixed(2)}`
+      : `少退 ¥${Math.abs(diff).toFixed(2)}`
+  })
+
+  const showNotEarlyWarning = computed(() => {
+    if (!hasStayed.value) return false
+    if (!props.order?.checkOutDate || !actualCheckoutTime.value) return false
+    return new Date(actualCheckoutTime.value) >= new Date(props.order.checkOutDate)
+  })
+
+  const canSubmit = computed(() => {
+    if (!props.order) return false
+    if (!actualCheckoutTime.value || showNotEarlyWarning.value) return false
+    if (refundAmount.value === null || refundAmount.value === undefined) return false
+    if (refundAmount.value < 0) return false
+    if (refundAmount.value - recommendedRefund.value > 0.01) return false
+    if (!refundMethod.value) return false
+    return true
+  })
+
+  function formatDateOnly(input) {
+    if (!input) return null
+    if (typeof input === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(input)) return input
+    const date = new Date(input)
+    if (Number.isNaN(date.getTime())) return null
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
   }
 
-  // 验证
-  const isValid = computed(() => {
-    return !!form.newCheckOutDate && !!form.refundMethod
-  })
+  function formatDate(dateInput, includeTime = false) {
+    if (!dateInput) return '--'
+    const date = new Date(dateInput)
+    if (Number.isNaN(date.getTime())) return dateInput
+    const y = date.getFullYear()
+    const m = String(date.getMonth() + 1).padStart(2, '0')
+    const d = String(date.getDate()).padStart(2, '0')
+    let formatted = `${y}-${m}-${d}`
+    if (includeTime) {
+      const hh = String(date.getHours()).padStart(2, '0')
+      const mm = String(date.getMinutes()).padStart(2, '0')
+      formatted += ` ${hh}:${mm}`
+    }
+    return formatted
+  }
+
+  function formatForInput(dateObj) {
+    if (!(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) return ''
+    const y = dateObj.getFullYear()
+    const m = String(dateObj.getMonth() + 1).padStart(2, '0')
+    const d = String(dateObj.getDate()).padStart(2, '0')
+    const hh = String(dateObj.getHours()).padStart(2, '0')
+    const mm = String(dateObj.getMinutes()).padStart(2, '0')
+    return `${y}-${m}-${d}T${hh}:${mm}`
+  }
+
+  function setActualCheckoutToNow() {
+    actualCheckoutTime.value = formatForInput(new Date())
+  }
+
+  function useRecommendedAmount() {
+    refundAmount.value = Number(recommendedRefund.value.toFixed(2))
+    manualAmountTouched.value = false
+  }
+
+  function closeDialog() {
+    emit('update:modelValue', false)
+  }
+
+  async function loadBills() {
+    if (!props.order?.orderNumber) {
+      orderBills.value = []
+      return
+    }
+    try {
+      loadingBills.value = true
+      const bills = await billStore.getBillsByOrderId(props.order.orderNumber)
+      orderBills.value = bills || []
+    } catch (error) {
+      orderBills.value = []
+      console.warn('加载订单账单失败:', error.message || error)
+    } finally {
+      loadingBills.value = false
+    }
+  }
+
+  function initializeForm() {
+    if (!props.order) return
+    hasStayed.value = true
+    const now = new Date()
+    const planned = props.order.checkOutDate ? new Date(props.order.checkOutDate) : null
+    let base = now
+    if (planned && now >= planned) {
+      base = new Date(planned.getTime() - 60 * 60 * 1000)
+    }
+    actualCheckoutTime.value = formatForInput(base)
+    refundMethod.value = props.order.paymentMethod || viewStore.paymentMethodOptions?.[0]?.value || '现金'
+    remarks.value = ''
+    manualAmountTouched.value = false
+  }
+
+  async function handleSubmit() {
+    if (!canSubmit.value || !props.order) return
+    try {
+      submitting.value = true
+      const isoTime = new Date(actualCheckoutTime.value)
+      if (Number.isNaN(isoTime.getTime())) {
+        $q.notify({ type: 'negative', message: '请选择有效的退房时间' })
+        return
+      }
+
+      const payload = {
+        actualCheckoutTime: isoTime.toISOString(),
+        refundAmount: Number(refundAmount.value || 0),
+        refundMethod: refundMethod.value,
+        operator: userStore.user?.username || 'system',
+        remarks: remarks.value,
+        hasStayed: hasStayed.value
+      }
+
+      const result = await orderStore.earlyCheckout(props.order.orderNumber, payload)
+      $q.notify({ type: 'positive', message: '提前退房已完成' })
+      emit('success', result)
+      closeDialog()
+    } catch (error) {
+      const message = error.response?.data?.message || error.message || '提前退房失败'
+      $q.notify({ type: 'negative', message, multiLine: true })
+    } finally {
+      submitting.value = false
+    }
+  }
+
+  watch(
+    () => props.modelValue,
+    async (val) => {
+      if (val) {
+        initializeForm()
+        await loadBills()
+        refundAmount.value = Number(recommendedRefund.value.toFixed(2))
+      } else {
+        orderBills.value = []
+      }
+    }
+  )
+
+  watch(
+    () => recommendedRefund.value,
+    (val) => {
+      if (!manualAmountTouched.value) {
+        refundAmount.value = Number(val.toFixed(2))
+      }
+    }
+  )
+
+  watch(
+    () => hasStayed.value,
+    (val) => {
+      if (!val) {
+        manualAmountTouched.value = false
+        refundAmount.value = Number(recommendedRefund.value.toFixed(2))
+      }
+    }
+  )
 
   return {
-    form,
+    // state
+    actualCheckoutTime,
     refundAmount,
-    actualDays,
-    isValid,
-    submit
+    refundMethod,
+    remarks,
+    hasStayed,
+    manualAmountTouched,
+    submitting,
+    loadingBills,
+    paymentMethodOptions,
+    refundableNights,
+    // computed helpers
+    recommendedRefund,
+    refundAmountRules,
+    refundDiffText,
+    showNotEarlyWarning,
+    canSubmit,
+    // actions
+    formatDate,
+    setActualCheckoutToNow,
+    useRecommendedAmount,
+    closeDialog,
+    handleSubmit
   }
 }

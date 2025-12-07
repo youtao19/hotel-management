@@ -128,7 +128,21 @@ async function addBill(billData, client){
   try {
     const runner = client || query;
     const createTime = formatDateTimeForDB(billData.create_time) || formatDateTimeForDB();
-    const stayDate = createTime.slice(0, 10);
+
+    // 优先使用传入的 stay_date，否则使用创建时间的日期
+    let stayDate = billData.stay_date;
+    if (!stayDate) {
+        stayDate = createTime.slice(0, 10);
+    } else if (stayDate instanceof Date) {
+        // 如果是 Date 对象，转为 YYYY-MM-DD
+        const y = stayDate.getFullYear();
+        const m = String(stayDate.getMonth() + 1).padStart(2, '0');
+        const d = String(stayDate.getDate()).padStart(2, '0');
+        stayDate = `${y}-${m}-${d}`;
+    } else if (typeof stayDate === 'string') {
+        // 如果是字符串，截取前10位 (YYYY-MM-DD)
+        stayDate = stayDate.slice(0, 10);
+    }
 
     const insertQuery = `
         INSERT INTO bills (
