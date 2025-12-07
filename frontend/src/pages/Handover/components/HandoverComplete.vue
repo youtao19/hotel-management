@@ -77,10 +77,12 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useQuasar } from 'quasar'
 import { useRouter } from 'vue-router'
+import { useUserStore } from 'src/stores/userStore'
 
 // 交接完成组件 - 组合式函数
 const $q = useQuasar()
 const router = useRouter()
+const userStore = useUserStore()
 
 // 响应式数据
 const countdown = ref(5)
@@ -110,7 +112,6 @@ const props = defineProps({
   }
 })
 
-// 发出事件
 const emit = defineEmits(['logout'])
 
 // 开始倒计时
@@ -135,30 +136,16 @@ const handleLogout = async () => {
       clearInterval(countdownTimer)
     }
 
-    $q.notify({
-      type: 'info',
-      message: '正在登出...',
-      position: 'top'
-    })
+    $q.notify({ type: 'info', message: '正在登出...', position: 'top' })
 
-    // 模拟登出延迟
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    // 通过 userStore 调用后端登出路由
+    await userStore.logout()
 
-    // 发出登出事件
+    // 发出登出事件给父级做后续导航
     emit('logout')
 
-    // 清除本地存储的用户信息
-    localStorage.removeItem('userToken')
-    localStorage.removeItem('userInfo')
+    $q.notify({ type: 'positive', message: '已成功登出，请使用接班人账号登录', position: 'top', timeout: 3000 })
 
-    $q.notify({
-      type: 'positive',
-      message: '已成功登出，请使用接班人账号登录',
-      position: 'top',
-      timeout: 3000
-    })
-
-    // 跳转到登录页面
     router.push('/login')
 
   } catch (error) {

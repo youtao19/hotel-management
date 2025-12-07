@@ -40,9 +40,9 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useQuasar } from 'quasar'
-import { shiftHandoverApi } from '../../api/index.js'
+import { ref, computed, onMounted } from "vue";
+import { useQuasar } from "quasar";
+import { shiftHandoverApi } from "src/api";
 
 // 响应式状态
 const $q = useQuasar()
