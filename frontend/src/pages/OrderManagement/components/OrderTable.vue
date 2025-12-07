@@ -10,7 +10,7 @@
 
       <q-table
         :rows="rows"
-        :columns="columns"
+        :columns="tableConfig.columns"
         row-key="orderNumber"
         :pagination="{ rowsPerPage: 10 }"
         :loading="loading"
@@ -22,7 +22,10 @@
 
         <template v-slot:body-cell-orderType="props">
           <q-td :props="props">
-            <q-chip v-if="isRestRoom(props.row)" color="orange" text-color="white" icon="access_time" size="sm">
+            <q-chip
+              v-if="tableConfig.isRestRoom(props.row)"
+              color="orange" text-color="white" icon="access_time" size="sm"
+            >
               休息房
             </q-chip>
             <span v-else class="text-grey-6">住宿</span>
@@ -31,7 +34,10 @@
 
         <template v-slot:body-cell-status="props">
           <q-td :props="props">
-            <q-badge :color="viewStore.getStatusColor(props.row.status)" :label="viewStore.getOrderStatusText(props.row.status)" />
+            <q-badge
+              :color="tableConfig.viewStore.getStatusColor(props.row.status)"
+              :label="tableConfig.viewStore.getOrderStatusText(props.row.status)"
+            />
           </q-td>
         </template>
 
@@ -74,39 +80,12 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import { useViewStore } from 'src/stores/viewStore'
+import { useOrderTableConfig } from '../composables/useOrderTableConfig'
 
 const props = defineProps(['rows', 'loading', 'totalOrders', 'canRefundDeposit'])
 const emit = defineEmits(['view', 'check-in', 'cancel', 'checkout', 'early-checkout', 'extend-stay', 'refund'])
 
-const viewStore = useViewStore()
+// 使用 Composable 获取配置和工具
+const tableConfig = useOrderTableConfig()
 
-// 判断休息房
-const isRestRoom = (order) => {
-  if (!order.checkInDate || !order.checkOutDate) return false
-  const checkIn = new Date(order.checkInDate).toISOString().split('T')[0]
-  const checkOut = new Date(order.checkOutDate).toISOString().split('T')[0]
-  return checkIn === checkOut
-}
-
-// 辅助函数：格式化日期
-const formatDate = (val) => {
-  if (!val) return ''
-  return typeof val === 'string' && val.includes('T') ? val.split('T')[0] : val
-}
-
-// 表格列定义
-const columns = [
-  { name: 'orderNumber', align: 'left', label: '订单号', field: 'orderNumber', sortable: true },
-  { name: 'guestName', align: 'left', label: '客人姓名', field: 'guestName', sortable: true },
-  { name: 'phone', align: 'left', label: '手机号', field: 'phone' },
-  { name: 'roomNumber', align: 'left', label: '房间号', field: 'roomNumber', sortable: true },
-  { name: 'roomType', align: 'left', label: '房间类型', field: 'roomType', format: val => viewStore.getRoomTypeName(val) },
-  { name: 'checkInDate', align: 'left', label: '入住日期', field: 'checkInDate', sortable: true, format: formatDate },
-  { name: 'checkOutDate', align: 'left', label: '离店日期', field: 'checkOutDate', sortable: true, format: formatDate },
-  { name: 'orderType', align: 'center', label: '类型', field: 'orderType' },
-  { name: 'status', align: 'left', label: '状态', field: 'status', sortable: true }, // Format handled in template
-  { name: 'actions', align: 'center', label: '操作', field: 'actions' }
-]
 </script>
