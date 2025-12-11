@@ -198,6 +198,8 @@ const {
 // 6.1 详情逻辑
 const currentOrder = ref(null)
 
+
+// 查看订单详情
 async function viewOrderDetails(order) {
   currentOrder.value = order
   dialogs.details = true // 使用新状态
@@ -286,12 +288,15 @@ async function handleOrderUpdated() {
 
 // 6.4 提前退房
 const earlyCheckoutOrder = ref(null)
+
+// 打开提前退房对话框
 function openEarlyCheckoutDialog(order) {
   if (!order) return
   earlyCheckoutOrder.value = order
   dialogs.earlyCheckout = true // 使用新状态
 }
 
+// 处理提前退房成功后的逻辑
 async function handleEarlyCheckoutSuccess(data) {
   try {
     loadingOrders.value = true

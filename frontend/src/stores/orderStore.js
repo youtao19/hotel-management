@@ -19,6 +19,7 @@ export const useOrderStore = defineStore('order', () => {
 
   // 获取所有订单
   async function fetchAllOrders(retryCount = 0) {
+    // 如果已有进行中的请求，直接返回该请求的结果
     if (inFlightFetchAll) {
       try { return await inFlightFetchAll } finally { }
     }
@@ -29,6 +30,8 @@ export const useOrderStore = defineStore('order', () => {
         console.log('开始获取订单数据...')
 
         const response = await orderApi.getAllOrders()
+
+
 
         const rawOrders = response && response.data ? response.data : (Array.isArray(response) ? response : [])
         console.log(`成功获取 ${rawOrders.length} 条订单数据`)
@@ -53,7 +56,6 @@ export const useOrderStore = defineStore('order', () => {
           sourceNumber: order.id_source,
           isPrepaid: Boolean(order.is_prepaid),
           prepaidAmount: parseFloat(order.prepaid_amount) || 0,
-          prepaidAt: order.prepaid_at
         }))
 
         return orders.value
@@ -102,6 +104,10 @@ export const useOrderStore = defineStore('order', () => {
   }
 
 
+  /**
+   *
+   * @returns Array
+   */
   function getAllOrdersLocal() {
     return orders.value
   }
@@ -218,68 +224,22 @@ export const useOrderStore = defineStore('order', () => {
     }
   }
 
-  async function getOrderByNumber(orderNumber, forceRefresh = false) {
-    if (!forceRefresh) {
-      const localOrder = orders.value.find(order => order.orderNumber === orderNumber)
-      if (localOrder) return localOrder
-    }
-
+  /**
+   * 根据订单号获取订单详情
+   * @param {*} orderNumber 要查询的订单 ID
+   * @param {*} forceRefresh 强制刷新数据
+   * @returns {Array} 订单详细列表
+   */
+  async function getOrderByNumber(orderNumber) {
     try {
       loading.value = true
       const response = await orderApi.getOrderById(orderNumber)
       const orderData = response.data
-
-      if (orderData) {
-        // Handle array response (backend returns array of daily rows)
-        const mainOrder = Array.isArray(orderData) ? orderData[0] : orderData;
-        const dailyList = Array.isArray(orderData) ? orderData : [orderData];
-
-        const mappedOrder = {
-          orderNumber: mainOrder.order_id,
-          guestName: mainOrder.guest_name,
-          phone: mainOrder.phone,
-          roomType: mainOrder.room_type,
-          roomNumber: mainOrder.room_number,
-          checkInDate: formatOrderDate(mainOrder.check_in_date),
-          checkOutDate: formatOrderDate(mainOrder.check_out_date),
-          status: mainOrder.status,
-          paymentMethod: mainOrder.payment_method,
-          roomPrice: mainOrder.total_price,
-          deposit: mainOrder.deposit,
-          refundedDeposit: mainOrder.refunded_deposit || 0,
-          refundRecords: [],
-          createTime: mainOrder.create_time,
-          remarks: mainOrder.remarks,
-          source: mainOrder.order_source,
-          sourceNumber: mainOrder.id_source,
-          isPrepaid: Boolean(mainOrder.is_prepaid),
-          prepaidAmount: parseFloat(mainOrder.prepaid_amount) || 0,
-          prepaidAt: mainOrder.prepaid_at,
-          // Add daily orders details
-          dailyOrders: dailyList.map(d => ({
-            stayDate: formatOrderDate(d.stay_date),
-            roomNumber: d.room_number,
-            roomType: d.room_type,
-            price: d.total_price,
-            status: d.status
-          })).sort((a, b) => new Date(a.stayDate) - new Date(b.stayDate))
-        }
-
-        const index = orders.value.findIndex(o => o.orderNumber === orderNumber)
-        if (index !== -1) {
-          orders.value[index] = { ...orders.value[index], ...mappedOrder }
-        } else {
-          orders.value.push(mappedOrder)
-        }
-
-        return mappedOrder
-      }
-      return null
+      console.log(`获取订单 ${orderNumber} 详情:`, orderData)
+      return orderData
     } catch (err) {
       console.error(`获取订单 ${orderNumber} 失败:`, err)
-      return orders.value.find(order => order.orderNumber === orderNumber) || null
-    } finally {
-      loading.value = false
+      throw err
     }
   }
 

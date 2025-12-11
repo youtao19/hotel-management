@@ -70,8 +70,8 @@
           >
             <template #control>
               <div class="text-subtitle1">
-                ¥{{ logic.recommendedRefund.toFixed(2) }}
-                <q-spinner size="16px" class="q-ml-sm" v-if="logic.loadingBills" />
+                ¥{{ logic.recommendedRefundRounded.toFixed(2) }}
+                <q-spinner size="16px" class="q-ml-sm" v-if="logic.loadingOrderDetails" />
               </div>
             </template>
             <template #message>
@@ -94,7 +94,7 @@
                 flat
                 label="使用建议"
                 @click="logic.useRecommendedAmount"
-                :disable="logic.recommendedRefund <= 0"
+                :disable="logic.recommendedRefundRounded <= 0"
               />
             </template>
             <template #hint>
@@ -130,7 +130,7 @@
                 class="col-auto"
               >
                 <q-chip dense color="yellow-3" text-color="orange-10">
-                  {{ item.stayDate }} · ¥{{ Number(item.amount).toFixed(2) }}
+                  {{ item.stayDate }} · ¥{{ Number(item.roomPrice).toFixed(2) }}
                 </q-chip>
               </div>
             </div>

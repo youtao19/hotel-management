@@ -149,7 +149,7 @@ async function createOrder(orderData, client) {
 
 /**
  * 获取所有订单（聚合视图）
- * 在多日分行结构中，按 order_id 聚合，返回订单汇总信息
+ * 在多日分行结构中，按 order_id 聚合，返回订单汇总信息，返回总房费和押金
  * @returns {Promise<Array>} 所有订单列表（聚合后）
  */
 async function getAllOrders() {

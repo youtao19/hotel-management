@@ -92,16 +92,6 @@ const earlyCheckoutSchema = {
 router.get('/', async (req, res) => {
   try {
     console.log('获取所有订单请求');
-    if (process.env.NODE_ENV === 'dev' && req.query?.debug === '1') {
-      try {
-        const tableCheck = await orderModule.checkTableExists();
-        if (!tableCheck.rows[0].exists) {
-          console.log('orders表不存在！');
-        }
-      } catch (e) {
-        console.warn('检查orders表存在失败(忽略):', e.message);
-      }
-    }
     const orders = await orderModule.getAllOrders();
     console.log(`成功获取 ${orders.length} 条订单数据`);
     res.status(200).json({ data: orders });
