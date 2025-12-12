@@ -20,8 +20,9 @@ export function useOrderFinancials(currentOrderRef) {
   // 1. 获取当前订单关联的所有账单
   const billsForThisOrder = computed(() => {
     if (!currentOrderRef.value) return []
-    // 确保 billStore 已经加载
-    return billStore.bills.filter(b => b.order_id === currentOrderRef.value.orderNumber)
+    // 确保 billStore 已经加载，注意 billStore.bills 是 ref，需要 .value
+    const allBills = billStore.bills || []
+    return allBills.filter(b => b.order_id === currentOrderRef.value.orderNumber)
   })
 
   // 2. 计算押金金额 (优先从订单取，如果为0则从账单找)

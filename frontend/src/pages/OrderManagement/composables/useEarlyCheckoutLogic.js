@@ -187,7 +187,7 @@ export function useEarlyCheckoutLogic(props, emit) {
   }
 
  /**
-  * 加载订单关联的每日明细（total_price）
+  * 加载订单关联的每日明细（roomPrice）
   * @returns {Array(Object)} 数组对象
   */
   async function loadOrderDetails() {
@@ -198,18 +198,19 @@ export function useEarlyCheckoutLogic(props, emit) {
     }
     try {
       loadingOrderDetails.value = true
-      const orders = await orderStore.getOrderByNumber(oid)
-      console.log('获取订单明细:', orders)
-      const roomPrices = [];
-      orders.forEach(order => {
-        if (order.total_price !== undefined) {
-          roomPrices.push({
-            stayDate: order.stay_date,
-            roomPrice: Number(order.total_price)
-          });
-        }
-      });
-      orderDailyRows.value = roomPrices;
+      const orderData = await orderStore.getOrderByNumber(oid)
+      console.log('获取订单明细:', orderData)
+
+      // getOrderByNumber 返回格式化后的订单对象
+      // dailyOrders 中包含每日明细：{ stayDate, roomNumber, roomType, roomPrice }
+      if (orderData && orderData.dailyOrders && orderData.dailyOrders.length > 0) {
+        orderDailyRows.value = orderData.dailyOrders.map(day => ({
+          stayDate: day.stayDate,
+          roomPrice: Number(day.roomPrice) || 0
+        }))
+      } else {
+        orderDailyRows.value = []
+      }
     } catch (error) {
       orderDailyRows.value = []
       console.warn('加载订单明细失败:', error.message || error)

@@ -228,15 +228,54 @@ export const useOrderStore = defineStore('order', () => {
    * 根据订单号获取订单详情
    * @param {*} orderNumber 要查询的订单 ID
    * @param {*} forceRefresh 强制刷新数据
-   * @returns {Array} 订单详细列表
+   * @returns {Object|null} 格式化后的订单对象（与 fetchAllOrders 格式一致）
    */
   async function getOrderByNumber(orderNumber) {
     try {
       loading.value = true
       const response = await orderApi.getOrderById(orderNumber)
-      const orderData = response.data
-      console.log(`获取订单 ${orderNumber} 详情:`, orderData)
-      return orderData
+      // 后端返回 { data: [...rows] }，是订单每日记录数组
+      const rows = response.data
+      console.log(`获取订单 ${orderNumber} 详情:`, rows)
+
+      // 如果没有数据，返回 null
+      if (!rows || !Array.isArray(rows) || rows.length === 0) {
+        return null
+      }
+
+      // 取第一条记录作为主订单信息（共享字段如 guest_name, status 等）
+      const firstRow = rows[0]
+
+      // 将后端蛇形命名映射为前端驼峰命名，与 fetchAllOrders 保持一致
+      return {
+        orderNumber: firstRow.order_id,
+        guestName: firstRow.guest_name,
+        phone: firstRow.phone,
+        idNumber: firstRow.id_number,
+        roomType: firstRow.room_type,
+        roomNumber: firstRow.room_number,
+        checkInDate: formatOrderDate(firstRow.check_in_date),
+        checkOutDate: formatOrderDate(firstRow.check_out_date),
+        status: firstRow.status,
+        paymentMethod: firstRow.payment_method,
+        roomPrice: firstRow.total_price,
+        deposit: firstRow.deposit,
+        refundedDeposit: firstRow.refunded_deposit || 0,
+        refundRecords: [],
+        createTime: firstRow.create_time,
+        remarks: firstRow.remarks,
+        source: firstRow.order_source,
+        sourceNumber: firstRow.id_source,
+        isPrepaid: Boolean(firstRow.is_prepaid),
+        prepaidAmount: parseFloat(firstRow.prepaid_amount) || 0,
+        // 每日房间安排（多日订单场景），包含每日房价
+        dailyOrders: rows.map(row => ({
+          stayDate: formatOrderDate(row.stay_date),
+          roomNumber: row.room_number,
+          roomType: row.room_type,
+          roomPrice: Number(row.total_price) || 0
+        }))
+      }
     } catch (err) {
       console.error(`获取订单 ${orderNumber} 失败:`, err)
       throw err
