@@ -15,14 +15,6 @@ export function useOrderState() {
     return `O${year}${month}${day}${random}`
   }
 
-  // 获取当前时间（分钟级）
-  function getCurrentTimeToMinute() {
-    const now = new Date()
-    now.setSeconds(0)
-    now.setMilliseconds(0)
-    return now
-  }
-
   // 静态选项配置
   const statusOptions = [
     { label: '所有状态', value: 'all' },
@@ -56,13 +48,13 @@ export function useOrderState() {
     phone: '',
     roomType: null,
     roomNumber: null,
-    checkInDate: date.formatDate(getCurrentTimeToMinute(), 'YYYY-MM-DD'),
-    checkOutDate: date.formatDate(date.addToDate(getCurrentTimeToMinute(), { days: 1 }), 'YYYY-MM-DD'),
+    checkInDate: date.formatDate(new Date(), 'YYYY-MM-DD'),
+    checkOutDate: date.formatDate(date.addToDate(new Date(), { days: 1 }), 'YYYY-MM-DD'),
     deposit: 0,
     paymentMethod: viewStore.paymentMethodOptions[0]?.value || '现金',
     roomPrice: {},
     remarks: '',
-    createTime: date.formatDate(getCurrentTimeToMinute(), 'YYYY-MM-DD HH:mm:ss'),
+    createTime: new Date().toISOString(),
     stayType: '客房',
     isRestRoom: false,
     isPrepaid: false,
@@ -73,7 +65,6 @@ export function useOrderState() {
     orderData,
     statusOptions,
     sourceOptions,
-    prepayOptions,
-    getCurrentTimeToMinute
+    prepayOptions
   }
 }

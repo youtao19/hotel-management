@@ -92,7 +92,7 @@ import { useOrderSubmit } from './composables/useOrderSubmit'
 
 // 1. 初始化基础状态
 const {
-  orderData, statusOptions, sourceOptions, prepayOptions, getCurrentTimeToMinute
+  orderData, statusOptions, sourceOptions, prepayOptions
 } = useOrderState()
 
 // 2. 初始化日期逻辑
@@ -120,7 +120,7 @@ const {
 // 5. 初始化提交逻辑
 const {
   submitOrder, showCheckInDialog, pendingCheckInOrder, handleCheckInConfirm
-} = useOrderSubmit(orderData, dailyPrices, dateList, totalPrice, getCurrentTimeToMinute)
+} = useOrderSubmit(orderData, dailyPrices, dateList, totalPrice)
 
 const route = useRoute()
 const normalizeRouteParam = (param) => {

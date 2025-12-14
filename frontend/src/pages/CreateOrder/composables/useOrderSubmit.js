@@ -4,7 +4,7 @@ import { useQuasar, date } from 'quasar'
 import { orderApi } from 'src/api' // 假设路径
 import { useRoomStore } from 'src/stores/roomStore'
 
-export function useOrderSubmit(orderData, dailyPrices, dateList, totalPrice, getCurrentTimeToMinute) {
+export function useOrderSubmit(orderData, dailyPrices, dateList, totalPrice) {
   const router = useRouter()
   const $q = useQuasar()
   const roomStore = useRoomStore()
@@ -40,7 +40,7 @@ export function useOrderSubmit(orderData, dailyPrices, dateList, totalPrice, get
 
     const submitData = {
       ...orderData.value,
-      createTime: date.formatDate(getCurrentTimeToMinute(), 'YYYY-MM-DDTHH:mm:ssZ'),
+      createTime: new Date().toISOString(), // 使用完整的当前时间，包含秒和毫秒
       roomPrice: dailyPrices.value
     }
 
