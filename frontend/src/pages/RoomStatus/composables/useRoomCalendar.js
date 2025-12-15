@@ -20,6 +20,9 @@ export function useRoomCalendar() {
     if (!room) return
     currentRoom.value = room
 
+    // 更新当前视图状态（这很重要，roomCalendarEvents 依赖这个值）
+    currentCalendarView.value = { year, month }
+
     // 计算当月起止日期
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`
     const lastDay = new Date(year, month, 0).getDate()
@@ -27,32 +30,62 @@ export function useRoomCalendar() {
 
     try {
       roomBookingData.value = []
+
+      // 确保订单数据已加载（如果没有订单数据则先获取）
+      if (!orderStore.orders || orderStore.orders.length === 0) {
+        console.log('[RoomCalendar] 订单数据为空，正在获取...')
+        await orderStore.fetchAllOrders()
+      }
+
       const orders = orderStore.orders || []
+      const roomNumber = String(room.room_number) // 统一转为字符串比较
 
-      // 1. 筛选该房间的订单
-      const roomOrders = orders.filter(order => order.roomNumber === room.room_number)
+      console.log(`[RoomCalendar] 房间 ${roomNumber} 在 ${startDate} ~ ${endDate} 的日历数据`)
+      console.log(`[RoomCalendar] 总订单数: ${orders.length}`)
 
-      // 2. 筛选日期范围重叠的订单
+      // 1. 筛选该房间的订单（统一转为字符串比较）
+      const roomOrders = orders.filter(order => {
+        const orderRoomNumber = order.roomNumber != null ? String(order.roomNumber) : null
+        return orderRoomNumber === roomNumber
+      })
+      console.log(`[RoomCalendar] 房间 ${roomNumber} 的订单数: ${roomOrders.length}`)
+
+      // 2. 筛选日期范围重叠的订单（排除已取消和已退房的订单）
       const filteredOrders = roomOrders.filter(order => {
         if (!order.checkInDate || !order.checkOutDate) return false
+        // 跳过已取消的订单
+        if (order.status === 'cancelled' || order.status === '已取消') return false
+
         const checkIn = new Date(order.checkInDate)
         const checkOut = new Date(order.checkOutDate)
         const start = new Date(startDate)
         const end = new Date(endDate)
 
+        // 检查日期范围是否重叠
         return (checkIn >= start && checkIn <= end) ||
                (checkOut >= start && checkOut <= end) ||
                (checkIn <= start && checkOut >= end)
       })
+
+      console.log(`[RoomCalendar] 日期范围内的订单数: ${filteredOrders.length}`)
+      if (filteredOrders.length > 0) {
+        console.log('[RoomCalendar] 订单详情:', filteredOrders.map(o => ({
+          orderNumber: o.orderNumber,
+          checkIn: o.checkInDate,
+          checkOut: o.checkOutDate,
+          status: o.status,
+          guest: o.guestName
+        })))
+      }
 
       // 3. 映射为简单数据结构
       if (filteredOrders.length > 0) {
         roomBookingData.value = filteredOrders.map(order => {
           let status = order.status
           // 状态归一化
-          if (status === '待入住') status = 'pending'
-          else if (status === '已入住') status = 'checked-in'
-          else if (status === '已退房') status = 'checked-out'
+          if (status === '待入住' || status === 'pending' || status === 'reserved') status = 'pending'
+          else if (status === '已入住' || status === 'checked-in' || status === 'occupied') status = 'checked-in'
+          else if (status === '已退房' || status === 'checked-out') status = 'checked-out'
 
           return {
             check_in_date: order.checkInDate,
@@ -63,7 +96,7 @@ export function useRoomCalendar() {
         })
       }
     } catch (error) {
-      console.error('获取日历数据失败', error)
+      console.error('[RoomCalendar] 获取日历数据失败', error)
     }
   }
 
@@ -90,8 +123,8 @@ export function useRoomCalendar() {
   }
 
   // --- 辅助方法：生成日历事件点 ---
+  // 始终为当月所有日期生成事件，这样即使没有订单也能显示"可用"状态
   const roomCalendarEvents = computed(() => {
-    if (!roomBookingData.value.length) return []
     const events = []
     const { year, month } = currentCalendarView.value
     const daysInMonth = new Date(year, month, 0).getDate()

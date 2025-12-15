@@ -1,68 +1,63 @@
 <template>
   <q-dialog v-model="isOpen" @hide="handleHide" persistent>
     <q-card class="calendar-dialog-card">
+      <!-- 简洁的头部 -->
       <q-card-section class="calendar-header">
-        <div class="calendar-header-content">
-          <div class="calendar-title-section">
-            <q-icon name="calendar_month" size="2rem" class="calendar-title-icon" />
-            <div class="calendar-title-text">
-              <div class="text-h5 text-weight-bold">{{ currentRoom?.room_number }} 房间</div>
-              <div class="text-subtitle1 calendar-subtitle">月度入住状态</div>
+        <div class="header-content">
+          <div class="header-left">
+            <q-icon name="hotel" size="1.8rem" />
+            <div class="header-info">
+              <div class="room-number">{{ currentRoom?.room_number }} 房间</div>
+              <div class="room-type">{{ currentRoom?.room_type || currentRoom?.type_code }}</div>
             </div>
           </div>
-          <q-btn icon="close" flat round dense v-close-popup class="calendar-close-btn" />
+          <q-btn icon="close" flat round dense v-close-popup color="white" />
         </div>
       </q-card-section>
 
+      <!-- 日历区域 -->
       <q-card-section class="calendar-content">
-        <div class="room-info-navigation-card q-mb-md">
-          <div class="room-info-section">
-            <q-icon name="hotel" size="1.5rem" class="room-info-icon" />
-            <div class="room-info-text">
-              <div class="text-subtitle1 text-weight-medium">{{ currentRoom?.room_number }}</div>
-              <div class="text-body2 text-grey-7">{{ currentRoom?.room_type || currentRoom?.type_code }}</div>
-            </div>
-          </div>
+        <q-date
+          v-model="calendarDate"
+          :events="roomCalendarEvents"
+          :event-color="getEventColor"
+          today-btn
+          flat
+          class="full-width-calendar"
+          @update:model-value="handleDateSelect"
+          @navigation="onCalendarNavigation"
+          :locale="locale"
+        />
 
-          <div class="navigation-section">
-            <q-btn flat round icon="chevron_left" color="primary" @click="changeMonth(-1)" class="nav-btn" />
-            <div class="current-month-year">{{ currentCalendarView.year }}年{{ currentCalendarView.month }}月</div>
-            <q-btn flat round icon="chevron_right" color="primary" @click="changeMonth(1)" class="nav-btn" />
+        <!-- 图例 -->
+        <div class="legend-bar">
+          <div class="legend-item">
+            <span class="legend-dot" style="background: #4caf50"></span>
+            <span>可入住</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-dot" style="background: #2196f3"></span>
+            <span>已预订</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-dot" style="background: #f44336"></span>
+            <span>已入住</span>
           </div>
         </div>
 
-        <div class="calendar-container">
-          <q-date
-            v-model="calendarDate"
-            :events="roomCalendarEvents"
-            :event-color="getEventColor"
-            today-btn
-            class="beautiful-calendar"
-            @update:model-value="handleDateSelect"
-            minimal
-            :locale="locale"
-          />
-        </div>
-
+        <!-- 选中日期详情 -->
         <div v-if="selectedDateInfo" class="selected-date-info">
-          <div class="selected-date-header">
-            <q-icon name="event" size="1.5rem" class="selected-date-icon" />
-            <div class="selected-date-title">
-              <div class="text-subtitle1 text-weight-medium">{{ selectedDateInfo.date }}</div>
-              <div class="text-body2 text-grey-7">详细信息</div>
-            </div>
+          <div class="info-row">
+            <span class="info-label">日期</span>
+            <span class="info-value">{{ selectedDateInfo.date }}</span>
           </div>
-          <div class="selected-date-content">
-            <div class="status-info">
-              <span class="status-label">状态：</span>
-              <q-chip :color="selectedDateInfo.color" text-color="white" class="status-chip-detailed">
-                {{ selectedDateInfo.statusText }}
-              </q-chip>
-            </div>
-            <div v-if="selectedDateInfo.guestName" class="guest-info">
-              <span class="guest-label">客人：</span>
-              <span class="guest-name">{{ selectedDateInfo.guestName }}</span>
-            </div>
+          <div class="info-row">
+            <span class="info-label">状态</span>
+            <q-badge :color="selectedDateInfo.color" :label="selectedDateInfo.statusText" />
+          </div>
+          <div v-if="selectedDateInfo.guestName" class="info-row">
+            <span class="info-label">客人</span>
+            <span class="info-value">{{ selectedDateInfo.guestName }}</span>
           </div>
         </div>
       </q-card-section>
@@ -71,7 +66,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRoomCalendar } from '../composables/useRoomCalendar'
 import langZhCn from 'quasar/lang/zh-CN' // 导入中文语言包
 
@@ -112,16 +107,15 @@ const open = async (room) => {
   await fetchMonthData(room, now.getFullYear(), now.getMonth() + 1)
 }
 
-// 翻页方法
-const changeMonth = async (offset) => {
-  const date = new Date(calendarDate.value)
-  date.setMonth(date.getMonth() + offset)
-  calendarDate.value = date.toISOString().substr(0, 10)
+// 监听 q-date 内置导航的月份变化
+const onCalendarNavigation = async (view) => {
+  const { year, month } = view
+  console.log('[Calendar] navigation to:', year, month)
 
-  const year = date.getFullYear()
-  const month = date.getMonth() + 1
+  // 更新视图状态
   currentCalendarView.value = { year, month }
 
+  // 加载该月份的数据
   await fetchMonthData(currentRoom.value, year, month)
 }
 
@@ -129,56 +123,106 @@ defineExpose({ open })
 </script>
 
 <style scoped>
-/* 样式保持不变，记得保留之前的 CSS */
 .calendar-dialog-card {
-  min-width: 600px;
-  max-width: 700px;
-  max-height: 90vh;
-  border-radius: 16px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  width: 400px;
+  max-width: 95vw;
+  border-radius: 12px;
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
 }
 
 .calendar-header {
-  background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
+  background: #1976d2;
   color: white;
-  padding: 16px 24px;
+  padding: 12px 16px;
 }
-/* ... 请确保之前的样式都在这里 ... */
-.calendar-content {
-  padding: 20px;
-  flex: 1;
-  overflow-y: auto;
-}
-.room-info-navigation-card {
-  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-  border-radius: 12px;
-  padding: 16px;
-  border: 1px solid #dee2e6;
-  margin-bottom: 16px;
+
+.header-content {
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
-.room-info-section, .navigation-section {
+
+.header-left {
   display: flex;
   align-items: center;
   gap: 12px;
 }
-.beautiful-calendar {
-  width: 100%;
+
+.header-info {
+  display: flex;
+  flex-direction: column;
 }
-.selected-date-info {
-  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
-  border-radius: 12px;
+
+.room-number {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.room-type {
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+
+.calendar-content {
   padding: 16px;
-  margin-top: 12px;
 }
-.status-info, .guest-info {
+
+.full-width-calendar {
+  width: 100%;
+  box-shadow: none;
+}
+
+.full-width-calendar :deep(.q-date__header) {
+  display: none;
+}
+
+.legend-bar {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  padding: 12px 0;
+  border-top: 1px solid #eee;
+  margin-top: 8px;
+}
+
+.legend-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.selected-date-info {
+  background: #f5f5f5;
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 12px;
+}
+
+.info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+}
+
+.info-row:not(:last-child) {
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.info-label {
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.info-value {
+  font-weight: 500;
 }
 </style>
