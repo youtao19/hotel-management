@@ -3,6 +3,10 @@ const postgre = require("pg");
 const setup = require("../../appSettings/setup");
 let pool = {};
 
+// 设置日期类型解析器，保持日期为字符串格式，避免时区转换问题
+// OID 1082 = DATE 类型
+postgre.types.setTypeParser(1082, (val) => val);  // 保持 DATE 为原始字符串 YYYY-MM-DD
+
 const connOpt1 = {
   user: setup.db.postgres.user,
   database: "postgres",

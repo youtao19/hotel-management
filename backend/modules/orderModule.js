@@ -479,6 +479,24 @@ async function updateOrderDayRoom(orderNumber, stayDate, newRoomNumber, changedB
       RETURNING *
     `, [newRoomNumber, room.type_code, orderNumber, stayDate]);
 
+    // 同步更新该日期的房费账单房间号（如果存在）
+    // 格式化 stayDate 确保格式正确
+    const formattedStayDate = typeof stayDate === 'string' ? stayDate.slice(0, 10) : stayDate;
+    console.log(`📝 [updateOrderDayRoom] 准备更新账单，订单号: ${orderNumber}, 日期: ${formattedStayDate}, 新房间号: ${newRoomNumber}`);
+
+    const billUpdateResult = await client.query(`
+      UPDATE bills
+      SET room_number = $1
+      WHERE order_id = $2 AND stay_date = $3::date AND change_type = '房费'
+      RETURNING bill_id
+    `, [newRoomNumber, orderNumber, formattedStayDate]);
+
+    if (billUpdateResult.rowCount > 0) {
+      console.log(`📝 [updateOrderDayRoom] 同步更新了 ${billUpdateResult.rowCount} 条账单房间号`);
+    } else {
+      console.warn(`⚠️ [updateOrderDayRoom] 未找到 ${orderNumber} 在 ${formattedStayDate} 的房费账单，请检查账单数据`);
+    }
+
     await client.query('COMMIT');
 
     // 记录变更
@@ -1031,6 +1049,20 @@ async function checkIn(orderId, depositAmount, client) {
 
     // 为每个住宿日插入房费账单
     for (const ord of orderRows) {
+      // 处理 stay_date：如果是 Date 对象需要正确格式化以避免时区问题
+      let stayDateStr;
+      if (ord.stay_date instanceof Date) {
+        // 直接从 Date 对象获取 UTC 日期部分，避免时区转换问题
+        const y = ord.stay_date.getFullYear();
+        const m = String(ord.stay_date.getMonth() + 1).padStart(2, '0');
+        const d = String(ord.stay_date.getDate()).padStart(2, '0');
+        stayDateStr = `${y}-${m}-${d}`;
+      } else if (typeof ord.stay_date === 'string') {
+        stayDateStr = ord.stay_date.slice(0, 10);
+      } else {
+        stayDateStr = ord.stay_date;
+      }
+
       const billData = {
         order_id: orderId,
         room_number: ord.room_number,
@@ -1041,12 +1073,12 @@ async function checkIn(orderId, depositAmount, client) {
         create_time: formatDateTimeForDB(),
         remarks: '办理入住房费',
         stay_type: ord.stay_type,
-        stay_date: ord.stay_date
+        stay_date: stayDateStr
       };
-      console.log('!!!!!账单日期是:', billData.stay_date);
+      console.log(`📝 [check-in] 账单日期处理: 原始值=${ord.stay_date}, 类型=${typeof ord.stay_date}, 处理后=${stayDateStr}`);
       const roomBill = await billModule.addBill(billData, runner);
       createdBills.push(roomBill);
-      console.log(`📝 [check-in] 插入房费账单，金额: ${ord.total_price}，入住日期: ${ord.stay_date}`);
+      console.log(`📝 [check-in] 插入房费账单，金额: ${ord.total_price}，入住日期: ${stayDateStr}`);
     }
 
     if (manageTx) {
