@@ -59,6 +59,58 @@ describe('房态 API - display_status（SQL计算）', () => {
     expect(room103.order_id).toBe(orderId);
   });
 
+  test('GET /api/rooms?date 返回 display_status=reserved（订单reserved）', async () => {
+    const orderId = `${TEST_PREFIX}RESERVED`;
+    const orderPayload = buildOrderPayload({
+      orderId,
+      guestName: '测试客人_reserved',
+      roomType: 'asu_xiao_zhu',
+      roomNumber: '105',
+      checkInDate: '2025-12-20',
+      checkOutDate: '2025-12-21',
+      roomPrice: { '2025-12-20': 288 },
+      status: 'reserved',
+      stayType: '客房'
+    });
+
+    await createOrder(orderPayload);
+
+    const res = await request(app).get('/api/rooms').query({ date: '2025-12-20' });
+    expect(res.statusCode).toBe(200);
+
+    const room105 = findRoom(res.body.data, '105');
+    expect(room105).toBeTruthy();
+    expect(room105.display_status).toBe('reserved');
+    expect(room105.order_status).toBe('reserved');
+    expect(room105.order_id).toBe(orderId);
+  });
+
+  test('GET /api/rooms?date 返回 display_status=occupied（订单occupied）', async () => {
+    const orderId = `${TEST_PREFIX}OCCUPIED`;
+    const orderPayload = buildOrderPayload({
+      orderId,
+      guestName: '测试客人_occupied',
+      roomType: 'asu_xiao_zhu',
+      roomNumber: '106',
+      checkInDate: '2025-12-21',
+      checkOutDate: '2025-12-22',
+      roomPrice: { '2025-12-21': 288 },
+      status: 'occupied',
+      stayType: '客房'
+    });
+
+    await createOrder(orderPayload);
+
+    const res = await request(app).get('/api/rooms').query({ date: '2025-12-21' });
+    expect(res.statusCode).toBe(200);
+
+    const room106 = findRoom(res.body.data, '106');
+    expect(room106).toBeTruthy();
+    expect(room106.display_status).toBe('occupied');
+    expect(room106.order_status).toBe('occupied');
+    expect(room106.order_id).toBe(orderId);
+  });
+
   test('清扫/维修优先级覆盖订单（display_status=cleaning）', async () => {
     // tools.js 中 113 的 room.status 预置为 cleaning
     const orderId = `${TEST_PREFIX}CLEANING_OVERRIDE`;
@@ -126,4 +178,3 @@ describe('房态 API - display_status（SQL计算）', () => {
     expect(map['2025-12-18']).toBe('reserved');
   });
 });
-

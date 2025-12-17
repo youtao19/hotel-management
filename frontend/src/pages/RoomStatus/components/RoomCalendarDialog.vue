@@ -68,7 +68,7 @@
 
 <script setup>
 import { ref } from 'vue'
-import { date as qDate } from 'quasar'
+import { date as qDateUtil } from 'quasar'
 import { useRoomCalendar } from '../composables/useRoomCalendar'
 import langZhCn from 'quasar/lang/zh-CN' // 导入中文语言包
 
@@ -102,9 +102,9 @@ const open = async (room) => {
   const now = Date.now()
 
   // 重置视图到当前月份
-  calendarDate.value = qDate.formatDate(now, 'YYYY-MM-DD')
-  const year = Number(qDate.formatDate(now, 'YYYY'))
-  const month = Number(qDate.formatDate(now, 'M'))
+  calendarDate.value = qDateUtil.formatDate(now, 'YYYY-MM-DD')
+  const year = Number(qDateUtil.formatDate(now, 'YYYY'))
+  const month = Number(qDateUtil.formatDate(now, 'M'))
   currentCalendarView.value = { year, month }
 
   // 加载数据

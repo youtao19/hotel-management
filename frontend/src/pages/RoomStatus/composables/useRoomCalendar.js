@@ -14,6 +14,11 @@ function toYmd(year, month, day) {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
+function normalizeCalendarDate(dateStr) {
+  if (!dateStr) return ''
+  return String(dateStr).trim().replaceAll('/', '-').slice(0, 10)
+}
+
 export function useRoomCalendar() {
   const currentRoom = ref(null)
   const roomBookingData = ref([])
@@ -55,24 +60,22 @@ export function useRoomCalendar() {
     }
   }
 
+  // QDate 的 events 支持传函数；用函数可以避免 mask/分隔符不一致导致事件不显示
   const roomCalendarEvents = computed(() => {
     const { year, month } = currentCalendarView.value
-    const daysInMonth = new Date(year, month, 0).getDate()
-    const events = []
-    for (let i = 1; i <= daysInMonth; i++) {
-      events.push(toYmd(year, month, i))
-    }
-    return events
+    const prefix = `${year}-${String(month).padStart(2, '0')}-`
+    return (dateStr) => normalizeCalendarDate(dateStr).startsWith(prefix)
   })
 
   const getEventColor = (dateStr) => {
-    const status = dailyRoomStatus.value?.[dateStr]?.display_status || 'available'
+    const normalized = normalizeCalendarDate(dateStr)
+    const status = dailyRoomStatus.value?.[normalized]?.display_status || 'available'
     return STATUS_UI[status]?.color || STATUS_UI.available.color
   }
 
   const handleDateSelect = (date) => {
     if (!date) return
-    const dateStr = String(date)
+    const dateStr = normalizeCalendarDate(date)
     const row = dailyRoomStatus.value?.[dateStr]
     const status = row?.display_status || 'available'
 

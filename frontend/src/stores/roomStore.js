@@ -63,7 +63,7 @@ export const useRoomStore = defineStore('room', () => {
 
   function getRoomDisplayStatus(room) {
     if (!room) return ROOM_STATES.AVAILABLE
-    return normalizeDisplayStatus(room.display_status || room.displayStatus || room.status)
+    return normalizeDisplayStatus(room.display_status)
   }
 
   const totalRooms = computed(() => rooms.value.length)

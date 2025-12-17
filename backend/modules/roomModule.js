@@ -47,11 +47,11 @@ async function getAllRooms(queryDate = null) {
         FROM orders o
         WHERE o.room_number = r.room_number
           AND o.stay_date = sd.stay_date
-          AND o.status IN ('pending', 'checked-in')
+          AND o.status IN ('pending', 'reserved', 'checked-in', 'occupied')
         ORDER BY
           CASE
-            WHEN o.status IN ('checked-in') THEN 2
-            WHEN o.status IN ('pending') THEN 1
+            WHEN o.status IN ('checked-in', 'occupied') THEN 2
+            WHEN o.status IN ('pending', 'reserved') THEN 1
             ELSE 0
           END DESC,
           o.create_time DESC
