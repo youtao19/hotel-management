@@ -20,7 +20,7 @@ export function useRoomCalendar() {
   const dailyRoomStatus = ref({})
 
   const today = Date.now()
-  const calendarDate = ref(qDate.formatDate(today, 'YYYY/MM/DD'))
+  const calendarDate = ref(qDate.formatDate(today, 'YYYY-MM-DD'))
   const selectedDateInfo = ref(null)
   const currentCalendarView = ref({
     year: Number(qDate.formatDate(today, 'YYYY')),
@@ -60,20 +60,19 @@ export function useRoomCalendar() {
     const daysInMonth = new Date(year, month, 0).getDate()
     const events = []
     for (let i = 1; i <= daysInMonth; i++) {
-      events.push(`${year}/${String(month).padStart(2, '0')}/${String(i).padStart(2, '0')}`)
+      events.push(toYmd(year, month, i))
     }
     return events
   })
 
-  const getEventColor = (timestamp) => {
-    const dateStr = String(timestamp).replace(/\//g, '-')
+  const getEventColor = (dateStr) => {
     const status = dailyRoomStatus.value?.[dateStr]?.display_status || 'available'
     return STATUS_UI[status]?.color || STATUS_UI.available.color
   }
 
   const handleDateSelect = (date) => {
     if (!date) return
-    const dateStr = String(date).replace(/\//g, '-')
+    const dateStr = String(date)
     const row = dailyRoomStatus.value?.[dateStr]
     const status = row?.display_status || 'available'
 
@@ -98,4 +97,3 @@ export function useRoomCalendar() {
     roomCalendarEvents
   }
 }
-

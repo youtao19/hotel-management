@@ -19,6 +19,7 @@
       <q-card-section class="calendar-content">
         <q-date
           v-model="calendarDate"
+          mask="YYYY-MM-DD"
           :events="roomCalendarEvents"
           :event-color="getEventColor"
           today-btn
@@ -101,7 +102,7 @@ const open = async (room) => {
   const now = Date.now()
 
   // 重置视图到当前月份
-  calendarDate.value = qDate.formatDate(now, 'YYYY/MM/DD')
+  calendarDate.value = qDate.formatDate(now, 'YYYY-MM-DD')
   const year = Number(qDate.formatDate(now, 'YYYY'))
   const month = Number(qDate.formatDate(now, 'M'))
   currentCalendarView.value = { year, month }
