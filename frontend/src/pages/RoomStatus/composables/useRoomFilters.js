@@ -1,7 +1,7 @@
 /* 这个文件将接管主页面的核心逻辑：URL同步、筛选计算、重置功能、数据初始化。 */
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useQuasar } from 'quasar'
+import { useQuasar, date as qDate } from 'quasar'
 import { useRoomStore } from 'src/stores/roomStore'
 import { useViewStore } from 'src/stores/viewStore'
 import { useOrderStore } from 'src/stores/orderStore'
@@ -17,7 +17,7 @@ export function useRoomFilters() {
   const orderStore = useOrderStore()
 
   // --- 状态 ---
-  const selectedDate = ref(new Date().toISOString().split('T')[0]) // 默认今天
+  const selectedDate = ref(qDate.formatDate(Date.now(), 'YYYY-MM-DD')) // 默认今天（本地日期）
   const selectedRoomType = ref(null)
   const filterType = ref(null)
   const filterStatus = ref(null)

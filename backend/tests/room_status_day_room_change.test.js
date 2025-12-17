@@ -69,9 +69,11 @@ describe('房间状态 API - 单日换房后旧房应释放', () => {
     const room108On17 = findRoom(res17.body.data, '108');
     expect(room110On17).toBeTruthy();
     expect(room108On17).toBeTruthy();
-    expect(room110On17.order_status).toBeUndefined();
+    expect(room110On17.order_status).toBeNull();
     expect(room108On17.order_status).toBe('pending');
     expect(room108On17.order_id).toBe(orderId);
+    expect(room110On17.display_status).toBe('available');
+    expect(room108On17.display_status).toBe('reserved');
 
     // 同一订单其他日期仍占用原房间 110
     const res16 = await request(app).get('/api/rooms').query({ date: '2025-12-16' });
@@ -79,12 +81,14 @@ describe('房间状态 API - 单日换房后旧房应释放', () => {
     const room110On16 = findRoom(res16.body.data, '110');
     const room108On16 = findRoom(res16.body.data, '108');
     expect(room110On16.order_status).toBe('pending');
-    expect(room108On16.order_status).toBeUndefined();
+    expect(room108On16.order_status).toBeNull();
+    expect(room110On16.display_status).toBe('reserved');
+    expect(room108On16.display_status).toBe('available');
 
     const res18 = await request(app).get('/api/rooms').query({ date: '2025-12-18' });
     expect(res18.statusCode).toBe(200);
     const room110On18 = findRoom(res18.body.data, '110');
     expect(room110On18.order_status).toBe('pending');
+    expect(room110On18.display_status).toBe('reserved');
   });
 });
-
