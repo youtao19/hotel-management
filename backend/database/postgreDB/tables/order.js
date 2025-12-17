@@ -20,7 +20,7 @@ const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
     deposit DECIMAL(10,2), -- 押金 (通常只在第一天记录)
     is_prepaid BOOLEAN NOT NULL DEFAULT FALSE, -- 是否在下单时已收房费
     prepaid_amount NUMERIC(10,2) DEFAULT 0, -- 预收房费金额
-    create_time TIMESTAMP NOT NULL, -- 创建时间
+    create_time TIMESTAMPTZ NOT NULL DEFAULT now(), -- 创建时间
     stay_type TEXT, -- 住宿类型
     remarks TEXT,
     FOREIGN KEY (room_type) REFERENCES room_types(type_code),

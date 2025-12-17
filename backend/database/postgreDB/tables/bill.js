@@ -10,7 +10,7 @@ const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
     change_price NUMERIC(10,2) DEFAULT 0, -- 统一金额字段（收入为正，支出为负）
     change_type TEXT, -- 类型：房费、收押、退押、补收、退款
     pay_way VARCHAR(50) NOT NULL, -- 支付方式
-    create_time TIMESTAMP NOT NULL, -- 创建时间
+    create_time TIMESTAMPTZ NOT NULL DEFAULT now(), -- 创建时间
     remarks TEXT, -- 备注
     stay_type TEXT, -- 入住类型
     stay_date DATE -- 入住日期

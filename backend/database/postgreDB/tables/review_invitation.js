@@ -7,8 +7,8 @@ const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
   order_id VARCHAR(50) NOT NULL,
   invited BOOLEAN NOT NULL DEFAULT FALSE,
   positive_review BOOLEAN DEFAULT NULL,
-  invite_time TIMESTAMP DEFAULT NULL,
-  update_time TIMESTAMP DEFAULT NULL,
+  invite_time TIMESTAMPTZ DEFAULT NULL,
+  update_time TIMESTAMPTZ DEFAULT NULL,
   -- 注意：移除了 order_id 外键约束，因为多日分行结构中 order_id 不再是唯一的
   UNIQUE(order_id)
 )`;
