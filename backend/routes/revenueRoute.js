@@ -8,7 +8,9 @@ const {
     getMonthlyRevenue,
     getRoomTypeRevenue,
     getRevenueBillDetails,
-    getOverview
+    getOverview,
+    getWeekStartDateString,
+    getMonthStartDateString
 } = require('../modules/revenueModule');
 
 /**
@@ -257,24 +259,28 @@ router.get('/room-type', async (req, res) => {
 router.get('/quick-stats', async (req, res) => {
     console.log('🚀 收到快速统计请求');
     try {
-        const formatter = new Intl.DateTimeFormat('en-CA', {
-            timeZone: 'Asia/Shanghai',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit'
-        });
-        const fmt = d => formatter.format(d);
+        const { baseDate } = req.query;
 
-        const now = new Date();
-        const today = fmt(now);
+        // 中文注释：baseDate 用于测试/对账（例如使用交接班测试 SQL 数据时，可指定某一天作为“今日”）。
+        // 未传 baseDate 时使用数据库 current_date（避免 Node.js 侧时区/Date 解析带来的偏差）。
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        let today = null;
+        if (baseDate) {
+            if (!dateRegex.test(baseDate)) {
+                return res.status(400).json({
+                    message: '日期格式错误，请使用YYYY-MM-DD格式',
+                    error: 'Invalid baseDate format'
+                });
+            }
+            today = String(baseDate);
+        } else {
+            const dbNow = await query(`SELECT current_date::text AS today`, []);
+            today = dbNow.rows?.[0]?.today;
+        }
 
-        const thisWeekStart = new Date(now);
-        thisWeekStart.setDate(thisWeekStart.getDate() - thisWeekStart.getDay());
-        const thisWeekStartStr = fmt(thisWeekStart);
-
-        const thisMonthStart = new Date(now);
-        thisMonthStart.setDate(1);
-        const thisMonthStartStr = fmt(thisMonthStart);
+        // 中文注释：本周起始口径=周一
+        const thisWeekStartStr = getWeekStartDateString(today);
+        const thisMonthStartStr = getMonthStartDateString(today);
 
         console.log('📅 日期范围:', { today, thisWeekStartStr, thisMonthStartStr });
 
@@ -387,37 +393,28 @@ router.get('/daily-details', async (req, res) => {
             });
         }
 
-        console.log('获取每日营收明细(订单表):', { startDate, endDate, roomType });
+        console.log('获取每日营收明细(bills房费):', { startDate, endDate, roomType });
 
-        // 从订单表获取数据，使用与 getOverview 相同的逻辑
-        // 查询与日期区间有交集的订单
+        // 中文注释：
+        // - “每日营收明细”按 bills.stay_date 展示每天实际房费（不做均分）
+        // - 只统计 change_type='房费'，明确排除押金/收押
         let sql = `
             SELECT
-                o.order_id,
-                o.room_number,
-                o.guest_name,
+                b.order_id,
+                b.room_number,
+                MAX(b.guest_name) AS guest_name,
                 o.room_type,
                 rt.type_name as room_type_name,
-                o.total_price,
-                o.deposit,
-                o.payment_method,
-                o.check_in_date,
-                o.check_out_date,
-                o.status,
-                o.order_source
-            FROM orders o
+                b.stay_date::date AS stay_date,
+                SUM(COALESCE(b.change_price,0)) AS total_amount,
+                MAX(b.pay_way) as payment_method,
+                o.check_out_date
+            FROM bills b
+            JOIN orders o ON o.order_id = b.order_id
             LEFT JOIN room_types rt ON o.room_type = rt.type_code
-            WHERE (
-                (
-                    o.check_in_date::date <= $2::date
-                    AND o.check_out_date::date > $1::date
-                )
-                OR (
-                    o.check_in_date::date = o.check_out_date::date
-                    AND o.check_in_date::date BETWEEN $1::date AND $2::date
-                )
-            )
-            AND o.status NOT IN ('cancelled')
+            WHERE b.change_type = '房费'
+              AND b.stay_date::date BETWEEN $1::date AND $2::date
+              AND o.status NOT IN ('cancelled')
         `;
 
         const params = [startDate, endDate];
@@ -427,93 +424,26 @@ router.get('/daily-details', async (req, res) => {
             params.push(roomType);
         }
 
-        sql += ` ORDER BY o.check_in_date DESC, o.room_number ASC`;
+        sql += `
+            GROUP BY b.order_id, b.room_number, o.room_type, rt.type_name, b.stay_date::date, o.check_out_date
+            ORDER BY b.stay_date::date DESC, b.room_number ASC, b.order_id ASC
+        `;
 
         const result = await query(sql, params);
 
-        // 计算每个订单在查询区间内的收入（按天均分）
-        const Decimal = require('decimal.js');
-        const DAY_MS = 24 * 60 * 60 * 1000;
-
-        const formatDateOnly = (dateInput) => {
-            const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
-            const formatter = new Intl.DateTimeFormat('en-CA', {
-                timeZone: 'Asia/Shanghai',
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit'
-            });
-            return formatter.format(d);
-        };
-
-        const diffDays = (date1, date2) => {
-            const [y1, m1, d1] = date1.split('-').map(Number);
-            const [y2, m2, d2] = date2.split('-').map(Number);
-            const t1 = Date.UTC(y1, m1 - 1, d1);
-            const t2 = Date.UTC(y2, m2 - 1, d2);
-            return Math.round((t2 - t1) / DAY_MS);
-        };
-
-        const addDays = (dateStr, days) => {
-            const [y, m, d] = dateStr.split('-').map(Number);
-            const date = new Date(Date.UTC(y, m - 1, d));
-            date.setUTCDate(date.getUTCDate() + days);
-            return formatDateOnly(date);
-        };
-
-        const details = result.rows.map(row => {
-            const roomFee = new Decimal(row.total_price || 0);
-            const checkInStr = formatDateOnly(row.check_in_date);
-            const checkOutStr = formatDateOnly(row.check_out_date);
-            const isRestRoom = checkInStr === checkOutStr;
-
-            // 计算订单的入住天数
-            let nights = diffDays(checkInStr, checkOutStr);
-            nights = nights >= 1 ? nights : 1;
-
-            // 计算订单在查询区间内的重叠天数
-            const overlapStart = checkInStr > startDate ? checkInStr : startDate;
-            const overlapEndCandidate = addDays(endDate, 1);
-            const overlapEnd = checkOutStr < overlapEndCandidate ? checkOutStr : overlapEndCandidate;
-
-            const overlapDays = isRestRoom
-                ? (overlapStart <= overlapEnd ? 1 : 0)
-                : diffDays(overlapStart, overlapEnd);
-
-            // 均分房费
-            const perNightRoomFee = roomFee.div(nights);
-            const contribution = perNightRoomFee.times(Math.max(0, overlapDays));
-
-            // 支付方式标准化
-            let paymentMethodLabel = '现金';
-            const pm = String(row.payment_method || '').toLowerCase().trim();
-            if (pm.includes('微') && pm.includes('信') || pm.includes('wechat')) paymentMethodLabel = '微信';
-            else if (pm.includes('邮付') || pm.includes('ali') || pm.includes('支付宝')) paymentMethodLabel = '微邮付';
-            else if (pm === '平台' || pm.includes('平台')) paymentMethodLabel = '平台';
-            else if (pm === '微信') paymentMethodLabel = '微信';
-            else if (pm === '微邮付') paymentMethodLabel = '微邮付';
-            else if (pm === '现金' || pm.includes('cash')) paymentMethodLabel = '现金';
-
-            return {
-                id: row.order_id,
-                order_number: row.order_id,
-                room_number: row.room_number,
-                guest_name: row.guest_name || '未知客户',
-                room_type: row.room_type,
-                room_type_name: row.room_type_name || row.room_type,
-                total_amount: Number(contribution.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toString()),
-                payment_method: paymentMethodLabel,
-                stay_date: checkInStr,
-                check_out_date: checkOutStr,
-                stay_date_display: checkInStr,
-                order_source: row.order_source,
-                nights: nights,
-                overlap_days: overlapDays
-            };
-        });
-
-        // 过滤掉贡献为0的记录
-        const filteredDetails = details.filter(d => d.total_amount > 0);
+        const filteredDetails = (result.rows || []).map(row => ({
+            id: row.order_id,
+            order_number: row.order_id,
+            room_number: row.room_number,
+            guest_name: row.guest_name || '未知客户',
+            room_type: row.room_type,
+            room_type_name: row.room_type_name || row.room_type,
+            total_amount: parseFloat(row.total_amount || 0),
+            payment_method: row.payment_method,
+            stay_date: String(row.stay_date || ''),
+            check_out_date: String(row.check_out_date || ''),
+            stay_date_display: String(row.stay_date || '')
+        })).filter(d => d.total_amount > 0);
 
         res.json({
             success: true,
@@ -603,7 +533,8 @@ router.get('/receipts', async (req, res) => {
         res.status(500).json({
             success: false,
             message: '获取收款明细失败: ' + error.message,
-            timestamp: new Date().toISOString()
+            // 中文注释：不使用 toISOString() 直接返回给前端，避免时区/格式差异
+            timestamp: Date.now()
         });
     }
 });

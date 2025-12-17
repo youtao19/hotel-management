@@ -67,7 +67,6 @@
 
 <script setup>
 import { computed } from 'vue'
-import { date } from 'quasar'
 
 const props = defineProps(['quickStats', 'selectedRangeStats', 'dateRange'])
 
@@ -75,8 +74,9 @@ const formatCurrency = (val) => Number(val || 0).toLocaleString('zh-CN', { minim
 
 const selectedTitle = computed(() => {
   const { start, end } = props.dateRange
-  const today = date.formatDate(new Date(), 'YYYY-MM-DD')
-  if (start === today && end === today) return '今日收入'
+  // 中文注释：以快速统计接口返回的“基准日”作为今日判断，便于使用交接班测试数据对账
+  const baseToday = props.quickStats?.today?.date
+  if (baseToday && start === baseToday && end === baseToday) return '今日收入'
   return `${start} 收入`
 })
 </script>

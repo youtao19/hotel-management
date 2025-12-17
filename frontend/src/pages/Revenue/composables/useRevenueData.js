@@ -13,26 +13,13 @@ export function useRevenueData(dateRange, selectedPeriod) {
   const selectedRangeStats = ref({ total_revenue: 0, total_orders: 0 })
   const selectedRoomType = ref(null)
 
-  // 辅助：生成日期列表填充缺失数据
-  const fillMissingDailyData = (rows, start, end) => {
-    try {
-      const map = new Map()
-      rows.forEach(r => map.set(r.date.substring(0, 10), r))
-
-      const list = []
-      const s = new Date(start)
-      const e = new Date(end)
-      for (let d = s; d <= e; d.setDate(d.getDate() + 1)) {
-        const dateStr = d.toISOString().split('T')[0]
-        list.push(map.get(dateStr) || { date: dateStr, total_revenue: 0, order_count: 0 })
-      }
-      return list.sort((a, b) => a.date < b.date ? 1 : -1)
-    } catch { return rows }
-  }
-
   const initBaseData = async () => {
     try {
-      const [qRes, rtRes] = await Promise.all([revenueApi.getQuickStats(), roomApi.getRoomTypes()])
+      const [qRes, rtRes] = await Promise.all([
+        // 中文注释：快速统计基于后端口径计算，前端仅传 baseDate（默认取所选范围 end）用于对账/测试
+        revenueApi.getQuickStats(dateRange.value?.end),
+        roomApi.getRoomTypes()
+      ])
       quickStats.value = qRes.data || quickStats.value
       allRoomTypes.value = rtRes.data || []
     } catch (e) { console.error(e) }
@@ -42,6 +29,10 @@ export function useRevenueData(dateRange, selectedPeriod) {
     if (!dateRange.value.start || !dateRange.value.end) return
     loading.value = true
     try {
+      // 0. 快速统计（本周/本月）以所选 end 作为基准日，便于使用交接班测试 SQL 数据进行对账
+      const qRes = await revenueApi.getQuickStats(dateRange.value.end)
+      quickStats.value = qRes.data || quickStats.value
+
       // 1. 趋势数据
       let res
       const args = [dateRange.value.start, dateRange.value.end, selectedRoomType.value]
@@ -49,20 +40,14 @@ export function useRevenueData(dateRange, selectedPeriod) {
       else if (selectedPeriod.value === 'weekly') res = await revenueApi.getWeeklyRevenue(...args)
       else res = await revenueApi.getMonthlyRevenue(...args)
 
-      let raw = res.data || []
-      if (selectedPeriod.value === 'daily') {
-        raw = fillMissingDailyData(raw, dateRange.value.start, dateRange.value.end)
-      }
-      revenueData.value = raw
+      revenueData.value = res.data || []
 
       // 2. 房型数据
       const rtRes = await revenueApi.getRoomTypeRevenue(dateRange.value.start, dateRange.value.end)
       roomTypeData.value = rtRes.data || []
 
-      // 3. 选中范围单日统计
-      const isSingle = dateRange.value.start === dateRange.value.end
-      const targetDate = isSingle ? dateRange.value.start : new Date().toISOString().split('T')[0]
-      const sRes = await revenueApi.getOverview(targetDate, targetDate)
+      // 3. 所选范围统计：逻辑直接来自后端 API，前端不做二次计算
+      const sRes = await revenueApi.getOverview(dateRange.value.start, dateRange.value.end)
       selectedRangeStats.value = sRes?.data || { total_revenue: 0, total_orders: 0 }
 
     } catch (e) {

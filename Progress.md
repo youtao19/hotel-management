@@ -1,46 +1,49 @@
-# 房态来源后端化（任务1&2）进度
+# 收入统计页修复/验证流程（待确认）
 
-## 目标回顾
-- 任务1：房间卡片最终显示状态 **直接来自后端 SQL 查询**，状态优先级也在后端完成；前端只按返回状态渲染（不再做复杂判断）。
-- 任务2：日历弹窗（按天）数据也由后端 API 按时间段返回；前端直接渲染。
+> 说明：每完成一步，会在本文件中把该步标记为【已完成】并补充结论/截图/关键日志位置（如有）。
 
-## 约束（必须遵守）
-- Node.js 后端对 `DATE` 字段：禁止 `new Date(date)` / `toISOString()`；以字符串传递/使用，或仅用于展示格式化。
-- `timestamptz`：不手动加减时区，不用 `toISOString()` 直接返回给前端。
-- 逻辑集中到后端：完成后删除前端与房态/日历相关的推导逻辑，前端仅做最小映射与渲染，保持代码整洁。
+## 1. 基线信息收集（未开始）
+- [x] 【已完成】定位“交接班测试”使用的 SQL 数据文件/脚本与导入方式，并在本地数据库执行（或确认已存在）。
+  - 已定位到测试数据脚本：`sql/orders.sql`、`sql/bills.sql`、`sql/rooms.sql`、`sql/room_types.sql`（现有集成测试 `backend/tests/integration/handover.test.js` 也使用这些脚本导入数据）。
+  - 已通过 `npm test` 验证：测试环境会自动加载 `../.env.test` 并连接 `POSTGRES_TEST_DB`（测试全部通过，说明测试库连接正常）。
+- [x] 【已完成】梳理收入统计页面使用的后端 API（路由、入参、出参字段），确认“今日/本周/本月收入”的口径（是否含退款、是否按入住/结账日等）。
+  - 口径补充（已确认）：今日收入=今天入住日对应的“房费预期收入”，多日订单只算入住日期=今天那一晚的房费，不包含收押（押金）。
+- [x] 【已完成】梳理“每日营收表”所依赖的 API/SQL，确认房型筛选逻辑与口径。
+  - 收入统计页接口：`backend/routes/revenueRoute.js`（`/api/revenue/quick-stats`、`/api/revenue/overview`、`/api/revenue/daily|weekly|monthly` 等），主要逻辑在 `backend/modules/revenueModule.js`。
+  - 每日营收明细接口：`GET /api/revenue/daily-details`（按 `bills.stay_date` 聚合每天实际房费，不做均分）。
 
-## 修改流程（需要你先确认）
-- [x] 1. 更新 `Progress.md`：列出修改流程（本步骤）
-- [x] 2. 等待你确认本流程（未确认前不改代码）
-- [x] 2.1 修复当前报错：`RoomCalendarDialog.vue` 中 `<q-date>` 组件解析冲突导致的 Vue warn
-- [x] 3. 任务1-后端：实现“单日房态”SQL（含优先级）并提供/调整 API 返回 `display_status`
-- [x] 4. 任务1-前端：房间卡片改为直接使用后端 `display_status` 渲染（保持现有布局样式）
-- [x] 4.1 清理前端：删除 `roomStore`/页面内与房态推导相关的代码（映射、归一化、根据订单计算 displayStatus 等）
-- [x] 5. 任务2-后端：实现“时间段房态（日历）”API（传入 startDate/endDate/roomNumber）
-- [x] 6. 任务2-前端：日历弹窗改用时间段 API，一次请求拿到当月每日房态直接渲染
-- [x] 6.1 清理前端：删除日历按天循环请求与本地判断逻辑，仅保留渲染所需最小代码
-- [x] 6.2 修复日历每天房态颜色不显示（QDate events/mask 格式兼容）
-- [x] 7. 编写测试样例（你确认后再写）
-- [x] 8. 执行测试并通过
-- [x] 9. 提交代码：`git add .` + `git commit -m "中文commit message"`
+## 2. 用交接班 SQL 数据做对账（未开始）
+- [x] 【已完成】用交接班测试 SQL 数据对账：今日收入、本周收入、本月收入（以数据库为准），记录期望值。
+  - 已新增对账用例：`backend/tests/integration/revenue_statistics.test.js`
+  - 对账基准日：`2025-11-04`（用于模拟“今日”）
+  - 期望值（房费预期收入，不含押金/收押，按 `bills.stay_date` 的每天实际房费累加）：
+    - 今日收入（`2025-11-04`）：`total_revenue=3630.34`，`total_orders=31`
+    - 本周收入（周一起始 `2025-11-03` ~ `2025-11-04`）：`total_revenue=6723.53`，`total_orders=55`
+    - 本月收入（`2025-11-01` ~ `2025-11-04`）：`total_revenue=9710.47`，`total_orders=76`
+- [x] 【已完成】对比 API 返回值与期望值，并覆盖房型筛选与每日营收明细校验。
+  - 覆盖接口：`/api/revenue/overview`、`/api/revenue/daily`、`/api/revenue/quick-stats?baseDate=...`、`/api/revenue/daily-details`
 
-## 设计草案（确认后按此落地）
-### 任务1：单日房态（Room Card）
-- 后端将以 `rooms` 为主表，按传入 `date (YYYY-MM-DD)` 查询 `orders.stay_date = date` 的订单。
-- SQL 内完成状态优先级（示例）：
-  1) `rooms.status = 'repair'`（或 `is_closed=true`）优先返回 `repair`
-  2) `rooms.status = 'cleaning'` 优先返回 `cleaning`
-  3) 若当日存在订单：`checked-in` > `pending` > `checked-out`
-  4) 否则 `available`
-- API 响应将包含：
-  - `display_status`（前端直接用它渲染）
-  - 以及必要的展示字段（如 `guest_name` / `check_in_date` / `check_out_date` / `order_id` 等）用于卡片信息展示
+## 3. 后端实现口径与逻辑（未开始）
+- [x] 【已完成】把“今日/本周/本月收入”以及“每日营收表”的核心判断/聚合逻辑集中到后端（API 直接返回可展示数据）。
+  - 收入口径统一：仅房费（`bills.change_type='房费'`），按 `bills.stay_date` 的每天实际房费累加，不包含押金/收押。
+  - 相关实现：`backend/modules/revenueModule.js`
+- [x] 【已完成】严格遵守日期/时区规范：`DATE` 字段按字符串使用；`timestamptz` 不手动加减 8 小时、不用 `toISOString()` 返回前端。
+  - `quick-stats` 默认使用数据库 `current_date`，并支持 `baseDate=YYYY-MM-DD` 便于对账：`backend/routes/revenueRoute.js`
+- [x] 【已完成】在关键逻辑处补充必要的中文注释（解释口径、边界条件）。
 
-### 任务2：时间段房态（日历）
-- 新增/扩展 API：传入 `roomNumber` + `startDate` + `endDate`（均为 `YYYY-MM-DD` 字符串）。
-- 后端一次查询返回该房间在区间内每天的 `display_status`（以及需要展示的 `guest_name/order_id`）。
-- 前端 `RoomCalendarDialog` 仅做：状态->颜色/文本 的简单映射，不再循环请求或推导订单逻辑。
+## 4. 前端清理（未开始）
+- [x] 【已完成】删除收入统计页面中与后端重复的逻辑判断/二次计算代码，仅做展示与基础格式化。
+  - 不再在前端补齐日维度空数据、也不再用 `toISOString()` 拼日期：`frontend/src/pages/Revenue/composables/useRevenueData.js`
+- [x] 【已完成】确认随机选择一个房型后，“每日营收表”展示数据与后端返回一致（已通过对账测试覆盖）。
 
----
+## 5. 测试样例与验收（未开始）
+- [x] 【已完成】编写一个“测试样例”（包含：准备数据 SQL、调用 API/打开页面的步骤、期望结果），提交你确认。
+  - 测试样例：`backend/tests/integration/revenue_statistics.test.js`
+  - 运行方式：`npm test`（会自动导入交接班测试 SQL 数据并对账接口返回）
+- [x] 【已完成】按确认后的样例完成测试并记录结果（必要时附关键接口返回）。
+  - 已确认口径：周一起始；收入=按 `bills.stay_date` 的每日实际房费累加（仅 `change_type='房费'`，不含押金/收押）
+  - 已运行结果：`npm test` 全部通过
 
-请你先确认以上“修改流程 + 设计草案”是否OK（尤其是状态优先级规则是否符合你的业务预期）。确认后我再开始改代码。
+## 6. 提交代码（未开始）
+- [ ] 【未完成】使用中文撰写 commit message。
+- [ ] 【未完成】执行 `git add -A` 与 `git commit -m "..."`。
