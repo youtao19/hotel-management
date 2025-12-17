@@ -1,48 +1,12 @@
-# Repository Guidelines
+## 问题描述
+创建了一个多日订单，我在每日房间安排中修改了其中某一天的房间号，比如在12-17号将房间110换到了108，那么房间110在12-17号应该是空闲的，但是我现在在房间状态页面看12-17号的110房间，还是显示为被占用状态，但是在创建订单的时候这个房间显示时可用的。我需要你帮助我找出这个bug的原因，并修改。
+## 目标
+1.你需要先给我创建一个Progress.md文件，列出你的修改流程
+2.让我确认你的修改流程
+3.执行修改后，你需要给我写一个测试样例，并且让我确认。
+4.你需要执行这个测试样例，确保测试可以通过。
+5.完成测试后，你需要使用中文写好commit message，然后执行git commit
 
-This workspace houses a Quasar frontend and an Express backend maintained via npm workspaces. Use this guide as your quick-start checklist when contributing features or fixes.
-
-## Project Structure & Module Organization
-
-- `frontend/src` holds SPA views, components, and assets; adjust `quasar.config.js` for UI build settings.
-- `backend/modules` contains domain logic, while `backend/routes` maps incoming requests.
-- `backend/appSettings` stores runtime configuration helpers; persistence lives in `backend/database/postgreDB` with Redis utilities alongside.
-- Tests belong in `backend/tests` (unit/api/integration), and environment templates (`dev.env.template`, `docker.dev.env`) plus `compose.yaml` sit at the repository root.
-
-## Build, Test, and Development Commands
-
-- `npm install` installs all workspace dependencies.
-- `npm start` runs backend (port 3000) and frontend (port 9000) together via `concurrently`.
-- `npm run dev` starts the backend with hot reload; pair with `npm --workspace frontend run dev` for split sessions.
-- `npm run build` outputs the production bundle to `frontend/dist`.
-- `npm test` or `npm run test:watch` executes the Jest suite; `npm test -- --coverage` reports coverage.
-- `npm run db:init` / `npm run db:migrate` bootstrap and evolve the PostgreSQL schema.
-
-## Coding Style & Naming Conventions
-
-- Keep two-space indentation; backend stays CommonJS with double-quoted strings.
-- Vue components use PascalCase; helpers and utilities stay camelCase; reuse paths from `jsconfig.json`.
-- Run the Quasar formatter or IDE defaults before committing.
-
-## Testing Guidelines
-
-- Jest is configured via `backend/tests/setup.js`. Place specs in `backend/tests/unit`, endpoint checks in `backend/tests/api`, and flows in `backend/tests/integration`.
-- Name files with `.test.js` or `.spec.js`; share fixtures through `backend/tests/__mocks__`.
-- Ensure both success and failure paths are covered; confirm coverage with `npm test -- --coverage`.
-
-## Feature Notes
-
-- 提前退房前端逻辑封装在 `frontend/src/pages/OrderManagement/composables/useEarlyCheckoutLogic.js`，组件 `components/EarlyCheckoutDialog.vue` 仅负责展示。逻辑基于账单按入住日期聚合计算建议退款，需保持日期聚合（Map 逻辑）以避免重复日期。
-
-## Commit & Pull Request Guidelines
-
-- Write imperative commit subjects (≤72 chars) and prefix with scope when useful, e.g., `backend/orders: fix deposit balance`.
-- Pull requests should describe impact, include manual test notes, attach UI screenshots if applicable, and link related issues.
-- Run `npm test` (and relevant DB scripts) before opening a PR; note any skipped checks in the description.
-
-## Environment & Security Notes
-
-- Copy `dev.env.template` to `dev.env` (and `docker.dev.env` when containerizing) before running services.
-- Never commit secrets or personal data; rotate any exposed credentials immediately.
-
-## always answer me in Chinese
+## 要求
++ 当你完成一个progress的流程后，你需要同步修改progress.md文件，表示这一步已经完成
++ 当你执行修改时，先查看progress的完成进度，然后根据进度继续执行代码修改

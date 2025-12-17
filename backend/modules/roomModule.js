@@ -34,8 +34,7 @@ async function getAllRooms(queryDate = null) {
           o.check_in_date,
           o.stay_type
         FROM orders o
-        WHERE o.check_in_date <= $1::date
-          AND o.check_out_date >= $1::date
+        WHERE o.stay_date = $1::date
           AND o.status IN ('pending', 'checked-in')
         ORDER BY o.room_number, o.create_time DESC
       `;
