@@ -74,6 +74,17 @@ export const roomApi = {
     return api.get(finalUrl);
   },
 
+  // 获取指定房间在日期范围内的每日房态（用于日历按天渲染）
+  getRoomStatusRange: (roomNumber, startDate, endDate) => {
+    const params = new URLSearchParams({
+      roomNumber: String(roomNumber),
+      startDate,
+      endDate,
+      _: String(Date.now())
+    })
+    return api.get(`/rooms/status-range?${params.toString()}`)
+  },
+
   // 根据房间号获取房间
   getRoomByNumber: (number) => api.get(`/rooms/number/${number}`),
 

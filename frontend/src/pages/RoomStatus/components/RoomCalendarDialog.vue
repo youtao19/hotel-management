@@ -66,7 +66,8 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
+import { date as qDate } from 'quasar'
 import { useRoomCalendar } from '../composables/useRoomCalendar'
 import langZhCn from 'quasar/lang/zh-CN' // 导入中文语言包
 
@@ -97,14 +98,16 @@ const handleHide = () => {
 // 打开方法
 const open = async (room) => {
   isOpen.value = true
-  const now = new Date()
+  const now = Date.now()
 
   // 重置视图到当前月份
-  calendarDate.value = now.toISOString().substr(0, 10)
-  currentCalendarView.value = { year: now.getFullYear(), month: now.getMonth() + 1 }
+  calendarDate.value = qDate.formatDate(now, 'YYYY/MM/DD')
+  const year = Number(qDate.formatDate(now, 'YYYY'))
+  const month = Number(qDate.formatDate(now, 'M'))
+  currentCalendarView.value = { year, month }
 
   // 加载数据
-  await fetchMonthData(room, now.getFullYear(), now.getMonth() + 1)
+  await fetchMonthData(room, year, month)
 }
 
 // 监听 q-date 内置导航的月份变化

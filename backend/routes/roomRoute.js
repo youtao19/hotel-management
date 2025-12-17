@@ -34,11 +34,6 @@ router.get('/', async (req, res) => {
         return res.status(400).json({ message: '日期格式必须为 YYYY-MM-DD' });
       }
 
-      const queryDate = new Date(date);
-      if (isNaN(queryDate.getTime())) {
-        return res.status(400).json({ message: '无效的日期' });
-      }
-
       console.log(`查询 ${date} 日期的房间状态`);
     }
 
@@ -55,6 +50,9 @@ router.get('/', async (req, res) => {
     }
   } catch (err) {
     console.error('获取房间数据错误:', err);
+    if (err?.code === '22007') {
+      return res.status(400).json({ message: '无效的日期' });
+    }
     res.status(500).json({
       message: '服务器错误',
       error: err.message,
@@ -80,12 +78,7 @@ router.get('/available', async (req, res) => {
     }
 
     // 验证日期逻辑（允许同一天入住和退房，支持休息房）
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      return res.status(400).json({ message: '无效的日期' });
-    }
-    if (start > end) {
+    if (startDate > endDate) {
       return res.status(400).json({ message: '退房日期不能早于入住日期' });
     }
 
@@ -99,6 +92,49 @@ router.get('/available', async (req, res) => {
     });
   } catch (err) {
     console.error('查询可用房间失败:', err);
+    if (err?.code === '22007') {
+      return res.status(400).json({ message: '无效的日期' });
+    }
+    res.status(500).json({
+      message: '服务器错误',
+      error: err.message
+    });
+  }
+});
+
+// 获取指定房间在日期范围内的每日房态（用于日历按天渲染）
+router.get('/status-range', async (req, res) => {
+  try {
+    const { roomNumber, startDate, endDate } = req.query;
+
+    if (!roomNumber || !startDate || !endDate) {
+      return res.status(400).json({ message: '必须提供 roomNumber, startDate, endDate' });
+    }
+
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(startDate) || !dateRegex.test(endDate)) {
+      return res.status(400).json({ message: '日期格式必须为 YYYY-MM-DD' });
+    }
+
+    if (startDate > endDate) {
+      return res.status(400).json({ message: 'endDate 不能早于 startDate' });
+    }
+
+    const rows = await roomModule.getRoomStatusRange(String(roomNumber), startDate, endDate);
+
+    if (!rows.length) {
+      return res.status(404).json({ message: '未找到房间或无数据' });
+    }
+
+    res.status(200).json({
+      data: rows,
+      query: { roomNumber: String(roomNumber), startDate, endDate }
+    });
+  } catch (err) {
+    console.error('查询日期范围房态失败:', err);
+    if (err?.code === '22007') {
+      return res.status(400).json({ message: '无效的日期' });
+    }
     res.status(500).json({
       message: '服务器错误',
       error: err.message

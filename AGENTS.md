@@ -1,78 +1,43 @@
-## 任务说明
-在审查和修改代码时，请同时审查 PostgreSQL 的建表文件（tables / schema.sql / migration 文件），
-确保“新建表结构”与时间与时区规范完全一致，避免旧问题再次出现。
+## 任务说明1
+1. 修改房间卡片的最终显示状态的来源，直接来自后端的sql查询
+2. 如果后端没有直接可用的api，那么创建一个供给前端使用的房间状态的api。你可以查看`backend/database/postgreDB/tables`表结构，构思sql语句。
+3. 状态优先级判定也在后端完成
+4. 前台直接使用后台返回的数据显示各个房间的状态（例如，后台直接返回101是空闲状态，103是已入住状态，105是带入住状态）前台根据这些状态直接渲染，不再做复杂的逻辑判断。
+5. 页面卡片传入的是单日的日期，前台在选择了一个日期后，会向后端发送请求，后端将这一天的房间状态返回给前端显示。
+6. 确保前端的页面布局保持当前样式。
+7. 完成这个任务后开始任务2.
 
-【建表文件强制规范】
-
-1️⃣ 时间点字段（精确到秒，表示某一时刻）
-- 示例字段名：created_at, updated_at, create_time, changed_at, invite_time
-- PostgreSQL 类型：TIMESTAMP WITH TIME ZONE（timestamptz）
-- 推荐默认值：
-  DEFAULT now()
-- 严禁使用：
-  TIMESTAMP WITHOUT TIME ZONE
-
-示例（正确）：
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-
-示例（错误）：
-  created_at TIMESTAMP
-  create_time TIMESTAMP WITHOUT TIME ZONE
-
----
-
-2️⃣ 业务日期字段（只表示“哪一天”）
-- 示例字段名：check_in_date, check_out_date, stay_date, memo_date, handover_date
-- PostgreSQL 类型：DATE
-- 禁止设置默认值为 now()
-- 插入时只允许 'YYYY-MM-DD'
-
-示例（正确）：
-  check_in_date DATE NOT NULL
-
-示例（错误）：
-  stay_date DATE DEFAULT now()
-  check_in_date TIMESTAMP
-
----
-
-3️⃣ updated_at 规范
-- 类型必须为 TIMESTAMPTZ
-- 通过触发器或应用层更新
-- 不使用 TIMESTAMP
-
----
-
-【迁移与一致性要求】
-
-4️⃣ 如果 tables 文件中仍存在以下任一情况，必须修改：
-- timestamp without time zone
-- DATE + DEFAULT now()
-- 时间字段含义与类型不匹配
-
-5️⃣ tables 文件是“最终权威定义”，
-- 数据库现状可以通过迁移修正
-- 但 tables 文件必须体现“正确最终状态”
-
----
-
-【输出要求】
-
-当发现问题时，请你：
-- 明确指出哪个表、哪个字段违反规范
-- 给出修改后的建表 SQL（CREATE TABLE）
-- 如涉及已存在表，额外给出 ALTER TABLE 迁移 SQL
-- 确保新建表不会再引入“时间少一天”的隐患
+## 任务说明2
+1. 日历弹窗（按天）逻辑也使用后端api直接返回数据，前端拿到数据直接渲染，不做复杂的逻辑判断。
+2. 日历的api需要传入一个时间段，然后查询这个时间段的房间状态返回给前端。
 
 
 ## 目标
 1.你需要先给我创建一个Progress.md文件，列出你的修改流程
 2.让我确认你的修改流程
 3.执行修改后，你需要给我写一个测试样例，并且让我确认。
-4.你需要执行这个测试样例，确保测试可以通过。
-5.完成测试后，你需要使用中文写好commit message，然后执行git commit，你需要 git add 所有文件，然后git commit -m "commit message"
+4.完成测试后，你需要使用中文写好commit message，然后执行git commit，你需要 git add 所有文件，然后git commit -m "commit message"
 
 ## 要求
 + 当你完成一个progress的流程后，你需要同步修改progress.md文件，表示这一步已经完成
 + 当你执行修改时，先查看progress的完成进度，然后根据进度继续执行代码修改
++ 前端尽量不做逻辑判断（除非 不做逻辑判断就无法完成这个任务）
 
+## Node.js 事件处理规范（必须遵守）
+
+1. 禁止对Date字段使用:
+- new Date(date)
+- toISOString()
+
+DATE 字段在 Node.js 中应:
+- 作为字符串直接使用
+- 或仅用于格式化展示(如 dayjs(date).format('YYYY-MM-DD'))
+
+2. 对timestamptz字段：
+- 不做手动市区换算
+- 不加減8小时
+- 不使用 toISOString() 直接返回给前端
+
+3. PostgreSQL 驱动(pg / ORM):
+- 不强制设置 timezone = 'UTC'
+- 依赖数据库 + 会话时区自动转换

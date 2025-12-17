@@ -7,102 +7,146 @@ const { query, getClient } = require('../database/postgreDB/pg');
  */
 async function getAllRooms(queryDate = null) {
   try {
-    // 使用两次查询，先获取全部房间，然后获取已有订单的房间，最后合并数据
-    // 这样可以确保不会漏掉任何房间
-
-    // 1. 获取所有房间的基本信息
-    console.log('开始获取房间基本信息...');
-    const roomsResult = await query('SELECT * FROM rooms ORDER BY room_number');
-    console.log(`查询到 ${roomsResult.rows.length} 个房间`);
-
-    const allRooms = roomsResult.rows;
-
-    // 2. 获取房间与订单的关联信息
-    let ordersSQL;
-    let queryParams = [];
-
-    if (queryDate) {
-      // 如果指定了查询日期，获取该日期的房间状态
-      console.log(`开始获取 ${queryDate} 日期的房间关联订单信息...`);
-      ordersSQL = `
-        SELECT DISTINCT ON (o.room_number)
-          o.room_number,
+    // 说明：
+    // - 房态最终显示(display_status)由 SQL 直接计算，前端仅渲染该字段
+    // - 日期字段不使用 new Date()/toISOString() 做业务计算，统一以 YYYY-MM-DD 字符串传递给数据库
+    const sql = `
+      WITH selected_date AS (
+        SELECT COALESCE($1::date, CURRENT_DATE) AS stay_date
+      )
+      SELECT
+        r.room_id,
+        r.room_number,
+        r.type_code,
+        r.status,
+        r.price,
+        r.is_closed,
+        o.guest_name,
+        o.check_out_date,
+        o.order_status,
+        o.order_id,
+        o.check_in_date,
+        o.stay_type,
+        CASE
+          WHEN r.is_closed = TRUE OR r.status = 'repair' THEN 'repair'
+          WHEN r.status = 'cleaning' THEN 'cleaning'
+          WHEN o.order_status IN ('checked-in', 'occupied') THEN 'occupied'
+          WHEN o.order_status IN ('pending', 'reserved') THEN 'reserved'
+          ELSE 'available'
+        END AS display_status
+      FROM rooms r
+      CROSS JOIN selected_date sd
+      LEFT JOIN LATERAL (
+        SELECT
           o.guest_name,
           o.check_out_date,
-          o.status as order_status,
+          o.status AS order_status,
           o.order_id,
           o.check_in_date,
           o.stay_type
         FROM orders o
-        WHERE o.stay_date = $1::date
+        WHERE o.room_number = r.room_number
+          AND o.stay_date = sd.stay_date
           AND o.status IN ('pending', 'checked-in')
-        ORDER BY o.room_number, o.create_time DESC
-      `;
-      queryParams = [queryDate];
-    } else {
-      // 如果没有指定日期，获取当前活跃订单
-      console.log('开始获取房间关联的当前活跃订单信息...');
-      ordersSQL = `
-        SELECT DISTINCT ON (o.room_number)
-          o.room_number,
-          o.guest_name,
-          o.check_out_date,
-          o.status as order_status,
-          o.order_id,
-          o.check_in_date,
-          o.stay_type
-        FROM orders o
-        WHERE o.status IN ('pending', 'checked-in')
-          AND NOW()::date >= o.check_in_date
-          AND NOW()::date <= o.check_out_date
-        ORDER BY o.room_number, o.create_time DESC
-      `;
-    }
+        ORDER BY
+          CASE
+            WHEN o.status IN ('checked-in') THEN 2
+            WHEN o.status IN ('pending') THEN 1
+            ELSE 0
+          END DESC,
+          o.create_time DESC
+        LIMIT 1
+      ) o ON TRUE
+      ORDER BY r.room_number
+    `;
 
-    const ordersResult = await query(ordersSQL, queryParams);
-    console.log(`查询到 ${ordersResult.rows.length} 个相关订单`);
-
-    const ordersByRoom = {};
-
-    // 创建房间号到订单的映射
-    ordersResult.rows.forEach(order => {
-      ordersByRoom[order.room_number] = order;
-    });
-
-    // 合并房间数据和订单数据
-    const mergedRooms = allRooms.map(room => {
-      const order = ordersByRoom[room.room_number];
-      if (order) {
-        return {
-          ...room,
-          guest_name: order.guest_name,
-          check_out_date: order.check_out_date,
-          order_status: order.order_status,
-          order_id: order.order_id,
-          check_in_date: order.check_in_date,
-          stay_type: order.stay_type
-        };
-      }
-      return room;
-    });
-
-    // 记录有订单状态的房间
-    const roomsWithOrders = mergedRooms.filter(room => room.order_status);
-    if (roomsWithOrders.length > 0) {
-      console.log('已关联订单的房间示例:',
-        roomsWithOrders.slice(0, 3).map(room => ({
-          room_number: room.room_number,
-          status: room.status,
-          order_status: room.order_status,
-          guest_name: room.guest_name,
-          query_date: queryDate || 'current'
-        }))
-      );
-    }
-
-    return mergedRooms;
+    const result = await query(sql, [queryDate]);
+    return result.rows;
   } catch (error) {
     console.error('获取所有房间失败:', error);
+    throw error;
+  }
+}
+
+/**
+ * 获取指定房间在日期区间内的每日房态（用于日历按天渲染）
+ * @param {string} roomNumber - 房间号
+ * @param {string} startDate - 开始日期 YYYY-MM-DD
+ * @param {string} endDate - 结束日期 YYYY-MM-DD
+ * @returns {Promise<Array>} 每日房态列表
+ */
+async function getRoomStatusRange(roomNumber, startDate, endDate) {
+  try {
+    const sql = `
+      WITH date_series AS (
+        SELECT generate_series($2::date, $3::date, interval '1 day')::date AS stay_date
+      ),
+      room_row AS (
+        SELECT room_number, type_code, status, price, is_closed
+        FROM rooms
+        WHERE room_number = $1
+        LIMIT 1
+      ),
+      order_candidates AS (
+        SELECT
+          o.stay_date,
+          o.order_id,
+          o.guest_name,
+          o.check_in_date,
+          o.check_out_date,
+          o.status AS order_status,
+          o.create_time,
+          CASE
+            WHEN o.status IN ('checked-in', 'occupied') THEN 2
+            WHEN o.status IN ('pending', 'reserved') THEN 1
+            ELSE 0
+          END AS status_rank
+        FROM orders o
+        WHERE o.room_number = $1
+          AND o.stay_date >= $2::date
+          AND o.stay_date <= $3::date
+          AND o.status IN ('pending', 'reserved', 'checked-in', 'occupied')
+      ),
+      best_order AS (
+        SELECT DISTINCT ON (stay_date)
+          stay_date,
+          order_id,
+          guest_name,
+          check_in_date,
+          check_out_date,
+          order_status
+        FROM order_candidates
+        ORDER BY stay_date, status_rank DESC, create_time DESC
+      )
+      SELECT
+        ds.stay_date::text AS stay_date,
+        r.room_number,
+        r.type_code,
+        r.price,
+        r.status AS room_status,
+        r.is_closed,
+        bo.order_id,
+        bo.guest_name,
+        bo.check_in_date,
+        bo.check_out_date,
+        bo.order_status,
+        CASE
+          WHEN r.is_closed = TRUE OR r.status = 'repair' THEN 'repair'
+          WHEN r.status = 'cleaning' THEN 'cleaning'
+          WHEN bo.order_status IN ('checked-in', 'occupied') THEN 'occupied'
+          WHEN bo.order_status IN ('pending', 'reserved') THEN 'reserved'
+          ELSE 'available'
+        END AS display_status
+      FROM date_series ds
+      CROSS JOIN room_row r
+      LEFT JOIN best_order bo ON bo.stay_date = ds.stay_date
+      ORDER BY ds.stay_date
+    `;
+
+    const result = await query(sql, [roomNumber, startDate, endDate]);
+    return result.rows;
+  } catch (error) {
+    console.error('获取房间日期范围房态失败:', error);
     throw error;
   }
 }
@@ -292,14 +336,6 @@ async function getAvailableRooms(startDate, endDate, typeCode = null) {
     const isRestRoomQuery = queryStartDate === queryEndDate;
     console.log('[Backend INFO] getAvailableRooms: 是否为休息房查询:', isRestRoomQuery);
 
-    // 统一使用 stay_date（每日一行）进行占用检查，休息房用 [start, start+1) 区间
-    const endExclusive = (() => {
-      if (!isRestRoomQuery) return queryEndDate;
-      const endDate = new Date(queryStartDate);
-      endDate.setDate(endDate.getDate() + 1);
-      return endDate.toISOString().split('T')[0];
-    })();
-
     let sqlQuery = `
       SELECT r.room_number, r.type_code, r.status, r.price, r.is_closed
       FROM rooms r
@@ -311,11 +347,16 @@ async function getAvailableRooms(startDate, endDate, typeCode = null) {
           WHERE o.room_number = r.room_number
             AND o.status NOT IN ('cancelled', 'checked-out')
             AND o.stay_date >= $1::date
-            AND o.stay_date < $2::date
+            AND o.stay_date < (
+              CASE
+                WHEN $1::date = $2::date THEN ($1::date + 1)  -- 休息房：同日进出按 1 天占用
+                ELSE $2::date                                 -- 普通订单：按 [start, end) 区间
+              END
+            )
         )
     `;
 
-    const queryParams = [queryStartDate, endExclusive];
+    const queryParams = [queryStartDate, queryEndDate];
 
     // 如果指定了房型，添加房型筛选条件
     if (typeCode) {
@@ -447,16 +488,14 @@ async function changeOrderRoom(orderNumber, oldRoomNumber, newRoomNumber) {
     await query('BEGIN');
 
     try {
-            // 更新订单的房间信息
+      // 更新订单的房间信息
       // 计算新的总价格（根据住宿天数）
-      const checkInDate = new Date(order.check_in_date);
-      const checkOutDate = new Date(order.check_out_date);
-      let nights = Math.ceil((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24));
-
-      // 对于休息房等当天退房的情况（nights === 0），按1晚计算
-      if (nights === 0) {
-        nights = 1;
-      }
+      const { rows: nightsRows } = await query(
+        `SELECT ($2::date - $1::date) AS nights`,
+        [order.check_in_date, order.check_out_date]
+      );
+      const nightsRaw = Number(nightsRows?.[0]?.nights ?? 0);
+      const nights = nightsRaw > 0 ? nightsRaw : 1; // 休息房等同日进出按 1 晚
 
       // 计算新的总价格
       const newTotalPrice = Number(newRoom.price) * nights;
@@ -526,6 +565,7 @@ async function changeOrderRoom(orderNumber, oldRoomNumber, newRoomNumber) {
 // 导出表定义和功能函数
 module.exports = {
   getAllRooms,
+  getRoomStatusRange,
   getRoomByNumber,
   updateRoomStatus,
   addRoom,
