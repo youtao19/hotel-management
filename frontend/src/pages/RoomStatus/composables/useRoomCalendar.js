@@ -60,32 +60,19 @@ export function useRoomCalendar() {
     const daysInMonth = new Date(year, month, 0).getDate()
     const events = []
     for (let i = 1; i <= daysInMonth; i++) {
-<<<<<<< HEAD
       events.push(toYmd(year, month, i))
-=======
-      events.push(`${year}/${String(month).padStart(2, '0')}/${String(i).padStart(2, '0')}`)
->>>>>>> a3857c1142225d2cae549a87c2c0c489b51cc89f
     }
     return events
   })
 
-<<<<<<< HEAD
   const getEventColor = (dateStr) => {
-=======
-  const getEventColor = (timestamp) => {
-    const dateStr = String(timestamp).replace(/\//g, '-')
->>>>>>> a3857c1142225d2cae549a87c2c0c489b51cc89f
     const status = dailyRoomStatus.value?.[dateStr]?.display_status || 'available'
     return STATUS_UI[status]?.color || STATUS_UI.available.color
   }
 
   const handleDateSelect = (date) => {
     if (!date) return
-<<<<<<< HEAD
     const dateStr = String(date)
-=======
-    const dateStr = String(date).replace(/\//g, '-')
->>>>>>> a3857c1142225d2cae549a87c2c0c489b51cc89f
     const row = dailyRoomStatus.value?.[dateStr]
     const status = row?.display_status || 'available'
 
@@ -110,4 +97,3 @@ export function useRoomCalendar() {
     roomCalendarEvents
   }
 }
-
