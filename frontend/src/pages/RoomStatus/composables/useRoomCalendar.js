@@ -1,13 +1,14 @@
 /* 这个文件将接管 RoomCalendarDialog.vue 内部的复杂逻辑（数据获取、颜色计算）。 */
 import { ref, computed } from 'vue'
-import { useOrderStore } from 'src/stores/orderStore'
+import { roomApi } from 'src/api'
 
 export function useRoomCalendar() {
-  const orderStore = useOrderStore()
-
   // --- 状态 ---
   const currentRoom = ref(null)
+  // 改用每日房态数据结构：Map<日期字符串, {status, guest_name, order_id}>
   const roomBookingData = ref([])
+  // 存储每日房态详情：{ 'YYYY-MM-DD': { status, guest_name, order_id } }
+  const dailyRoomStatus = ref({})
   const calendarDate = ref(new Date().toISOString().substr(0, 10))
   const selectedDateInfo = ref(null)
   const currentCalendarView = ref({
@@ -16,6 +17,7 @@ export function useRoomCalendar() {
   })
 
   // --- 核心逻辑：获取某房间某月的数据 ---
+  // 改为使用后端的每日房态 API，确保准确反映每日房间安排的换房情况
   const fetchMonthData = async (room, year, month) => {
     if (!room) return
     currentRoom.value = room
@@ -24,101 +26,80 @@ export function useRoomCalendar() {
     currentCalendarView.value = { year, month }
 
     // 计算当月起止日期
-    const startDate = `${year}-${String(month).padStart(2, '0')}-01`
     const lastDay = new Date(year, month, 0).getDate()
-    const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+    const roomNumber = String(room.room_number)
+
+    console.log(`[RoomCalendar] 开始获取房间 ${roomNumber} 在 ${year}-${month} 的每日房态`)
 
     try {
+      // 清空旧数据
       roomBookingData.value = []
+      dailyRoomStatus.value = {}
 
-      // 确保订单数据已加载（如果没有订单数据则先获取）
-      if (!orderStore.orders || orderStore.orders.length === 0) {
-        console.log('[RoomCalendar] 订单数据为空，正在获取...')
-        await orderStore.fetchAllOrders()
+      // 批量获取该月每一天的房态数据
+      // 使用并行请求提高效率
+      const datePromises = []
+      for (let day = 1; day <= lastDay; day++) {
+        const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+        datePromises.push(
+          roomApi.getAllRooms(dateStr)
+            .then(response => ({ dateStr, data: response?.data || [] }))
+            .catch(err => {
+              console.warn(`[RoomCalendar] 获取 ${dateStr} 房态失败:`, err.message)
+              return { dateStr, data: [] }
+            })
+        )
       }
 
-      const orders = orderStore.orders || []
-      const roomNumber = String(room.room_number) // 统一转为字符串比较
+      const results = await Promise.all(datePromises)
 
-      console.log(`[RoomCalendar] 房间 ${roomNumber} 在 ${startDate} ~ ${endDate} 的日历数据`)
-      console.log(`[RoomCalendar] 总订单数: ${orders.length}`)
-
-      // 1. 筛选该房间的订单（统一转为字符串比较）
-      const roomOrders = orders.filter(order => {
-        const orderRoomNumber = order.roomNumber != null ? String(order.roomNumber) : null
-        return orderRoomNumber === roomNumber
-      })
-      console.log(`[RoomCalendar] 房间 ${roomNumber} 的订单数: ${roomOrders.length}`)
-
-      // 2. 筛选日期范围重叠的订单（排除已取消和已退房的订单）
-      const filteredOrders = roomOrders.filter(order => {
-        if (!order.checkInDate || !order.checkOutDate) return false
-        // 跳过已取消的订单
-        if (order.status === 'cancelled' || order.status === '已取消') return false
-
-        const checkIn = new Date(order.checkInDate)
-        const checkOut = new Date(order.checkOutDate)
-        const start = new Date(startDate)
-        const end = new Date(endDate)
-
-        // 检查日期范围是否重叠
-        return (checkIn >= start && checkIn <= end) ||
-               (checkOut >= start && checkOut <= end) ||
-               (checkIn <= start && checkOut >= end)
-      })
-
-      console.log(`[RoomCalendar] 日期范围内的订单数: ${filteredOrders.length}`)
-      if (filteredOrders.length > 0) {
-        console.log('[RoomCalendar] 订单详情:', filteredOrders.map(o => ({
-          orderNumber: o.orderNumber,
-          checkIn: o.checkInDate,
-          checkOut: o.checkOutDate,
-          status: o.status,
-          guest: o.guestName
-        })))
-      }
-
-      // 3. 映射为简单数据结构
-      if (filteredOrders.length > 0) {
-        roomBookingData.value = filteredOrders.map(order => {
-          let status = order.status
+      // 解析每天的房态数据
+      const statusMap = {}
+      for (const { dateStr, data } of results) {
+        const roomData = data.find(r => String(r.room_number) === roomNumber)
+        if (roomData && roomData.order_status) {
+          // 该房间在该日有订单
+          let status = roomData.order_status
           // 状态归一化
           if (status === '待入住' || status === 'pending' || status === 'reserved') status = 'pending'
           else if (status === '已入住' || status === 'checked-in' || status === 'occupied') status = 'checked-in'
           else if (status === '已退房' || status === 'checked-out') status = 'checked-out'
 
-          return {
-            check_in_date: order.checkInDate,
-            check_out_date: order.checkOutDate,
-            status: status,
-            guest_name: order.guestName
+          statusMap[dateStr] = {
+            status,
+            guest_name: roomData.guest_name,
+            order_id: roomData.order_id
           }
-        })
+        }
+        // 没有订单的日期不记录，getRoomDateStatus 会返回 'available'
       }
+
+      dailyRoomStatus.value = statusMap
+      console.log(`[RoomCalendar] 房间 ${roomNumber} 共 ${Object.keys(statusMap).length} 天有订单`)
+
+      // 兼容旧的 roomBookingData 结构（用于 handleDateSelect）
+      // 转换为简单数组供选中日期时查找
+      roomBookingData.value = Object.entries(statusMap).map(([dateStr, info]) => ({
+        stay_date: dateStr,
+        status: info.status,
+        guest_name: info.guest_name,
+        order_id: info.order_id
+      }))
+
     } catch (error) {
       console.error('[RoomCalendar] 获取日历数据失败', error)
     }
   }
 
   // --- 核心逻辑：判断某天的状态 ---
+  // 改为直接查询 dailyRoomStatus，精确到每一天
   const getRoomDateStatus = (dateStr) => {
-    if (!roomBookingData.value.length) return 'available'
+    const dayInfo = dailyRoomStatus.value[dateStr]
+    if (!dayInfo) return 'available'
 
-    for (const booking of roomBookingData.value) {
-      const checkIn = new Date(booking.check_in_date).toISOString().substr(0, 10)
-      const checkOut = new Date(booking.check_out_date).toISOString().substr(0, 10)
-
-      // 区间判断
-      if (dateStr >= checkIn && dateStr < checkOut) {
-        if (booking.status === 'checked-in') return 'occupied'
-        if (booking.status === 'pending') return 'reserved'
-        if (booking.status === 'checked-out') return 'occupied' // 历史记录
-      }
-      // 特殊处理：当天入住当天退房
-      if (checkIn === checkOut && dateStr === checkIn) {
-         return booking.status === 'checked-in' ? 'occupied' : 'reserved'
-      }
-    }
+    if (dayInfo.status === 'checked-in') return 'occupied'
+    if (dayInfo.status === 'pending') return 'reserved'
+    if (dayInfo.status === 'checked-out') return 'available' // 已退房视为可用
     return 'available'
   }
 
@@ -155,18 +136,14 @@ export function useRoomCalendar() {
     const dateStr = typeof date === 'string' ? date.replace(/\//g, '-') : date.toISOString().substr(0, 10)
     const status = getRoomDateStatus(dateStr)
 
-    // 查找该日期的订单信息
-    const booking = roomBookingData.value.find(b => {
-       const checkIn = new Date(b.check_in_date).toISOString().substr(0, 10)
-       const checkOut = new Date(b.check_out_date).toISOString().substr(0, 10)
-       return dateStr >= checkIn && dateStr < checkOut
-    })
+    // 从 dailyRoomStatus 中查找该日期的详细信息
+    const dayInfo = dailyRoomStatus.value[dateStr]
 
     selectedDateInfo.value = {
       date: dateStr,
       statusText: status === 'occupied' ? '已入住' : status === 'reserved' ? '已预订' : '可入住',
       color: status === 'occupied' ? 'red' : status === 'reserved' ? 'blue' : 'green',
-      guestName: booking?.guest_name
+      guestName: dayInfo?.guest_name
     }
   }
 
