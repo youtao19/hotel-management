@@ -2,6 +2,38 @@ const express = require('express');
 const router = express.Router();
 const { query } = require('../database/postgreDB/pg');
 
+const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+const isDateString = (value) => DATE_REGEX.test(String(value || ''));
+
+// 复用：多个统计接口都要求 startDate/endDate 且格式为 YYYY-MM-DD
+// 注意：这里保持原有错误 message/error 字段不变，避免前端依赖受影响。
+const requireDateRangeQuery = (req, res) => {
+    const { startDate, endDate, roomType } = req.query;
+
+    if (!startDate || !endDate) {
+        res.status(400).json({
+            message: '请提供开始日期和结束日期',
+            error: 'startDate and endDate are required'
+        });
+        return null;
+    }
+
+    if (!isDateString(startDate) || !isDateString(endDate)) {
+        res.status(400).json({
+            message: '日期格式错误，请使用YYYY-MM-DD格式',
+            error: 'Invalid date format'
+        });
+        return null;
+    }
+
+    return {
+        startDate: String(startDate),
+        endDate: String(endDate),
+        roomType: roomType || undefined
+    };
+};
+
 const {
     getDailyRevenue,
     getWeeklyRevenue,
@@ -16,31 +48,20 @@ const {
 /**
  * 获取每日收入统计
  * GET /api/revenue/daily?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+ * 前端使用位置：
+ * - `frontend/src/api/index.js`：`revenueApi.getDailyRevenue(startDate, endDate, roomType)`
+ * - `frontend/src/pages/Revenue/composables/useRevenueData.js`：`fetchMainStats()`（selectedPeriod='daily'）
  */
 router.get('/daily', async (req, res) => {
     console.log('📊 收到每日收入统计请求');
     console.log('请求参数:', req.query);
     try {
-        const { startDate, endDate, roomType } = req.query;
-
-        // 参数验证
-        if (!startDate || !endDate) {
-            console.log('❌ 参数验证失败: 缺少日期参数');
-            return res.status(400).json({
-                message: '请提供开始日期和结束日期',
-                error: 'startDate and endDate are required'
-            });
+        const parsed = requireDateRangeQuery(req, res);
+        if (!parsed) {
+            console.log('❌ 参数验证失败:', req.query);
+            return;
         }
-
-        // 日期格式验证
-        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-        if (!dateRegex.test(startDate) || !dateRegex.test(endDate)) {
-            console.log('❌ 日期格式验证失败:', { startDate, endDate });
-            return res.status(400).json({
-                message: '日期格式错误，请使用YYYY-MM-DD格式',
-                error: 'Invalid date format'
-            });
-        }
+        const { startDate, endDate, roomType } = parsed;
 
         console.log('📅 开始获取每日收入数据:', { startDate, endDate, roomType });
         const dailyRevenue = await getDailyRevenue(startDate, endDate, roomType);
@@ -68,27 +89,15 @@ router.get('/daily', async (req, res) => {
 /**
  * 获取每周收入统计
  * GET /api/revenue/weekly?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+ * 前端使用位置：
+ * - `frontend/src/api/index.js`：`revenueApi.getWeeklyRevenue(startDate, endDate, roomType)`
+ * - `frontend/src/pages/Revenue/composables/useRevenueData.js`：`fetchMainStats()`（selectedPeriod='weekly'）
  */
 router.get('/weekly', async (req, res) => {
     try {
-        const { startDate, endDate, roomType } = req.query;
-
-        // 参数验证
-        if (!startDate || !endDate) {
-            return res.status(400).json({
-                message: '请提供开始日期和结束日期',
-                error: 'startDate and endDate are required'
-            });
-        }
-
-        // 日期格式验证
-        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-        if (!dateRegex.test(startDate) || !dateRegex.test(endDate)) {
-            return res.status(400).json({
-                message: '日期格式错误，请使用YYYY-MM-DD格式',
-                error: 'Invalid date format'
-            });
-        }
+        const parsed = requireDateRangeQuery(req, res);
+        if (!parsed) return;
+        const { startDate, endDate, roomType } = parsed;
 
         const weeklyRevenue = await getWeeklyRevenue(startDate, endDate, roomType);
 
@@ -114,27 +123,15 @@ router.get('/weekly', async (req, res) => {
 /**
  * 获取每月收入统计
  * GET /api/revenue/monthly?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+ * 前端使用位置：
+ * - `frontend/src/api/index.js`：`revenueApi.getMonthlyRevenue(startDate, endDate, roomType)`
+ * - `frontend/src/pages/Revenue/composables/useRevenueData.js`：`fetchMainStats()`（selectedPeriod='monthly'）
  */
 router.get('/monthly', async (req, res) => {
     try {
-        const { startDate, endDate, roomType } = req.query;
-
-        // 参数验证
-        if (!startDate || !endDate) {
-            return res.status(400).json({
-                message: '请提供开始日期和结束日期',
-                error: 'startDate and endDate are required'
-            });
-        }
-
-        // 日期格式验证
-        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-        if (!dateRegex.test(startDate) || !dateRegex.test(endDate)) {
-            return res.status(400).json({
-                message: '日期格式错误，请使用YYYY-MM-DD格式',
-                error: 'Invalid date format'
-            });
-        }
+        const parsed = requireDateRangeQuery(req, res);
+        if (!parsed) return;
+        const { startDate, endDate, roomType } = parsed;
 
         const monthlyRevenue = await getMonthlyRevenue(startDate, endDate, roomType);
 
@@ -160,27 +157,15 @@ router.get('/monthly', async (req, res) => {
 /**
  * 获取收入概览统计
  * GET /api/revenue/overview?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+ * 前端使用位置：
+ * - `frontend/src/api/index.js`：`revenueApi.getOverview(startDate, endDate)`
+ * - `frontend/src/pages/Revenue/composables/useRevenueData.js`：`fetchMainStats()`（selectedRangeStats 汇总卡片）
  */
 router.get('/overview', async (req, res) => {
     try {
-        const { startDate, endDate } = req.query;
-
-        // 参数验证
-        if (!startDate || !endDate) {
-            return res.status(400).json({
-                message: '请提供开始日期和结束日期',
-                error: 'startDate and endDate are required'
-            });
-        }
-
-        // 日期格式验证
-        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-        if (!dateRegex.test(startDate) || !dateRegex.test(endDate)) {
-            return res.status(400).json({
-                message: '日期格式错误，请使用YYYY-MM-DD格式',
-                error: 'Invalid date format'
-            });
-        }
+        const parsed = requireDateRangeQuery(req, res);
+        if (!parsed) return;
+        const { startDate, endDate } = parsed;
 
         const overview = await getOverview(startDate, endDate);
 
@@ -205,31 +190,20 @@ router.get('/overview', async (req, res) => {
 /**
  * 获取房型收入统计
  * GET /api/revenue/room-type?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+ * 前端使用位置：
+ * - `frontend/src/api/index.js`：`revenueApi.getRoomTypeRevenue(startDate, endDate)`
+ * - `frontend/src/pages/Revenue/composables/useRevenueData.js`：`fetchMainStats()`（RoomTypeAnalysis 房型分析）
  */
 router.get('/room-type', async (req, res) => {
     console.log('🏨 收到房型收入统计请求');
     console.log('请求参数:', req.query);
     try {
-        const { startDate, endDate } = req.query;
-
-        // 参数验证
-        if (!startDate || !endDate) {
-            console.log('❌ 参数验证失败: 缺少日期参数');
-            return res.status(400).json({
-                message: '请提供开始日期和结束日期',
-                error: 'startDate and endDate are required'
-            });
+        const parsed = requireDateRangeQuery(req, res);
+        if (!parsed) {
+            console.log('❌ 参数验证失败:', req.query);
+            return;
         }
-
-        // 日期格式验证
-        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-        if (!dateRegex.test(startDate) || !dateRegex.test(endDate)) {
-            console.log('❌ 日期格式验证失败:', { startDate, endDate });
-            return res.status(400).json({
-                message: '日期格式错误，请使用YYYY-MM-DD格式',
-                error: 'Invalid date format'
-            });
-        }
+        const { startDate, endDate } = parsed;
 
         const roomTypeRevenue = await getRoomTypeRevenue(startDate, endDate);
 
@@ -255,6 +229,10 @@ router.get('/room-type', async (req, res) => {
  * 获取快速统计数据（今日、本周、本月）
  * GET /api/revenue/quick-stats
  * 用于收入统计页面的今日收入等卡片
+ * 前端使用位置：
+ * - `frontend/src/api/index.js`：`revenueApi.getQuickStats(baseDate)`
+ * - `frontend/src/pages/Revenue/composables/useRevenueData.js`：`initBaseData()` / `fetchMainStats()`
+ * - `frontend/src/pages/Revenue/components/QuickStatsCards.vue`：展示 quickStats 与 selectedRangeStats
  */
 router.get('/quick-stats', async (req, res) => {
     console.log('🚀 收到快速统计请求');
@@ -263,10 +241,9 @@ router.get('/quick-stats', async (req, res) => {
 
         // 中文注释：baseDate 用于测试/对账（例如使用交接班测试 SQL 数据时，可指定某一天作为“今日”）。
         // 未传 baseDate 时使用数据库 current_date（避免 Node.js 侧时区/Date 解析带来的偏差）。
-        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
         let today = null;
         if (baseDate) {
-            if (!dateRegex.test(baseDate)) {
+            if (!isDateString(baseDate)) {
                 return res.status(400).json({
                     message: '日期格式错误，请使用YYYY-MM-DD格式',
                     error: 'Invalid baseDate format'
@@ -328,14 +305,17 @@ router.get('/quick-stats', async (req, res) => {
 /**
  * 获取账单明细（支持日期、房间号过滤）
  * GET /api/revenue/bills?date=YYYY-MM-DD&roomNumber=101
+ * 前端使用位置：
+ * - `frontend/src/api/index.js`：`revenueApi.getRevenueBills(params)`
+ * - `frontend/src/pages/Revenue/composables/useDetailedBills.js`：`fetchData()`（DetailedBillTable）
+ * - `frontend/src/pages/Revenue/components/DetailedBillTable.vue`：详细收入数据表格
  */
 router.get('/bills', async (req, res) => {
     try {
         const { date: queryDate, roomNumber } = req.query;
 
         if (queryDate) {
-            const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-            if (!dateRegex.test(queryDate)) {
+            if (!isDateString(queryDate)) {
                 return res.status(400).json({
                     success: false,
                     message: '日期格式错误，请使用YYYY-MM-DD'
@@ -371,6 +351,9 @@ router.get('/bills', async (req, res) => {
  * @param {string} startDate - 开始日期 (YYYY-MM-DD)
  * @param {string} endDate - 结束日期 (YYYY-MM-DD)
  * @param {string} roomType - 房型筛选 (可选)
+ * 前端使用位置：
+ * - `frontend/src/pages/Revenue/composables/useDailyReceipts.js`：`fetchReceipts()`（当前请求的是该接口）
+ * - `frontend/src/pages/Revenue/components/RevenueTrendAnalysis.vue`：watch(dateRange/roomType) 触发刷新表格
  */
 router.get('/daily-details', async (req, res) => {
     try {
@@ -385,8 +368,7 @@ router.get('/daily-details', async (req, res) => {
         }
 
         // 日期格式验证
-        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-        if (!dateRegex.test(startDate) || !dateRegex.test(endDate)) {
+        if (!isDateString(startDate) || !isDateString(endDate)) {
             return res.status(400).json({
                 success: false,
                 message: '日期格式错误，请使用YYYY-MM-DD格式'
@@ -466,6 +448,9 @@ router.get('/daily-details', async (req, res) => {
  * GET /api/revenue/receipts
  * @param {string} startDate - 开始日期 (YYYY-MM-DD)
  * @param {string} endDate - 结束日期 (YYYY-MM-DD)
+ * 前端使用位置：
+ * - 当前前端未直接调用（全局搜索未发现 `/revenue/receipts` 或 revenueApi 对应方法）。
+ * - 可作为“按收款时间(create_time)聚合”的明细接口被复用（与 `/daily-details` 的 stay_date 口径不同）。
  */
 router.get('/receipts', async (req, res) => {
     try {

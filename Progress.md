@@ -44,6 +44,15 @@
   - 已确认口径：周一起始；收入=按 `bills.stay_date` 的每日实际房费累加（仅 `change_type='房费'`，不含押金/收押）
   - 已运行结果：`npm test` 全部通过
 
-## 6. 提交代码（未开始）
-- [ ] 【未完成】使用中文撰写 commit message。
-- [ ] 【未完成】执行 `git add -A` 与 `git commit -m "..."`。
+## 6. 路由注释与复用整理（未开始）
+- [x] 【已完成】在 `backend/routes/revenueRoute.js` 的每个 API 里写清楚：该 API 在前端的哪个页面/哪个文件调用（精确到文件路径与方法名）。
+  - 已补充到每个路由的 JSDoc 中（如 `/daily`、`/overview`、`/bills`、`/daily-details`、`/receipts` 等）。
+- [x] 【已完成】分析并整理可复用代码：如日期参数解析、房型过滤参数校验、统一错误处理/返回结构；如有明显重复，抽取为小的 helper（不改变 API 行为）。
+  - 已在 `backend/routes/revenueRoute.js` 抽取 `DATE_REGEX`/`isDateString`/`requireDateRangeQuery`，用于 `/daily` `/weekly` `/monthly` `/overview` `/room-type` 等接口的入参校验复用。
+  - 已保持原有接口返回结构与 message/error 文案不变，并通过 `npm test` 验证（全部通过）。
+
+## 7. 提交代码（未开始）
+- [x] 【已完成】使用中文撰写 commit message。
+  - `收入统计：补全路由前端使用注释并复用日期参数校验`
+- [x] 【已完成】执行 `git add -A` 与 `git commit -m "..."`。
+  - commit：`git log -1` 可查看最新提交
