@@ -10,7 +10,7 @@ const { query } = require('../../database/postgreDB/pg');
  * 收入统计验收用例（基于“交接班测试”SQL数据）
  *
  * 目的：
- * 1) 用固定 SQL 数据对账收入统计页的：今日/本周/本月（对应 quick-stats）与所选范围统计（overview）
+ * 1) 用固定 SQL 数据对账收入统计页的：首卡（今日/所选单日）+ 本周 + 本月（对应 quick-stats）
  * 2) 随机选择一个房型后，对账“每日营收明细”（daily-details）返回的每个订单贡献金额是否正确
  *
  * 收入口径（与你确认一致）：
@@ -150,10 +150,25 @@ describe('收入统计接口对账（基于交接班测试 SQL 数据）', () =>
     await executeSqlFile(billsSqlPath);
   });
 
-  test('所选范围统计 /revenue/overview 与预期一致（不含押金/收押，按每日实际房费累加）', async () => {
-    // 中文注释：覆盖“所选范围统计卡片”（前端应直接展示后端 overview 返回）
+  test('快速统计：非单日选择时 today 仍为 current_date（不跟随 endDate）', async () => {
     const startDate = '2025-11-03';
     const endDate = '2025-11-05';
+
+    const dbTodayRes = await query('SELECT current_date::text AS today', []);
+    const dbToday = dbTodayRes.rows?.[0]?.today;
+    expect(DATE_REGEX.test(String(dbToday))).toBe(true);
+
+    const apiRes = await request(app)
+      .get('/api/revenue/quick-stats')
+      .query({ startDate, endDate });
+
+    expect(apiRes.status).toBe(200);
+    const data = apiRes.body?.data || {};
+    expect(data.today).toMatchObject({ date: dbToday, period: 'today', label: '今日收入' });
+  });
+
+  test('快速统计：单日选择时 today 使用所选日期（首卡展示所选日期收入）', async () => {
+    const selectedDate = '2025-11-04';
 
     const billRes = await query(
       `SELECT b.order_id, b.change_type, b.change_price, b.stay_date::text AS stay_date, o.room_type
@@ -162,15 +177,20 @@ describe('收入统计接口对账（基于交接班测试 SQL 数据）', () =>
         WHERE o.status NOT IN ('cancelled')`,
       []
     );
-    const expected = computeExpected({ bills: billRes.rows, startDate, endDate });
+    const expected = computeExpected({ bills: billRes.rows, startDate: selectedDate, endDate: selectedDate }).overview;
 
     const apiRes = await request(app)
-      .get('/api/revenue/overview')
-      .query({ startDate, endDate });
+      .get('/api/revenue/quick-stats')
+      .query({ startDate: selectedDate, endDate: selectedDate });
 
     expect(apiRes.status).toBe(200);
-    expect(apiRes.body).toHaveProperty('data');
-    expect(apiRes.body.data).toEqual(expected.overview);
+    const data = apiRes.body?.data || {};
+    expect(data.today).toMatchObject({
+      ...expected,
+      date: selectedDate,
+      period: 'today',
+      label: `${selectedDate} 收入`
+    });
   });
 
   test('每日趋势 /revenue/daily 返回完整日期区间，且与预期一致', async () => {

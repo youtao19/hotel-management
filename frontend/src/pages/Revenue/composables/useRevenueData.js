@@ -8,7 +8,7 @@ import { revenueApi, roomApi } from 'src/api'
   主要职责：
   - 初始化基础数据（房型列表、快速统计）
   - 拉取主报表数据（按日/周/月聚合）
-  - 拉取房型维度的数据、汇总统计（overview）
+  - 拉取房型维度的数据
   - 暴露状态（loading）与方法供页面调用
   说明：所有聚合与统计逻辑以后端为准，前端只负责显示与触发刷新。
 */
@@ -22,15 +22,14 @@ export function useRevenueData(dateRange, selectedPeriod) {
   const roomTypeData = ref([]) // 按房型聚合的营收数据
   const allRoomTypes = ref([]) // 所有房型（用于与统计数据做映射）
   const quickStats = ref({ today: {}, thisWeek: {}, thisMonth: {} }) // 快速统计：便于顶部显示
-  const selectedRangeStats = ref({ total_revenue: 0, total_orders: 0 }) // 所选范围的汇总（后端直接返回）
   const selectedRoomType = ref(null) // 当前选中的房型过滤
 
   // 初始化基础数据：快速统计 + 房型列表
   const initBaseData = async () => {
     try {
       const [qRes, rtRes] = await Promise.all([
-        // 快速统计以 dateRange.value.end 作为基准日期（后端约定）
-        revenueApi.getQuickStats(dateRange.value?.end),
+        // 快速统计：默认展示“今日”；当筛选为单日时展示“所选日期”
+        revenueApi.getQuickStats({ startDate: dateRange.value?.start, endDate: dateRange.value?.end }),
         roomApi.getRoomTypes()
       ])
       quickStats.value = qRes.data || quickStats.value
@@ -52,7 +51,7 @@ export function useRevenueData(dateRange, selectedPeriod) {
     loading.value = true
     try {
       // 0. 快速统计
-      const qRes = await revenueApi.getQuickStats(dateRange.value.end)
+      const qRes = await revenueApi.getQuickStats({ startDate: dateRange.value.start, endDate: dateRange.value.end })
       quickStats.value = qRes.data || quickStats.value
 
       // 1. 趋势数据（按粒度）
@@ -67,10 +66,6 @@ export function useRevenueData(dateRange, selectedPeriod) {
       // 2. 房型维度数据
       const rtRes = await revenueApi.getRoomTypeRevenue(dateRange.value.start, dateRange.value.end)
       roomTypeData.value = rtRes.data || []
-
-      // 3. 所选范围统计（后端返回 total_revenue / total_orders 等）
-      const sRes = await revenueApi.getOverview(dateRange.value.start, dateRange.value.end)
-      selectedRangeStats.value = sRes?.data || { total_revenue: 0, total_orders: 0 }
 
     } catch (e) {
       // 错误提示统一使用 Quasar Notify
@@ -109,7 +104,6 @@ export function useRevenueData(dateRange, selectedPeriod) {
     loading,
     revenueData,
     quickStats,
-    selectedRangeStats,
     selectedRoomType,
     displayRoomTypeData,
     initBaseData,

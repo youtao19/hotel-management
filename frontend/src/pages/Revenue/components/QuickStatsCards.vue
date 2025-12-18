@@ -6,18 +6,18 @@
         <q-card-section class="modern-stat-section">
           <div class="modern-stat-header">
             <div>
-              <div class="modern-stat-title">{{ selectedTitle }}</div>
-              <div class="modern-stat-subtitle">所选范围统计</div>
+              <div class="modern-stat-title">{{ todayTitle }}</div>
+              <div class="modern-stat-subtitle">今日/所选单日</div>
             </div>
             <div class="modern-stat-icon"><q-icon name="event_note" size="20px" /></div>
           </div>
           <div class="modern-stat-amount">
             <span class="modern-stat-currency">¥</span>
-            <span class="modern-stat-value">{{ formatCurrency(selectedRangeStats.total_revenue) }}</span>
+            <span class="modern-stat-value">{{ formatCurrency(quickStats.today?.total_revenue) }}</span>
           </div>
           <div class="modern-stat-footer">
             <div class="modern-stat-orders">
-              <span class="modern-stat-orders-count">{{ selectedRangeStats.total_orders }}</span>
+              <span class="modern-stat-orders-count">{{ quickStats.today?.total_orders || 0 }}</span>
               <span class="modern-stat-orders-label">订单数</span>
             </div>
           </div>
@@ -68,17 +68,11 @@
 <script setup>
 import { computed } from 'vue'
 
-const props = defineProps(['quickStats', 'selectedRangeStats', 'dateRange'])
+const props = defineProps(['quickStats'])
 
 const formatCurrency = (val) => Number(val || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 })
 
-const selectedTitle = computed(() => {
-  const { start, end } = props.dateRange
-  // 中文注释：以快速统计接口返回的“基准日”作为今日判断，便于使用交接班测试数据对账
-  const baseToday = props.quickStats?.today?.date
-  if (baseToday && start === baseToday && end === baseToday) return '今日收入'
-  return `${start} 收入`
-})
+const todayTitle = computed(() => props.quickStats?.today?.label || '今日收入')
 </script>
 
 <style scoped>

@@ -5,8 +5,6 @@
 
       <QuickStatsCards
         :quick-stats="quickStats"
-        :selected-range-stats="selectedRangeStats"
-        :date-range="dateRange"
       />
 
       <RevenueFilterBar
@@ -61,7 +59,7 @@ const {
 } = useRevenueFilters()
 
 const {
-  loading, revenueData, displayRoomTypeData, quickStats, selectedRangeStats, selectedRoomType,
+  loading, revenueData, displayRoomTypeData, quickStats, selectedRoomType,
   initBaseData, fetchMainStats, toggleRoomType, clearSelectedRoomType
 } = useRevenueData(dateRange, selectedPeriod)
 

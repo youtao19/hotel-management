@@ -282,15 +282,17 @@ export const revenueApi = {
   getMonthlyRevenue: (startDate, endDate, roomType) =>
     api.get('/revenue/monthly', { params: { startDate, endDate, roomType } }),
 
-  // 获取收入概览统计
-  getOverview: (startDate, endDate) => api.get('/revenue/overview', { params: { startDate, endDate } }),
-
   // 获取房型收入统计
   getRoomTypeRevenue: (startDate, endDate) => api.get('/revenue/room-type', { params: { startDate, endDate } }),
 
   // 获取快速统计数据（今日、本周、本月）
-  getQuickStats: (baseDate) =>
-    api.get('/revenue/quick-stats', { params: baseDate ? { baseDate } : {} }),
+  getQuickStats: (paramsOrBaseDate) => {
+    if (typeof paramsOrBaseDate === 'string') {
+      return api.get('/revenue/quick-stats', { params: paramsOrBaseDate ? { baseDate: paramsOrBaseDate } : {} })
+    }
+    const params = paramsOrBaseDate && typeof paramsOrBaseDate === 'object' ? paramsOrBaseDate : {}
+    return api.get('/revenue/quick-stats', { params })
+  },
 
   // 获取账单明细
   getRevenueBills: (params = {}) => api.get('/revenue/bills', { params }),

@@ -51,6 +51,8 @@ const {
  * 前端使用位置：
  * - `frontend/src/api/index.js`：`revenueApi.getDailyRevenue(startDate, endDate, roomType)`
  * - `frontend/src/pages/Revenue/composables/useRevenueData.js`：`fetchMainStats()`（selectedPeriod='daily'）
+ * 前端展示位置：
+ * - `frontend/src/pages/Revenue/components/RevenueTrendAnalysis.vue`：折线图数据源（按日趋势，渲染到 `<canvas>`）
  */
 router.get('/daily', async (req, res) => {
     console.log('📊 收到每日收入统计请求');
@@ -92,6 +94,8 @@ router.get('/daily', async (req, res) => {
  * 前端使用位置：
  * - `frontend/src/api/index.js`：`revenueApi.getWeeklyRevenue(startDate, endDate, roomType)`
  * - `frontend/src/pages/Revenue/composables/useRevenueData.js`：`fetchMainStats()`（selectedPeriod='weekly'）
+ * 前端展示位置：
+ * - `frontend/src/pages/Revenue/components/RevenueTrendAnalysis.vue`：折线图数据源（按周趋势，渲染到 `<canvas>`）
  */
 router.get('/weekly', async (req, res) => {
     try {
@@ -126,6 +130,8 @@ router.get('/weekly', async (req, res) => {
  * 前端使用位置：
  * - `frontend/src/api/index.js`：`revenueApi.getMonthlyRevenue(startDate, endDate, roomType)`
  * - `frontend/src/pages/Revenue/composables/useRevenueData.js`：`fetchMainStats()`（selectedPeriod='monthly'）
+ * 前端展示位置：
+ * - `frontend/src/pages/Revenue/components/RevenueTrendAnalysis.vue`：折线图数据源（按月趋势，渲染到 `<canvas>`）
  */
 router.get('/monthly', async (req, res) => {
     try {
@@ -155,44 +161,13 @@ router.get('/monthly', async (req, res) => {
 });
 
 /**
- * 获取收入概览统计
- * GET /api/revenue/overview?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
- * 前端使用位置：
- * - `frontend/src/api/index.js`：`revenueApi.getOverview(startDate, endDate)`
- * - `frontend/src/pages/Revenue/composables/useRevenueData.js`：`fetchMainStats()`（selectedRangeStats 汇总卡片）
- */
-router.get('/overview', async (req, res) => {
-    try {
-        const parsed = requireDateRangeQuery(req, res);
-        if (!parsed) return;
-        const { startDate, endDate } = parsed;
-
-        const overview = await getOverview(startDate, endDate);
-
-        res.json({
-            message: '获取收入概览成功',
-            data: overview,
-            period: {
-                startDate,
-                endDate,
-                type: 'overview'
-            }
-        });
-    } catch (error) {
-        console.error('获取收入概览失败:', error);
-        res.status(500).json({
-            message: '获取收入概览失败',
-            error: error.message
-        });
-    }
-});
-
-/**
  * 获取房型收入统计
  * GET /api/revenue/room-type?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
  * 前端使用位置：
  * - `frontend/src/api/index.js`：`revenueApi.getRoomTypeRevenue(startDate, endDate)`
  * - `frontend/src/pages/Revenue/composables/useRevenueData.js`：`fetchMainStats()`（RoomTypeAnalysis 房型分析）
+ * 前端展示位置：
+ * - `frontend/src/pages/Revenue/components/RoomTypeAnalysis.vue`：左侧「房型营收贡献」列表（type_name / total_revenue / order_count）
  */
 router.get('/room-type', async (req, res) => {
     console.log('🏨 收到房型收入统计请求');
@@ -233,15 +208,34 @@ router.get('/room-type', async (req, res) => {
  * - `frontend/src/api/index.js`：`revenueApi.getQuickStats(baseDate)`
  * - `frontend/src/pages/Revenue/composables/useRevenueData.js`：`initBaseData()` / `fetchMainStats()`
  * - `frontend/src/pages/Revenue/components/QuickStatsCards.vue`：展示 quickStats 与 selectedRangeStats
+ * 前端展示位置：
+ * - `frontend/src/pages/Revenue/components/QuickStatsCards.vue`：第 2/3 张卡片「本周收入」「本月收入」（quickStats.thisWeek / quickStats.thisMonth）
+ * - `frontend/src/pages/Revenue/components/QuickStatsCards.vue`：selectedTitle 使用 `quickStats.today.date` 判断「今日收入」
  */
 router.get('/quick-stats', async (req, res) => {
     console.log('🚀 收到快速统计请求');
     try {
-        const { baseDate } = req.query;
+        const { baseDate, startDate, endDate } = req.query;
 
-        // 中文注释：baseDate 用于测试/对账（例如使用交接班测试 SQL 数据时，可指定某一天作为“今日”）。
-        // 未传 baseDate 时使用数据库 current_date（避免 Node.js 侧时区/Date 解析带来的偏差）。
+        // 中文注释：
+        // - baseDate：用于测试/对账（例如使用交接班测试 SQL 数据时，可指定某一天作为“今日”）。
+        // - startDate/endDate：前端当前所选日期范围；当且仅当“单日”（startDate===endDate）时，首卡应展示所选日期的收入。
+        // - 未传 baseDate 且非单日时，使用数据库 current_date（避免 Node.js 侧时区/Date 解析带来的偏差）。
         let today = null;
+        let todayLabel = '今日收入';
+        const hasRange = startDate && endDate;
+        const normalizedStart = startDate ? String(startDate) : null;
+        const normalizedEnd = endDate ? String(endDate) : null;
+
+        if (hasRange) {
+            if (!isDateString(normalizedStart) || !isDateString(normalizedEnd)) {
+                return res.status(400).json({
+                    message: '日期格式错误，请使用YYYY-MM-DD格式',
+                    error: 'Invalid date format'
+                });
+            }
+        }
+
         if (baseDate) {
             if (!isDateString(baseDate)) {
                 return res.status(400).json({
@@ -250,6 +244,10 @@ router.get('/quick-stats', async (req, res) => {
                 });
             }
             today = String(baseDate);
+            todayLabel = `${today} 收入`;
+        } else if (hasRange && normalizedStart === normalizedEnd) {
+            today = normalizedStart;
+            todayLabel = `${today} 收入`;
         } else {
             const dbNow = await query(`SELECT current_date::text AS today`, []);
             today = dbNow.rows?.[0]?.today;
@@ -276,7 +274,8 @@ router.get('/quick-stats', async (req, res) => {
                 today: {
                     ...todayStats,
                     period: 'today',
-                    date: today
+                    date: today,
+                    label: todayLabel
                 },
                 thisWeek: {
                     ...weekStats,
@@ -309,6 +308,8 @@ router.get('/quick-stats', async (req, res) => {
  * - `frontend/src/api/index.js`：`revenueApi.getRevenueBills(params)`
  * - `frontend/src/pages/Revenue/composables/useDetailedBills.js`：`fetchData()`（DetailedBillTable）
  * - `frontend/src/pages/Revenue/components/DetailedBillTable.vue`：详细收入数据表格
+ * 前端展示位置：
+ * - `frontend/src/pages/Revenue/components/DetailedBillTable.vue`：底部「详细收入数据」QTable（rows/columns）
  */
 router.get('/bills', async (req, res) => {
     try {
@@ -354,6 +355,8 @@ router.get('/bills', async (req, res) => {
  * 前端使用位置：
  * - `frontend/src/pages/Revenue/composables/useDailyReceipts.js`：`fetchReceipts()`（当前请求的是该接口）
  * - `frontend/src/pages/Revenue/components/RevenueTrendAnalysis.vue`：watch(dateRange/roomType) 触发刷新表格
+ * 前端展示位置：
+ * - `frontend/src/pages/Revenue/components/RevenueTrendAnalysis.vue`：顶部「每日营收明细」QTable（按房间号搜索、展示支付方式 chip）
  */
 router.get('/daily-details', async (req, res) => {
     try {
@@ -451,6 +454,8 @@ router.get('/daily-details', async (req, res) => {
  * 前端使用位置：
  * - 当前前端未直接调用（全局搜索未发现 `/revenue/receipts` 或 revenueApi 对应方法）。
  * - 可作为“按收款时间(create_time)聚合”的明细接口被复用（与 `/daily-details` 的 stay_date 口径不同）。
+ * 前端展示位置：
+ * - 当前暂无页面直接展示该接口返回数据（可在收入统计页新增 Tab/表格后接入）。
  */
 router.get('/receipts', async (req, res) => {
     try {
