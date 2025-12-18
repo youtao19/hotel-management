@@ -10,10 +10,11 @@
 4. [x] 路由清理（如确认无用）：删除 `overview` 路由及其相关页面/接口/入口引用，并确保构建通过
 5. [x] 编写测试：补充一个覆盖“默认今日 / 单日 / 非单日”的测试样例（按项目现有测试框架落地）
 6. [x] 本地验证：运行与本改动相关的测试/构建命令，确认通过
-7. [ ] 提交代码：`git add -A`，使用中文 commit message 执行 `git commit -m "..."`（提交前会给你确认 commit message）
+7. [x] 提交代码：`git add -A`，使用中文 commit message 执行 `git commit -m "..."`（提交前会给你确认 commit message）
 
 ## 当前进度记录
 
 - 已确认实现方式：前端无“单日/非单日”判断，统一把 `startDate/endDate` 传给 `/api/revenue/quick-stats`，由后端决定首卡基准日（单日=所选日期；非单日=数据库 current_date）。
 - 已完成清理：移除 `/api/revenue/overview` 路由与前端对应调用；首卡改为展示 `quickStats.today`（今日/所选单日）。
 - 已完成验证：已运行 `npm test`，测试通过（含新增 quick-stats 单日/非单日用例）。
+- 已完成提交：`收入统计：首卡单日显示所选日期收入，移除 overview 路由`（commit `997849a`）。
