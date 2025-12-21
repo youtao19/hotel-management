@@ -1,20 +1,24 @@
-# 任务进度（收入统计首卡单日显示 + 可选移除 overview 路由）
+# 任务进度（收入统计：改为 orders 口径 + 明细默认日期）
 
 > 规则：每完成一个流程步骤，我会同步更新本文件为“已完成”。
 
 ## 修改流程（待你确认后开始执行）
 
-1. [x] 现状排查：定位“收入统计页面”第一张卡片的数据来源、日期选择组件的取值结构、相关接口与 `overview` 路由的使用点
-2. [x] 方案确认：定义“单日”的判定方式（例如 `startDate === endDate`），并决定判断尽量放后端还是前端；同时确认 `overview` 路由是否确实无调用方
-3. [x] 代码修改：实现规则——默认显示“今日收入”；当选择单日时显示“所选日期收入”；选择非单日时仍显示“今日收入”
-4. [x] 路由清理（如确认无用）：删除 `overview` 路由及其相关页面/接口/入口引用，并确保构建通过
-5. [x] 编写测试：补充一个覆盖“默认今日 / 单日 / 非单日”的测试样例（按项目现有测试框架落地）
-6. [x] 本地验证：运行与本改动相关的测试/构建命令，确认通过
-7. [x] 提交代码：`git add -A`，使用中文 commit message 执行 `git commit -m "..."`（提交前会给你确认 commit message）
+1. [x] 现状排查：确认收入统计页的 3 个数据源（顶部卡片/趋势图&每日营收明细/详细收入数据表）当前分别来自哪些接口与表
+2. [x] 后端改造：将“快速统计（今日/本周/本月）”“趋势（按日/周/月）”“每日营收明细”统一改为基于 `orders` 表计算（`stay_date` 口径，排除 `status='cancelled'`）
+3. [x] 后端保持：`详细收入数据` 继续使用 `bills` 表（不改口径）
+4. [x] 前端微调：`详细收入数据` 的日期筛选默认值改为“当前日期”（保持页面布局不变）
+5. [x] 编写测试样例：补充后端测试用例覆盖（快速统计 + 趋势按日 + 每日营收明细），并先让你确认用例设计
+6. [x] 本地验证：运行相关测试，确认通过
+7. [ ] 提交代码：你确认中文 commit message 后执行 `git add -A` 与 `git commit -m "..."`（中文）
 
 ## 当前进度记录
 
-- 已确认实现方式：前端无“单日/非单日”判断，统一把 `startDate/endDate` 传给 `/api/revenue/quick-stats`，由后端决定首卡基准日（单日=所选日期；非单日=数据库 current_date）。
-- 已完成清理：移除 `/api/revenue/overview` 路由与前端对应调用；首卡改为展示 `quickStats.today`（今日/所选单日）。
-- 已完成验证：已运行 `npm test`，测试通过（含新增 quick-stats 单日/非单日用例）。
-- 已完成提交：`收入统计：首卡单日显示所选日期收入，移除 overview 路由`（commit `997849a`）。
+- 已排查：后端当前营收聚合（`backend/modules/revenueModule.js`）与 `/api/revenue/daily-details` 主要基于 `bills` 表的 `change_type='房费'`；本任务将改为 `orders.total_price` 按 `stay_date` 汇总（排除 `cancelled`）。
+- 已排查：前端“详细收入数据”（`frontend/src/pages/Revenue/components/DetailedBillTable.vue`）默认日期为空，需要改为默认当天（`YYYY-MM-DD`）。
+- 已完成：后端 `backend/modules/revenueModule.js` 的聚合口径已切换为 `orders`（快速统计/日周月趋势/所选范围汇总）。
+- 已完成：后端 `/api/revenue/daily-details` 已切换为 `orders.total_price`（按 stay_date）。
+- 已完成：前端 `frontend/src/pages/Revenue/composables/useDetailedBills.js` 默认日期已改为当天（`YYYY-MM-DD`），页面布局不变。
+- 已完成：后端测试用例 `backend/tests/integration/revenue_statistics.test.js` 已按你确认的范围覆盖 2025-11-02~2025-11-09（含 11-04），并用 orders 聚合对账。
+- 已完成验证：`cd backend && npm test -- integration/revenue_statistics.test.js` 通过。
+- 已修复：收入统计页选择日期后自动刷新 quick-stats，单日选择时首卡会展示所选日期收入（`frontend/src/pages/Revenue/index.vue`）。

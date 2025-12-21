@@ -16,7 +16,11 @@ export function useDetailedBills() {
   const loading = ref(false)
   const rows = ref([])
   // filters.value 的结构：{ date: 'YYYY-MM-DD', roomNumber: '101' }
-  const filters = ref({ date: '', roomNumber: '' })
+  const today = new Date()
+  const yyyy = today.getFullYear()
+  const mm = String(today.getMonth() + 1).padStart(2, '0')
+  const dd = String(today.getDate()).padStart(2, '0')
+  const filters = ref({ date: `${yyyy}-${mm}-${dd}`, roomNumber: '' })
   const pagination = ref({ rowsPerPage: 10 })
 
   // 表格列定义（用于 QTable）
@@ -50,7 +54,7 @@ export function useDetailedBills() {
 
   // 重置筛选并重新获取数据
   const resetFilters = () => {
-    filters.value = { date: '', roomNumber: '' }
+    filters.value = { date: `${yyyy}-${mm}-${dd}`, roomNumber: '' }
     fetchData()
   }
 

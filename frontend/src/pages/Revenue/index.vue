@@ -69,8 +69,12 @@ const setFilter = (type) => {
   else if (type === 'yesterday') setFilterYesterday()
   else if (type === 'week') setFilterThisWeek()
   else if (type === 'month') setFilterThisMonth()
-  fetchMainStats()
 }
+
+// 监听日期变化自动刷新（确保“单日”选择后首卡展示所选日期收入）
+watch(() => [dateRange.value.start, dateRange.value.end], ([start, end]) => {
+  if (start && end) fetchMainStats()
+})
 
 // 监听周期变化自动刷新
 watch(selectedPeriod, fetchMainStats)

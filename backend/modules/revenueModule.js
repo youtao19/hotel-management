@@ -67,27 +67,25 @@ function diffDays(date1, date2) {
 
 function buildRevenueExpandedCTE() {
   // 中文注释：
-  // 预期房费收入口径（与你确认一致）：
-  // - 以 bills 表中 change_type='房费' 的记录为准
-  // - 多日订单不做“均分”，而是按账单里每一天的实际房费（stay_date）累加
-  // - 明确排除押金/收押：不统计 change_type='收押'/'押金'
+  // 本任务的“房费收入”口径改为 orders 表：
+  // - 以 orders.total_price 为单日房费（按 stay_date 计入）
+  // - 排除取消订单：status='cancelled'
+  // - 不从 bills 推导（bills 仅用于“详细收入数据”明细表）
   return `
-    WITH room_fee_bills AS (
+    WITH order_room_fee AS (
       SELECT
-        b.order_id,
+        o.order_id,
         o.room_type,
-        b.room_number,
-        MAX(b.guest_name) AS guest_name,
-        MAX(b.pay_way) AS pay_way,
-        b.stay_date::date AS stay_date,
-        SUM(COALESCE(b.change_price, 0)) AS room_fee
-      FROM bills b
-      JOIN orders o ON o.order_id = b.order_id
-      WHERE b.change_type = '房费'
-        AND b.stay_date::date BETWEEN $1::date AND $2::date
+        o.room_number,
+        MAX(o.guest_name) AS guest_name,
+        MAX(o.payment_method) AS payment_method,
+        o.stay_date::date AS stay_date,
+        SUM(COALESCE(o.total_price, 0)) AS room_fee
+      FROM orders o
+      WHERE o.stay_date::date BETWEEN $1::date AND $2::date
         AND o.status NOT IN ('cancelled')
         AND ($3::text IS NULL OR o.room_type = $3::text)
-      GROUP BY b.order_id, o.room_type, b.room_number, b.stay_date::date
+      GROUP BY o.order_id, o.room_type, o.room_number, o.stay_date::date
     )
   `;
 }
@@ -106,7 +104,7 @@ async function getDailyRevenue(startDate, endDate, roomType) {
         stay_date AS date,
         COUNT(DISTINCT order_id) AS order_count,
         ROUND(SUM(room_fee)::numeric, 2) AS total_revenue
-      FROM room_fee_bills
+      FROM order_room_fee
       GROUP BY stay_date
     ),
     calendar AS (
@@ -143,7 +141,7 @@ async function getWeeklyRevenue(startDate, endDate, roomType) {
         stay_date AS date,
         COUNT(DISTINCT order_id) AS order_count,
         ROUND(SUM(room_fee)::numeric, 2) AS total_revenue
-      FROM room_fee_bills
+      FROM order_room_fee
       GROUP BY stay_date
     ),
     weekly AS (
@@ -187,7 +185,7 @@ async function getMonthlyRevenue(startDate, endDate, roomType) {
         stay_date AS date,
         COUNT(DISTINCT order_id) AS order_count,
         ROUND(SUM(room_fee)::numeric, 2) AS total_revenue
-      FROM room_fee_bills
+      FROM order_room_fee
       GROUP BY stay_date
     ),
     monthly AS (
@@ -230,7 +228,7 @@ async function getOverview(startDate, endDate) {
     SELECT
       COUNT(DISTINCT order_id)::int AS total_orders,
       ROUND(COALESCE(SUM(room_fee)::numeric, 0), 2) AS total_revenue
-    FROM room_fee_bills
+    FROM order_room_fee
   `;
 
   const res = await query(sql, [startDate, endDate, null]);
@@ -255,7 +253,7 @@ async function getRoomTypeRevenue(startDate, endDate) {
         room_type,
         COUNT(DISTINCT order_id)::int AS order_count,
         ROUND(SUM(room_fee)::numeric, 2) AS total_revenue
-      FROM room_fee_bills
+      FROM order_room_fee
       GROUP BY room_type
     )
     SELECT

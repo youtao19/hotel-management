@@ -378,27 +378,26 @@ router.get('/daily-details', async (req, res) => {
             });
         }
 
-        console.log('获取每日营收明细(bills房费):', { startDate, endDate, roomType });
+        console.log('获取每日营收明细(orders.total_price):', { startDate, endDate, roomType });
 
         // 中文注释：
-        // - “每日营收明细”按 bills.stay_date 展示每天实际房费（不做均分）
-        // - 只统计 change_type='房费'，明确排除押金/收押
+        // - “每日营收明细”口径改为 orders 表（按 stay_date 展示单日房费 total_price）
+        // - 排除取消订单：status='cancelled'
+        // - 不从 bills 推导（bills 仅用于“详细收入数据”）
         let sql = `
             SELECT
-                b.order_id,
-                b.room_number,
-                MAX(b.guest_name) AS guest_name,
+                o.order_id,
+                o.room_number,
+                o.guest_name,
                 o.room_type,
                 rt.type_name as room_type_name,
-                b.stay_date::date AS stay_date,
-                SUM(COALESCE(b.change_price,0)) AS total_amount,
-                MAX(b.pay_way) as payment_method,
+                o.stay_date::date AS stay_date,
+                COALESCE(o.total_price, 0) AS total_amount,
+                o.payment_method,
                 o.check_out_date
-            FROM bills b
-            JOIN orders o ON o.order_id = b.order_id
+            FROM orders o
             LEFT JOIN room_types rt ON o.room_type = rt.type_code
-            WHERE b.change_type = '房费'
-              AND b.stay_date::date BETWEEN $1::date AND $2::date
+            WHERE o.stay_date::date BETWEEN $1::date AND $2::date
               AND o.status NOT IN ('cancelled')
         `;
 
@@ -410,8 +409,7 @@ router.get('/daily-details', async (req, res) => {
         }
 
         sql += `
-            GROUP BY b.order_id, b.room_number, o.room_type, rt.type_name, b.stay_date::date, o.check_out_date
-            ORDER BY b.stay_date::date DESC, b.room_number ASC, b.order_id ASC
+            ORDER BY o.stay_date::date DESC, o.room_number ASC, o.order_id ASC
         `;
 
         const result = await query(sql, params);
