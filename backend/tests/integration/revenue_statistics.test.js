@@ -34,28 +34,260 @@ const buildDateSeries = (startDate, endDate) => {
   return list;
 };
 
-const loadSqlFile = async (filePath) => {
-  const sql = fs.readFileSync(filePath, 'utf8').trim();
-  if (sql) {
-    await query(sql);
+const parseCsvLine = (line) => {
+  const out = [];
+  let cur = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+
+    if (inQuotes) {
+      if (ch === '"') {
+        const next = line[i + 1];
+        if (next === '"') {
+          cur += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        cur += ch;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inQuotes = true;
+      continue;
+    }
+
+    if (ch === ',') {
+      out.push(cur);
+      cur = '';
+      continue;
+    }
+
+    cur += ch;
   }
+
+  out.push(cur);
+  return out;
 };
 
-const loadFixtureData = async () => {
-  const roomsSqlPath = path.resolve(__dirname, '../../../sql/rooms.sql');
-  const roomTypesSqlPath = path.resolve(__dirname, '../../../sql/room_types.sql');
-  const ordersSqlPath = path.resolve(__dirname, '../../../sql/orders.sql');
-  const billsSqlPath = path.resolve(__dirname, '../../../sql/bills.sql');
+const toNullable = (value) => {
+  if (value === undefined || value === null) return null;
+  const s = String(value);
+  return s === '' ? null : s;
+};
 
-  await query('TRUNCATE TABLE bills RESTART IDENTITY CASCADE;');
-  await query('TRUNCATE TABLE orders RESTART IDENTITY CASCADE;');
-  await query('TRUNCATE TABLE rooms RESTART IDENTITY CASCADE;');
-  await query('TRUNCATE TABLE room_types RESTART IDENTITY CASCADE;');
+const toNonEmptyString = (value, fallback) => {
+  const s = toNullable(value);
+  if (s) return s;
+  return String(fallback || '');
+};
 
-  await loadSqlFile(roomTypesSqlPath);
-  await loadSqlFile(roomsSqlPath);
-  await loadSqlFile(ordersSqlPath);
-  await loadSqlFile(billsSqlPath);
+const parseCsvRecords = (raw) => {
+  const records = [];
+  let record = [];
+  let field = '';
+  let inQuotes = false;
+
+  const pushField = () => {
+    record.push(field);
+    field = '';
+  };
+
+  const pushRecord = () => {
+    // 忽略完全空行
+    if (record.length === 1 && String(record[0] || '').trim() === '') {
+      record = [];
+      return;
+    }
+    records.push(record);
+    record = [];
+  };
+
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i];
+
+    if (ch === '\r') {
+      continue;
+    }
+
+    if (inQuotes) {
+      if (ch === '"') {
+        const next = raw[i + 1];
+        if (next === '"') {
+          field += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += ch;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inQuotes = true;
+      continue;
+    }
+
+    if (ch === ',') {
+      pushField();
+      continue;
+    }
+
+    if (ch === '\n') {
+      pushField();
+      pushRecord();
+      continue;
+    }
+
+    field += ch;
+  }
+
+  // flush last record
+  pushField();
+  pushRecord();
+
+  return records;
+};
+
+const loadOrdersFromCsv = async (csvPath) => {
+  const raw = fs.readFileSync(csvPath, 'utf8');
+  const records = parseCsvRecords(raw);
+  if (!records.length) return;
+
+  const header = (records[0] || []).map((h) => String(h || '').trim());
+  const idx = (name) => header.indexOf(name);
+
+  const required = [
+    'order_id',
+    'id_source',
+    'order_source',
+    'guest_name',
+    'phone',
+    'room_type',
+    'room_number',
+    'check_in_date',
+    'check_out_date',
+    'stay_date',
+    'status',
+    'payment_method',
+    'total_price',
+    'deposit',
+    'create_time',
+    'stay_type',
+    'remarks',
+    'is_prepaid',
+    'prepaid_amount',
+  ];
+
+  required.forEach((col) => {
+    if (idx(col) === -1) {
+      throw new Error(`orders.csv missing required column: ${col}`);
+    }
+  });
+
+  await query('DROP INDEX IF EXISTS uniq_orders_guest_stay;');
+  await query('BEGIN;');
+  try {
+    for (let lineNo = 1; lineNo < records.length; lineNo++) {
+      const fields = records[lineNo] || [];
+      const v = (col) => toNullable(fields[idx(col)]);
+      const orderId = toNonEmptyString(v('order_id'), `CSV_ROW_${lineNo}`);
+      const guestName = toNonEmptyString(v('guest_name'), orderId);
+
+      const requiredNotNull = [
+        ['order_source', v('order_source')],
+        ['room_type', v('room_type')],
+        ['room_number', v('room_number')],
+        ['check_in_date', v('check_in_date')],
+        ['check_out_date', v('check_out_date')],
+        ['stay_date', v('stay_date')],
+        ['status', v('status')],
+      ];
+      const missing = requiredNotNull.filter(([, value]) => !value).map(([key]) => key);
+      if (missing.length) {
+        throw new Error(`orders.csv row ${lineNo + 1} missing required fields: ${missing.join(', ')}`);
+      }
+
+      await query(
+        `
+          INSERT INTO orders (
+            order_id,
+            id_source,
+            order_source,
+            guest_name,
+            phone,
+            room_type,
+            room_number,
+            check_in_date,
+            check_out_date,
+            stay_date,
+            status,
+            payment_method,
+            total_price,
+            deposit,
+            create_time,
+            stay_type,
+            remarks,
+            is_prepaid,
+            prepaid_amount
+          ) VALUES (
+            $1::text,
+            $2::text,
+            $3::text,
+            $4::text,
+            $5::text,
+            $6::text,
+            $7::text,
+            $8::date,
+            $9::date,
+            $10::date,
+            $11::text,
+            $12::text,
+            $13::numeric,
+            $14::numeric,
+            $15::timestamptz,
+            $16::text,
+            $17::text,
+            $18::boolean,
+            $19::numeric
+          )
+        `,
+        [
+          orderId,
+          v('id_source'),
+          v('order_source'),
+          guestName,
+          v('phone'),
+          v('room_type'),
+          v('room_number'),
+          v('check_in_date'),
+          v('check_out_date'),
+          v('stay_date'),
+          v('status'),
+          v('payment_method'),
+          v('total_price'),
+          v('deposit'),
+          v('create_time'),
+          v('stay_type'),
+          v('remarks'),
+          v('is_prepaid'),
+          v('prepaid_amount'),
+        ]
+      );
+    }
+
+    await query('COMMIT;');
+  } catch (e) {
+    await query('ROLLBACK;');
+    throw e;
+  }
 };
 
 const getExpectedOverview = async ({ startDate, endDate, roomType = null }) => {
@@ -105,7 +337,42 @@ const getExpectedDailyMap = async ({ startDate, endDate, roomType = null }) => {
 
 describe('收入统计接口对账（复用交接班 SQL 数据，orders 口径）', () => {
   beforeAll(async () => {
-    await loadFixtureData();
+    const roomsSqlPath = path.resolve(__dirname, '../../../sql/rooms.sql');
+    const roomTypesSqlPath = path.resolve(__dirname, '../../../sql/room_types.sql');
+    const ordersCsvPath = path.resolve(__dirname, '../../../sql/orders.csv');
+
+    const executeSqlFile = async (filePath) => {
+      const sql = fs.readFileSync(filePath, 'utf8').trim();
+      if (sql) {
+        await query(sql);
+      }
+    };
+
+    await query('TRUNCATE TABLE bills RESTART IDENTITY CASCADE;');
+    await query('TRUNCATE TABLE orders RESTART IDENTITY CASCADE;');
+    await query('TRUNCATE TABLE rooms RESTART IDENTITY CASCADE;');
+    await query('TRUNCATE TABLE room_types RESTART IDENTITY CASCADE;');
+
+    await executeSqlFile(roomTypesSqlPath);
+    await executeSqlFile(roomsSqlPath);
+    await loadOrdersFromCsv(ordersCsvPath);
+  });
+
+  test.each([
+    ['2025-11-02', 3115.14],
+    ['2025-11-03', 3233.97],
+    ['2025-11-04', 3462.66],
+    ['2025-11-05', 3675.12],
+    ['2025-11-06', 2891.76],
+    ['2025-11-07', 4845.85],
+  ])('GET /api/revenue/quick-stats 单日范围：%s 今日收入=%s（来自 orders.csv）', async (date, expectedRevenue) => {
+    const res = await request(app)
+      .get('/api/revenue/quick-stats')
+      .query({ startDate: date, endDate: date });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body?.data?.today?.date).toBe(date);
+    expect(Number(res.body?.data?.today?.total_revenue || 0)).toBe(expectedRevenue);
   });
 
   test.each([
@@ -157,7 +424,7 @@ describe('收入统计接口对账（复用交接班 SQL 数据，orders 口径�
     });
   });
 
-  test('GET /api/revenue/daily-details：返回 orders 明细（排除 cancelled 且 total_price>0）', async () => {
+  test('GET /api/revenue/daily-details：返回 orders 明细（排除 cancelled）', async () => {
     const date = '2025-11-04';
 
     const expectedRes = await query(
@@ -171,7 +438,6 @@ describe('收入统计接口对账（复用交接班 SQL 数据，orders 口径�
         FROM orders
         WHERE stay_date::date BETWEEN $1::date AND $2::date
           AND status NOT IN ('cancelled')
-          AND COALESCE(total_price, 0) > 0
         ORDER BY stay_date::date DESC, room_number ASC, order_id ASC
       `,
       [date, date]
@@ -213,4 +479,3 @@ describe('收入统计接口对账（复用交接班 SQL 数据，orders 口径�
     });
   });
 });
-

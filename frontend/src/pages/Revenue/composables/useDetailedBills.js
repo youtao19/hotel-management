@@ -16,8 +16,15 @@ export function useDetailedBills() {
   const loading = ref(false)
   const rows = ref([])
   // filters.value 的结构：{ date: 'YYYY-MM-DD', roomNumber: '101' }
-  // 默认不传日期筛选：展示数据库中的全部账单数据（业务说明.md）
-  const filters = ref({ date: '', roomNumber: '' })
+  // 业务要求：日期默认显示“今日”，但默认展示“全部账单”（首次加载不按日期过滤，需点“查询”才应用筛选）。
+  const today = new Date()
+  const yyyy = today.getFullYear()
+  const mm = String(today.getMonth() + 1).padStart(2, '0')
+  const dd = String(today.getDate()).padStart(2, '0')
+  const defaultDate = `${yyyy}-${mm}-${dd}`
+
+  const filters = ref({ date: defaultDate, roomNumber: '' })
+  const hasSearched = ref(false)
   const pagination = ref({ rowsPerPage: 10 })
 
   // 表格列定义（用于 QTable）
@@ -37,7 +44,13 @@ export function useDetailedBills() {
   const fetchData = async () => {
     loading.value = true
     try {
-      const res = await revenueApi.getRevenueBills(filters.value)
+      const params = {}
+      if (hasSearched.value) {
+        if (filters.value.date) params.date = filters.value.date
+        if (filters.value.roomNumber) params.roomNumber = filters.value.roomNumber
+      }
+
+      const res = await revenueApi.getRevenueBills(params)
       const list = Array.isArray(res.data) ? res.data : []
       // 简单排序：按 create_time 倒序（最近的在前）
       rows.value = list.sort((a, b) => new Date(b.create_time) - new Date(a.create_time))
@@ -51,7 +64,8 @@ export function useDetailedBills() {
 
   // 重置筛选并重新获取数据
   const resetFilters = () => {
-    filters.value = { date: '', roomNumber: '' }
+    filters.value = { date: defaultDate, roomNumber: '' }
+    hasSearched.value = false
     fetchData()
   }
 
@@ -59,6 +73,7 @@ export function useDetailedBills() {
     rows,
     loading,
     filters,
+    hasSearched,
     pagination,
     columns,
     fetchData,
