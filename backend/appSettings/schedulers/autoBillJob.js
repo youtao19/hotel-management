@@ -20,7 +20,7 @@ function startAutoBillJob() {
   const timezone = setup.autoBillJob.timezone || 'Asia/Shanghai';
 
   cronTask = cron.schedule(expression, async () => {
-    console.info(`[autoBillJob] ${new Date().toISOString()} 开始执行`);
+    console.info(`[autoBillJob] ${new Date().toLocaleString('zh-CN', { hour12: false })} 开始执行`);
     try {
       await runAutoBillJob({ manualTrigger: false });
       console.info('[autoBillJob] 执行完成');

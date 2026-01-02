@@ -288,81 +288,42 @@ function focusDepositInput() {
 
 
 
-// 判断是否为休息房
 const isRestRoom = computed(() => {
-  if (!props.order?.checkInDate || !props.order?.checkOutDate) return false
-  const checkIn = new Date(props.order.checkInDate).toISOString().split('T')[0]
-  const checkOut = new Date(props.order.checkOutDate).toISOString().split('T')[0]
-  return checkIn === checkOut
+  if (!props.order) return false
+  if (props.order.isRestRoom !== undefined) return Boolean(props.order.isRestRoom)
+  const stayType = props.order.stayType ?? props.order.stay_type
+  if (stayType) return stayType === '休息房'
+  const checkIn = typeof props.order.checkInDate === 'string' ? props.order.checkInDate.slice(0, 10) : ''
+  const checkOut = typeof props.order.checkOutDate === 'string' ? props.order.checkOutDate.slice(0, 10) : ''
+  return Boolean(checkIn && checkOut && checkIn === checkOut)
 })
 
-// 计算住宿天数
-const stayDays = computed(() => {
-  if (!props.order?.checkInDate || !props.order?.checkOutDate) return 0
-
-  if (isRestRoom.value) return 1 // 休息房按1天计算
-
-  const checkIn = new Date(props.order.checkInDate)
-  const checkOut = new Date(props.order.checkOutDate)
-  const diffTime = Math.abs(checkOut - checkIn)
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-  return diffDays || 1
-})
-
-// 房费明细
 const roomPriceDetails = computed(() => {
-  if (!props.order?.roomPrice) return {}
-
-  // 如果是对象格式（每日价格）
-  if (typeof props.order.roomPrice === 'object' && !Array.isArray(props.order.roomPrice)) {
-    return props.order.roomPrice
-  }
-
-  // 如果是数字（总价），按天平均分配
-  if (typeof props.order.roomPrice === 'number') {
-    const dailyPrice = props.order.roomPrice / stayDays.value
-    const details = {}
-    const startDate = new Date(props.order.checkInDate)
-
-    for (let i = 0; i < stayDays.value; i++) {
-      const currentDate = new Date(startDate)
-      currentDate.setDate(startDate.getDate() + i)
-      const dateStr = currentDate.toISOString().split('T')[0]
-      details[dateStr] = dailyPrice.toFixed(2)
-    }
-    return details
-  }
-
+  if (!props.order) return {}
+  const dailyPrices = props.order.dailyPrices ?? props.order.daily_prices
+  if (dailyPrices && typeof dailyPrices === 'object' && !Array.isArray(dailyPrices)) return dailyPrices
+  if (props.order.roomPrice && typeof props.order.roomPrice === 'object' && !Array.isArray(props.order.roomPrice)) return props.order.roomPrice
   return {}
 })
 
-// 房费总计
+const stayDays = computed(() => {
+  if (!props.order) return 0
+  const fromApi = props.order.stayDays ?? props.order.stay_days
+  if (Number(fromApi) > 0) return Number(fromApi)
+  const days = Object.keys(roomPriceDetails.value || {}).length
+  if (days > 0) return days
+  return isRestRoom.value ? 1 : 0
+})
+
 const totalRoomFee = computed(() => {
-  console.log('🔍 计算房费总计 - roomPrice类型:', typeof props.order?.roomPrice, '值:', props.order?.roomPrice)
-
-  // 处理数字类型
-  if (typeof props.order?.roomPrice === 'number') {
-    console.log('✅ roomPrice是数字:', props.order.roomPrice)
-    return props.order.roomPrice
+  if (!props.order) return 0
+  const details = roomPriceDetails.value
+  const keys = Object.keys(details || {})
+  if (keys.length) {
+    return keys.reduce((sum, k) => sum + (Number(details[k]) || 0), 0)
   }
-
-  // 处理字符串类型（需要转换为数字）
-  if (typeof props.order?.roomPrice === 'string') {
-    const total = parseFloat(props.order.roomPrice) || 0
-    console.log('✅ roomPrice是字符串，转换为数字:', total)
-    return total
-  }
-
-  // 处理对象类型（每日价格）
-  if (typeof props.order?.roomPrice === 'object' && props.order?.roomPrice !== null) {
-    const total = Object.values(props.order.roomPrice)
-      .reduce((sum, price) => sum + parseFloat(price || 0), 0)
-    console.log('✅ roomPrice是对象，计算总额:', total)
-    return total
-  }
-
-  console.log('⚠️ roomPrice无效，返回0')
-  return 0
+  const raw = props.order.roomPrice ?? props.order.total_price ?? 0
+  return Number(raw) || 0
 })
 
 const prepaidRoomFee = computed(() => {
@@ -373,6 +334,12 @@ const prepaidRoomFee = computed(() => {
 })
 
 const remainingRoomFee = computed(() => {
+  if (!props.order) return 0
+  const fromApi = props.order.remainingRoomFee ?? props.order.remaining_room_fee
+  if (fromApi !== undefined && fromApi !== null && fromApi !== '') {
+    const n = Number(fromApi) || 0
+    return n > 0 ? Number(n.toFixed(2)) : 0
+  }
   const roomFee = Number(totalRoomFee.value) || 0
   const prepaid = Number(prepaidRoomFee.value) || 0
   const diff = Number((roomFee - prepaid).toFixed(2))
@@ -383,7 +350,6 @@ const remainingRoomFee = computed(() => {
 const totalAmount = computed(() => {
   const deposit = parseFloat(depositAmount.value) || 0
   const roomFee = remainingRoomFee.value
-  console.log('计算应收合计 - 待收房费:', roomFee, '押金:', deposit)
   return (roomFee + deposit).toFixed(2)
 })
 

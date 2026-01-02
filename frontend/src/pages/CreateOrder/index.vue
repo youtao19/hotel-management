@@ -113,7 +113,7 @@ const {
 const pricingLogic = usePricingLogic(orderData, dateLogic)
 const {
   dailyPrices, totalPriceInput, totalPrice, averageDailyPrice,
-  calculateAdjustedRoomPrice, initializeDailyPrices,
+  initializeDailyPrices,
   updateTotalFromDaily, distributeTotalPrice, applyFirstDayPriceToAll
 } = pricingLogic
 
@@ -147,8 +147,7 @@ watch(
       if (orderData.value.roomNumber) {
         const room = findAvailableRoomByNumber(orderData.value.roomNumber)
         if (room) {
-          const price = calculateAdjustedRoomPrice(room.price) // Pricing Logic
-          initializeDailyPrices(price) // Pricing Logic
+          await initializeDailyPrices(room.price) // Pricing Logic（后端拆分）
         }
       }
     }
@@ -168,13 +167,12 @@ watch(
 )
 
 // 当房间号改变时（选房），更新价格
-watch(() => orderData.value.roomNumber, (newVal) => {
+watch(() => orderData.value.roomNumber, async (newVal) => {
   if (newVal) {
     const room = findAvailableRoomByNumber(newVal)
     if (room) {
       dailyPrices.value = {} // 重置旧价格
-      const price = calculateAdjustedRoomPrice(room.price)
-      initializeDailyPrices(price)
+      await initializeDailyPrices(room.price)
     }
   }
 })

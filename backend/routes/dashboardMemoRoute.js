@@ -4,6 +4,7 @@ const router = express.Router();
 const Ajv = require("ajv");
 const addFormats = require("ajv-formats");
 const memoModule = require("../modules/dashboardMemoModule");
+const { formatDate } = require("../modules/tools");
 
 const ajv = new Ajv({ allErrors: true, removeAdditional: "failing" });
 addFormats(ajv);
@@ -37,21 +38,18 @@ const memoUpdateSchema = {
 const validateCreate = ajv.compile(memoCreateSchema);
 const validateUpdate = ajv.compile(memoUpdateSchema);
 
-function formatDateToISO(dateInput) {
-  if (typeof dateInput === "string") {
-    return dateInput;
-  }
-  const dateObj = dateInput instanceof Date ? dateInput : new Date(dateInput);
-  if (Number.isNaN(dateObj.getTime())) {
+function normalizeMemoDate(dateInput) {
+  try {
+    return formatDate(dateInput);
+  } catch {
     return null;
   }
-  return dateObj.toISOString().slice(0, 10);
 }
 
 router.get("/", async (req, res) => {
   try {
     const queryDate = req.query.date;
-    const formattedDate = formatDateToISO(queryDate || new Date());
+    const formattedDate = normalizeMemoDate(queryDate || new Date());
 
     if (!formattedDate) {
       return res.status(400).json({ message: "日期格式无效" });

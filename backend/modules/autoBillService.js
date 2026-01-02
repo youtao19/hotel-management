@@ -3,6 +3,7 @@
 const setup = require("../appSettings/setup");
 const { query } = require("../database/postgreDB/pg");
 const emailJob = require("./emailSetup");
+const { formatDate } = require("./tools");
 
 const SUPPORTED_PAY_WAYS = new Set(['现金', '微信', '微邮付', '平台']);
 const ENGLISH_PAYWAY_MAP = {
@@ -53,27 +54,41 @@ function determineStayType(order = {}) {
   if (order.stay_type) {
     return order.stay_type;
   }
-  const checkIn = order.check_in_date ? new Date(order.check_in_date) : null;
-  const checkOut = order.check_out_date ? new Date(order.check_out_date) : null;
-  if (checkIn && checkOut && !Number.isNaN(checkIn.getTime()) && !Number.isNaN(checkOut.getTime())) {
-    const sameDay = checkIn.toISOString().slice(0, 10) === checkOut.toISOString().slice(0, 10);
-    return sameDay ? '休息房' : '客房';
+  try {
+    const checkIn = formatDate(order.check_in_date);
+    const checkOut = formatDate(order.check_out_date);
+    if (checkIn && checkOut) {
+      return checkIn === checkOut ? '休息房' : '客房';
+    }
+  } catch {
+    // ignore
   }
   return '客房';
 }
 
 function calculateStayNights(order = {}) {
-  const checkIn = order.check_in_date ? new Date(order.check_in_date) : null;
-  const checkOut = order.check_out_date ? new Date(order.check_out_date) : null;
-
-  if (!checkIn || !checkOut || Number.isNaN(checkIn.getTime()) || Number.isNaN(checkOut.getTime())) {
+  let checkInYmd = null;
+  let checkOutYmd = null;
+  try {
+    checkInYmd = formatDate(order.check_in_date);
+    checkOutYmd = formatDate(order.check_out_date);
+  } catch {
     return 1;
   }
+  if (!checkInYmd || !checkOutYmd) return 1;
 
-  const diff = checkOut.getTime() - checkIn.getTime();
-  if (diff <= 0) {
-    return 1;
-  }
+  const ymdToUtcMs = (ymd) => {
+    const [y, m, d] = String(ymd).split('-').map(Number);
+    if (!y || !m || !d) return NaN;
+    return Date.UTC(y, m - 1, d);
+  };
+
+  const startMs = ymdToUtcMs(checkInYmd);
+  const endMs = ymdToUtcMs(checkOutYmd);
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return 1;
+
+  const diff = endMs - startMs;
+  if (diff <= 0) return 1;
   return Math.max(1, Math.round(diff / (24 * 60 * 60 * 1000)));
 }
 

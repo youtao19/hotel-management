@@ -1,24 +1,8 @@
 "use strict";
 
 const { query } = require('../database/postgreDB/pg');
-const { toAmountNumber } = require('./tools');
+const { toAmountNumber, formatDate } = require('./tools');
 const REFUND_TYPES = new Set(['退押', '退押金', '退款']);
-
-function formatDateTimeForDB(input) {
-    const date = input ? new Date(input) : new Date();
-    if (Number.isNaN(date.getTime())) {
-        throw new Error(`无效的日期时间格式: ${input}`);
-    }
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    const seconds = String(date.getSeconds()).padStart(2, '0');
-    const millis = String(date.getMilliseconds()).padStart(3, '0');
-    const micros = `${millis}000`;
-    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${micros}`;
-}
 
 // 获得订单的“最新一条”账单（兼容旧接口 getBillByOrderId）
 async function getBillByOrderId(order_id){
@@ -72,13 +56,11 @@ async function applyDepositRefund(order_id, actualRefundAmount, refundMethod, re
         const { room_number, guest_name } = ord.rows[0];
 
         const insertSql = `
-            INSERT INTO bills (order_id, room_number, guest_name, change_price, change_type, pay_way, create_time, stay_date, remarks)
-            VALUES ($1, $2, $3, $4, '退押', $5, $6, $7, $8)
+            INSERT INTO bills (order_id, room_number, guest_name, change_price, change_type, pay_way, stay_date, remarks)
+            VALUES ($1, $2, $3, $4, '退押', $5, COALESCE($6::date, CURRENT_DATE), $7)
             RETURNING *
         `;
-        const createTimeDate = refundTime ? new Date(refundTime) : new Date();
-        const createTime = formatDateTimeForDB(createTimeDate);
-        const stayDate = new Date(createTimeDate).toISOString().slice(0,10);
+        const stayDate = refundTime ? formatDate(refundTime) : null;
         const remarks = '退押';
         const result = await query(insertSql, [
             order_id,
@@ -86,7 +68,6 @@ async function applyDepositRefund(order_id, actualRefundAmount, refundMethod, re
             guest_name,
             -Math.abs(Number(actualRefundAmount) || 0),
             refundMethod,
-            createTime,
             stayDate,
             remarks
         ]);
@@ -127,22 +108,12 @@ async function getAllBills() {
 async function addBill(billData, client){
   try {
     const runner = client || query;
-    const createTime = formatDateTimeForDB(billData.create_time) || formatDateTimeForDB();
 
-    // 优先使用传入的 stay_date，否则使用创建时间的日期
-    let stayDate = billData.stay_date;
-    if (!stayDate) {
-        stayDate = createTime.slice(0, 10);
-    } else if (stayDate instanceof Date) {
-        // 如果是 Date 对象，转为 YYYY-MM-DD
-        const y = stayDate.getFullYear();
-        const m = String(stayDate.getMonth() + 1).padStart(2, '0');
-        const d = String(stayDate.getDate()).padStart(2, '0');
-        stayDate = `${y}-${m}-${d}`;
-    } else if (typeof stayDate === 'string') {
-        // 如果是字符串，截取前10位 (YYYY-MM-DD)
-        stayDate = stayDate.slice(0, 10);
-    }
+    // 优先使用传入的 stay_date（DATE 字段按字符串处理）
+    let stayDate = formatDate(billData.stay_date);
+    if (!stayDate) stayDate = null;
+
+    const createTime = typeof billData.create_time === 'string' ? billData.create_time : null;
 
     const insertQuery = `
         INSERT INTO bills (
@@ -156,7 +127,7 @@ async function addBill(billData, client){
             remarks,
             stay_type,
             stay_date
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        ) VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7::timestamptz, now()),$8,$9,COALESCE($10::date, (COALESCE($7::timestamptz, now()))::date))
         RETURNING *
     `;
 
@@ -170,7 +141,7 @@ async function addBill(billData, client){
       createTime,
       billData.remarks || null,
       billData.stay_type,
-      stayDate,
+      stayDate
     ];
 
     // 退款和退押必须为负数，补收与收押必须为正数
@@ -219,11 +190,11 @@ async function getOrderBillDetails(order_id) {
         const dateMap = new Map();
 
         for (const row of result.rows) {
-            const dateKey = row.stay_date.toISOString ? row.stay_date.toISOString().split('T')[0] : row.stay_date;
+            const dateKey = formatDate(row.stay_date);
 
             if (!dateMap.has(dateKey)) {
                 dateMap.set(dateKey, {
-                    stay_date: row.stay_date,
+                    stay_date: dateKey,
                     room_fee: 0,
                     deposit: 0,
                     change_price: 0,

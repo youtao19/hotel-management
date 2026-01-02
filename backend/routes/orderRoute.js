@@ -67,7 +67,7 @@ const updateOrderStatusSchema = {
 const earlyCheckoutSchema = {
   type: 'object',
   properties: {
-    actualCheckoutTime: { type: 'string', format: 'date-time' },
+    actualCheckoutTime: { type: 'string', minLength: 10, maxLength: 32 },
     refundAmount: {
       anyOf: [
         { type: 'number', minimum: 0 },
@@ -79,7 +79,40 @@ const earlyCheckoutSchema = {
     hasStayed: { type: 'boolean' },
     remarks: { type: 'string' }
   },
-  required: ['refundAmount'],
+  required: ['actualCheckoutTime', 'refundAmount'],
+  additionalProperties: false
+};
+
+const pricingBreakdownSchema = {
+  type: 'object',
+  properties: {
+    checkInDate: { type: 'string', format: 'date' },
+    checkOutDate: { type: 'string', format: 'date' },
+    mode: { type: 'string', enum: ['from-room-price', 'distribute-total'] },
+    basePrice: {
+      anyOf: [
+        { type: 'number', exclusiveMinimum: 0 },
+        { type: 'string', pattern: '^(0|[1-9]\\d*)(\\.\\d{1,2})?$', not: { const: '0' } }
+      ]
+    },
+    totalPrice: {
+      anyOf: [
+        { type: 'number', exclusiveMinimum: 0 },
+        { type: 'string', pattern: '^(0|[1-9]\\d*)(\\.\\d{1,2})?$', not: { const: '0' } }
+      ]
+    }
+  },
+  required: ['checkInDate', 'checkOutDate', 'mode'],
+  allOf: [
+    {
+      if: { properties: { mode: { const: 'from-room-price' } } },
+      then: { required: ['basePrice'] }
+    },
+    {
+      if: { properties: { mode: { const: 'distribute-total' } } },
+      then: { required: ['totalPrice'] }
+    }
+  ],
   additionalProperties: false
 };
 
@@ -121,6 +154,36 @@ router.get('/daily', async (req, res) => {
       message: '服务器错误',
       error: err.message,
       stack: process.env.NODE_ENV === 'dev' ? err.stack : undefined
+    });
+  }
+});
+
+/**
+ * 创建订单定价拆分（前端创建订单用）
+ * POST /api/orders/pricing/breakdown
+ */
+router.post('/pricing/breakdown', async (req, res) => {
+  try {
+    const validate = ajv.compile(pricingBreakdownSchema);
+    const valid = validate(req.body);
+    if (!valid) {
+      return res.status(400).json({
+        success: false,
+        message: '请求参数验证失败',
+        errors: validate.errors
+      });
+    }
+
+    const result = await orderModule.getPricingBreakdown(req.body);
+    return res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    console.error('定价拆分失败:', err);
+    const code = err.code || 'UNKNOWN';
+    const status = ['INVALID_DATE_RANGE', 'INVALID_PRICE', 'INVALID_MODE'].includes(code) ? 400 : 500;
+    return res.status(status).json({
+      success: false,
+      message: err.message || '定价拆分失败',
+      error: { code, details: err.message }
     });
   }
 });
@@ -337,6 +400,52 @@ router.put('/:orderNumber/with-bills', authenticationMiddleware, async (req, res
   } catch (error) {
     console.error(`联合更新订单 ${orderNumber} 失败:`, error);
     res.status(500).json({ success: false, message: '联合更新失败', error: error.message });
+  }
+});
+
+/**
+ * 更新订单和相关账单（联合事务，新版：后端计算差异 + 按日同步）
+ * PUT /api/orders/:orderNumber/with-bills-v2
+ * body: { orderData, roomPrice, changedBy }
+ */
+router.put('/:orderNumber/with-bills-v2', authenticationMiddleware, async (req, res) => {
+  const { orderNumber } = req.params;
+  try {
+    const body = req.body || {};
+    const { orderData, roomPrice, changedBy } = body;
+    const result = await orderModule.updateOrderWithBillsV2(orderNumber, orderData, roomPrice, changedBy);
+    res.json(result);
+  } catch (error) {
+    console.error(`联合更新订单(v2) ${orderNumber} 失败:`, error);
+    const status = error.statusCode || 500;
+    res.status(status).json({
+      success: false,
+      message: status === 500 ? '联合更新失败' : error.message,
+      error: error.message,
+      code: error.code || 'UPDATE_WITH_BILLS_V2_ERROR'
+    });
+  }
+});
+
+/**
+ * 提前退房：获取推荐退款信息（只读）
+ * GET /api/orders/:orderNumber/early-checkout/recommendation?actualCheckoutTime=...&hasStayed=true
+ */
+router.get('/:orderNumber/early-checkout/recommendation', authenticationMiddleware, async (req, res) => {
+  const { orderNumber } = req.params;
+  try {
+    const { actualCheckoutTime, hasStayed } = req.query || {};
+    const result = await orderModule.getEarlyCheckoutRecommendation(orderNumber, { actualCheckoutTime, hasStayed });
+    return res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    console.error(`获取提前退房推荐 ${orderNumber} 失败:`, error);
+    const statusCode = error.statusCode || 500;
+    return res.status(statusCode).json({
+      success: false,
+      message: statusCode >= 500 ? '获取提前退房推荐失败' : error.message,
+      error: error.message,
+      code: error.code || 'EARLY_CHECKOUT_RECOMMENDATION_ERROR'
+    });
   }
 });
 

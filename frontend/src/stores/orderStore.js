@@ -31,9 +31,7 @@ export const useOrderStore = defineStore('order', () => {
 
         const response = await orderApi.getAllOrders()
 
-
-
-        const rawOrders = response && response.data ? response.data : (Array.isArray(response) ? response : [])
+        const rawOrders = response?.data?.data || response?.data || (Array.isArray(response) ? response : [])
         console.log(`成功获取 ${rawOrders.length} 条订单数据`)
 
         orders.value = rawOrders.map(order => ({
@@ -56,6 +54,11 @@ export const useOrderStore = defineStore('order', () => {
           sourceNumber: order.id_source,
           isPrepaid: Boolean(order.is_prepaid),
           prepaidAmount: parseFloat(order.prepaid_amount) || 0,
+          stayDays: Number(order.stay_days) || 0,
+          stayDates: order.stay_dates || [],
+          dailyPrices: order.daily_prices || null,
+          isRestRoom: Boolean(order.is_rest_room),
+          remainingRoomFee: order.remaining_room_fee
         }))
 
         return orders.value
@@ -235,7 +238,7 @@ export const useOrderStore = defineStore('order', () => {
       loading.value = true
       const response = await orderApi.getOrderById(orderNumber)
       // 后端返回 { data: [...rows] }，是订单每日记录数组
-      const rows = response.data
+      const rows = response?.data?.data || response?.data
       console.log(`获取订单 ${orderNumber} 详情:`, rows)
 
       // 如果没有数据，返回 null
@@ -245,6 +248,9 @@ export const useOrderStore = defineStore('order', () => {
 
       // 取第一条记录作为主订单信息（共享字段如 guest_name, status 等）
       const firstRow = rows[0]
+      const dailyPrices = Object.fromEntries(
+        rows.map(row => [formatOrderDate(row.stay_date), Number(row.total_price) || 0])
+      )
 
       // 将后端蛇形命名映射为前端驼峰命名，与 fetchAllOrders 保持一致
       return {
@@ -268,6 +274,10 @@ export const useOrderStore = defineStore('order', () => {
         sourceNumber: firstRow.id_source,
         isPrepaid: Boolean(firstRow.is_prepaid),
         prepaidAmount: parseFloat(firstRow.prepaid_amount) || 0,
+        stayDays: rows.length,
+        stayDates: rows.map(row => formatOrderDate(row.stay_date)),
+        dailyPrices,
+        isRestRoom: firstRow.stay_type === '休息房',
         // 每日房间安排（多日订单场景），包含每日房价
         dailyOrders: rows.map(row => ({
           stayDate: formatOrderDate(row.stay_date),
@@ -486,7 +496,6 @@ export const useOrderStore = defineStore('order', () => {
         remarks: order.remarks?.toString() || '',
         orderSource: normalizeOrderSource(order.source),
         idSource: order.sourceNumber?.toString() || '',
-        createTime: new Date().toISOString(),
       };
 
       // Call the new API

@@ -204,11 +204,6 @@ async function viewOrderDetails(order) {
   currentOrder.value = order
   dialogs.details = true // 使用新状态
 
-  // 确保账单数据已加载，以便详情页财务信息能正确显示
-  if (!billStore.bills?.length) {
-    try { await billStore.fetchAllBills() } catch(e) { console.warn('加载账单失败', e) }
-  }
-
   if (order?.orderNumber) {
     try {
       const full = await orderStore.getOrderByNumber(order.orderNumber)

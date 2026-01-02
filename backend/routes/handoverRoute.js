@@ -349,10 +349,10 @@ router.post('/save-admin-memo', async (req, res) => {
       memo: typeof req.body.memo === "string" ? req.body.memo.trim() : req.body.memo
     };
 
-    console.log('收到保存管理员备忘录请求:', {
-      body: JSON.stringify(payload, null, 2),
-      timestamp: new Date().toISOString()
-    });
+	    console.log('收到保存管理员备忘录请求:', {
+	      body: JSON.stringify(payload, null, 2),
+	      timestamp: new Date().toLocaleString('zh-CN', { hour12: false })
+	    });
 
     const isValid = validateSaveAdminMemo(payload);
 
@@ -381,13 +381,13 @@ router.post('/save-admin-memo', async (req, res) => {
       requestBody: JSON.stringify(req.body, null, 2)
     });
 
-    res.status(500).json({
-      success: false,
-      message: error.message || '保存失败',
-      timestamp: new Date().toISOString()
-    });
-  }
-});
+	    res.status(500).json({
+	      success: false,
+	      message: error.message || '保存失败',
+	      timestamp: new Date().toLocaleString('zh-CN', { hour12: false })
+	    });
+	  }
+	});
 
 
 router.get('/check-yesterday', async (req, res) => {
@@ -701,10 +701,10 @@ router.post('/complete', async (req, res) => {
       notes = ''
     } = req.body;
 
-    console.log('收到完成交接班请求:', {
-      date, handoverPerson, receivePerson,
-      vipCard, timestamp: new Date().toISOString()
-    });
+	    console.log('收到完成交接班请求:', {
+	      date, handoverPerson, receivePerson,
+	      vipCard, timestamp: new Date().toLocaleString('zh-CN', { hour12: false })
+	    });
 
     client = await getClient();
     await client.query('BEGIN');

@@ -14,10 +14,13 @@ export function useOrderTableConfig() {
 
   // 判断是否为休息房 (入住日期 == 离店日期)
   const isRestRoom = (order) => {
-    if (!order.checkInDate || !order.checkOutDate) return false
-    const checkIn = new Date(order.checkInDate).toISOString().split('T')[0]
-    const checkOut = new Date(order.checkOutDate).toISOString().split('T')[0]
-    return checkIn === checkOut
+    if (!order) return false
+    if (order.isRestRoom !== undefined) return Boolean(order.isRestRoom)
+    const stayType = order.stayType ?? order.stay_type
+    if (stayType) return stayType === '休息房'
+    const checkIn = typeof order.checkInDate === 'string' ? order.checkInDate.slice(0, 10) : ''
+    const checkOut = typeof order.checkOutDate === 'string' ? order.checkOutDate.slice(0, 10) : ''
+    return Boolean(checkIn && checkOut && checkIn === checkOut)
   }
 
   // --- 表格列定义 ---

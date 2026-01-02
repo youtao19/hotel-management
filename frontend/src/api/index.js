@@ -147,6 +147,10 @@ export const orderApi = {
   updateOrderWithBills: (orderId, orderData, billUpdates, changedBy = 'system') =>
     api.put(`/orders/${orderId}/with-bills`, { orderData, billUpdates, changedBy }),
 
+  // 更新订单和相关账单（联合事务 v2：后端计算差异 + 按日同步）
+  updateOrderWithBillsV2: (orderId, orderData, roomPrice, changedBy = 'system') =>
+    api.put(`/orders/${orderId}/with-bills-v2`, { orderData, roomPrice, changedBy }),
+
   // 退押金
   refundDeposit: (order_id, refundData) => api.post(`/orders/${order_id}/refund-deposit`, refundData),
 
@@ -161,9 +165,13 @@ export const orderApi = {
 
   // 提前退房
   earlyCheckout: (orderId, payload) => api.post(`/orders/${orderId}/early-checkout`, payload),
+  earlyCheckoutRecommendation: (orderId, params) => api.get(`/orders/${orderId}/early-checkout/recommendation`, { params }),
 
   // 更新订单特定日期的房间
   updateOrderDayRoom: (orderId, data) => api.put(`/orders/${orderId}/day-room`, data),
+
+  // 创建订单：定价拆分（后端计算，前端只渲染/触发）
+  getPricingBreakdown: (payload) => api.post('/orders/pricing/breakdown', payload),
 }
 
 // 用户相关接口

@@ -28,6 +28,7 @@ export function useCheckDataLogic() {
   const hotelRoomData = ref([]);
   const restRoomData = ref([]);
   const carIncomeData = ref([]);
+  const backendSummaryDataObject = ref(null);
 
   const roomColumns = [
     { name: "billId", label: "账单ID", field: "billId", align: "left" },
@@ -93,6 +94,7 @@ export function useCheckDataLogic() {
   });
 
   const summaryDataObject = computed(() => {
+    if (backendSummaryDataObject.value) return backendSummaryDataObject.value;
     const buckets = {
       hotelIncome: createPaywayBucket(),
       restIncome: createPaywayBucket(),
@@ -166,6 +168,7 @@ export function useCheckDataLogic() {
       hotelRoomData.value = hotelBills.map(mapBillToRow);
       restRoomData.value = restBills.map(mapBillToRow);
       carIncomeData.value = carBills.map(mapBillToRow);
+      backendSummaryDataObject.value = response.data?.summaryDataObject || null;
     } catch (error) {
       console.error("加载账单数据失败:", error);
       $q.notify({
@@ -176,6 +179,7 @@ export function useCheckDataLogic() {
       hotelRoomData.value = [];
       restRoomData.value = [];
       carIncomeData.value = [];
+      backendSummaryDataObject.value = null;
     } finally {
       isLoadingData.value = false;
     }

@@ -5,7 +5,7 @@
 const { query } = require('../database/postgreDB/pg');
 
 describe('PostgreSQL 时间字段类型规范测试', () => {
-  
+
   // 需要检查的时间点字段（应为 TIMESTAMPTZ）
   const timestamptzFields = [
     { table: 'orders', column: 'create_time' },
@@ -31,8 +31,8 @@ describe('PostgreSQL 时间字段类型规范测试', () => {
   test('所有时间点字段应使用 TIMESTAMPTZ 类型', async () => {
     for (const { table, column } of timestamptzFields) {
       const result = await query(`
-        SELECT data_type 
-        FROM information_schema.columns 
+        SELECT data_type
+        FROM information_schema.columns
         WHERE table_name = $1 AND column_name = $2
       `, [table, column]);
 
@@ -44,8 +44,8 @@ describe('PostgreSQL 时间字段类型规范测试', () => {
   test('所有业务日期字段应使用 DATE 类型', async () => {
     for (const { table, column } of dateFields) {
       const result = await query(`
-        SELECT data_type 
-        FROM information_schema.columns 
+        SELECT data_type
+        FROM information_schema.columns
         WHERE table_name = $1 AND column_name = $2
       `, [table, column]);
 
@@ -58,7 +58,7 @@ describe('PostgreSQL 时间字段类型规范测试', () => {
     // 检查是否有任何时间字段错误使用了 timestamp without time zone
     const result = await query(`
       SELECT table_name, column_name, data_type
-      FROM information_schema.columns 
+      FROM information_schema.columns
       WHERE table_schema = 'public'
         AND data_type = 'timestamp without time zone'
         AND column_name IN ('create_time', 'created_at', 'updated_at', 'changed_at', 'invite_time', 'update_time')
@@ -67,14 +67,14 @@ describe('PostgreSQL 时间字段类型规范测试', () => {
     if (result.rows.length > 0) {
       console.log('发现使用无时区时间戳的字段:', result.rows);
     }
-    
+
     expect(result.rows.length).toBe(0);
   });
 
   test('orders.create_time 应有默认值 now()', async () => {
     const result = await query(`
       SELECT column_default
-      FROM information_schema.columns 
+      FROM information_schema.columns
       WHERE table_name = 'orders' AND column_name = 'create_time'
     `);
 
@@ -85,7 +85,7 @@ describe('PostgreSQL 时间字段类型规范测试', () => {
   test('bills.create_time 应有默认值 now()', async () => {
     const result = await query(`
       SELECT column_default
-      FROM information_schema.columns 
+      FROM information_schema.columns
       WHERE table_name = 'bills' AND column_name = 'create_time'
     `);
 
@@ -93,3 +93,4 @@ describe('PostgreSQL 时间字段类型规范测试', () => {
     expect(result.rows[0].column_default).toMatch(/now\(\)/i);
   });
 });
+

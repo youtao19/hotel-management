@@ -86,7 +86,7 @@ router.post('/add', async (req, res) => {
       room_number,
       guest_name,
       stay_type,
-      create_time: req.body.create_time || req.body.refundTime || new Date()
+      create_time: req.body.create_time || req.body.refundTime || null
     });
     res.status(201).json({ success: true, data: newBill });
   } catch (err) {
@@ -116,30 +116,6 @@ router.post('/other-income', async (req, res) => {
       return res.status(400).json({ message: 'amount 必须是大于 0 的数字' });
     }
 
-    const incomeDateObj = income_date ? new Date(income_date) : new Date();
-    if (Number.isNaN(incomeDateObj.getTime())) {
-      return res.status(400).json({ message: 'income_date 格式不正确' });
-    }
-
-    const formatDateTimeForDB = (input) => {
-      const dateObj = input ? new Date(input) : new Date();
-      if (Number.isNaN(dateObj.getTime())) {
-        throw new Error(`无效的日期时间格式: ${input}`);
-      }
-      const year = dateObj.getFullYear();
-      const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-      const day = String(dateObj.getDate()).padStart(2, '0');
-      const hours = String(dateObj.getHours()).padStart(2, '0');
-      const minutes = String(dateObj.getMinutes()).padStart(2, '0');
-      const seconds = String(dateObj.getSeconds()).padStart(2, '0');
-      const millis = String(dateObj.getMilliseconds()).padStart(3, '0');
-      const micros = `${millis}000`;
-      return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${micros}`;
-    };
-
-    const createTime = formatDateTimeForDB(incomeDateObj);
-    const stayDate = incomeDateObj.toISOString().split('T')[0];
-
     const insertQuery = `
       INSERT INTO bills (
         order_id,
@@ -152,7 +128,7 @@ router.post('/other-income', async (req, res) => {
         remarks,
         stay_type,
         stay_date
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7::timestamptz,$8,$9,($7::timestamptz)::date)
       RETURNING *
     `;
 
@@ -163,10 +139,9 @@ router.post('/other-income', async (req, res) => {
       numericAmount, // 收入正数
       income_type || '其他收入',
       pay_way,
-      createTime,
+      income_date,
       remarks || '',
       '租车收入',
-      stayDate
     ];
 
     const { rows } = await query(insertQuery, values);
@@ -269,6 +244,61 @@ router.get('/by-date/:date', async (req, res) => {
       (!bill.order_id && (bill.stay_type === '其他' || !bill.stay_type))
     );
 
+    const PAY_WAY_KEYS = ['现金', '微信', '微邮付', '其他'];
+    const normalizePayWay = (val) => (PAY_WAY_KEYS.includes(val) ? val : '其他');
+    const isRefund = (type) => ['退押', '退押金', '退款'].includes(type);
+    const isIncome = (type) => ['房费', '收押', '补收', '订单账单', '租车收入'].includes(type);
+    const createPaywayBucket = () => PAY_WAY_KEYS.reduce((acc, k) => { acc[k] = 0; return acc; }, {});
+
+    const addAmount = (bucket, payWay, amount) => {
+      const key = normalizePayWay(payWay);
+      const cents = Math.round((Number(amount) || 0) * 100);
+      bucket[key] = Number(((bucket[key] || 0) + cents).toFixed(0));
+    };
+
+    const toAmountBucket = (bucketCents) => {
+      const res = {};
+      PAY_WAY_KEYS.forEach(k => {
+        res[k] = Number(((bucketCents[k] || 0) / 100).toFixed(2));
+      });
+      return res;
+    };
+
+    const bucketsCents = {
+      hotelIncome: createPaywayBucket(),
+      restIncome: createPaywayBucket(),
+      hotelRefundDeposit: createPaywayBucket(),
+      restRefundDeposit: createPaywayBucket(),
+      carRentIncome: createPaywayBucket()
+    };
+
+    const accumulate = (rows, incomeBucket, refundBucket) => {
+      rows.forEach((bill) => {
+        const type = bill.change_type;
+        const payWay = bill.pay_way;
+        const raw = Number(bill.change_price || 0);
+        if (isIncome(type)) {
+          addAmount(bucketsCents[incomeBucket], payWay, raw);
+        } else if (isRefund(type)) {
+          addAmount(bucketsCents[refundBucket], payWay, Math.abs(raw));
+        }
+      });
+    };
+
+    accumulate(hotelBills, 'hotelIncome', 'hotelRefundDeposit');
+    accumulate(restBills, 'restIncome', 'restRefundDeposit');
+    accumulate(carBills, 'carRentIncome', 'carRentIncome');
+
+    const summaryDataObject = {
+      hotelIncome: toAmountBucket(bucketsCents.hotelIncome),
+      restIncome: toAmountBucket(bucketsCents.restIncome),
+      hotelRefundDeposit: toAmountBucket(bucketsCents.hotelRefundDeposit),
+      restRefundDeposit: toAmountBucket(bucketsCents.restRefundDeposit),
+      carRentIncome: toAmountBucket(bucketsCents.carRentIncome),
+      totalRooms: hotelBills.length,
+      restRooms: restBills.length
+    };
+
     console.log(`🏨 [by-date] 账单分组统计:`, {
       总账单数: allBills.length,
       客房账单: hotelBills.length,
@@ -285,6 +315,7 @@ router.get('/by-date/:date', async (req, res) => {
         hotelBills,
         restBills,
         carBills,
+        summaryDataObject,
         totalCount: allBills.length
       },
       message: `成功获取 ${date} 的账单数据`
@@ -320,8 +351,8 @@ router.post('/adjustment', async (req, res) => {
       remarks: req.body.remarks || req.body.notes || null,
       guest_name: orderRes[0].guest_name,
       stay_type: orderRes[0].stay_type,
-      stay_date: new Date().toISOString().split('T')[0],
-      create_time: req.body.create_time || new Date()
+      stay_date: null,
+      create_time: req.body.create_time || null
     }
 
     // 插入调整账单

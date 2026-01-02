@@ -5,6 +5,7 @@ import { orderApi } from 'src/api'
 import { useRoomStore } from 'src/stores/roomStore'
 import { useViewStore } from 'src/stores/viewStore'
 import { useOrderStore } from 'src/stores/orderStore'
+import { date } from 'quasar'
 
 export function useExtendStay(refreshAllData) {
   const $q = useQuasar()
@@ -35,10 +36,8 @@ export function useExtendStay(refreshAllData) {
     loadingExtendStayRooms.value = true
 
     try {
-      const today = new Date().toISOString().split('T')[0]
-      const tomorrow = new Date()
-      tomorrow.setDate(tomorrow.getDate() + 1)
-      const tomorrowStr = tomorrow.toISOString().split('T')[0]
+      const today = date.formatDate(new Date(), 'YYYY-MM-DD')
+      const tomorrowStr = date.formatDate(date.addToDate(today, { days: 1 }), 'YYYY-MM-DD')
 
       const rooms = await roomStore.getAvailableRoomsByDate(today, tomorrowStr)
 
@@ -112,7 +111,6 @@ export function useExtendStay(refreshAllData) {
         stayType: extendStayData.stayType || '客房',
         isPrepaid: false,
         prepaidAmount: 0,
-        createTime: new Date().toISOString(),
         remarks: `续住订单，原客人：${extendStayData.guestName}，原订单号：${extendStayData.originalOrderNumber}。${extendStayData.notes || ''}`.trim(),
         source: 'extend_stay'
       }

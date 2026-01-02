@@ -51,20 +51,18 @@ export function useExtendStayLogic({ modelValueRef, currentOrderRef, availableRo
 
   const stayDays = computed(() => {
     if (!extendStartDate.value || !extendEndDate.value) return 0
-    const start = new Date(extendStartDate.value)
-    const end = new Date(extendEndDate.value)
-    const diffTime = end - start
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    const diffDays = date.getDateDiff(extendEndDate.value, extendStartDate.value, 'days')
     return diffDays > 0 ? diffDays : 0
   })
 
   const stayDateList = computed(() => {
     if (!extendStartDate.value || !extendEndDate.value) return []
     const res = []
-    const start = new Date(extendStartDate.value)
-    const end = new Date(extendEndDate.value)
-    for (let d = new Date(start); d < end; d.setDate(d.getDate() + 1)) {
-      res.push(d.toISOString().split('T')[0])
+    const start = extendStartDate.value
+    const end = extendEndDate.value
+    const total = date.getDateDiff(end, start, 'days')
+    for (let i = 0; i < total; i++) {
+      res.push(date.formatDate(date.addToDate(start, { days: i }), 'YYYY-MM-DD'))
     }
     return res
   })

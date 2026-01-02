@@ -1,69 +1,57 @@
 import { ref, computed, watch } from 'vue'
 import { useQuasar } from 'quasar'
-import Decimal from 'decimal.js'
+import { orderApi } from 'src/api'
 
 export function usePricingLogic(orderData, dateLogic) {
   const $q = useQuasar()
   const dailyPrices = ref({})
   const totalPriceInput = ref(0)
 
-  Decimal.set({ precision: 20, rounding: Decimal.ROUND_HALF_UP })
-
-  function toDecimal(value) {
-    if (Decimal.isDecimal(value)) return value
-    if (value === undefined || value === null || value === '') return new Decimal(0)
-    try { return new Decimal(value) } catch (e) { return new Decimal(0) }
-  }
-
-  function toAmountNumber(value) {
-    const d = Decimal.isDecimal(value) ? value : toDecimal(value)
-    return Number(d.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toString())
-  }
-
-  // 根据是否休息房调整单价
-  function calculateAdjustedRoomPrice(rawPrice) {
-    const base = toDecimal(rawPrice)
-    if (!base.gt(0)) return 0
-    const adjusted = dateLogic.isRestRoom.value ? base.div(2) : base
-    return toAmountNumber(adjusted)
-  }
-
-  // 计算每日价格总和
-  function sumDailyPricesDecimal() {
-    if (!Array.isArray(dateLogic.dateList.value) || dateLogic.dateList.value.length === 0) return new Decimal(0)
-    return dateLogic.dateList.value.reduce((sum, date) => {
-      const p = dailyPrices.value[date]
-      return p ? sum.plus(toDecimal(p)) : sum
-    }, new Decimal(0))
+  function toAmountNumber(v) {
+    const n = Number(v)
+    if (!Number.isFinite(n)) return 0
+    return Math.round(n * 100) / 100
   }
 
   const totalPrice = computed(() => {
-    return Number(sumDailyPricesDecimal().toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toString())
+    if (!Array.isArray(dateLogic.dateList.value) || dateLogic.dateList.value.length === 0) return 0
+    const sum = dateLogic.dateList.value.reduce((acc, date) => {
+      return acc + (Number(dailyPrices.value[date]) || 0)
+    }, 0)
+    return toAmountNumber(sum)
   })
 
   const averageDailyPrice = computed(() => {
     const days = dateLogic.dateList.value.length
     if (!days) return 0
-    return Number(toDecimal(totalPrice.value).div(days).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toString())
+    return toAmountNumber((Number(totalPrice.value) || 0) / days)
   })
 
-  // 初始化每日价格
-  function initializeDailyPrices(basePrice) {
-    if (dateLogic.dateList.value.length === 0) {
+  async function initializeDailyPrices(basePrice) {
+    if (!dateLogic.dateList.value.length) {
+      dailyPrices.value = {}
       totalPriceInput.value = 0
       return
     }
     const normalized = toAmountNumber(basePrice)
     if (!(normalized > 0)) {
+      dailyPrices.value = {}
       totalPriceInput.value = 0
       return
     }
-    dateLogic.dateList.value.forEach(date => {
-      if (!dailyPrices.value[date]) {
-        dailyPrices.value[date] = normalized
-      }
-    })
-    updateTotalFromDaily()
+
+    try {
+      const res = await orderApi.getPricingBreakdown({
+        checkInDate: orderData.value.checkInDate,
+        checkOutDate: orderData.value.checkOutDate,
+        mode: 'from-room-price',
+        basePrice: normalized
+      })
+      dailyPrices.value = res?.data?.daily_prices || {}
+      updateTotalFromDaily()
+    } catch (e) {
+      $q.notify({ type: 'negative', message: e?.response?.data?.message || e?.message || '初始化每日价格失败' })
+    }
   }
 
   // 从每日价格更新总价输入
@@ -72,30 +60,27 @@ export function usePricingLogic(orderData, dateLogic) {
       totalPriceInput.value = 0
       return
     }
-    totalPriceInput.value = toAmountNumber(sumDailyPricesDecimal())
+    totalPriceInput.value = totalPrice.value
   }
 
   // 分摊总价到每日
-  function distributeTotalPrice() {
-    if (dateLogic.dateList.value.length === 0) return
-    const total = toDecimal(totalPriceInput.value)
-    if (!total.gt(0)) return
+  async function distributeTotalPrice() {
+    if (!dateLogic.dateList.value.length) return
+    const total = toAmountNumber(totalPriceInput.value)
+    if (!(total > 0)) return
 
-    const days = dateLogic.dateList.value.length
-    const totalCents = total.mul(100).toDecimalPlaces(0, Decimal.ROUND_HALF_UP)
-    const baseCents = totalCents.div(days).floor()
-    let remainder = totalCents.minus(baseCents.mul(days))
-
-    dailyPrices.value = {} // Reset or update
-    dateLogic.dateList.value.forEach(date => {
-      let cents = baseCents
-      if (remainder.gt(0)) {
-        cents = cents.plus(1)
-        remainder = remainder.minus(1)
-      }
-      dailyPrices.value[date] = cents.div(100).toNumber()
-    })
-    updateTotalFromDaily()
+    try {
+      const res = await orderApi.getPricingBreakdown({
+        checkInDate: orderData.value.checkInDate,
+        checkOutDate: orderData.value.checkOutDate,
+        mode: 'distribute-total',
+        totalPrice: total
+      })
+      dailyPrices.value = res?.data?.daily_prices || {}
+      updateTotalFromDaily()
+    } catch (e) {
+      $q.notify({ type: 'negative', message: e?.response?.data?.message || e?.message || '分摊总价失败' })
+    }
   }
 
   // 应用首日价格
@@ -130,12 +115,10 @@ export function usePricingLogic(orderData, dateLogic) {
     totalPriceInput,
     totalPrice,
     averageDailyPrice,
-    calculateAdjustedRoomPrice,
     initializeDailyPrices,
     updateTotalFromDaily,
     distributeTotalPrice,
     applyFirstDayPriceToAll,
-    toAmountNumber,
-    toDecimal
+    toAmountNumber
   }
 }

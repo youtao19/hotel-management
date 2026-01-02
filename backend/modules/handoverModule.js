@@ -1,4 +1,5 @@
 const { query, getClient } = require('../database/postgreDB/pg');
+const { formatDate } = require('./tools');
 
 const PAY_WAY_KEYS = ['现金', '微信', '微邮付', '其他'];
 
@@ -544,7 +545,7 @@ async function getReserveCash(date) {
  * @returns {Promise<Object>} { openCount, restCount, invited, positive }
  */
 async function getShiftSpecialStats(date) {
-  const targetDate = date || new Date().toISOString().split('T')[0]
+  const targetDate = formatDate(date || new Date())
 
   // 统计开房/休息房数量
   const roomCountSql = `

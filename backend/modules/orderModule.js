@@ -1,8 +1,7 @@
 const { query, getClient } = require('../database/postgreDB/pg');
 const billModule = require('./billModule');
 const setup = require('../appSettings/setup');
-const { formatDate, formatDateTimeForDB } = require('./tools');
-const { toDecimal, toAmountNumber } = require('./tools');
+const { formatDate, toDecimal, toAmountNumber } = require('./tools');
 
 const tableName = "orders";
 
@@ -35,17 +34,9 @@ async function checkTableExists() {
  * @returns {boolean} 是否为休息房
  */
 function isRestRoom(orderData) {
-  const toLocalYMD = (d) => {
-    if (d == null) return '';
-    if (typeof d === 'string') return d.slice(0, 10); // 已经是 'YYYY-MM-DD'
-    const dt = (d instanceof Date) ? d : new Date(d);
-    const y = dt.getFullYear();
-    const m = String(dt.getMonth() + 1).padStart(2, '0');
-    const day = String(dt.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  };
-  const checkInDateStr = toLocalYMD(orderData.check_in_date);
-  const checkOutDateStr = toLocalYMD(orderData.check_out_date);
+  const checkInDateStr = formatDate(orderData.check_in_date);
+  const checkOutDateStr = formatDate(orderData.check_out_date);
+  if (!checkInDateStr || !checkOutDateStr) return false;
   return checkInDateStr === checkOutDateStr;
 }
 
@@ -71,16 +62,9 @@ async function createOrder(orderData, client) {
     const normalizedStayType = stayType || orderData.stay_type || '客房';
     const normalizedIsPrepaid = Boolean(isPrepaid);
     const normalizedPrepaidAmount = toAmountNumber(prepaidAmount || 0);
-    const normalizedCreateTime = formatDateTimeForDB(createTime || new Date());
 
     const formattedCheckInDate = formatDate(checkInDate);
     const formattedCheckOutDate = formatDate(checkOutDate);
-    // 计算住宿天数
-    const checkInDateObj = new Date(formattedCheckInDate);
-    const checkOutDateObj = new Date(formattedCheckOutDate);
-    let stayDays = Math.ceil((checkOutDateObj - checkInDateObj) / (1000 * 60 * 60 * 24));
-    // 休息房（同日入住退房）按1天处理
-    if (stayDays === 0) stayDays = 1;
 
     // 插入 sql 语句
     const insertQuery = `
@@ -88,9 +72,9 @@ async function createOrder(orderData, client) {
         order_id, id_source, order_source, guest_name, phone,
         room_type, room_number, check_in_date, check_out_date, stay_date, status,
         payment_method, total_price, deposit, is_prepaid, prepaid_amount,
-        create_time, stay_type, remarks
+        stay_type, remarks
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
       )
       RETURNING *;
     `;
@@ -102,28 +86,44 @@ async function createOrder(orderData, client) {
         await runner.query('BEGIN');
       }
 
-      // 获得日期列表
-      const dateList = Object.keys(roomPrice);
-      for (let i = 0; i < stayDays; i++) {
-        const stay_date = formatDate(dateList[i] || new Date(checkInDateObj.getTime() + i * 24 * 60 * 60 * 1000));
-        const total_price = toAmountNumber(roomPrice[stay_date]);
+      // stayDates 必须以订单日期范围为准：入住日(含) 到 退房日(不含)；休息房/异常范围兜底为 1 天
+      let stayDates = [];
+      if (!formattedCheckInDate) {
+        stayDates = [];
+      } else if (!formattedCheckOutDate || formattedCheckOutDate <= formattedCheckInDate) {
+        stayDates = [formattedCheckInDate];
+      } else {
+        const { rows } = await runner.query(
+          `SELECT to_char(d::date, 'YYYY-MM-DD') AS stay_date
+             FROM generate_series($1::date, ($2::date - INTERVAL '1 day'), INTERVAL '1 day') d`,
+          [formattedCheckInDate, formattedCheckOutDate]
+        );
+        stayDates = rows.map(r => r.stay_date);
+      }
+
+      if (!stayDates.length) {
+        const err = new Error('订单日期范围无效，无法创建订单');
+        err.code = 'INVALID_DATE_RANGE';
+        throw err;
+      }
+
+      for (let i = 0; i < stayDates.length; i++) {
+        const stay_date = stayDates[i];
+        const total_price = toAmountNumber(roomPrice?.[stay_date]);
 
         // 如果是预付，预付金额放在第一天的订单
-        let prepaidAmountForThisDay = 0;
-        if (normalizedIsPrepaid) {
-          prepaidAmountForThisDay = (i === 0) ? normalizedPrepaidAmount : 0;
-        }
+        const prepaidAmountForThisDay = (normalizedIsPrepaid && i === 0) ? normalizedPrepaidAmount : 0;
 
         let value = [orderId, sourceNumber, normalizedOrderSource, guestName, phone,
-          roomType, roomNumber, checkInDate, checkOutDate, stay_date, status,
-          paymentMethod, total_price, deposit, normalizedIsPrepaid, prepaidAmountForThisDay || normalizedPrepaidAmount,
-          normalizedCreateTime, normalizedStayType, remarks]
+          roomType, roomNumber, formattedCheckInDate, formattedCheckOutDate, stay_date, status,
+          paymentMethod, total_price, deposit, normalizedIsPrepaid, prepaidAmountForThisDay,
+          normalizedStayType, remarks]
         await runner.query(insertQuery, value);
       }
 
       if (manageTx) {
         await runner.query('COMMIT');
-        console.log(`✅ [createOrder] 插入成功 order_id=${orderId}, 共 ${stayDays} 条记录`);
+        console.log(`✅ [createOrder] 插入成功 order_id=${orderId}, 共 ${stayDates.length} 条记录`);
       }
       return;
     } catch (txnError) {
@@ -145,6 +145,89 @@ async function createOrder(orderData, client) {
     }
     throw error;
   }
+}
+
+/**
+ * 创建订单定价拆分（供前端创建订单时使用，避免前端做复杂的金额/拆分逻辑）
+ * - from-room-price: 根据房间基础价格初始化每日价格（休息房自动按一半）
+ * - distribute-total: 将总价按天平均分摊到每日（按分/cent 处理余数）
+ */
+async function getPricingBreakdown(payload) {
+  const { checkInDate, checkOutDate, mode, basePrice, totalPrice } = payload || {};
+
+  const formattedCheckInDate = formatDate(checkInDate);
+  const formattedCheckOutDate = formatDate(checkOutDate);
+
+  let stayDates = [];
+  if (!formattedCheckInDate) {
+    stayDates = [];
+  } else if (!formattedCheckOutDate || formattedCheckOutDate <= formattedCheckInDate) {
+    stayDates = [formattedCheckInDate];
+  } else {
+    const { rows } = await query(
+      `SELECT to_char(d::date, 'YYYY-MM-DD') AS stay_date
+         FROM generate_series($1::date, ($2::date - INTERVAL '1 day'), INTERVAL '1 day') d`,
+      [formattedCheckInDate, formattedCheckOutDate]
+    );
+    stayDates = rows.map(r => r.stay_date);
+  }
+
+  if (!stayDates.length) {
+    const err = new Error('订单日期范围无效，无法生成定价拆分');
+    err.code = 'INVALID_DATE_RANGE';
+    throw err;
+  }
+
+  const restRoom = formattedCheckInDate && formattedCheckOutDate && formattedCheckInDate === formattedCheckOutDate;
+  const dailyPrices = {};
+
+  if (mode === 'from-room-price') {
+    const base = toAmountNumber(basePrice);
+    if (!(base > 0)) {
+      const err = new Error('房间基础价格无效');
+      err.code = 'INVALID_PRICE';
+      throw err;
+    }
+    const baseCents = Math.round(base * 100);
+    const adjustedCents = restRoom ? Math.round(baseCents / 2) : baseCents;
+    stayDates.forEach(d => { dailyPrices[d] = adjustedCents / 100; });
+  } else if (mode === 'distribute-total') {
+    const total = toAmountNumber(totalPrice);
+    if (!(total > 0)) {
+      const err = new Error('总价无效');
+      err.code = 'INVALID_PRICE';
+      throw err;
+    }
+
+    const totalCents = Math.round(total * 100);
+    const days = stayDates.length || 1;
+    const baseCents = Math.floor(totalCents / days);
+    let remainder = totalCents - baseCents * days;
+
+    stayDates.forEach((d) => {
+      let cents = baseCents;
+      if (remainder > 0) {
+        cents += 1;
+        remainder -= 1;
+      }
+      dailyPrices[d] = cents / 100;
+    });
+  } else {
+    const err = new Error('定价拆分模式无效');
+    err.code = 'INVALID_MODE';
+    throw err;
+  }
+
+  const total = Object.values(dailyPrices).reduce((s, v) => s + (Number(v) || 0), 0);
+  const avg = (stayDates.length ? total / stayDates.length : total);
+
+  return {
+    stay_dates: stayDates,
+    daily_prices: dailyPrices,
+    total_price: toAmountNumber(total),
+    average_price: toAmountNumber(avg),
+    is_rest_room: restRoom
+  };
 }
 
 /**
@@ -172,11 +255,14 @@ async function getAllOrders() {
         SUM(deposit) as deposit,
         BOOL_OR(is_prepaid) as is_prepaid,
         SUM(prepaid_amount) as prepaid_amount,
+        GREATEST(SUM(total_price) - SUM(prepaid_amount), 0) as remaining_room_fee,
         MIN(create_time) as create_time,
         MAX(stay_type) as stay_type,
         MAX(remarks) as remarks,
         COUNT(*) as stay_days,
-        ARRAY_AGG(stay_date ORDER BY stay_date) as stay_dates
+        (MIN(check_in_date) = MAX(check_out_date)) as is_rest_room,
+        ARRAY_AGG(stay_date ORDER BY stay_date) as stay_dates,
+        JSONB_OBJECT_AGG(stay_date::text, total_price) as daily_prices
       FROM orders
       GROUP BY order_id
       ORDER BY MIN(create_time) DESC
@@ -623,7 +709,68 @@ async function getDepositStatus(orderId) {
     const changeRefunded = parseFloat(r2.rows[0].change_refunded) || 0;
 
     const refunded = legacyRefunded + changeRefunded;
-    return { orderId, deposit, refunded, remaining: Math.max(0, deposit - refunded) };
+
+    // 退款明细（用于前端展示，避免前端做复杂账单解析）
+    let refundRecords = [];
+    if (colRef.rows.length) {
+      const { rows } = await query(
+        `SELECT
+           ABS(
+             CASE
+               WHEN change_type = '退押' THEN COALESCE(change_price, 0)
+               WHEN refund_deposit < 0 THEN refund_deposit
+               ELSE 0
+             END
+           ) AS amount,
+           pay_way,
+           to_char(COALESCE(refund_time, create_time), 'YYYY-MM-DD HH24:MI:SS') AS time
+         FROM bills
+         WHERE order_id = $1
+           AND (
+             change_type = '退押'
+             OR (refund_deposit IS NOT NULL AND refund_deposit < 0)
+           )
+         ORDER BY COALESCE(refund_time, create_time) ASC`,
+        [orderId]
+      );
+      refundRecords = rows.map(r => ({
+        amount: toAmountNumber(r.amount || 0),
+        method: r.pay_way,
+        time: r.time
+      }));
+    } else {
+      const { rows } = await query(
+        `SELECT
+           ABS(COALESCE(change_price, 0)) AS amount,
+           pay_way,
+           to_char(create_time, 'YYYY-MM-DD HH24:MI:SS') AS time
+         FROM bills
+         WHERE order_id = $1 AND change_type = '退押'
+         ORDER BY create_time ASC`,
+        [orderId]
+      );
+      refundRecords = rows.map(r => ({
+        amount: toAmountNumber(r.amount || 0),
+        method: r.pay_way,
+        time: r.time
+      }));
+    }
+
+    // 总房费（订单分行求和）
+    const roomFeeRes = await query(
+      `SELECT COALESCE(SUM(total_price), 0) AS total_room_fee FROM orders WHERE order_id = $1`,
+      [orderId]
+    );
+    const totalRoomFee = toAmountNumber(roomFeeRes.rows?.[0]?.total_room_fee || 0);
+
+    return {
+      orderId,
+      deposit,
+      refunded,
+      remaining: Math.max(0, deposit - refunded),
+      refundRecords,
+      totalRoomFee
+    };
   } catch (error) {
     console.error('获取押金状态失败:', error);
     throw new Error('获取押金状态失败');
@@ -682,10 +829,14 @@ async function earlyCheckout(orderNumber, options = {}) {
 
     const hasStayedFlag = !(hasStayed === false || hasStayed === 'false');
     const originalCheckoutDateStr = formatDate(lastRow.check_out_date);
-    const actualCheckoutDateStr = formatDate(actualCheckoutTime || new Date());
+    const actualCheckoutDateStr = formatDate(actualCheckoutTime);
 
-    const originalCheckoutDate = new Date(originalCheckoutDateStr);
-    const actualCheckoutDate = new Date(actualCheckoutDateStr);
+    if (!actualCheckoutDateStr) {
+      const err = new Error('缺少实际退房时间');
+      err.code = 'EARLY_CHECKOUT_MISSING_TIME';
+      err.statusCode = 400;
+      throw err;
+    }
 
     // 计算原始总价（聚合所有行）
     const originalTotalPrice = orderRows.reduce((sum, row) => sum + Number(row.total_price || 0), 0);
@@ -739,8 +890,8 @@ async function earlyCheckout(orderNumber, options = {}) {
         const refundResult = await client.query(
           `INSERT INTO bills (
               order_id, room_number, guest_name, change_price, change_type,
-              pay_way, create_time, remarks, stay_type, stay_date
-           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+              pay_way, remarks, stay_type, stay_date
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
            RETURNING *`,
           [
             orderNumber,
@@ -749,7 +900,6 @@ async function earlyCheckout(orderNumber, options = {}) {
             Number((-finalRefund).toFixed(2)),
             '退款',
             refundPayWay,
-            formatDateTimeForDB(),
             refundRemark,
             firstRow.stay_type,
             actualCheckoutDateStr
@@ -810,7 +960,7 @@ async function earlyCheckout(orderNumber, options = {}) {
     }
 
     // 已入住提前退房逻辑
-    if (!(actualCheckoutDate < originalCheckoutDate)) {
+    if (!(actualCheckoutDateStr < originalCheckoutDateStr)) {
       const err = new Error('实际退房日期未早于原退房日期，无法执行提前退房');
       err.code = 'EARLY_CHECKOUT_NOT_EARLY';
       err.statusCode = 400;
@@ -879,8 +1029,8 @@ async function earlyCheckout(orderNumber, options = {}) {
       const refundResult = await client.query(
         `INSERT INTO bills (
             order_id, room_number, guest_name, change_price, change_type,
-            pay_way, create_time, remarks, stay_type, stay_date
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+            pay_way, remarks, stay_type, stay_date
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
          RETURNING *`,
         [
           orderNumber,
@@ -889,7 +1039,6 @@ async function earlyCheckout(orderNumber, options = {}) {
           Number((-finalRefund).toFixed(2)),
           '房费',
           refundPayWay,
-          formatDateTimeForDB(),
           refundRemark,
           firstRow.stay_type,
           actualCheckoutDateStr
@@ -960,6 +1109,96 @@ async function earlyCheckout(orderNumber, options = {}) {
   }
 }
 
+/**
+ * 提前退房：获取推荐退款信息（只读，不修改数据）
+ * @param {string} orderNumber
+ * @param {Object} options
+ * @param {string} options.actualCheckoutTime - 支持 YYYY-MM-DD / YYYY-MM-DDTHH:mm 等字符串
+ * @param {boolean|string} [options.hasStayed=true]
+ */
+async function getEarlyCheckoutRecommendation(orderNumber, options = {}) {
+  const { actualCheckoutTime, hasStayed = true } = options;
+  const hasStayedFlag = !(hasStayed === false || hasStayed === 'false');
+
+  const orderRows = await query(
+    `SELECT order_id, room_number, guest_name, stay_type, payment_method, check_out_date, total_price, deposit, status
+       FROM orders
+      WHERE order_id = $1
+      ORDER BY stay_date`,
+    [orderNumber]
+  );
+
+  if (!orderRows.rows.length) {
+    const err = new Error(`订单 ${orderNumber} 不存在`);
+    err.code = 'ORDER_NOT_FOUND';
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const firstRow = orderRows.rows[0];
+  const lastRow = orderRows.rows[orderRows.rows.length - 1];
+
+  const originalCheckoutDate = formatDate(lastRow.check_out_date);
+  const actualCheckoutDate = formatDate(actualCheckoutTime);
+
+  if (!actualCheckoutDate) {
+    const err = new Error('缺少实际退房时间');
+    err.code = 'EARLY_CHECKOUT_MISSING_TIME';
+    err.statusCode = 400;
+    throw err;
+  }
+
+  let refundableNights = [];
+  let recommendedRefund = 0;
+
+  if (!hasStayedFlag) {
+    const { rows: [billSumRow] } = await query(
+      `SELECT COALESCE(SUM(change_price), 0) AS net_paid FROM bills WHERE order_id = $1`,
+      [orderNumber]
+    );
+    let netPaid = Number(billSumRow?.net_paid || 0);
+    if (!Number.isFinite(netPaid)) netPaid = 0;
+
+    let parsedRefund = Math.max(0, Number(netPaid.toFixed(2)));
+    if (parsedRefund === 0) {
+      const depositFallback = orderRows.rows.reduce((sum, row) => sum + Number(row.deposit || 0), 0);
+      const originalTotalPrice = orderRows.rows.reduce((sum, row) => sum + Number(row.total_price || 0), 0);
+      if (depositFallback > 0) parsedRefund = depositFallback;
+      else if (originalTotalPrice > 0) parsedRefund = originalTotalPrice;
+    }
+    recommendedRefund = Number(Number(parsedRefund).toFixed(2));
+  } else {
+    const { rows: roomFeeBills } = await query(
+      `SELECT stay_date, change_price
+         FROM bills
+        WHERE order_id = $1
+          AND change_type = $2
+          AND stay_date >= $3::date
+        ORDER BY stay_date`,
+      [orderNumber, '房费', actualCheckoutDate]
+    );
+
+    refundableNights = roomFeeBills.map(bill => ({
+      stayDate: formatDate(bill.stay_date),
+      roomPrice: Number(bill.change_price || 0)
+    }));
+
+    const sum = refundableNights.reduce((s, item) => s + Number(item.roomPrice || 0), 0);
+    recommendedRefund = Number(sum.toFixed(2));
+  }
+
+  return {
+    orderNumber,
+    status: firstRow.status,
+    hasStayed: hasStayedFlag,
+    originalCheckoutDate,
+    actualCheckoutDate,
+    isEarly: actualCheckoutDate < originalCheckoutDate,
+    refundableNights,
+    recommendedRefund
+  };
+}
+
 
 
 /**
@@ -1025,7 +1264,6 @@ async function checkIn(orderId, depositAmount, client) {
         change_price: parsedDeposit,
         change_type: '收押',
         pay_way: firstOrder.payment_method,
-        create_time: formatDateTimeForDB(),
         remarks: '办理入住押金',
         stay_type: firstOrder.stay_type,
         stay_date: firstOrder.check_in_date
@@ -1049,19 +1287,7 @@ async function checkIn(orderId, depositAmount, client) {
 
     // 为每个住宿日插入房费账单
     for (const ord of orderRows) {
-      // 处理 stay_date：如果是 Date 对象需要正确格式化以避免时区问题
-      let stayDateStr;
-      if (ord.stay_date instanceof Date) {
-        // 直接从 Date 对象获取 UTC 日期部分，避免时区转换问题
-        const y = ord.stay_date.getFullYear();
-        const m = String(ord.stay_date.getMonth() + 1).padStart(2, '0');
-        const d = String(ord.stay_date.getDate()).padStart(2, '0');
-        stayDateStr = `${y}-${m}-${d}`;
-      } else if (typeof ord.stay_date === 'string') {
-        stayDateStr = ord.stay_date.slice(0, 10);
-      } else {
-        stayDateStr = ord.stay_date;
-      }
+      const stayDateStr = formatDate(ord.stay_date);
 
       const billData = {
         order_id: orderId,
@@ -1070,12 +1296,10 @@ async function checkIn(orderId, depositAmount, client) {
         change_price: toAmountNumber(ord.total_price),
         change_type: '房费',
         pay_way: ord.payment_method,
-        create_time: formatDateTimeForDB(),
         remarks: '办理入住房费',
         stay_type: ord.stay_type,
         stay_date: stayDateStr
       };
-      console.log(`📝 [check-in] 账单日期处理: 原始值=${ord.stay_date}, 类型=${typeof ord.stay_date}, 处理后=${stayDateStr}`);
       const roomBill = await billModule.addBill(billData, runner);
       createdBills.push(roomBill);
       console.log(`📝 [check-in] 插入房费账单，金额: ${ord.total_price}，入住日期: ${stayDateStr}`);
@@ -1428,6 +1652,165 @@ async function updateOrderWithBills(orderNumber, updatedData, billUpdates = {}, 
   }
 }
 
+/**
+ * 联合更新订单与账单（新版：后端负责差异计算与按日更新）
+ * - 订单为多日分行结构：按 stay_date 更新 orders.total_price
+ * - 同步更新 bills（change_type='房费'）对应 stay_date 的 change_price
+ * @param {string} orderNumber
+ * @param {Object} orderData - 订单通用字段（蛇形命名）
+ * @param {Object} roomPrice - { 'YYYY-MM-DD': number|string } 每日房费
+ * @param {string} changedBy
+ */
+async function updateOrderWithBillsV2(orderNumber, orderData = {}, roomPrice = {}, changedBy = 'system') {
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+
+    const { rows: orderRows } = await client.query(
+      `SELECT * FROM ${tableName} WHERE order_id = $1 ORDER BY stay_date FOR UPDATE`,
+      [orderNumber]
+    );
+    if (!orderRows.length) {
+      const err = new Error(`订单 ${orderNumber} 不存在`);
+      err.code = 'ORDER_NOT_FOUND';
+      err.statusCode = 404;
+      throw err;
+    }
+
+    const normalizedOrderData = orderData && typeof orderData === 'object' ? orderData : {};
+    const normalizedRoomPrice = roomPrice && typeof roomPrice === 'object' ? roomPrice : {};
+
+    // 1) 更新订单通用字段（更新所有分行）
+    const updateableFields = ['guest_name', 'phone', 'room_type', 'room_number', 'payment_method', 'remarks', 'deposit'];
+    const updates = [];
+    const values = [];
+    let paramIndex = 1;
+
+    updateableFields.forEach((field) => {
+      if (normalizedOrderData[field] !== undefined) {
+        updates.push(`${field} = $${paramIndex}`);
+        if (field === 'deposit') {
+          values.push(toAmountNumber(normalizedOrderData[field]));
+        } else {
+          values.push(normalizedOrderData[field]);
+        }
+        paramIndex++;
+      }
+    });
+
+    if (updates.length) {
+      await client.query(
+        `UPDATE ${tableName}
+            SET ${updates.join(', ')}
+          WHERE order_id = $${paramIndex}`,
+        [...values, orderNumber]
+      );
+    }
+
+    // 2) 更新每日房费：orders.total_price + bills.change_price（房费）
+    const billUpdateResults = [];
+    const priceEntries = Object.entries(normalizedRoomPrice || {});
+    for (const [stayDateRaw, priceRaw] of priceEntries) {
+      const stayDate = formatDate(stayDateRaw);
+      const price = toAmountNumber(priceRaw);
+
+      const { rowCount: orderUpdated } = await client.query(
+        `UPDATE ${tableName}
+            SET total_price = $1
+          WHERE order_id = $2
+            AND stay_date = $3::date`,
+        [price, orderNumber, stayDate]
+      );
+
+      const { rowCount: billUpdated } = await client.query(
+        `UPDATE bills
+            SET change_price = $1
+          WHERE order_id = $2
+            AND change_type = '房费'
+            AND stay_date = $3::date`,
+        [price, orderNumber, stayDate]
+      );
+
+      billUpdateResults.push({ stayDate, orderUpdated, billUpdated });
+    }
+
+    // 3) 押金：同步更新收押账单（若存在）
+    if (normalizedOrderData.deposit !== undefined) {
+      const deposit = toAmountNumber(normalizedOrderData.deposit);
+      const { rows: depositBills } = await client.query(
+        `SELECT bill_id
+           FROM bills
+          WHERE order_id = $1
+            AND change_type = '收押'
+          ORDER BY create_time ASC
+          LIMIT 1`,
+        [orderNumber]
+      );
+      if (depositBills.length) {
+        await client.query(
+          `UPDATE bills SET change_price = $1 WHERE bill_id = $2`,
+          [Math.abs(deposit), depositBills[0].bill_id]
+        );
+      }
+    }
+
+    // 4) 换房：同步更新账单房间号（如果 room_number 变化）
+    if (normalizedOrderData.room_number !== undefined) {
+      await client.query(
+        `UPDATE bills SET room_number = $1 WHERE order_id = $2`,
+        [normalizedOrderData.room_number, orderNumber]
+      );
+    }
+
+    // 5) 支付方式变更：同步更新房费账单支付方式
+    if (normalizedOrderData.payment_method !== undefined) {
+      await client.query(
+        `UPDATE bills
+            SET pay_way = $1
+          WHERE order_id = $2
+            AND change_type = '房费'`,
+        [normalizedOrderData.payment_method, orderNumber]
+      );
+    }
+
+    await client.query('COMMIT');
+
+    // 记录变更（失败不影响主流程）
+    try {
+      await query(
+        `INSERT INTO order_changes (order_id, changed_by, changes, reason)
+         VALUES ($1, $2, $3, $4)`,
+        [
+          orderNumber,
+          changedBy,
+          JSON.stringify({
+            action: 'update_order_with_bills_v2',
+            order_fields: normalizedOrderData,
+            room_price: normalizedRoomPrice,
+            bill_updates: billUpdateResults
+          }),
+          normalizedOrderData.reason || '订单信息更新（含房费/账单同步）'
+        ]
+      );
+    } catch (e) {
+      console.warn('⚠️ [updateOrderWithBillsV2] 保存变更记录失败:', e.message);
+    }
+
+    return {
+      success: true,
+      order: await getOrderById(orderNumber),
+      billUpdates: billUpdateResults,
+      message: '订单和账单更新成功'
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error(`❌ [updateOrderWithBillsV2] 更新订单 ${orderNumber} 和账单失败:`, error);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 const table = {
   checkTableExists,
   createOrder,
@@ -1435,6 +1818,7 @@ const table = {
   getAllOrdersDaily,
   getOrderById,
   getOrderRowById,
+  getPricingBreakdown,
   updateOrderStatus,
   updateOrder,
   updateOrderDayRoom,
@@ -1442,7 +1826,9 @@ const table = {
   getDepositStatus,
   isRestRoom,
   earlyCheckout,
+  getEarlyCheckoutRecommendation,
   updateOrderWithBills,
+  updateOrderWithBillsV2,
   checkIn,
   fastCheckIn,
   checkOut

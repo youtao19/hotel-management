@@ -40,7 +40,6 @@ export function useOrderSubmit(orderData, dailyPrices, dateList, totalPrice) {
 
     const submitData = {
       ...orderData.value,
-      createTime: new Date().toISOString(), // 使用完整的当前时间，包含秒和毫秒
       roomPrice: dailyPrices.value
     }
 

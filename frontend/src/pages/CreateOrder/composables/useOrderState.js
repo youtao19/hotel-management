@@ -54,7 +54,6 @@ export function useOrderState() {
     paymentMethod: viewStore.paymentMethodOptions[0]?.value || '现金',
     roomPrice: {},
     remarks: '',
-    createTime: new Date().toISOString(),
     stayType: '客房',
     isRestRoom: false,
     isPrepaid: false,

@@ -4,6 +4,7 @@ import { useQuasar } from 'quasar'
 import { useOrderStore } from 'src/stores/orderStore'
 import { useUserStore } from 'src/stores/userStore'
 import { useViewStore } from 'src/stores/viewStore'
+import { orderApi } from 'src/api'
 
 /**
  * 提前退房业务逻辑 Hook
@@ -23,71 +24,17 @@ export function useEarlyCheckoutLogic(props, emit) {
   const remarks = ref('') // 备注
   const manualAmountTouched = ref(false) // 用户是否手动修改过退款金额
   const submitting = ref(false) // 提交中状态
-  const loadingOrderDetails = ref(false) // 加载订单明细中状态
-  const orderDailyRows = ref([]) // 订单关联的每日行数据
+  const loadingOrderDetails = ref(false) // 加载推荐数据中状态（保持变量名不改动，避免影响模板）
+  const recommendation = ref(null) // 后端推荐退款信息
   const hasStayed = ref(true) // 是否已入住 (true: 已入住, false: 未入住直接退房)
 
   const paymentMethodOptions = viewStore.paymentMethodOptions
 
 
-  // 提取实际退房日期的 YYYY-MM-DD 部分，用于比较
-  const actualCheckoutDateYMD = computed(() => {
-    // 统一用 formatDate 解析，避免浏览器本地化格式(如含斜杠/逗号)导致字符串比较失真
-    return formatDate(actualCheckoutTime.value)
-  })
+  const refundableNights = computed(() => recommendation.value?.refundableNights || [])
 
-/**
- * 计算建议退款的每日价格列表 (仅针对已入住情况)
- * 逻辑：找出所有 stayDate >= 实际退房日期的订单行 total_price，按日期聚合
- */
-  const recommendedBills = computed(() => {
-    // 未入住则无每日退款建议
-    if (!hasStayed.value) return []
-    // 如果订单或实际退房日期无效，返回空
-    if (!props.order || !actualCheckoutDateYMD.value) return []
-    const cutoff = actualCheckoutDateYMD.value // 实际退房日期
-
-    let billslist = [];
-    console.log('订单每日行数据:', orderDailyRows.value);
-
-    for (const orderDaily of orderDailyRows.value) {
-      const stayDateYMD = formatDate(orderDaily.stayDate) // 订单的入住时间
-      console.log('处理订单每日行:', stayDateYMD);
-      if (!stayDateYMD || stayDateYMD < cutoff) continue
-      const amount = Number(orderDaily.roomPrice);
-      billslist.push({
-        stayDate: stayDateYMD,
-        roomPrice: amount
-      });
-    }
-    console.log('建议退款的房晚列表:', billslist);
-    return billslist;
-  })
-
-  /**
-   * 计算订单已支付总额
-   * 逻辑：基于订单每日明细 roomPrice + deposit
-   */
-  const totalPaid = computed(() => {
-    const daily = orderDailyRows.value || []
-    if (daily.length) {
-      const dailyTotal = daily.reduce((sum, item) => sum + Number(item.roomPrice), 0)
-      const deposit = Number(props.order?.deposit || 0)
-      return parseFloat((dailyTotal + deposit).toFixed(2))
-    }
-    return 0
-  })
-
-  // 计算建议退款总金额
-  const recommendedRefund = computed(() => {
-    // 如果未入住，建议退还所有已支付金额
-    if (!hasStayed.value) {
-      return totalPaid.value
-    }
-    // 如果已入住，退还剩余天数的房费
-
-    return recommendedBills.value.reduce((sum, item) => parseFloat((sum + Number(item.roomPrice)).toFixed(2)), 0)
-  })
+  // 计算建议退款总金额（由后端统一计算）
+  const recommendedRefund = computed(() => Number(recommendation.value?.recommendedRefund || 0))
 
   // 建议退款的安全数值（保留两位小数，NaN/负值时兜底为0）
   const recommendedRefundRounded = computed(() => {
@@ -95,9 +42,6 @@ export function useEarlyCheckoutLogic(props, emit) {
     if (!Number.isFinite(val) || val < 0) return 0
     return Number(val.toFixed(2))
   })
-
-  // 可退款的房晚列表 (用于UI展示)
-  const refundableNights = computed(() => recommendedBills.value)
 
   // 退款金额校验规则
   const refundAmountRules = [
@@ -117,8 +61,9 @@ export function useEarlyCheckoutLogic(props, emit) {
   // 警告：实际退房时间晚于原计划退房时间 (此时不应属于提前退房)
   const showNotEarlyWarning = computed(() => {
     if (!hasStayed.value) return false
-    if (!props.order?.checkOutDate || !actualCheckoutTime.value) return false
-    return new Date(actualCheckoutTime.value) >= new Date(props.order.checkOutDate)
+    if (!actualCheckoutTime.value) return false
+    if (!recommendation.value) return false
+    return !recommendation.value.isEarly
   })
 
   // 表单提交按钮是否可用
@@ -126,6 +71,7 @@ export function useEarlyCheckoutLogic(props, emit) {
     if (!props.order) return false
     // 必须有退房时间且不能晚于原计划
     if (!actualCheckoutTime.value || showNotEarlyWarning.value) return false
+    if (hasStayed.value && !recommendation.value) return false
     // 退款金额校验
     if (refundAmount.value === null || refundAmount.value === undefined) return false
     if (refundAmount.value < 0) return false
@@ -186,34 +132,23 @@ export function useEarlyCheckoutLogic(props, emit) {
     emit('update:modelValue', false)
   }
 
- /**
-  * 加载订单关联的每日明细（roomPrice）
-  * @returns {Array(Object)} 数组对象
-  */
-  async function loadOrderDetails() {
+  async function loadRecommendation() {
     const oid = props.order?.orderNumber || props.order?.order_id || props.order?.orderId
-    if (!oid) {
-      orderDailyRows.value = []
+    if (!oid || !actualCheckoutTime.value) {
+      recommendation.value = null
       return
     }
+
     try {
       loadingOrderDetails.value = true
-      const orderData = await orderStore.getOrderByNumber(oid)
-      console.log('获取订单明细:', orderData)
-
-      // getOrderByNumber 返回格式化后的订单对象
-      // dailyOrders 中包含每日明细：{ stayDate, roomNumber, roomType, roomPrice }
-      if (orderData && orderData.dailyOrders && orderData.dailyOrders.length > 0) {
-        orderDailyRows.value = orderData.dailyOrders.map(day => ({
-          stayDate: day.stayDate,
-          roomPrice: Number(day.roomPrice) || 0
-        }))
-      } else {
-        orderDailyRows.value = []
-      }
+      const resp = await orderApi.earlyCheckoutRecommendation(oid, {
+        actualCheckoutTime: actualCheckoutTime.value,
+        hasStayed: hasStayed.value
+      })
+      recommendation.value = resp?.data?.data || null
     } catch (error) {
-      orderDailyRows.value = []
-      console.warn('加载订单明细失败:', error.message || error)
+      recommendation.value = null
+      console.warn('加载提前退房推荐失败:', error?.message || error)
     } finally {
       loadingOrderDetails.value = false
     }
@@ -223,14 +158,7 @@ export function useEarlyCheckoutLogic(props, emit) {
   function initializeForm() {
     if (!props.order) return
     hasStayed.value = true
-    const now = new Date()
-    const planned = props.order.checkOutDate ? new Date(props.order.checkOutDate) : null
-    let base = now
-    // 如果当前时间已经超过原计划退房时间，默认显示原计划时间前一小时 (逻辑上不太可能发生，作为兜底)
-    if (planned && now >= planned) {
-      base = new Date(planned.getTime() - 60 * 60 * 1000)
-    }
-    actualCheckoutTime.value = formatForInput(base)
+    actualCheckoutTime.value = formatForInput(new Date())
     refundMethod.value = props.order.paymentMethod || viewStore.paymentMethodOptions?.[0]?.value || '现金'
     remarks.value = ''
     manualAmountTouched.value = false
@@ -246,14 +174,8 @@ export function useEarlyCheckoutLogic(props, emit) {
     if (!canSubmit.value || !props.order) return
     try {
       submitting.value = true
-      const isoTime = new Date(actualCheckoutTime.value)
-      if (Number.isNaN(isoTime.getTime())) {
-        $q.notify({ type: 'negative', message: '请选择有效的退房时间' })
-        return
-      }
-
       const payload = {
-        actualCheckoutTime: isoTime.toISOString(),
+        actualCheckoutTime: actualCheckoutTime.value,
         refundAmount: Number(refundAmount.value || 0),
         refundMethod: refundMethod.value,
         operator: userStore.user?.username || 'system',
@@ -281,11 +203,11 @@ export function useEarlyCheckoutLogic(props, emit) {
     async (val) => {
       if (val) {
         initializeForm()
-        await loadOrderDetails()
+        await loadRecommendation()
         // 初始加载完成后，自动填入建议金额
         applySuggestedAmountIfUntouched()
       } else {
-        orderDailyRows.value = []
+        recommendation.value = null
       }
     }
   )
@@ -307,11 +229,21 @@ export function useEarlyCheckoutLogic(props, emit) {
     }
   )
 
-  // 弹窗开启且明细加载完成后，再次同步推荐金额（防止初次加载时因异步造成0）
+  // 弹窗开启且推荐加载完成后，再次同步推荐金额（防止初次加载时因异步造成0）
   watch(
     () => [props.modelValue, loadingOrderDetails.value],
     ([visible, loading]) => {
       if (!visible || loading) return
+      applySuggestedAmountIfUntouched()
+    }
+  )
+
+  // 监听关键字段变化，重新拉取后端推荐
+  watch(
+    () => [props.modelValue, actualCheckoutTime.value, hasStayed.value],
+    async ([visible]) => {
+      if (!visible) return
+      await loadRecommendation()
       applySuggestedAmountIfUntouched()
     }
   )

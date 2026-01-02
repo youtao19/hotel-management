@@ -61,7 +61,7 @@ export function useHandoverSubmit({ confirmationData, handoverInfo, selectedHand
         vipCard: confirmationData.value.vipCards || 0,
         taskList: confirmationData.value.taskList || [],
         notes: handoverInfo.value.notes || "",
-        handoverTime: handoverInfo.value.handoverTime || new Date().toISOString()
+        handoverTime: handoverInfo.value.handoverTime || undefined
       };
 
       const response = await shiftHandoverApi.completeHandover(payload);
