@@ -26,15 +26,23 @@ export function useRevenueData(dateRange, selectedPeriod) {
 
   // 初始化基础数据：快速统计 + 房型列表
   const initBaseData = async () => {
-    try {
-      const [qRes, rtRes] = await Promise.all([
-        // 快速统计：默认展示“今日”；当筛选为单日时展示“所选日期”
-        revenueApi.getQuickStats({ startDate: dateRange.value?.start, endDate: dateRange.value?.end }),
-        roomApi.getRoomTypes()
-      ])
-      quickStats.value = qRes.data || quickStats.value
-      allRoomTypes.value = rtRes.data || []
-    } catch (e) { console.error(e) }
+    const [qRes, rtRes] = await Promise.allSettled([
+      // 快速统计：默认展示“今日”；当筛选为单日时展示“所选日期”
+      revenueApi.getQuickStats({ startDate: dateRange.value?.start, endDate: dateRange.value?.end }),
+      roomApi.getRoomTypes()
+    ])
+
+    if (qRes.status === 'fulfilled') {
+      quickStats.value = qRes.value?.data || quickStats.value
+    } else {
+      console.error(qRes.reason)
+    }
+
+    if (rtRes.status === 'fulfilled') {
+      allRoomTypes.value = rtRes.value?.data || []
+    } else {
+      console.error(rtRes.reason)
+    }
   }
 
   /*

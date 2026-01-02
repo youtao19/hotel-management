@@ -219,10 +219,9 @@ router.get('/quick-stats', async (req, res) => {
 
         // 中文注释：
         // - baseDate：用于测试/对账（例如使用交接班测试 SQL 数据时，可指定某一天作为“今日”）。
-        // - startDate/endDate：前端当前所选日期范围；当且仅当“单日”（startDate===endDate）时，首卡应展示所选日期的收入。
-        // - 未传 baseDate 且非单日时，使用数据库 current_date（避免 Node.js 侧时区/Date 解析带来的偏差）。
-        let today = null;
-        let todayLabel = '今日收入';
+        // - startDate/endDate：前端当前所选日期范围；当且仅当“单日”（startDate===endDate）时，首卡展示所选日期收入。
+        // - 本周/本月卡片：始终以数据库 current_date 为“今天”（不跟随所选单日），保证口径为“本周/本月（截至今天）”。
+        // - 禁止对业务 DATE 字段使用 new Date(dateStr) 或 toISOString()。
         const hasRange = startDate && endDate;
         const normalizedStart = startDate ? String(startDate) : null;
         const normalizedEnd = endDate ? String(endDate) : null;
@@ -236,6 +235,7 @@ router.get('/quick-stats', async (req, res) => {
             }
         }
 
+        let selectedToday = null;
         if (baseDate) {
             if (!isDateString(baseDate)) {
                 return res.status(400).json({
@@ -243,27 +243,28 @@ router.get('/quick-stats', async (req, res) => {
                     error: 'Invalid baseDate format'
                 });
             }
-            today = String(baseDate);
-            todayLabel = `${today} 收入`;
+            selectedToday = String(baseDate);
         } else if (hasRange && normalizedStart === normalizedEnd) {
-            today = normalizedStart;
-            todayLabel = `${today} 收入`;
-        } else {
-            const dbNow = await query(`SELECT current_date::text AS today`, []);
-            today = dbNow.rows?.[0]?.today;
+            selectedToday = normalizedStart;
         }
 
-        // 中文注释：本周起始口径=周一
-        const thisWeekStartStr = getWeekStartDateString(today);
-        const thisMonthStartStr = getMonthStartDateString(today);
+        // 数据库 current_date：作为“本周/本月”的截止日（今天）
+        const dbNow = await query(`SELECT current_date::text AS today`, []);
+        const currentToday = dbNow.rows?.[0]?.today;
+        const today = selectedToday || currentToday;
+        const todayLabel = selectedToday ? `${today} 收入` : '今日收入';
 
-        console.log('📅 日期范围:', { today, thisWeekStartStr, thisMonthStartStr });
+        // 中文注释：本周起始口径=周一
+        const thisWeekStartStr = getWeekStartDateString(currentToday);
+        const thisMonthStartStr = getMonthStartDateString(currentToday);
+
+        console.log('📅 日期范围:', { today, currentToday, thisWeekStartStr, thisMonthStartStr });
 
         // 并行获取今日、本周、本月数据
         const [todayStats, weekStats, monthStats] = await Promise.all([
             getOverview(today, today),
-            getOverview(thisWeekStartStr, today),
-            getOverview(thisMonthStartStr, today)
+            getOverview(thisWeekStartStr, currentToday),
+            getOverview(thisMonthStartStr, currentToday)
         ]);
 
         console.log('📊 统计结果:', { todayStats, weekStats, monthStats });
@@ -281,13 +282,13 @@ router.get('/quick-stats', async (req, res) => {
                     ...weekStats,
                     period: 'thisWeek',
                     startDate: thisWeekStartStr,
-                    endDate: today
+                    endDate: currentToday
                 },
                 thisMonth: {
                     ...monthStats,
                     period: 'thisMonth',
                     startDate: thisMonthStartStr,
-                    endDate: today
+                    endDate: currentToday
                 }
             }
         });
@@ -426,7 +427,7 @@ router.get('/daily-details', async (req, res) => {
             stay_date: String(row.stay_date || ''),
             check_out_date: String(row.check_out_date || ''),
             stay_date_display: String(row.stay_date || '')
-        })).filter(d => d.total_amount > 0);
+        }));
 
         res.json({
             success: true,

@@ -16,11 +16,8 @@ export function useDetailedBills() {
   const loading = ref(false)
   const rows = ref([])
   // filters.value 的结构：{ date: 'YYYY-MM-DD', roomNumber: '101' }
-  const today = new Date()
-  const yyyy = today.getFullYear()
-  const mm = String(today.getMonth() + 1).padStart(2, '0')
-  const dd = String(today.getDate()).padStart(2, '0')
-  const filters = ref({ date: `${yyyy}-${mm}-${dd}`, roomNumber: '' })
+  // 默认不传日期筛选：展示数据库中的全部账单数据（业务说明.md）
+  const filters = ref({ date: '', roomNumber: '' })
   const pagination = ref({ rowsPerPage: 10 })
 
   // 表格列定义（用于 QTable）
@@ -54,7 +51,7 @@ export function useDetailedBills() {
 
   // 重置筛选并重新获取数据
   const resetFilters = () => {
-    filters.value = { date: `${yyyy}-${mm}-${dd}`, roomNumber: '' }
+    filters.value = { date: '', roomNumber: '' }
     fetchData()
   }
 
