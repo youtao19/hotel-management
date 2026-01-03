@@ -174,3 +174,108 @@ describe('收入统计：单日收入（导入 sql/orders.csv）', () => {
     expect(res.body.data.today.total_revenue).toBe(expectedRevenue);
   });
 });
+
+describe('收入统计：房型收入汇总（导入 sql/orders.csv）', () => {
+  test('GET /api/revenue/room-type：与 orders 按房型聚合一致（排除 cancelled）', async () => {
+    const startDate = '2025-11-02';
+    const endDate = '2025-11-07';
+
+    // 中文注释：后端接口返回 room_type 维度的 order_count 与 total_revenue
+    const res = await request(app)
+      .get('/api/revenue/room-type')
+      .query({ startDate, endDate });
+
+    expect(res.statusCode).toBe(200);
+    expect(Array.isArray(res.body?.data)).toBe(true);
+
+    // 中文注释：用 SQL 计算期望结果，避免在测试里做复杂日期/金额逻辑
+    const expectedRes = await query(
+      `
+        SELECT
+          room_type::text AS room_type,
+          COUNT(DISTINCT order_id)::int AS order_count,
+          ROUND(COALESCE(SUM(COALESCE(total_price, 0))::numeric, 0), 2) AS total_revenue
+        FROM orders
+        WHERE stay_date::date BETWEEN $1::date AND $2::date
+          AND status NOT IN ('cancelled')
+        GROUP BY room_type
+      `,
+      [startDate, endDate]
+    );
+
+    const expectedMap = new Map(
+      (expectedRes.rows || []).map((r) => [
+        String(r.room_type),
+        {
+          order_count: Number(r.order_count || 0),
+          total_revenue: Number(r.total_revenue || 0),
+        },
+      ])
+    );
+
+    // 中文注释：只校验响应里返回的房型（后端可能会按房型表关联补充 type_name 等字段）
+    (res.body.data || []).forEach((row) => {
+      const roomType = String(row.room_type || row.type_code || '');
+      const expected = expectedMap.get(roomType);
+      expect(expected).toBeTruthy();
+      expect(Number(row.order_count || 0)).toBe(expected.order_count);
+      expect(Number(row.total_revenue || 0)).toBe(expected.total_revenue);
+    });
+  });
+});
+
+describe('收入统计：本周/本月卡片（导入 sql/orders.csv）', () => {
+  test('GET /api/revenue/quick-stats：本周/本月与数据库 current_date 口径一致', async () => {
+    const res = await request(app).get('/api/revenue/quick-stats');
+    expect(res.statusCode).toBe(200);
+
+    // 中文注释：直接使用数据库计算周一/月初，避免在 Node 里解析 DATE 字段（遵守日期处理规范）
+    const rangeRes = await query(
+      `
+        SELECT
+          current_date::date AS today,
+          date_trunc('week', current_date)::date AS week_start,
+          date_trunc('month', current_date)::date AS month_start
+      `,
+      []
+    );
+
+    const today = String(rangeRes.rows?.[0]?.today || '');
+    const weekStart = String(rangeRes.rows?.[0]?.week_start || '');
+    const monthStart = String(rangeRes.rows?.[0]?.month_start || '');
+
+    const expectedWeekRes = await query(
+      `
+        SELECT
+          ROUND(COALESCE(SUM(COALESCE(total_price, 0))::numeric, 0), 2) AS total_revenue,
+          COUNT(DISTINCT order_id)::int AS total_orders
+        FROM orders
+        WHERE stay_date::date BETWEEN $1::date AND $2::date
+          AND status NOT IN ('cancelled')
+      `,
+      [weekStart, today]
+    );
+
+    const expectedMonthRes = await query(
+      `
+        SELECT
+          ROUND(COALESCE(SUM(COALESCE(total_price, 0))::numeric, 0), 2) AS total_revenue,
+          COUNT(DISTINCT order_id)::int AS total_orders
+        FROM orders
+        WHERE stay_date::date BETWEEN $1::date AND $2::date
+          AND status NOT IN ('cancelled')
+      `,
+      [monthStart, today]
+    );
+
+    const expectedWeek = expectedWeekRes.rows?.[0] || {};
+    const expectedMonth = expectedMonthRes.rows?.[0] || {};
+
+    expect(Number(res.body?.data?.thisWeek?.total_revenue || 0)).toBe(Number(expectedWeek.total_revenue || 0));
+    expect(Number(res.body?.data?.thisWeek?.total_orders || 0)).toBe(Number(expectedWeek.total_orders || 0));
+
+    expect(Number(res.body?.data?.thisMonth?.total_revenue || 0)).toBe(Number(expectedMonth.total_revenue || 0));
+    expect(Number(res.body?.data?.thisMonth?.total_orders || 0)).toBe(Number(expectedMonth.total_orders || 0));
+  });
+});
+
