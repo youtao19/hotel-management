@@ -97,10 +97,10 @@ const renderChart = () => {
 
   // 简单的数据映射
   const labels = props.revenueData.map(i => {
-    // 处理不同周期的日期显示
-    if (i.week_number) return `第${i.week_number}周`
-    if (i.month) return `${i.month}月`
-    return i.date ? i.date.substring(5, 10) : ''
+    // 处理不同周期的日期显示（后端返回的字段决定显示方式）
+    if (i.week_start && i.week_end) return `${String(i.week_start).substring(5, 10)}-${String(i.week_end).substring(5, 10)}`
+    if (i.month_start) return String(i.month_start).substring(0, 7)
+    return i.date ? String(i.date).substring(5, 10) : ''
   }).reverse()
 
   const data = props.revenueData.map(i => i.total_revenue).reverse()

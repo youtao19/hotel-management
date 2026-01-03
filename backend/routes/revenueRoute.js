@@ -2,6 +2,15 @@ const express = require('express');
 const router = express.Router();
 const { query } = require('../database/postgreDB/pg');
 
+const {
+    getDailyRevenue,
+    getWeeklyRevenue,
+    getMonthlyRevenue,
+    getRoomTypeRevenue,
+    getRevenueBillDetails,
+    getQuickStatsSummary
+} = require('../modules/revenueModule');
+
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
 const isDateString = (value) => DATE_REGEX.test(String(value || ''));
@@ -34,127 +43,48 @@ const requireDateRangeQuery = (req, res) => {
     };
 };
 
-const {
-    getDailyRevenue,
-    getWeeklyRevenue,
-    getMonthlyRevenue,
-    getRoomTypeRevenue,
-    getRevenueBillDetails,
-    getOverview,
-    getWeekStartDateString,
-    getMonthStartDateString
-} = require('../modules/revenueModule');
+
 
 /**
- * 获取每日收入统计
- * GET /api/revenue/daily?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
- * 前端使用位置：
- * - `frontend/src/api/index.js`：`revenueApi.getDailyRevenue(startDate, endDate, roomType)`
- * - `frontend/src/pages/Revenue/composables/useRevenueData.js`：`fetchMainStats()`（selectedPeriod='daily'）
- * 前端展示位置：
- * - `frontend/src/pages/Revenue/components/RevenueTrendAnalysis.vue`：折线图数据源（按日趋势，渲染到 `<canvas>`）
+ * 获取收入聚合序列（按日/周/月）
+ * GET /api/revenue/series?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&bucket=daily|weekly|monthly&roomType=xxx
+ * 中文注释：
+ * - 该接口返回“按时间聚合后的序列数据”（不是单值汇总），更贴合 series 的语义
+ * - bucket 决定聚合粒度（daily/weekly/monthly）
  */
-router.get('/daily', async (req, res) => {
-    console.log('📊 收到每日收入统计请求');
-    console.log('请求参数:', req.query);
+router.get('/series', async (req, res) => {
     try {
         const parsed = requireDateRangeQuery(req, res);
-        if (!parsed) {
-            console.log('❌ 参数验证失败:', req.query);
-            return;
+        if (!parsed) return;
+        const { startDate, endDate, roomType } = parsed;
+        const bucket = String(req.query.bucket || '').trim();
+
+        if (!['daily', 'weekly', 'monthly'].includes(bucket)) {
+            return res.status(400).json({
+                message: 'bucket 参数错误，请使用 daily/weekly/monthly',
+                error: 'Invalid bucket'
+            });
         }
-        const { startDate, endDate, roomType } = parsed;
 
-        console.log('📅 开始获取每日收入数据:', { startDate, endDate, roomType });
-        const dailyRevenue = await getDailyRevenue(startDate, endDate, roomType);
-        console.log('✅ 每日收入数据获取成功:', dailyRevenue.length, '条记录');
+        let data = [];
+        if (bucket === 'daily') data = await getDailyRevenue(startDate, endDate, roomType);
+        else if (bucket === 'weekly') data = await getWeeklyRevenue(startDate, endDate, roomType);
+        else data = await getMonthlyRevenue(startDate, endDate, roomType);
 
         res.json({
-            message: '获取每日收入统计成功',
-            data: dailyRevenue,
+            message: '获取收入聚合序列成功',
+            data,
             period: {
                 startDate,
                 endDate,
-                type: 'daily',
+                bucket,
                 roomType: roomType || null
             }
         });
     } catch (error) {
-        console.error('❌ 获取每日收入统计失败:', error);
+        console.error('获取收入聚合序列失败:', error);
         res.status(500).json({
-            message: '获取每日收入统计失败',
-            error: error.message
-        });
-    }
-});
-
-/**
- * 获取每周收入统计
- * GET /api/revenue/weekly?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
- * 前端使用位置：
- * - `frontend/src/api/index.js`：`revenueApi.getWeeklyRevenue(startDate, endDate, roomType)`
- * - `frontend/src/pages/Revenue/composables/useRevenueData.js`：`fetchMainStats()`（selectedPeriod='weekly'）
- * 前端展示位置：
- * - `frontend/src/pages/Revenue/components/RevenueTrendAnalysis.vue`：折线图数据源（按周趋势，渲染到 `<canvas>`）
- */
-router.get('/weekly', async (req, res) => {
-    try {
-        const parsed = requireDateRangeQuery(req, res);
-        if (!parsed) return;
-        const { startDate, endDate, roomType } = parsed;
-
-        const weeklyRevenue = await getWeeklyRevenue(startDate, endDate, roomType);
-
-        res.json({
-            message: '获取每周收入统计成功',
-            data: weeklyRevenue,
-            period: {
-                startDate,
-                endDate,
-                type: 'weekly',
-                roomType: roomType || null
-            }
-        });
-    } catch (error) {
-        console.error('获取每周收入统计失败:', error);
-        res.status(500).json({
-            message: '获取每周收入统计失败',
-            error: error.message
-        });
-    }
-});
-
-/**
- * 获取每月收入统计
- * GET /api/revenue/monthly?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
- * 前端使用位置：
- * - `frontend/src/api/index.js`：`revenueApi.getMonthlyRevenue(startDate, endDate, roomType)`
- * - `frontend/src/pages/Revenue/composables/useRevenueData.js`：`fetchMainStats()`（selectedPeriod='monthly'）
- * 前端展示位置：
- * - `frontend/src/pages/Revenue/components/RevenueTrendAnalysis.vue`：折线图数据源（按月趋势，渲染到 `<canvas>`）
- */
-router.get('/monthly', async (req, res) => {
-    try {
-        const parsed = requireDateRangeQuery(req, res);
-        if (!parsed) return;
-        const { startDate, endDate, roomType } = parsed;
-
-        const monthlyRevenue = await getMonthlyRevenue(startDate, endDate, roomType);
-
-        res.json({
-            message: '获取每月收入统计成功',
-            data: monthlyRevenue,
-            period: {
-                startDate,
-                endDate,
-                type: 'monthly',
-                roomType: roomType || null
-            }
-        });
-    } catch (error) {
-        console.error('获取每月收入统计失败:', error);
-        res.status(500).json({
-            message: '获取每月收入统计失败',
+            message: '获取收入聚合序列失败',
             error: error.message
         });
     }
@@ -248,24 +178,12 @@ router.get('/quick-stats', async (req, res) => {
             selectedToday = normalizedStart;
         }
 
-        // 数据库 current_date：作为“本周/本月”的截止日（今天）
-        const dbNow = await query(`SELECT current_date::text AS today`, []);
-        const currentToday = dbNow.rows?.[0]?.today;
-        const today = selectedToday || currentToday;
+        // 中文注释：快速统计的“本周/本月”以数据库 current_date 为准；today 可按单日筛选变更
+        const { currentToday, today, thisWeekStartStr, thisMonthStartStr, todayStats, weekStats, monthStats } =
+            await getQuickStatsSummary(selectedToday || null);
         const todayLabel = selectedToday ? `${today} 收入` : '今日收入';
 
-        // 中文注释：本周起始口径=周一
-        const thisWeekStartStr = getWeekStartDateString(currentToday);
-        const thisMonthStartStr = getMonthStartDateString(currentToday);
-
         console.log('📅 日期范围:', { today, currentToday, thisWeekStartStr, thisMonthStartStr });
-
-        // 并行获取今日、本周、本月数据
-        const [todayStats, weekStats, monthStats] = await Promise.all([
-            getOverview(today, today),
-            getOverview(thisWeekStartStr, currentToday),
-            getOverview(thisMonthStartStr, currentToday)
-        ]);
 
         console.log('📊 统计结果:', { todayStats, weekStats, monthStats });
 

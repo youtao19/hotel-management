@@ -239,6 +239,76 @@ async function getOverview(startDate, endDate) {
   };
 }
 
+function minDateString(a, b) {
+  // 中文注释：日期字符串 YYYY-MM-DD 可直接用字典序比较
+  const sa = String(a || "");
+  const sb = String(b || "");
+  return sa <= sb ? sa : sb;
+}
+
+/**
+ * 获取快速统计（今日/本周/本月）
+ * 中文注释：
+ * - 今日收入：stay_date = today 且 status != 'cancelled' 的 total_price 汇总
+ * - 本周/本月：始终以数据库 current_date 为截止日（不跟随前端单日筛选）
+ * - 通过 1 次汇总 SQL 同时计算三张卡片数据，减少重复查询
+ */
+async function getQuickStatsSummary(selectedToday) {
+  const dbNow = await query(`SELECT current_date::text AS today`, []);
+  const currentToday = dbNow.rows?.[0]?.today;
+
+  const today = selectedToday ? assertDateString(selectedToday, "selectedToday") : currentToday;
+  const thisWeekStartStr = getWeekStartDateString(currentToday);
+  const thisMonthStartStr = getMonthStartDateString(currentToday);
+
+  // 中文注释：选中日期可能早于本周/本月起始日，因此扩大底层扫描范围，保证 today/week/month 都可命中
+  let rangeStart = minDateString(thisWeekStartStr, thisMonthStartStr);
+  rangeStart = minDateString(rangeStart, today);
+
+  const sql = `
+    ${buildRevenueExpandedCTE()}
+    SELECT
+      COUNT(DISTINCT CASE WHEN stay_date = $4::date THEN order_id END)::int AS today_orders,
+      ROUND(COALESCE(SUM(CASE WHEN stay_date = $4::date THEN room_fee END)::numeric, 0), 2) AS today_revenue,
+
+      COUNT(DISTINCT CASE WHEN stay_date BETWEEN $5::date AND $2::date THEN order_id END)::int AS week_orders,
+      ROUND(COALESCE(SUM(CASE WHEN stay_date BETWEEN $5::date AND $2::date THEN room_fee END)::numeric, 0), 2) AS week_revenue,
+
+      COUNT(DISTINCT CASE WHEN stay_date BETWEEN $6::date AND $2::date THEN order_id END)::int AS month_orders,
+      ROUND(COALESCE(SUM(CASE WHEN stay_date BETWEEN $6::date AND $2::date THEN room_fee END)::numeric, 0), 2) AS month_revenue
+    FROM order_room_fee
+  `;
+
+  const res = await query(sql, [
+    rangeStart, // $1
+    currentToday, // $2
+    null, // $3 roomType：quick-stats 不做房型筛选
+    today, // $4
+    thisWeekStartStr, // $5
+    thisMonthStartStr, // $6
+  ]);
+
+  const row = res.rows?.[0] || {};
+  return {
+    currentToday,
+    today,
+    thisWeekStartStr,
+    thisMonthStartStr,
+    todayStats: {
+      total_orders: Number(row.today_orders || 0),
+      total_revenue: round2(row.today_revenue || 0),
+    },
+    weekStats: {
+      total_orders: Number(row.week_orders || 0),
+      total_revenue: round2(row.week_revenue || 0),
+    },
+    monthStats: {
+      total_orders: Number(row.month_orders || 0),
+      total_revenue: round2(row.month_revenue || 0),
+    },
+  };
+}
+
 /**
  * 获取房型收入统计
  */
@@ -329,6 +399,7 @@ module.exports = {
   getRoomTypeRevenue,
   getRevenueBillDetails,
   getOverview,
+  getQuickStatsSummary,
   // 供路由层“快速统计”使用的日期辅助函数
   getWeekStartDateString,
   getMonthStartDateString,

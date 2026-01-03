@@ -278,17 +278,11 @@ export const reviewApi = {
 
 // 收入统计相关接口
 export const revenueApi = {
-  // 获取每日收入统计
-  getDailyRevenue: (startDate, endDate, roomType) =>
-    api.get('/revenue/daily', { params: { startDate, endDate, roomType } }),
-
-  // 获取每周收入统计
-  getWeeklyRevenue: (startDate, endDate, roomType) =>
-    api.get('/revenue/weekly', { params: { startDate, endDate, roomType } }),
-
-  // 获取每月收入统计
-  getMonthlyRevenue: (startDate, endDate, roomType) =>
-    api.get('/revenue/monthly', { params: { startDate, endDate, roomType } }),
+  // 获取收入趋势统计（按日/周/月聚合）
+  // 中文注释：bucket 取值：daily / weekly / monthly
+  getRevenueTrend: (startDate, endDate, bucket, roomType) =>
+    // 中文注释：后端路由已更名为 /revenue/series（返回按时间聚合的序列数据）
+    api.get('/revenue/series', { params: { startDate, endDate, bucket, roomType } }),
 
   // 获取房型收入统计
   getRoomTypeRevenue: (startDate, endDate) => api.get('/revenue/room-type', { params: { startDate, endDate } }),

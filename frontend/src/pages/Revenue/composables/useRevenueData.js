@@ -63,11 +63,13 @@ export function useRevenueData(dateRange, selectedPeriod) {
       quickStats.value = qRes.data || quickStats.value
 
       // 1. 趋势数据（按粒度）
-      let res
-      const args = [dateRange.value.start, dateRange.value.end, selectedRoomType.value]
-      if (selectedPeriod.value === 'daily') res = await revenueApi.getDailyRevenue(...args)
-      else if (selectedPeriod.value === 'weekly') res = await revenueApi.getWeeklyRevenue(...args)
-      else res = await revenueApi.getMonthlyRevenue(...args)
+      // 中文注释：聚合逻辑全部由后端决定；前端仅传 bucket 参数（daily/weekly/monthly）
+      const res = await revenueApi.getRevenueTrend(
+        dateRange.value.start,
+        dateRange.value.end,
+        selectedPeriod.value,
+        selectedRoomType.value
+      )
 
       revenueData.value = res.data || []
 
