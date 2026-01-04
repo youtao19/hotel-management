@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "cross-env NODE_ENV=dev quasar dev",
+    "dev:test": "cross-env NODE_ENV=test PLAYWRIGHT=1 quasar dev",
     "build": "quasar build",
     "postinstall": "quasar prepare"
   },

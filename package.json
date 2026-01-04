@@ -10,6 +10,7 @@
         "start": "concurrently \"npm --workspace backend run dev\" \"npm --workspace frontend run dev\"",
         "build": "npm --workspace frontend run build",
         "test": "npm --workspace backend run test",
+        "test:e2e": "PLAYWRIGHT=1 NODE_ENV=test FRONTEND_URL=http://localhost:9000 E2E_EMAIL=wuyoutao19@qq.com E2E_PASSWORD=wyt.1219 npx playwright test -c backend/playwright.config.js --project=chromium",
         "test:watch": "npm --workspace backend run test:watch",
         "export-schema": "npm --workspace backend run export-schema",
         "export-structure": "npm --workspace backend run export-structure",
@@ -17,6 +18,7 @@
         "db:backup": "npm --workspace backend run db:backup",
         "db:init": "npm --workspace backend run db:init",
         "db:migrate": "npm --workspace backend run db:migrate"
+        
     },
     "devDependencies": {
         "concurrently": "^8.2.0"

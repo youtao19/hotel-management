@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "dotenv -e ../dev.env -- cross-env NODE_ENV=dev nodemon server.js",
     "start": "dotenv -e ../dev.env -- node server.js",
+    "start:test": "dotenv --overload -e ../.env.test -- node server.js",
     "test": "dotenv --overload -e ../.env.test -- cross-env NODE_ENV=test jest --runInBand --rootDir=.",
     "test:watch": "dotenv --overload -e ../.env.test -- cross-env NODE_ENV=test jest --watch --runInBand",
     "test:coverage": "dotenv --overload -e ../.env.test -- cross-env NODE_ENV=test jest --coverage --runInBand",

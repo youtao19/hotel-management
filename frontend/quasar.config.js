@@ -69,7 +69,7 @@ export default defineConfig((/* ctx */) => {
     // Full list of options: https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#devserver
     devServer: {
       // https: true
-      open: true, // opens browser window automatically
+      open: !process.env.PLAYWRIGHT, // Playwright E2E 时不自动打开浏览器窗口
       port: 9000, // 前端开发服务器端口
       proxy: {
         '/api': {
