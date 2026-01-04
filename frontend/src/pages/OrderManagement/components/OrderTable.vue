@@ -44,7 +44,16 @@
         <template v-slot:body-cell-actions="props">
           <q-td :props="props">
             <q-btn-group flat>
-              <q-btn flat round dense color="primary" icon="visibility" @click="$emit('view', props.row)">
+              <q-btn
+                flat
+                round
+                dense
+                color="primary"
+                icon="visibility"
+                aria-label="查看详情"
+                @click="$emit('view', props.row)"
+                data-testid="orders-row-view"
+              >
                 <q-tooltip>查看详情</q-tooltip>
               </q-btn>
 

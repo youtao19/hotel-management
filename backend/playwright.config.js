@@ -14,6 +14,7 @@ const { defineConfig, devices } = require('@playwright/test');
  * @see https://playwright.dev/docs/test-configuration
  */
 const repoRoot = path.resolve(__dirname, '..');
+const authStatePath = path.join(repoRoot, 'playwright', '.auth', 'state.json');
 
 module.exports = defineConfig({
   testDir: './tests/e2e',
@@ -31,6 +32,7 @@ module.exports = defineConfig({
   use: {
     /* Base URL to use in actions like `await page.goto('')`. */
     baseURL: process.env.FRONTEND_URL || 'http://localhost:9000',
+    storageState: authStatePath,
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
@@ -91,4 +93,6 @@ module.exports = defineConfig({
       timeout: 120_000,
     },
   ],
+
+  globalSetup: path.join(__dirname, 'tests', 'e2e', 'global-setup.js'),
 });
