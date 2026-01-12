@@ -1,34 +1,33 @@
 {
-    "name": "hotel-management-system",
-    "version": "0.0.1",
-    "description": "酒店管理系统",
-    "productName": "酒店管理系统",
-    "author": "youtao19 <wuyoutao19@gmail.com>",
-    "private": true,
-    "scripts": {
-        "dev": "npm --workspace backend run dev",
-        "start": "concurrently \"npm --workspace backend run dev\" \"npm --workspace frontend run dev\"",
-        "build": "npm --workspace frontend run build",
-        "test": "npm --workspace backend run test",
-        "test:e2e": "PLAYWRIGHT=1 NODE_ENV=test FRONTEND_URL=http://localhost:9000 E2E_EMAIL=wuyoutao19@qq.com E2E_PASSWORD=wyt.1219 npx playwright test -c backend/playwright.config.js --project=chromium",
-        "test:watch": "npm --workspace backend run test:watch",
-        "export-schema": "npm --workspace backend run export-schema",
-        "export-structure": "npm --workspace backend run export-structure",
-        "export-all": "npm --workspace backend run export-all",
-        "db:backup": "npm --workspace backend run db:backup",
-        "db:init": "npm --workspace backend run db:init",
-        "db:migrate": "npm --workspace backend run db:migrate"
-        
-    },
-    "devDependencies": {
-        "concurrently": "^8.2.0"
-    },
-    "workspaces": [
-        "frontend",
-        "backend"
-    ],
-    "engines": {
-        "node": "^28 || ^26 || ^24 || ^22 || ^20 || ^18",
-        "npm": ">= 6.13.4"
-    }
+  "name": "hotel-management-system",
+  "version": "0.0.1",
+  "description": "酒店管理系统",
+  "productName": "酒店管理系统",
+  "author": "youtao19 <wuyoutao19@gmail.com>",
+  "private": true,
+  "scripts": {
+    "dev": "npm --workspace backend run dev",
+    "start": "concurrently \"npm --workspace backend run dev\" \"npm --workspace frontend run dev\"",
+    "build": "npm --workspace frontend run build",
+    "test": "npm --workspace backend run test",
+    "test:watch": "npm --workspace backend run test:watch",
+    "export-schema": "npm --workspace backend run export-schema",
+    "export-structure": "npm --workspace backend run export-structure",
+    "export-all": "npm --workspace backend run export-all",
+    "db:backup": "npm --workspace backend run db:backup",
+    "db:init": "npm --workspace backend run db:init",
+    "db:migrate": "npm --workspace backend run db:migrate"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.3",
+    "concurrently": "^8.2.0"
+  },
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "engines": {
+    "node": "^28 || ^26 || ^24 || ^22 || ^20 || ^18",
+    "npm": ">= 6.13.4"
+  }
 }

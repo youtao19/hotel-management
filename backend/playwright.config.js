@@ -1,6 +1,5 @@
 // @ts-check
-const path = require('path');
-const { defineConfig, devices } = require('@playwright/test');
+import { defineConfig, devices } from '@playwright/test';
 
 /**
  * Read environment variables from file.
@@ -13,10 +12,7 @@ const { defineConfig, devices } = require('@playwright/test');
 /**
  * @see https://playwright.dev/docs/test-configuration
  */
-const repoRoot = path.resolve(__dirname, '..');
-const authStatePath = path.join(repoRoot, 'playwright', '.auth', 'state.json');
-
-module.exports = defineConfig({
+export default defineConfig({
   testDir: './tests/e2e',
   /* Run tests in files in parallel */
   fullyParallel: true,
@@ -31,8 +27,7 @@ module.exports = defineConfig({
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('')`. */
-    baseURL: process.env.FRONTEND_URL || 'http://localhost:9000',
-    storageState: authStatePath,
+    // baseURL: 'http://localhost:3000',
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
@@ -77,22 +72,10 @@ module.exports = defineConfig({
   ],
 
   /* Run your local dev server before starting the tests */
-  webServer: [
-    {
-      command: 'npm --workspace backend run start:test',
-      url: 'http://localhost:3000/api/hup',
-      reuseExistingServer: !process.env.CI,
-      cwd: repoRoot,
-      timeout: 120_000,
-    },
-    {
-      command: 'npm --workspace frontend run dev:test',
-      url: 'http://localhost:9000/login',
-      reuseExistingServer: !process.env.CI,
-      cwd: repoRoot,
-      timeout: 120_000,
-    },
-  ],
-
-  globalSetup: path.join(__dirname, 'tests', 'e2e', 'global-setup.js'),
+  // webServer: {
+  //   command: 'npm run start',
+  //   url: 'http://localhost:3000',
+  //   reuseExistingServer: !process.env.CI,
+  // },
 });
+

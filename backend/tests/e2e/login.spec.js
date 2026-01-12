@@ -1,8 +1,8 @@
 // @ts-check
 import { test, expect } from '@playwright/test';
 
-const email = process.env.E2E_EMAIL;
-const password = process.env.E2E_PASSWORD;
+const email = process.env.E2E_EMAIL || 'wuyoutao19@qq.com';
+const password = process.env.E2E_PASSWORD || 'wyt.1219';
 const baseURL = process.env.FRONTEND_URL || 'http://localhost:9000';
 
 test.describe('登录', () => {
