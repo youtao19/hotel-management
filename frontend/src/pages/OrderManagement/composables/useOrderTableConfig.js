@@ -93,7 +93,10 @@ export function useOrderTableConfig() {
       name: 'actions',
       align: 'center',
       label: '操作',
-      field: 'actions'
+      field: 'actions',
+      // 为“操作”列提供可定位的 class：用于在表格中实现 sticky 固定列，避免仅靠 nth-child 选择器误伤其他列
+      headerClasses: 'om-actions-sticky om-actions-sticky--header',
+      classes: 'om-actions-sticky om-actions-sticky--cell'
     }
   ]
 

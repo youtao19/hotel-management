@@ -15,3 +15,10 @@
 6. 【进行中】修改后我会给出“测试样例/用例设计”，让你确认后再把该样例写进测试文件
 7. 【未开始】运行相关 e2e 测试验证（或最小化运行该 spec），直到通过
 8. 【未开始】`git add -A` 后使用中文 commit message 提交（你确认测试结果后执行）
+
+## 订单管理 UI
+
+1. 【已完成】订单列表“操作”列固定为右侧吸附（sticky），横向滚动时无需拖动底部滚动条找按钮
+   - 改动点：`frontend/src/pages/OrderManagement/composables/useOrderTableConfig.js` 为 `actions` 列补充 `headerClasses/classes`（带注释，便于样式精准命中）
+   - 改动点：`frontend/src/pages/OrderManagement/components/OrderTable.vue` 使用 `:deep()` 将 `actions` 列表头/单元格设置 `position: sticky; right: 0`，并保持按钮 `nowrap`（均带注释）
+2. 【已完成】提交上述变更（使用中文 commit message）
