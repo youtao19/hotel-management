@@ -148,7 +148,6 @@ async function checkInFromOrderDetails(page, guestName) {
  * 4) 等待提示“退房成功”
  */
 async function checkOutFromOrderDetails(page,guestName) {
-
   await page.getByRole('textbox', { name: '搜索订单' }).fill(guestName);
   // 与入住流程保持一致：填写搜索条件后必须点击搜索，避免依赖上一次列表状态造成不稳定。
   await page.getByRole('button', { name: '搜索' }).click();

@@ -344,7 +344,7 @@ watch(() => orderStore.orders, (newOrders) => {
 
 <style scoped>
 .view-orders {
-  max-width: 1200px;
+  max-width: 1300px;
   margin: 0 auto;
 }
 </style>

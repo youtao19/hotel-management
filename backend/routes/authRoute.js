@@ -3,7 +3,6 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const saltRounds = 10;
 const router = express.Router();
-const authentication = require("../modules/authentication");
 const Ajv = require("ajv");
 const ajv = new Ajv();
 const addFormats = require("ajv-formats");
@@ -11,7 +10,6 @@ addFormats(ajv);
 const db = require("../database/postgreDB/pg");
 const account = require("../database/postgreDB/tables/account");
 const redisDB = require("../database/redis/redis");
-const util = require("util");
 const setup = require("../appSettings/setup");
 const emailJob = require("../modules/emailSetup");
 const { limiterSlowBruteByIP, limiterConsecutiveFailsByUsernameAndIP, getUsernameIPkey } = require("../modules/rateLimiter");
@@ -122,7 +120,7 @@ router.post("/signup", async (req, res, next) => {
             }
         }
     } catch (e) {
-        console.error(`some error occured ${e}`);
+        console.error(`some error occurred ${e}`);
         return res.status(500).json()
     }
 });
@@ -215,7 +213,7 @@ router.post("/login", async (req, res) => {
                         };
                         await req.login(params);
 
-                        // Reset rate limiter on successful authorisation
+                        // Reset rate limiter on successful authorization
                         if (resUsernameAndIP !== null && resUsernameAndIP.consumedPoints > 0) {
                             await limiterConsecutiveFailsByUsernameAndIP.delete(usernameIPkey);
                         } else if (resSlowByIP !== null && resSlowByIP.consumedPoints > 0) {
@@ -243,7 +241,7 @@ router.post("/login", async (req, res) => {
             }
         }
     } catch (e) {
-        console.error("some error occured in login",e);
+        console.error("some error occurred in login",e);
         return res.status(500).json()
     }
 });
@@ -265,7 +263,7 @@ router.post("/send-email-verification", async (req, res, next) => {
             const result = await db.query(checkEmailExistQuery);
             if (result.rows.length === 0) {
                 //no match found
-                console.log(`email not in our system. The user is trying to send req directly without using browser! api is sending email verificaiton`);
+                console.log(`email not in our system. The user is trying to send req directly without using browser! api is sending email verification`);
                 return res.status(400).end();
             } else {
                 //check if we have already sent one, if so, we do not send anymore in one hour.
@@ -292,7 +290,7 @@ router.post("/send-email-verification", async (req, res, next) => {
                     }
                 } while (cursor !== '0');
 
-                //check if this email has already be set in redis
+                //check if this email has already been set in redis
                 if (values.indexOf(req.body.email) !== -1) {
                     console.log(`${req.body.email} is trying to verify email within 10 mins more than once.`);
                     return res.status(setup.errorCode.rate_limit).end();
@@ -371,7 +369,7 @@ router.get("/check/email/:email", async (req, res, next) => {
     }
 });
 
-router.post("/send-pwreset-email", async (req, res, next) => {
+router.post("/send-preset-email", async (req, res, next) => {
     try {
         const valid = validateResetPWEmail(req.body);
         if (!valid) {
@@ -413,7 +411,7 @@ router.post("/send-pwreset-email", async (req, res, next) => {
                         values.push(...scannedValues);
                     }
                 } while (cursor !== 0);
-                //check if this email has already be set in redis
+                //check if this email has already been set in redis
                 if (values.indexOf(req.body.email) !== -1) {
                     console.log(`${req.body.email} is trying to send reset pw email within 1 hour more than once.`);
                     return res.status(setup.errorCode.rate_limit).json();
