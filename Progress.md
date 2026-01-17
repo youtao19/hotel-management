@@ -22,3 +22,10 @@
    - 改动点：`frontend/src/pages/OrderManagement/composables/useOrderTableConfig.js` 为 `actions` 列补充 `headerClasses/classes`（带注释，便于样式精准命中）
    - 改动点：`frontend/src/pages/OrderManagement/components/OrderTable.vue` 使用 `:deep()` 将 `actions` 列表头/单元格设置 `position: sticky; right: 0`，并保持按钮 `nowrap`（均带注释）
 2. 【已完成】提交上述变更（使用中文 commit message）
+
+## E2E（Playwright）
+
+1. 【已完成】修复退房确认弹窗无法点击“确认”的问题
+   - 结论：弹窗按钮文案为“确定”，原用例点击 `{ name: '确认' }` 导致一直等待直到超时
+   - 改动点：`backend/tests/e2e/order-checkin.spec.js` 将点击目标改为弹窗内的“确定”，并限定在 `dialog` 范围内（带注释）
+2. 【已完成】验证用例通过（本机需 `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=mac15-arm64` 且以非沙盒权限启动浏览器）

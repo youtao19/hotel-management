@@ -158,7 +158,10 @@ async function checkOutFromOrderDetails(page,guestName) {
   await page.getByRole('button', { name: '办理退房' }).click();
   await expect(page.getByText('确认退房')).toBeVisible();
 
-  await page.getByRole('button', { name: '确认'}).click();
+  // 退房确认弹窗的按钮文案为“确定”（不是“确认”）；同时限定在弹窗内，避免页面其它“确定”按钮干扰。
+  const checkOutConfirmDialog = page.getByRole('dialog').filter({ hasText: '确认退房' });
+  await expect(checkOutConfirmDialog).toBeVisible();
+  await checkOutConfirmDialog.getByRole('button', { name: '确定' }).click();
   await expect(page.getByText('退房成功')).toBeVisible({ timeout: 30_000 });
 }
 
