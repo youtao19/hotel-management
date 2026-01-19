@@ -139,6 +139,7 @@
                       <q-icon name="edit" size="12px" class="q-ml-xs" color="primary" />
                     </div>
                     <div class="fee-card-input clickable-area">
+                      <!-- 为 E2E/无障碍提供稳定定位：押金输入框补齐 aria-label + data-testid（不改变布局） -->
                       <q-input
                         ref="depositInput"
                         v-model.number="depositAmount"
@@ -146,6 +147,8 @@
                         dense
                         borderless
                         prefix="¥"
+                        data-testid="checkin-deposit"
+                        :input-attrs="{ 'aria-label': '押金' }"
                         :rules="[val => val >= 0 || '押金不能为负数']"
                         class="fee-input editable-input"
                         input-class="fee-card-value-text"

@@ -1,5 +1,6 @@
 // @ts-check
 import { test, expect } from '@playwright/test';
+import { acquireE2ELock } from './helpers/orderManagement.e2e.helper.js';
 
 /**
  * 订单 E2E：覆盖「创建订单 -> 进入订单详情 -> 办理入住」核心链路
@@ -59,21 +60,39 @@ async function login(page) {
  */
 async function selectRoomTypeAndNumber(page) {
   const roomTypeCombobox = page.getByRole('combobox', { name: '房间类型' });
-  await roomTypeCombobox.click();
-
-  const roomTypeOption = page
-    .locator('.q-menu .q-item')
-    .filter({ hasNotText: '所有房型' })
-    .filter({ hasText: /[1-9]\d*间/ })
-    .first();
-  await expect(roomTypeOption).toBeVisible({ timeout: 30_000 });
-  await roomTypeOption.click();
-
   const roomNumberCombobox = page.getByRole('combobox', { name: '房间号' });
-  await roomNumberCombobox.click();
-  const roomNumberOption = page.locator('.q-menu .q-item').first();
-  await expect(roomNumberOption).toBeVisible({ timeout: 30_000 });
-  await roomNumberOption.click();
+
+  // 说明：房型选项在不同版本/主题下，可能不直接展示“剩余 x 间”，因此不能只靠文案过滤。
+  // 做法：遍历房型选项，逐个尝试打开房号下拉，找到“有可用房号”的房型后再选房号。
+  await roomTypeCombobox.click();
+  const optionCount = await page.locator('.q-menu:visible .q-item').filter({ hasNotText: '所有房型' }).count();
+
+  for (let i = 0; i < optionCount; i += 1) {
+    // 每轮重新打开房型下拉：Quasar 选中后会关闭菜单，下一轮需要再次展开
+    await roomTypeCombobox.click();
+    const option = page.locator('.q-menu:visible .q-item').filter({ hasNotText: '所有房型' }).nth(i);
+    await expect(option).toBeVisible({ timeout: 30_000 });
+    await option.click();
+
+    await roomNumberCombobox.click();
+
+    // 房号列表里可能出现“没有可用房间/请选择”等占位项，这里仅选择纯数字房号（例如 105）。
+    const roomNumberOption = page
+      .locator('.q-menu:visible .q-item')
+      .filter({ hasNotText: /没有可用|请选择/ })
+      .filter({ hasText: /^\s*\d+\s*$/ })
+      .first();
+
+    if (await roomNumberOption.count()) {
+      await roomNumberOption.click();
+      return;
+    }
+
+    // 当前房型在该日期范围下无房号可选：关闭下拉并继续尝试下一个房型
+    await page.keyboard.press('Escape');
+  }
+
+  throw new Error('未找到可用房型/房号（请检查该日期范围是否有可用房间）');
 }
 
 /**
@@ -96,7 +115,8 @@ async function fillDailyPrices(page, { stayDates, isRestRoom }) {
  */
 async function createOrder(page, { orderId, guestName, phone, checkInDate, checkOutDate, stayDates }) {
   await page.goto('/CreateOrder');
-  await expect(page.getByRole('heading', { name: '创建订单' })).toBeVisible();
+  // 防御性等待：首次进入创建订单页时渲染可能较慢（CI/低性能环境），提高超时时间避免误报
+  await expect(page.getByRole('heading', { name: '创建订单' })).toBeVisible({ timeout: 30_000 });
 
   await page.getByRole('textbox', { name: '订单号' }).fill(orderId);
   await page.getByRole('textbox', { name: '姓名' }).fill(guestName);
@@ -132,7 +152,11 @@ async function checkInFromOrderDetails(page, guestName) {
   await page.locator('tbody tr').first().getByRole('button', { name: '查看详情' }).click();
 
   await expect(page.getByText('订单详情')).toBeVisible();
-  await page.getByRole('button', { name: '办理入住' }).click();
+
+  // 限定在“订单详情”弹窗内点击，避免与表格行内同名图标按钮（aria-label=办理入住）冲突导致 strict mode 报错。
+  const orderDetailsDialog = page.getByRole('dialog').filter({ hasText: '订单详情' });
+  await expect(orderDetailsDialog).toBeVisible();
+  await orderDetailsDialog.getByRole('button', { name: '办理入住' }).click();
 
   await expect(page.getByRole('button', { name: '确认办理入住' })).toBeVisible();
   await page.getByRole('button', { name: '确认办理入住' }).click();
@@ -155,7 +179,10 @@ async function checkOutFromOrderDetails(page,guestName) {
   await page.getByRole('button', { name: '查看详情'}).click();
   await expect(page.getByText('订单详情')).toBeVisible();
 
-  await page.getByRole('button', { name: '办理退房' }).click();
+  // 限定在“订单详情”弹窗内点击，避免与表格行内同名图标按钮（aria-label=办理退房）冲突导致 strict mode 报错。
+  const orderDetailsDialog = page.getByRole('dialog').filter({ hasText: '订单详情' });
+  await expect(orderDetailsDialog).toBeVisible();
+  await orderDetailsDialog.getByRole('button', { name: '办理退房' }).click();
   await expect(page.getByText('确认退房')).toBeVisible();
 
   // 退房确认弹窗的按钮文案为“确定”（不是“确认”）；同时限定在弹窗内，避免页面其它“确定”按钮干扰。
@@ -168,14 +195,22 @@ async function checkOutFromOrderDetails(page,guestName) {
 test.describe('创建订单到办理入住', () => {
   // 串行：避免多个用例并发导致房间资源冲突（同一时间段可用房被抢占）
   test.describe.configure({ mode: 'serial' });
+  // 说明：下单流程涉及房态资源与多个弹窗交互，适当放宽超时以避免在低性能环境误报。
+  test.setTimeout(120_000);
 
   /** @type {import('@playwright/test').BrowserContext | null} */
   let context = null;
   /** @type {import('@playwright/test').Page | null} */
   let page = null;
+  /** @type {null | (() => Promise<void>)} */
+  let releaseLock = null;
 
   // 只登录一次：用例共享同一登录态，减少重复登录耗时与偶发波动
-  test.beforeAll(async ({ browser }) => {
+  test.beforeAll(async ({ browser }, testInfo) => {
+    // 说明：与订单管理 E2E 共用房态/订单资源，为避免跨文件并行抢房导致“创建订单不跳转”等不稳定问题，这里获取全局互斥锁。
+    // 同时：等待锁可能超过默认 30s，需要放宽 hook 超时。
+    testInfo.setTimeout(240_000);
+    releaseLock = await acquireE2ELock('order-management');
     context = await browser.newContext({ baseURL });
     page = await context.newPage();
     await login(page);
@@ -184,6 +219,7 @@ test.describe('创建订单到办理入住', () => {
   // 套件结束后统一关闭 context，释放资源
   test.afterAll(async () => {
     await context?.close();
+    await releaseLock?.();
     context = null;
     page = null;
   });

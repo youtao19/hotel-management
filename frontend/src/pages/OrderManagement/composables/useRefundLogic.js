@@ -109,6 +109,9 @@ export function useRefundLogic(refreshAllData) {
       const order = await orderStore.getOrderByNumber(refundData.order_id)
       if (order) await computeRefundable(order)
 
+      // 交互反馈：退押金成功后提示（用于用户确认与 E2E 断言）
+      $q.notify({ type: 'positive', message: '退押金成功', position: 'top' })
+
     } catch (error) {
       console.error('退押金处理失败:', error)
       $q.notify({ type: 'negative', message: '退押金处理失败: ' + (error.message || '未知错误'), position: 'top' })

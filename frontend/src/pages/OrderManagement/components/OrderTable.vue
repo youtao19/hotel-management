@@ -62,32 +62,98 @@
                   <q-tooltip>查看详情</q-tooltip>
                 </q-btn>
 
-                <q-btn v-if="props.row.status === 'pending'" flat round dense color="info" icon="hotel" @click="$emit('check-in', props.row)">
-                  <q-tooltip>办理入住</q-tooltip>
-                </q-btn>
+              <!-- 为 E2E/无障碍提供稳定定位：图标按钮补齐 aria-label + data-testid（不改变现有布局） -->
+              <q-btn
+                v-if="props.row.status === 'pending'"
+                flat
+                round
+                dense
+                color="info"
+                icon="hotel"
+                aria-label="办理入住"
+                data-testid="orders-row-check-in"
+                @click="$emit('check-in', props.row)"
+              >
+                <q-tooltip>办理入住</q-tooltip>
+              </q-btn>
 
-                <q-btn v-if="['checked-in', 'pending'].includes(props.row.status)" flat round dense color="negative" icon="cancel" @click="$emit('cancel', props.row)">
-                  <q-tooltip>取消订单</q-tooltip>
-                </q-btn>
+              <!-- 为 E2E/无障碍提供稳定定位：图标按钮补齐 aria-label + data-testid（不改变现有布局） -->
+              <q-btn
+                v-if="['checked-in', 'pending'].includes(props.row.status)"
+                flat
+                round
+                dense
+                color="negative"
+                icon="cancel"
+                aria-label="取消订单"
+                data-testid="orders-row-cancel"
+                @click="$emit('cancel', props.row)"
+              >
+                <q-tooltip>取消订单</q-tooltip>
+              </q-btn>
 
-                <q-btn v-if="props.row.status === 'checked-in'" flat round dense color="positive" icon="check_circle" @click="$emit('checkout', props.row)">
-                  <q-tooltip>办理退房</q-tooltip>
-                </q-btn>
+              <!-- 为 E2E/无障碍提供稳定定位：图标按钮补齐 aria-label + data-testid（不改变现有布局） -->
+              <q-btn
+                v-if="props.row.status === 'checked-in'"
+                flat
+                round
+                dense
+                color="positive"
+                icon="check_circle"
+                aria-label="办理退房"
+                data-testid="orders-row-checkout"
+                @click="$emit('checkout', props.row)"
+              >
+                <q-tooltip>办理退房</q-tooltip>
+              </q-btn>
 
-                <q-btn v-if="props.row.status === 'checked-in'" flat round dense color="warning" icon="logout" @click="$emit('early-checkout', props.row)">
-                  <q-tooltip>提前退房</q-tooltip>
-                </q-btn>
+              <!-- 为 E2E/无障碍提供稳定定位：图标按钮补齐 aria-label + data-testid（不改变现有布局） -->
+              <q-btn
+                v-if="props.row.status === 'checked-in'"
+                flat
+                round
+                dense
+                color="warning"
+                icon="logout"
+                aria-label="提前退房"
+                data-testid="orders-row-early-checkout"
+                @click="$emit('early-checkout', props.row)"
+              >
+                <q-tooltip>提前退房</q-tooltip>
+              </q-btn>
 
-                <q-btn v-if="['checked-out', 'checked-in'].includes(props.row.status)" flat round dense color="orange" icon="hotel_class" @click="$emit('extend-stay', props.row)">
-                  <q-tooltip>续住</q-tooltip>
-                </q-btn>
+              <!-- 为 E2E/无障碍提供稳定定位：图标按钮补齐 aria-label + data-testid（不改变现有布局） -->
+              <q-btn
+                v-if="['checked-out', 'checked-in'].includes(props.row.status)"
+                flat
+                round
+                dense
+                color="orange"
+                icon="hotel_class"
+                aria-label="续住"
+                data-testid="orders-row-extend-stay"
+                @click="$emit('extend-stay', props.row)"
+              >
+                <q-tooltip>续住</q-tooltip>
+              </q-btn>
 
-                <q-btn v-if="canRefundDeposit(props.row)" flat round dense color="purple" icon="account_balance_wallet" @click="$emit('refund', props.row)">
-                  <q-tooltip>退押金</q-tooltip>
-                </q-btn>
-              </q-btn-group>
-            </div>
-          </q-td>
+              <!-- 为 E2E/无障碍提供稳定定位：图标按钮补齐 aria-label + data-testid（不改变现有布局） -->
+              <q-btn
+                v-if="canRefundDeposit(props.row)"
+                flat
+                round
+                dense
+                color="purple"
+                icon="account_balance_wallet"
+                aria-label="退押金"
+                data-testid="orders-row-refund"
+                @click="$emit('refund', props.row)"
+              >
+                <q-tooltip>退押金</q-tooltip>
+              </q-btn>
+            </q-btn-group>
+          </div>
+        </q-td>
         </template>
       </q-table>
     </q-card-section>
