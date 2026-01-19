@@ -28,10 +28,12 @@ async function getAllRooms(queryDate = null) {
         o.check_in_date,
         o.stay_type,
         CASE
+          -- 维修状态优先级最高（房间不可用）
           WHEN r.is_closed = TRUE OR r.status = 'repair' THEN 'repair'
-          -- 业务规则：给“清扫中/待清理”的房间分配订单，视为已完成清扫；展示上以订单状态优先于清扫状态
+          -- 订单状态优先：前台优先看到预订中或入住中的订单
           WHEN o.order_status IN ('checked-in', 'occupied') THEN 'occupied'
           WHEN o.order_status IN ('pending', 'reserved') THEN 'reserved'
+          -- 清扫状态次于订单状态（无订单时才显示清扫中）
           WHEN r.status = 'cleaning' THEN 'cleaning'
           ELSE 'available'
         END AS display_status
@@ -132,10 +134,12 @@ async function getRoomStatusRange(roomNumber, startDate, endDate) {
         bo.check_out_date,
         bo.order_status,
         CASE
+          -- 维修状态优先级最高（房间不可用）
           WHEN r.is_closed = TRUE OR r.status = 'repair' THEN 'repair'
-          -- 业务规则：给“清扫中/待清理”的房间分配订单，视为已完成清扫；展示上以订单状态优先于清扫状态
+          -- 订单状态优先：前台优先看到预订中或入住中的订单
           WHEN bo.order_status IN ('checked-in', 'occupied') THEN 'occupied'
           WHEN bo.order_status IN ('pending', 'reserved') THEN 'reserved'
+          -- 清扫状态次于订单状态（无订单时才显示清扫中）
           WHEN r.status = 'cleaning' THEN 'cleaning'
           ELSE 'available'
         END AS display_status

@@ -111,9 +111,10 @@ describe('房态 API - display_status（SQL计算）', () => {
     expect(room106.order_id).toBe(orderId);
   });
 
-  test('清扫/维修优先级覆盖订单（display_status=cleaning）', async () => {
+  test('订单状态优先于清扫状态（display_status=reserved）', async () => {
     // tools.js 中 113 的 room.status 预置为 cleaning
-    const orderId = `${TEST_PREFIX}CLEANING_OVERRIDE`;
+    // 但当房间有订单时，前台优先看到订单状态（reserved）而非清扫状态
+    const orderId = `${TEST_PREFIX}ORDER_PRIORITY`;
     const orderPayload = buildOrderPayload({
       orderId,
       guestName: '测试客人2',
@@ -133,8 +134,8 @@ describe('房态 API - display_status（SQL计算）', () => {
 
     const room113 = findRoom(res.body.data, '113');
     expect(room113).toBeTruthy();
-    expect(room113.display_status).toBe('cleaning');
-    // 仍会带回当日订单信息（用于展示客人/订单号）
+    // 订单状态优先：显示 reserved 而非 cleaning
+    expect(room113.display_status).toBe('reserved');
     expect(room113.order_id).toBe(orderId);
     expect(room113.order_status).toBe('pending');
   });
