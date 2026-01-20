@@ -11,6 +11,7 @@
     "build": "npm --workspace frontend run build",
     "test": "npm --workspace backend run test",
     "test:watch": "npm --workspace backend run test:watch",
+    "test:e2e": "npx playwright test --config playwright.config.js",
     "export-schema": "npm --workspace backend run export-schema",
     "export-structure": "npm --workspace backend run export-structure",
     "export-all": "npm --workspace backend run export-all",

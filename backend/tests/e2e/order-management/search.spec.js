@@ -15,11 +15,9 @@ import path from 'node:path';
 // 配置常量
 // ============================================================================
 
-const e2eCredentials = {
-  email: process.env.E2E_EMAIL || 'wuyoutao19@qq.com',
-  password: process.env.E2E_PASSWORD || 'wyt.1219'
-};
-const e2eBaseURL = process.env.FRONTEND_URL || 'http://localhost:9000';
+const e2eBaseURL = process.env.FRONTEND_URL || 'http://localhost:9011';
+// 复用 global-setup 生成的登录态，避免每次用例重复登录。
+const storageStatePath = path.join(process.cwd(), 'backend', 'tests', 'e2e', 'storageState.json');
 
 // ============================================================================
 // 工具函数
@@ -102,21 +100,6 @@ function randomDigits(length) {
   return s;
 }
 
-/**
- * 登录
- * @param {import('@playwright/test').Page} page
- */
-async function login(page) {
-  const { email, password } = e2eCredentials;
-  if (!email || !password) {
-    throw new Error('缺少 E2E_EMAIL / E2E_PASSWORD');
-  }
-  await page.goto('/login');
-  await page.locator('input[type="email"]').fill(email);
-  await page.locator('input[type="password"]').fill(password);
-  await page.getByRole('button', { name: '登录' }).click();
-  await page.waitForURL('**/Dash-board', { timeout: 30_000 });
-}
 
 /**
  * 选择房型+房号
@@ -314,9 +297,8 @@ test.describe('订单管理（ViewOrders）- 搜索与详情', () => {
   test.beforeAll(async ({ browser }, testInfo) => {
     testInfo.setTimeout(240_000);
     releaseLock = await acquireE2ELock('order-management');
-    context = await browser.newContext({ baseURL: e2eBaseURL });
+    context = await browser.newContext({ baseURL: e2eBaseURL, storageState: storageStatePath });
     page = await context.newPage();
-    await login(page);
   });
 
   test.afterAll(async () => {

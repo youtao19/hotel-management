@@ -1,0 +1,25 @@
+{
+  "cookies": [
+    {
+      "name": "hotelManagement.sid",
+      "value": "s%3ATrS2sOoDAE-Cf5aClx0oLkRJuhMM_X-D.L%2Fy9pLN0ajAJn1%2FuXaA6%2BMFZdd5vC5TXUKgYaETqBo8",
+      "domain": "localhost",
+      "path": "/",
+      "expires": 1770128533.774197,
+      "httpOnly": true,
+      "secure": false,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": [
+    {
+      "origin": "http://localhost:9011",
+      "localStorage": [
+        {
+          "name": "user-store",
+          "value": "{\"user\":{\"isLoggedIn\":true,\"username\":\"E2E User\",\"avatar\":\"/icons/default-avatar.png\",\"role\":\"员工\"},\"loading\":false,\"error\":null}"
+        }
+      ]
+    }
+  ]
+}

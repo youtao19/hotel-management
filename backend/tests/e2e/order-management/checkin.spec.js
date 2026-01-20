@@ -17,9 +17,9 @@ import path from 'node:path';
 // ============================================================================
 
 // 说明：默认值仅用于本地开发，CI/真实环境请通过环境变量覆盖
-const email = process.env.E2E_EMAIL || 'wuyoutao19@qq.com';
-const password = process.env.E2E_PASSWORD || 'wyt.1219';
-const baseURL = process.env.FRONTEND_URL || 'http://localhost:9000';
+const baseURL = process.env.FRONTEND_URL || 'http://localhost:9011';
+// 复用 global-setup 生成的登录态，避免每次用例重复登录。
+const storageStatePath = path.join(process.cwd(), 'backend', 'tests', 'e2e', 'storageState.json');
 
 // ============================================================================
 // 工具函数
@@ -110,21 +110,6 @@ function randomDigits(length) {
   return s;
 }
 
-/**
- * 登录：进入 /login 填写账号密码并确保跳转到仪表盘
- * - 这里不依赖 storageState，是为了在本 spec 内部自洽，减少并发/共享状态带来的不确定性。
- * @param {import('@playwright/test').Page} page
- */
-async function login(page) {
-  if (!email || !password) {
-    throw new Error('缺少 E2E_EMAIL / E2E_PASSWORD，无法执行登录与下单 E2E');
-  }
-  await page.goto('/login');
-  await page.locator('input[type="email"]').fill(email);
-  await page.locator('input[type="password"]').fill(password);
-  await page.getByRole('button', { name: '登录' }).click();
-  await page.waitForURL('**/Dash-board', { timeout: 30_000 });
-}
 
 /**
  * 选择房型+房号：
@@ -305,9 +290,8 @@ test.describe('创建订单到办理入住', () => {
     // 同时：等待锁可能超过默认 30s，需要放宽 hook 超时。
     testInfo.setTimeout(240_000);
     releaseLock = await acquireE2ELock('order-management');
-    context = await browser.newContext({ baseURL });
+    context = await browser.newContext({ baseURL, storageState: storageStatePath });
     page = await context.newPage();
-    await login(page);
   });
 
   // 套件结束后统一关闭 context，释放资源
