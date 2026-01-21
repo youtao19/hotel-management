@@ -305,7 +305,6 @@ async function handleEarlyCheckoutSuccess(data) {
     earlyCheckoutOrder.value = null
     await fetchAllOrders()
     await roomStore.fetchAllRooms()
-    $q.notify({ type: 'positive', message: '提前退房成功' })
   } catch (e) {
     const msg = e?.message || '提前退房失败'
     $q.notify({ type: 'negative', message: '提前退房失败: ' + msg })

@@ -830,6 +830,7 @@ async function earlyCheckout(orderNumber, options = {}) {
     const hasStayedFlag = !(hasStayed === false || hasStayed === 'false');
     const originalCheckoutDateStr = formatDate(lastRow.check_out_date);
     const actualCheckoutDateStr = formatDate(actualCheckoutTime);
+    const check_in_date = formatDate(firstRow.check_in_date);
 
     if (!actualCheckoutDateStr) {
       const err = new Error('缺少实际退房时间');
@@ -841,8 +842,8 @@ async function earlyCheckout(orderNumber, options = {}) {
     // 计算原始总价（聚合所有行）
     const originalTotalPrice = orderRows.reduce((sum, row) => sum + Number(row.total_price || 0), 0);
 
-    if (!hasStayedFlag) {
-      // 未入住退房逻辑
+    // 未入住退房逻辑
+    if (actualCheckoutDateStr === check_in_date || !hasStayedFlag) {
       let parsedRefund = refundAmount !== undefined && refundAmount !== null && refundAmount !== ''
         ? Number(refundAmount)
         : null;
@@ -970,7 +971,7 @@ async function earlyCheckout(orderNumber, options = {}) {
     const refundableRows = orderRows.filter((row) => { // 从订单中筛出未入住天数
       const stayDateStr = formatDate(row.stay_date); // stay_date 可能为 Date，需要格式化
       return stayDateStr && stayDateStr >= actualCheckoutDateStr; // 仅保留实际退房日及之后
-    }); // 过滤出未入住的订单行
+    });
 
     const recommendedRefundRaw = refundableRows.reduce( // 计算未入住天数对应的房费总额
       (sum, row) => sum + Number(row.total_price || 0), // 使用订单 total_price 计算建议退款
