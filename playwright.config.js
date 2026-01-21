@@ -1,59 +1,65 @@
-const fs = require('node:fs')
-const path = require('node:path')
-const { defineConfig } = require('@playwright/test')
+// @ts-check
+import { defineConfig, devices } from '@playwright/test';
+import dotenv from 'dotenv';
+import path from 'path';
 
-// 加载 .env.test，确保测试用例可读取 E2E 账号与前端地址。
-const envPath = path.join(__dirname, '.env.test')
-if (fs.existsSync(envPath)) {
-  const content = fs.readFileSync(envPath, 'utf8')
-  for (const rawLine of content.split('\n')) {
-    const line = rawLine.trim()
-    if (!line || line.startsWith('#')) {
-      continue
-    }
-    const separatorIndex = line.indexOf('=')
-    if (separatorIndex === -1) {
-      continue
-    }
-    const key = line.slice(0, separatorIndex).trim()
-    const value = line.slice(separatorIndex + 1).trim()
-    process.env[key] = value
-  }
-}
+dotenv.config({ path: path.resolve(__dirname, '.env.test') });
 
-if (!process.env.FRONTEND_URL) {
-  process.env.FRONTEND_URL = 'http://localhost:9011'
-}
+export default defineConfig({
+  testDir: './e2e',
+  fullyParallel: true,
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 2 : 0,
+  workers: process.env.CI ? 1 : undefined,
+  reporter: 'html',
 
-// Playwright 配置：自动启动前后端服务，并复用 global-setup 的登录态。
-module.exports = defineConfig({
-  testDir: './backend/tests/e2e',
-  timeout: 60 * 1000,
-  expect: {
-    timeout: 10 * 1000,
-  },
   use: {
+    /* 这里的 URL 应该是你的前端 Quasar 地址 */
     baseURL: 'http://localhost:9011',
+    trace: 'on-first-retry',
   },
-  globalSetup: path.resolve(__dirname, 'global-setup.cjs'),
+
+  projects: [
+    // --- 第一步：设置 Setup 项目 ---
+    {
+      name: 'setup',
+      testMatch: /.*\.setup\.js/,
+    },
+
+    // --- 第二步：正式测试项目 ---
+    {
+      name: 'chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        // 关键：让这个项目使用 setup 产生的文件
+        storageState: path.join(__dirname, 'playwright/.auth/user.json'),
+      },
+      // 关键：声明这个项目依赖于 'setup' 项目
+      dependencies: ['setup'],
+    },
+
+    // ... 其他浏览器配置
+  ],
+
+  /* 使用数组同时监控前后端服务 */
   webServer: [
     {
-      command: 'npm --workspace backend run start:test',
-      port: 3011,
-      reuseExistingServer: false,
-      env: {
-        NODE_ENV: 'test',
-      },
+      // 前端服务
+      // 使用 dev:test 确保 PLAYWRIGHT=1，代理转发到 3011
+      command: 'PORT=9011 npm run dev:test --workspace frontend', // 确保通过命令强制指定端口
+      url: 'http://localhost:9011',
+      reuseExistingServer: !process.env.CI,
+      stdout: 'pipe', // 可选：将日志输出到控制台方便排查启动问题
+      stderr: 'pipe',
     },
     {
-      command: 'npm --workspace frontend run dev:test -- --port 9011',
-      port: 9011,
-      reuseExistingServer: false,
-      env: {
-        NODE_ENV: 'test',
-        PLAYWRIGHT: '1',
-        VITE_API_BASE: 'http://localhost:3011',
-      },
-    },
+      // 后端 Node.js 服务
+      command: 'NODE_PORT=3011 npm run dev:test --workspace backend', // 替换为你真正的后端启动脚本
+      // 使用后端健康检查路由，避免根路径非 200 导致等待超时
+      url: 'http://localhost:3011/api/hup',
+      reuseExistingServer: !process.env.CI,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    }
   ],
-})
+});

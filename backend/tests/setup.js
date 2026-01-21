@@ -4,14 +4,14 @@ const app = require('../app');
 
 // 所有测试表，统一管理
 const tables = [
-  'account',
   'room_types',
   'rooms',
   'orders',
   'bills',
   'review_invitations',
   'order_changes',
-  'handover'
+  'handover',
+  'dashboard_memos'
 ];
 
 // 全局测试设置

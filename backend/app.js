@@ -15,6 +15,14 @@ app.disable('x-powered-by');
 // 静态文件路径：Docker 环境统一使用 ./frontend_dist
 const staticFileRoot = path.join(__dirname, 'frontend_dist');
 
+const cors = require('cors');
+
+// 允许来自测试端口和开发端口的访问
+app.use(cors({
+  origin: ['http://localhost:9011', 'http://localhost:9000'],
+  credentials: true
+}));
+
 // 解析中间件
 app.use(express.json({
   limit: setup.reqSizeLimit,
