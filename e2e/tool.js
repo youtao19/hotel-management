@@ -153,6 +153,9 @@ async function createOrder(page) {
   });
 
   await expect(successNotify).toBeVisible();
+
+  // 返回本次创建的识别信息，便于后续筛选
+  return { guestName, phoneNumber };
 }
 
 /**
@@ -189,6 +192,9 @@ async function createMultiDayOrder(page) {
   });
 
   await expect(successNotify).toBeVisible();
+
+  // 返回本次创建的识别信息，便于后续筛选
+  return { guestName, phoneNumber };
 }
 
 /**
@@ -224,10 +230,61 @@ async function createRestOrder(page) {
   });
 
   await expect(successNotify).toBeVisible();
+
+  // 返回本次创建的识别信息，便于后续筛选
+  return { guestName, phoneNumber };
+}
+
+/**
+ * 通过搜索框筛选订单，避免并行时选到别人的订单
+ */
+async function filterOrdersByKeyword(page, keyword) {
+  // 输入关键字并触发搜索
+  await page.getByLabel('搜索订单').fill(keyword);
+  await page.getByRole('button', { name: '搜索' }).click();
+}
+
+/**
+ * 办理入住
+ */
+async function checkIn(page) {
+  const { guestName } = await createOrder(page);
+
+  // 订单创建成功后会跳转到订单详情页
+  await expect(page.getByText('订单列表')).toBeVisible();
+
+  // 根据创建的客人姓名筛选订单
+  await filterOrdersByKeyword(page, guestName);
+
+  // 等待出现“待入住”的订单行
+  const pendingRow = page
+    .locator('table tbody tr')
+    .filter({ has: page.locator('.q-badge', { hasText: '待入住' }) })
+    .first();
+  await expect(pendingRow).toBeVisible();
+
+  // 点击该行的“办理入住”按钮（有稳定的 data-testid）
+  await pendingRow.getByTestId('orders-row-check-in').click();
+
+  // 在弹出的办理入住对话框中，填写押金等信息
+  await page.getByTestId('checkin-deposit').fill('100');
+  await page.getByRole('button', { name: '确认办理入住' }).click();
+
+  // 验证办理入住成功的通知
+  const successNotify = page.locator('.q-notification.bg-positive').filter({
+    hasText: '入住成功'
+  });
+
+  await expect(successNotify).toBeVisible();
+
+  // 返回本次办理入住对应的客人姓名，便于后续测试使用
+  return { guestName };
 }
 
 module.exports = {
   createOrder,
   createMultiDayOrder,
-  createRestOrder
+  createRestOrder,
+  checkIn,
+  filterOrdersByKeyword
 };
