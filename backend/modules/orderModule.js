@@ -967,22 +967,16 @@ async function earlyCheckout(orderNumber, options = {}) {
       throw err;
     }
 
-    // 获取需要退款的房费账单（实际退房日期之后的）
-    const { rows: roomFeeBills } = await client.query(
-      `SELECT bill_id, stay_date, change_price
-         FROM bills
-        WHERE order_id = $1
-          AND change_type = $2
-          AND stay_date >= $3
-        ORDER BY stay_date`,
-      [orderNumber, '房费', actualCheckoutDateStr]
-    );
+    const refundableRows = orderRows.filter((row) => { // 从订单中筛出未入住天数
+      const stayDateStr = formatDate(row.stay_date); // stay_date 可能为 Date，需要格式化
+      return stayDateStr && stayDateStr >= actualCheckoutDateStr; // 仅保留实际退房日及之后
+    }); // 过滤出未入住的订单行
 
-    const recommendedRefundRaw = roomFeeBills.reduce(
-      (sum, bill) => sum + Number(bill.change_price || 0),
-      0
-    );
-    const recommendedRefund = Number(recommendedRefundRaw.toFixed(2));
+    const recommendedRefundRaw = refundableRows.reduce( // 计算未入住天数对应的房费总额
+      (sum, row) => sum + Number(row.total_price || 0), // 使用订单 total_price 计算建议退款
+      0 // 初始值
+    ); // 汇总建议退款金额
+    const recommendedRefund = Number(recommendedRefundRaw.toFixed(2)); // 固定两位小数避免浮点误差
 
     const parsedRefund = refundAmount !== undefined && refundAmount !== null && refundAmount !== ''
       ? Number(refundAmount)
@@ -1054,7 +1048,7 @@ async function earlyCheckout(orderNumber, options = {}) {
 
     await client.query('COMMIT');
 
-    const refundedStayDates = roomFeeBills.map(bill => formatDate(bill.stay_date));
+    const refundedStayDates = refundableRows.map(row => formatDate(row.stay_date)); // 退款日期列表用于记录
     const changeDetails = {
       action: 'early_checkout',
       previous_check_out_date: originalCheckoutDateStr,
@@ -1110,24 +1104,33 @@ async function earlyCheckout(orderNumber, options = {}) {
 }
 
 /**
- * 提前退房：获取推荐退款信息（只读，不修改数据）
+ * 系统建议退款
  * @param {string} orderNumber
- * @param {Object} options
- * @param {string} options.actualCheckoutTime - 支持 YYYY-MM-DD / YYYY-MM-DDTHH:mm 等字符串
- * @param {boolean|string} [options.hasStayed=true]
+ * @param {string} actualCheckoutTime - 支持 YYYY-MM-DD / YYYY-MM-DDTHH:mm 等字符串
+ * @param {boolean|string} [hasStayed=true] - 是否已入住（兼容字符串）
  */
-async function getEarlyCheckoutRecommendation(orderNumber, options = {}) {
-  const { actualCheckoutTime, hasStayed = true } = options;
-  const hasStayedFlag = !(hasStayed === false || hasStayed === 'false');
-
-  const orderRows = await query(
-    `SELECT order_id, room_number, guest_name, stay_type, payment_method, check_out_date, total_price, deposit, status
+async function getEarlyCheckoutRecommendation(orderNumber, actualCheckoutTime, hasStayed = true) {
+  const hasStayedFlag = !(hasStayed === false || hasStayed === 'false'); // 兼容字符串布尔值
+  const actualCheckoutDateStr = hasStayedFlag ? formatDate(actualCheckoutTime) : null; // 已入住时才校验日期
+  if (hasStayedFlag && !actualCheckoutDateStr) { // 已入住必须提供实际退房日期
+    const err = new Error('缺少实际退房时间'); // 提前校验参数
+    err.code = 'EARLY_CHECKOUT_MISSING_TIME'; // 统一错误码
+    err.statusCode = 400; // 参数错误返回 400
+    throw err; // 中断流程
+  }
+  const sqlText = hasStayedFlag // 根据是否已入住选择 SQL
+    ? `SELECT order_id, room_number, guest_name, stay_type, payment_method, check_out_date, total_price, deposit, status, stay_date
+       FROM orders
+      WHERE order_id = $1 and stay_date >= $2
+      ORDER BY stay_date`
+    : `SELECT order_id, room_number, guest_name, stay_type, payment_method, check_out_date, total_price, deposit, status, stay_date
        FROM orders
       WHERE order_id = $1
-      ORDER BY stay_date`,
-    [orderNumber]
-  );
+      ORDER BY stay_date`; // 未入住退房时，推荐退款覆盖全部天数
+  const sqlParams = hasStayedFlag ? [orderNumber, actualCheckoutDateStr] : [orderNumber]; // 动态组装查询参数
+  const orderRows = await query(sqlText, sqlParams); // 查询订单明细行
 
+  // 验证订单存在
   if (!orderRows.rows.length) {
     const err = new Error(`订单 ${orderNumber} 不存在`);
     err.code = 'ORDER_NOT_FOUND';
@@ -1135,67 +1138,18 @@ async function getEarlyCheckoutRecommendation(orderNumber, options = {}) {
     throw err;
   }
 
-  const firstRow = orderRows.rows[0];
-  const lastRow = orderRows.rows[orderRows.rows.length - 1];
+  const refundableNights = orderRows.rows.map((row) => ({ // 生成可退款金额明细
+    stayDate: formatDate(row.stay_date), // 返回可退款日期用于前端展示
+    roomPrice: toAmountNumber(row.total_price) // 统一金额精度用于展示
+  }));
 
-  const originalCheckoutDate = formatDate(lastRow.check_out_date);
-  const actualCheckoutDate = formatDate(actualCheckoutTime);
+  const sum = refundableNights.reduce((s, item) => s.plus(item.roomPrice), toDecimal(0)); // Decimal 累加金额
 
-  if (!actualCheckoutDate) {
-    const err = new Error('缺少实际退房时间');
-    err.code = 'EARLY_CHECKOUT_MISSING_TIME';
-    err.statusCode = 400;
-    throw err;
-  }
+  const recommendedRefund = toAmountNumber(sum); // 建议退款金额统一保留两位小数
 
-  let refundableNights = [];
-  let recommendedRefund = 0;
-
-  if (!hasStayedFlag) {
-    const { rows: [billSumRow] } = await query(
-      `SELECT COALESCE(SUM(change_price), 0) AS net_paid FROM bills WHERE order_id = $1`,
-      [orderNumber]
-    );
-    let netPaid = Number(billSumRow?.net_paid || 0);
-    if (!Number.isFinite(netPaid)) netPaid = 0;
-
-    let parsedRefund = Math.max(0, Number(netPaid.toFixed(2)));
-    if (parsedRefund === 0) {
-      const depositFallback = orderRows.rows.reduce((sum, row) => sum + Number(row.deposit || 0), 0);
-      const originalTotalPrice = orderRows.rows.reduce((sum, row) => sum + Number(row.total_price || 0), 0);
-      if (depositFallback > 0) parsedRefund = depositFallback;
-      else if (originalTotalPrice > 0) parsedRefund = originalTotalPrice;
-    }
-    recommendedRefund = Number(Number(parsedRefund).toFixed(2));
-  } else {
-    const { rows: roomFeeBills } = await query(
-      `SELECT stay_date, change_price
-         FROM bills
-        WHERE order_id = $1
-          AND change_type = $2
-          AND stay_date >= $3::date
-        ORDER BY stay_date`,
-      [orderNumber, '房费', actualCheckoutDate]
-    );
-
-    refundableNights = roomFeeBills.map(bill => ({
-      stayDate: formatDate(bill.stay_date),
-      roomPrice: Number(bill.change_price || 0)
-    }));
-
-    const sum = refundableNights.reduce((s, item) => s + Number(item.roomPrice || 0), 0);
-    recommendedRefund = Number(sum.toFixed(2));
-  }
-
-  return {
-    orderNumber,
-    status: firstRow.status,
-    hasStayed: hasStayedFlag,
-    originalCheckoutDate,
-    actualCheckoutDate,
-    isEarly: actualCheckoutDate < originalCheckoutDate,
-    refundableNights,
-    recommendedRefund
+  return { // 返回推荐退款金额
+    recommendedRefund, // 建议退款金额
+    refundableNights // 可退款日期明细
   };
 }
 

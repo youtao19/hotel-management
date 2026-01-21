@@ -434,8 +434,8 @@ router.put('/:orderNumber/with-bills-v2', authenticationMiddleware, async (req, 
 router.get('/:orderNumber/early-checkout/recommendation', authenticationMiddleware, async (req, res) => {
   const { orderNumber } = req.params;
   try {
-    const { actualCheckoutTime, hasStayed } = req.query || {};
-    const result = await orderModule.getEarlyCheckoutRecommendation(orderNumber, { actualCheckoutTime, hasStayed });
+    const { actualCheckoutTime, hasStayed } = req.query || {}; // 读取推荐退款所需参数
+    const result = await orderModule.getEarlyCheckoutRecommendation(orderNumber, actualCheckoutTime, hasStayed); // 传递是否已入住
     return res.status(200).json({ success: true, data: result });
   } catch (error) {
     console.error(`获取提前退房推荐 ${orderNumber} 失败:`, error);

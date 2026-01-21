@@ -81,10 +81,6 @@ export function useEarlyCheckoutLogic(props, emit) {
     return true
   })
 
-  // --- 辅助函数 ---
-
-
-
   /**
    * 通用日期格式化
    */
@@ -141,11 +137,10 @@ export function useEarlyCheckoutLogic(props, emit) {
 
     try {
       loadingOrderDetails.value = true
-      const resp = await orderApi.earlyCheckoutRecommendation(oid, {
-        actualCheckoutTime: actualCheckoutTime.value,
-        hasStayed: hasStayed.value
-      })
-      recommendation.value = resp?.data?.data || null
+      // 使用对象参数传递，避免 GET params 不是对象导致请求失败
+      const resp = await orderApi.earlyCheckoutRecommendation(oid, { actualCheckoutTime: actualCheckoutTime.value, hasStayed: hasStayed.value }) // 统一使用对象传参
+      console.log('!!!提前退房推荐数据:', resp.data)
+      recommendation.value = resp.data
     } catch (error) {
       recommendation.value = null
       console.warn('加载提前退房推荐失败:', error?.message || error)
@@ -159,7 +154,7 @@ export function useEarlyCheckoutLogic(props, emit) {
     if (!props.order) return
     hasStayed.value = true
     actualCheckoutTime.value = formatForInput(new Date())
-    refundMethod.value = props.order.paymentMethod || viewStore.paymentMethodOptions?.[0]?.value || '现金'
+    refundMethod.value = props.order.paymentMethod
     remarks.value = ''
     manualAmountTouched.value = false
   }
