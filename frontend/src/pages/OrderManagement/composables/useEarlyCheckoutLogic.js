@@ -61,9 +61,8 @@ export function useEarlyCheckoutLogic(props, emit) {
   // 警告：实际退房时间晚于原计划退房时间 (此时不应属于提前退房)
   const showNotEarlyWarning = computed(() => {
     if (!hasStayed.value) return false
-    if (!actualCheckoutTime.value) return false
     if (!recommendation.value) return false
-    return !recommendation.value.isEarly
+    return new Date(actualCheckoutTime.value) > new Date(recommendation.value.originalCheckOutTime)
   })
 
   // 表单提交按钮是否可用
@@ -139,7 +138,6 @@ export function useEarlyCheckoutLogic(props, emit) {
       loadingOrderDetails.value = true
       // 使用对象参数传递，避免 GET params 不是对象导致请求失败
       const resp = await orderApi.earlyCheckoutRecommendation(oid, { actualCheckoutTime: actualCheckoutTime.value, hasStayed: hasStayed.value }) // 统一使用对象传参
-      console.log('!!!提前退房推荐数据:', resp.data)
       recommendation.value = resp.data
     } catch (error) {
       recommendation.value = null
