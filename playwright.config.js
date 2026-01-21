@@ -12,6 +12,9 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: 'html',
+  // 全局初始化与清理（测试数据准备/回收）
+  globalSetup: path.join(__dirname, 'e2e/global-setup.js'),
+  globalTeardown: path.join(__dirname, 'e2e/global-teardown.js'),
 
   use: {
     /* 这里的 URL 应该是你的前端 Quasar 地址 */

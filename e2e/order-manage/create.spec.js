@@ -1,19 +1,5 @@
 // e2e/order-manage/create.spec.js
 const { test, expect } = require('@playwright/test');
-const { roomTypes, rooms, addRoomType, addRoom } = require('../../backend/tests/tools');
-const db = require('../../backend/database/postgreDB/pg');
-
-// 需要清理的测试表清单（与后端测试保持一致）
-const tables = [
-  'room_types',
-  'rooms',
-  'orders',
-  'bills',
-  'review_invitations',
-  'order_changes',
-  'handover',
-  'dashboard_memos'
-];
 
 
 /**
@@ -82,72 +68,38 @@ async function selectRoomType(page) {
   }
 }
 
-test.describe('订单管理 - 创建订单', () => {
 
-  test.beforeAll(async () => {
-    // 初始化测试连接池和表结构，避免 pool 未初始化或表不存在导致 query 报错
-    await db.initializePostgreDB();
-    await addRoomType(roomTypes);
-    await addRoom(rooms);
-  })
+test('创建订单测试', async ({ page }) => {
+  // 此时浏览器已经带有登录成功的 Cookies
+  await page.goto('http://localhost:9011/Dash-board');
 
-  test.afterAll(async () => {
-    try {
-      // 先禁用外键约束
-      await db.query('SET session_replication_role = replica;');
+  await page.goto('http://localhost:9011/CreateOrder');
+  await expect(page.getByRole('heading', { name: '创建订单' })).toBeVisible();
 
-      // 清空所有测试表数据（保留表结构，避免影响复用中的后端服务）
-      for (const table of tables) {
-        await db.query(`TRUNCATE TABLE ${table} RESTART IDENTITY CASCADE;`);
-      }
+  // 填写订单信息
 
-      // 恢复外键约束
-      await db.query('SET session_replication_role = DEFAULT;');
+  const guestName = generateGuestName();
+  const phoneNumber = generatePhoneNumber();
 
-      console.log('✅ 所有测试表已清空');
-    } catch (err) {
-      console.error('❌ 清空测试表时出错:', err);
-    } finally {
-      // 关闭数据库连接
-      await db.closePool();
+  // 1.输入姓名、手机号
+  await page.getByRole('textbox', { name: '姓名' }).fill(guestName);
+  await page.getByRole('textbox', { name: '手机号（可选）' }).fill(phoneNumber);
 
-      console.log('✅ 测试环境清理完成');
-    }
+  // 2.选择房型、房间
+  await selectRoomType(page);
+
+  // 当前立即收房费
+  await page.getByRole('radio', { name: '是' }).check();
+
+  // 输入备注
+  await page.getByRole('textbox', { name: '备注' }).fill('这是一个自动化测试订单，请勿处理。');
+
+  await page.getByRole('button', { name: '确认创建' }).click();
+
+  // 定位包含该文字且具有 positive 背景色的通知
+  const successNotify = page.locator('.q-notification.bg-positive').filter({
+    hasText: '订单创建成功！'
   });
 
-
-  test('创建订单测试', async ({ page }) => {
-    // 此时浏览器已经带有登录成功的 Cookies
-    await page.goto('http://localhost:9011/Dash-board');
-
-    await page.goto('http://localhost:9011/CreateOrder');
-    await expect(page.getByRole('heading', { name: '创建订单' })).toBeVisible();
-
-    // 填写订单信息
-
-    const guestName = generateGuestName();
-    const phoneNumber = generatePhoneNumber();
-
-    // 1.输入姓名、手机号
-    await page.getByRole('textbox', { name: '姓名' }).fill(guestName);
-    await page.getByRole('textbox', { name: '手机号（可选）' }).fill(phoneNumber);
-
-    // 2.选择房型、房间
-    await selectRoomType(page);
-
-    // 当前立即收房费
-    await page.getByRole('radio', { name: '是' }).check();
-
-    // 输入备注
-    await page.getByRole('textbox', { name: '备注' }).fill('这是一个自动化测试订单，请勿处理。');
-
-    await page.getByRole('button', { name: '确认创建' }).click();
-
-    // 定位包含该文字且具有 positive 背景色的通知
-    const successNotify = page.locator('.q-notification.bg-positive').filter({
-      hasText: '订单创建成功！'
-    });
-
-    await expect(successNotify).toBeVisible();
-  });
+  await expect(successNotify).toBeVisible();
 });
