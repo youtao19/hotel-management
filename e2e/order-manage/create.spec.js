@@ -85,8 +85,8 @@ async function selectRoomType(page) {
 test.describe('订单管理 - 创建订单', () => {
 
   test.beforeAll(async () => {
-    // 初始化测试连接池，避免 pool 未初始化导致 query 报错
-    db.createPool();
+    // 初始化测试连接池和表结构，避免 pool 未初始化或表不存在导致 query 报错
+    await db.initializePostgreDB();
     await addRoomType(roomTypes);
     await addRoom(rooms);
   })
@@ -96,9 +96,9 @@ test.describe('订单管理 - 创建订单', () => {
       // 先禁用外键约束
       await db.query('SET session_replication_role = replica;');
 
-      // 清空所有测试表数据
+      // 清空所有测试表数据（保留表结构，避免影响复用中的后端服务）
       for (const table of tables) {
-        await db.query(`DROP TABLE IF EXISTS ${table} CASCADE;`);
+        await db.query(`TRUNCATE TABLE ${table} RESTART IDENTITY CASCADE;`);
       }
 
       // 恢复外键约束
