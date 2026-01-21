@@ -245,6 +245,37 @@ async function filterOrdersByKeyword(page, keyword) {
 }
 
 /**
+ * 通过关键词找到待入住订单并办理入住
+ */
+async function checkInByKeyword(page, keyword) {
+  // 确保在订单列表页
+  await expect(page.getByText('订单列表')).toBeVisible();
+
+  // 先筛选订单，避免并行冲突
+  await filterOrdersByKeyword(page, keyword);
+
+  // 等待出现“待入住”的订单行
+  const pendingRow = page
+    .locator('table tbody tr')
+    .filter({ has: page.locator('.q-badge', { hasText: '待入住' }) })
+    .first();
+  await expect(pendingRow).toBeVisible();
+
+  // 点击该行的“办理入住”按钮
+  await pendingRow.getByTestId('orders-row-check-in').click();
+
+  // 在弹出的办理入住对话框中，填写押金等信息
+  await page.getByTestId('checkin-deposit').fill('100');
+  await page.getByRole('button', { name: '确认办理入住' }).click();
+
+  // 验证办理入住成功的通知
+  const successNotify = page.locator('.q-notification.bg-positive').filter({
+    hasText: '入住成功'
+  });
+  await expect(successNotify).toBeVisible();
+}
+
+/**
  * 办理入住
  */
 async function checkIn(page) {
@@ -286,5 +317,6 @@ module.exports = {
   createMultiDayOrder,
   createRestOrder,
   checkIn,
-  filterOrdersByKeyword
+  filterOrdersByKeyword,
+  checkInByKeyword
 };
