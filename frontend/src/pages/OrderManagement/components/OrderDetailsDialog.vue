@@ -90,10 +90,11 @@
                   <q-item-label caption>房间号</q-item-label>
                   <div class="row items-center">
                     <q-item-label class="q-mr-sm">{{ currentOrder.roomNumber }}</q-item-label>
+                    <!-- 传入订单对象，确保外层能打开更换房间弹窗 -->
                     <q-btn
                       v-if="currentOrder.status === 'pending'"
                       flat dense color="primary" icon="swap_horiz"
-                      @click="emit('change-room')"
+                      @click="emit('change-room', currentOrder)"
                     >
                       <q-tooltip>更换房间</q-tooltip>
                     </q-btn>
@@ -217,10 +218,11 @@
           flat label="办理入住" color="info"
           @click="emit('check-in')"
         />
+        <!-- 传入订单对象，确保外层能打开更换房间弹窗 -->
         <q-btn
           v-if="currentOrder?.status === 'checked-in'"
           flat label="更改房间" color="warning"
-          @click="emit('change-room')"
+          @click="emit('change-room', currentOrder)"
         >
           <q-tooltip>更换房间</q-tooltip>
         </q-btn>

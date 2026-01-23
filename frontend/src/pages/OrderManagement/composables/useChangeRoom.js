@@ -21,19 +21,23 @@ export function useChangeRoom(refreshAllData, formatDate) {
     try {
       const rawCheckInDate = order.checkInDate
       const rawCheckOutDate = order.checkOutDate
-      const roomType = order.roomType
-
       const startDate = formatDate(rawCheckInDate)
       const endDate = formatDate(rawCheckOutDate)
 
-      if (!startDate || !endDate || !roomType) {
-        $q.notify({ type: 'negative', message: '无法获取订单的日期或房型信息', position: 'top' })
+      if (!startDate || !endDate) {
+        $q.notify({ type: 'negative', message: '无法获取订单的日期信息', position: 'top' })
         return
       }
 
-      const rooms = await roomStore.getAvailableRoomsByDate(startDate, endDate, roomType)
+      // 使用修改订单相同的可用房间逻辑：按日期查询，不传房型过滤，避免接口 500
+      const rooms = await roomStore.getAvailableRoomsByDate(startDate, endDate)
+      const currentRoom = roomStore.getRoomByNumber(order.roomNumber)
+      const mergedRooms = [...rooms]
+      if (currentRoom && !mergedRooms.find(room => room.room_number === currentRoom.room_number)) {
+        mergedRooms.unshift(currentRoom)
+      }
 
-      availableRoomOptions.value = rooms
+      availableRoomOptions.value = mergedRooms
         .filter(room => room.room_number !== order.roomNumber)
         .map(room => ({
           label: `${room.room_number} - ${viewStore.getRoomTypeName(room.type_code)} (${room.price}元)`,
