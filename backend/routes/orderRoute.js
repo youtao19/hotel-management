@@ -634,10 +634,16 @@ router.post('/fast-check-in', async (req, res) => {
 
   } catch (error) {
     console.error('❌ 快速入住失败:', error);
-    return res.status(500).json({
+    // 重要：如果业务层已标注 statusCode/code，这里需要透传，
+    // 否则前端只会看到“500”，无法判断是参数问题还是事务问题。
+    const status = error.statusCode || 500;
+    return res.status(status).json({
       success: false,
-      message: '快速入住失败',
-      error: error.message
+      message: status === 500 ? '快速入住失败' : (error.message || '快速入住失败'),
+      error: {
+        code: error.code || 'UNKNOWN',
+        message: error.message
+      }
     });
   }
 });

@@ -108,6 +108,20 @@ async function insertBillRowFromCsvRecord(record) {
 }
 
 /**
+ * 交接班用例会从 bills.csv 显式插入 bill_id。
+ * Postgres 的 SERIAL/SEQUENCE 不会因为手动插入而自动前移，
+ * 需要在导入完成后手动 setval，否则后续业务插入账单会触发 bills_pkey 重复。
+ */
+async function syncBillsSequence() {
+  await db.query(
+    `SELECT setval(
+        pg_get_serial_sequence('bills','bill_id'),
+        COALESCE((SELECT MAX(bill_id) FROM bills), 1)
+      );`
+  );
+}
+
+/**
  * 启动交接班流程并进入第 1 步
  */
 async function startHandoverFlow(page) {
@@ -198,6 +212,9 @@ test.describe('交接班测试', () => {
 
       await insertBillRowFromCsvRecord(record);
     }
+
+    // 导入完成后同步 bills 的自增序列，避免影响后续测试用例创建账单。
+    await syncBillsSequence();
   });
 
   test('打开交接班页面并查看今日交接记录', async ({ page }) => {

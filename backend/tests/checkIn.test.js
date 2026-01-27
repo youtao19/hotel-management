@@ -233,6 +233,38 @@ describe('快速入住接口', () => {
     expect(roomStatus.rows[0].status).toBe('occupied');
   });
 
+  test('快速入住支持超过10位房号（防止账单字段长度回归）', async () => {
+    // 说明：历史上 bills.room_number 为 VARCHAR(10)，写入 TEST_ROOM_101 会触发 22001。
+    // 这个用例用于确保 schema 修复后不会回归。
+    const payload = buildOrderPayload({
+      orderId: `fast_checkin_LongRoomNumber`,
+      guestName: '快速入住长房号客户',
+      roomTypes: 'TEST_STD_ROOM',
+      roomNumber: 'TEST_ROOM_101',
+      checkInDate: '2025-12-01',
+      checkOutDate: '2025-12-02',
+      stayType: '客房',
+      deposit: 20,
+      status: 'pending'
+    });
+
+    const response = await request(app)
+      .post('/api/orders/fast-check-in')
+      .send(payload);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.message).toBe('快速入住成功');
+
+    // 校验账单确实写入了 room_number，且是长房号。
+    const storedBills = await query(
+      'SELECT room_number FROM bills WHERE order_id = $1 LIMIT 1',
+      [payload.orderId]
+    );
+    expect(storedBills.rows.length).toBe(1);
+    expect(storedBills.rows[0].room_number).toBe(payload.roomNumber);
+  });
+
   test('缺少必填字段时返回 400', async () => {
     const payload = buildOrderPayload({
       orderId: `fast_checkin_MissingField`,

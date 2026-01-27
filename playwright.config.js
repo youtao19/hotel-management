@@ -7,10 +7,14 @@ dotenv.config({ path: path.resolve(__dirname, '.env.test') });
 
 export default defineConfig({
   testDir: './e2e',
-  fullyParallel: true,
+  // 说明：E2E 共用同一个后端与数据库（见 webServer 配置），并发执行会导致
+  // - 多用例同时占用/释放同一房间，触发业务失败，从而看不到“入住成功”等通知
+  // - 部分用例在导入/清理数据时影响其他用例
+  // 因此本地默认串行执行；如需并发可通过 PW_WORKERS 覆盖。
+  fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  workers: process.env.PW_WORKERS ? Number(process.env.PW_WORKERS) : 1,
   reporter: 'html',
   // 全局初始化与清理（测试数据准备/回收）
   globalSetup: path.join(__dirname, 'e2e/global-setup.js'),

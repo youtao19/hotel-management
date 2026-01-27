@@ -62,7 +62,9 @@ async function selectRoomType(page) {
   await page.getByRole('combobox', { name: '房间类型' }).click();
 
   // 2. 仅选取当前可见的下拉菜单，避免多个菜单干扰
-  const menu = page.locator('.q-menu:visible').first();
+  // Quasar 的下拉菜单会挂在 body 下，且可能同时存在多个可见菜单。
+  // 这里取“最后一个可见菜单”，更符合“刚刚点开的那个”。
+  const menu = page.locator('.q-menu:visible').last();
   await expect(menu).toBeVisible();
 
   // 3. 获取菜单中的所有选项
@@ -85,6 +87,9 @@ async function selectRoomType(page) {
     const selectedText = await roomOptions.nth(randomIndex).innerText();
     console.log(`随机选择了房型: ${selectedText}`);
     await roomOptions.nth(randomIndex).click();
+
+    // 等待菜单关闭，避免后续点击“房间号”时误拿到旧菜单
+    await expect(menu).toBeHidden();
   } else {
     console.log('没有找到有剩余房间的房型');
   }
@@ -100,12 +105,19 @@ async function selectRoomNumber(page) {
   await roomNumberSelect.click();
 
   // 2. 仅选取当前可见的下拉菜单，避免多个菜单干扰
-  const menu = page.locator('.q-menu:visible').first();
+  // 同 selectRoomType：取最后一个可见菜单，避免选到“房型”菜单
+  const menu = page.locator('.q-menu:visible').last();
   await expect(menu).toBeVisible();
 
   // 3. 获取菜单中的所有选项
-  const roomOptions = menu.locator('.q-item');
-  const count = await roomOptions.count();
+  // 房间号选项通常包含括号，如："101 (asu_xiao_zhu)"。
+  // 先按这个特征过滤，避免误选到“xx间”的房型选项。
+  let roomOptions = menu.locator('.q-item').filter({ hasText: /\(/ });
+  let count = await roomOptions.count();
+  if (count === 0) {
+    roomOptions = menu.locator('.q-item');
+    count = await roomOptions.count();
+  }
 
   if (count > 0) {
     // 4. 随机选择一个房间号
@@ -113,8 +125,23 @@ async function selectRoomNumber(page) {
     const selectedText = await roomOptions.nth(randomIndex).innerText();
     console.log(`随机选择了房间号: ${selectedText}`);
     await roomOptions.nth(randomIndex).click();
+
+    // 等待菜单关闭，避免后续表单操作误触发
+    await expect(menu).toBeHidden();
   } else {
     throw new Error('没有可用房间号可选择');
+  }
+}
+
+/**
+ * 多日订单：将首日价格应用到全部日期（如果页面提供此快捷操作）。
+ * 说明：这是为了确保 roomPrice 每个住宿日都有价格，避免后端因缺失价格产生异常。
+ */
+async function applyFirstDayPriceIfVisible(page) {
+  const applyBtn = page.locator('text=应用首日价格').first();
+  // isVisible() 在元素不存在时会返回 false，不会抛异常
+  if (await applyBtn.isVisible()) {
+    await applyBtn.click();
   }
 }
 
@@ -312,11 +339,201 @@ async function checkIn(page) {
   return { guestName };
 }
 
+/**
+ * 快速办理单日入住
+ * 流程：创建订单时选择"已入住"状态 → 弹出确认对话框 → 填写押金 → 确认入住
+ */
+async function fastCheckIn(page) {
+  // 进入创建订单页面
+  await page.goto('http://localhost:9011/CreateOrder');
+  await expect(page.getByRole('heading', { name: '创建订单' })).toBeVisible();
+
+  // 生成客人信息
+  const guestName = generateGuestName();
+  const phoneNumber = generatePhoneNumber();
+
+  // 填写客人姓名和手机号
+  await page.getByRole('textbox', { name: '姓名' }).fill(guestName);
+  await page.getByRole('textbox', { name: '手机号（可选）' }).fill(phoneNumber);
+
+  // 选择订单状态为"已入住"，触发快速入住流程
+  await page.getByRole('combobox', { name: '订单状态' }).click();
+  await page.getByRole('option', { name: '已入住' }).click();
+
+  // 选择房型和房间
+  await selectRoomType(page);
+  await selectRoomNumber(page);
+
+  // 尝试应用首日价格，确保 roomPrice 完整（单日通常无影响，多日可补齐）
+  await applyFirstDayPriceIfVisible(page);
+
+  // 输入备注
+  await page.getByRole('textbox', { name: '备注' }).fill('这是一个快速入住测试订单，请勿处理。');
+
+  // 点击确认创建
+  await page.getByRole('button', { name: '确认创建' }).click();
+
+  // 等待确认立即入住的对话框出现，并点击确定
+  const confirmDialog = page.getByRole('dialog').filter({ hasText: '确认立即入住' });
+  await expect(confirmDialog).toBeVisible();
+  await confirmDialog.getByRole('button', { name: '确定' }).click();
+
+  // 等待办理入住对话框出现
+  const checkInDialog = page.getByRole('dialog').filter({ hasText: '确认办理入住' });
+  await expect(checkInDialog).toBeVisible();
+
+  // 填写押金
+  await page.getByTestId('checkin-deposit').fill('100');
+
+  // 确认办理入住
+  await page.getByRole('button', { name: '确认办理入住' }).click();
+
+  // 验证快速入住成功的通知（增加超时时间，使用正则匹配）
+  const successNotify = page.locator('.q-notification.bg-positive').filter({
+    hasText: /入住成功|快速入住成功/
+  });
+  await expect(successNotify).toBeVisible({ timeout: 15000 });
+
+  // 返回客人信息，便于后续验证
+  return { guestName, phoneNumber };
+}
+
+/**
+ * 快速办理多日入住
+ * 住 3 晚的快速入住
+ */
+async function fastCheckInMultiDay(page) {
+  // 进入创建订单页面
+  await page.goto('http://localhost:9011/CreateOrder');
+  await expect(page.getByRole('heading', { name: '创建订单' })).toBeVisible();
+
+  // 生成客人信息
+  const guestName = generateGuestName();
+  const phoneNumber = generatePhoneNumber();
+
+  // 填写客人姓名和手机号
+  await page.getByRole('textbox', { name: '姓名' }).fill(guestName);
+  await page.getByRole('textbox', { name: '手机号（可选）' }).fill(phoneNumber);
+
+  // 选择订单状态为"已入住"，触发快速入住流程
+  await page.getByRole('combobox', { name: '订单状态' }).click();
+  await page.getByRole('option', { name: '已入住' }).click();
+
+  // 设置多日入住日期（住 3 晚）
+  const { checkInDate, checkOutDate } = getDateRangeStrings(3);
+  await page.getByLabel('入住日期').fill(checkInDate);
+  await page.getByLabel('离店日期').fill(checkOutDate);
+
+  // 选择房型和房间
+  await selectRoomType(page);
+  await selectRoomNumber(page);
+
+  // 多日订单需要确保每一天都有房价
+  await applyFirstDayPriceIfVisible(page);
+
+  // 输入备注
+  await page.getByRole('textbox', { name: '备注' }).fill('这是一个快速入住多日测试订单，请勿处理。');
+
+  // 点击确认创建
+  await page.getByRole('button', { name: '确认创建' }).click();
+
+  // 等待确认立即入住的对话框出现，并点击确定
+  const confirmDialog = page.getByRole('dialog').filter({ hasText: '确认立即入住' });
+  await expect(confirmDialog).toBeVisible();
+  await confirmDialog.getByRole('button', { name: '确定' }).click();
+
+  // 等待办理入住对话框出现
+  const checkInDialog = page.getByRole('dialog').filter({ hasText: '确认办理入住' });
+  await expect(checkInDialog).toBeVisible();
+
+  // 填写押金
+  await page.getByTestId('checkin-deposit').fill('200');
+
+  // 确认办理入住
+  await page.getByRole('button', { name: '确认办理入住' }).click();
+
+  // 验证快速入住成功的通知（增加超时时间，使用正则匹配）
+  const successNotify = page.locator('.q-notification.bg-positive').filter({
+    hasText: /入住成功|快速入住成功/
+  });
+  await expect(successNotify).toBeVisible({ timeout: 15000 });
+
+  // 返回客人信息，便于后续验证
+  return { guestName, phoneNumber };
+}
+
+/**
+ * 快速办理休息房入住
+ * 入住日和退房日为同一天
+ */
+async function fastCheckInRestRoom(page) {
+  // 进入创建订单页面
+  await page.goto('http://localhost:9011/CreateOrder');
+  await expect(page.getByRole('heading', { name: '创建订单' })).toBeVisible();
+
+  // 生成客人信息
+  const guestName = generateGuestName();
+  const phoneNumber = generatePhoneNumber();
+
+  // 填写客人姓名和手机号
+  await page.getByRole('textbox', { name: '姓名' }).fill(guestName);
+  await page.getByRole('textbox', { name: '手机号（可选）' }).fill(phoneNumber);
+
+  // 选择订单状态为"已入住"，触发快速入住流程
+  await page.getByRole('combobox', { name: '订单状态' }).click();
+  await page.getByRole('option', { name: '已入住' }).click();
+
+  // 设置休息房日期（入住与离店同一天）
+  const { checkInDate } = getDateRangeStrings(0);
+  await page.getByLabel('入住日期').fill(checkInDate);
+  await page.getByLabel('离店日期').fill(checkInDate);
+
+  // 选择房型和房间
+  await selectRoomType(page);
+  await selectRoomNumber(page);
+
+  // 休息房也尝试应用首日价格，避免某些情况下房价明细为空
+  await applyFirstDayPriceIfVisible(page);
+
+  // 输入备注
+  await page.getByRole('textbox', { name: '备注' }).fill('这是一个快速入住休息房测试订单，请勿处理。');
+
+  // 点击确认创建
+  await page.getByRole('button', { name: '确认创建' }).click();
+
+  // 等待确认立即入住的对话框出现，并点击确定
+  const confirmDialog = page.getByRole('dialog').filter({ hasText: '确认立即入住' });
+  await expect(confirmDialog).toBeVisible();
+  await confirmDialog.getByRole('button', { name: '确定' }).click();
+
+  // 等待办理入住对话框出现
+  const checkInDialog = page.getByRole('dialog').filter({ hasText: '确认办理入住' });
+  await expect(checkInDialog).toBeVisible();
+
+  // 填写押金
+  await page.getByTestId('checkin-deposit').fill('50');
+
+  // 确认办理入住
+  await page.getByRole('button', { name: '确认办理入住' }).click();
+
+  // 验证快速入住成功的通知（增加超时时间，使用正则匹配）
+  const successNotify = page.locator('.q-notification.bg-positive').filter({
+    hasText: /入住成功|快速入住成功/
+  });
+  await expect(successNotify).toBeVisible({ timeout: 15000 });
+
+  // 返回客人信息，便于后续验证
+  return { guestName, phoneNumber };
+}
+
 module.exports = {
   createOrder,
   createMultiDayOrder,
   createRestOrder,
   checkIn,
   filterOrdersByKeyword,
-  checkInByKeyword
+  checkInByKeyword,
+  fastCheckIn,
+  fastCheckInMultiDay,
+  fastCheckInRestRoom
 };

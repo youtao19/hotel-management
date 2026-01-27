@@ -186,6 +186,14 @@ async function initializePostgreDB() {
   // await dropTables();
   await enableExtensions();
   await createTables();
+  // schema 修复：历史上 bills.room_number 为 VARCHAR(10)，会导致测试用的 TEST_ROOM_101 写入失败。
+  // 这里做一次幂等升级，避免因为 CREATE TABLE IF NOT EXISTS 而保留旧字段长度。
+  try {
+    await pool.query(`ALTER TABLE bills ALTER COLUMN room_number TYPE VARCHAR(20);`);
+  } catch (err) {
+    // 如果表不存在或字段不可变更，保留原错误信息用于排查；正常情况下不会触发。
+    console.warn('[initializePostgreDB] bills.room_number 字段升级跳过:', err.message);
+  }
   await createIndex();
 }
 
