@@ -32,8 +32,19 @@
             </div>
 
             <div :class="dateList.length === 1 ? 'col-md-4 col-xs-12' : 'col-md-3 col-sm-4 col-xs-6'">
-              <q-select v-model="orderData.paymentMethod" :options="paymentOptions" label="支付方式" filled
-                :rules="[val => !!val || '请选择']" class="simple-input" />
+              <!-- 使用 emit-value/map-options 确保 v-model 保存字符串，避免出现 [object Object] -->
+              <q-select
+                v-model="orderData.paymentMethod"
+                :options="paymentOptions"
+                label="支付方式"
+                option-label="label"
+                option-value="value"
+                emit-value
+                map-options
+                filled
+                :rules="[val => !!val || '请选择']"
+                class="simple-input"
+              />
             </div>
           </div>
 
