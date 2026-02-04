@@ -1,7 +1,8 @@
 const app = require('../app');
 const request = require('supertest');
 const { query } = require('../database/postgreDB/pg');
-const {roomTypes,addRoomType} = require('./tools');
+// 引入房型/房间/订单测试工具，构造删除房型关联订单用例数据
+const { roomTypes, addRoomType, addRoom, createOrder, buildOrderPayload } = require('./tools');
 
 describe('参数验证测试', () => {
   test('POST /api/room-types 缺少必填字段时返回 400', async () => {
@@ -105,6 +106,48 @@ describe('房型接口测试', () => {
     // 验证数据库中房型是否已删除
     const dbResponse = await query('SELECT * FROM room_types WHERE type_code = $1', ['DELUXE']);
     expect(dbResponse.rows.length).toBe(0);
+  });
+
+  test('删除被订单引用的房型返回 400', async () => {
+    // 生成唯一房型与房间，避免测试之间互相影响
+    const typeCode = `DEL_BLOCK_${Date.now()}`.slice(0, 20);
+    const roomNumber = `DEL_${Math.floor(Math.random() * 10000)}`;
+    try {
+      await addRoomType([{
+        type_code: typeCode,
+        type_name: '删除拦截房型',
+        base_price: 188.00,
+        description: '用于删除校验测试',
+        is_closed: false
+      }]);
+      await addRoom([{
+        room_number: roomNumber,
+        type_code: typeCode,
+        status: 'available',
+        price: 188.00,
+        is_closed: false
+      }]);
+      await createOrder(buildOrderPayload({
+        roomType: typeCode,
+        roomNumber,
+        checkInDate: '2025-11-30',
+        checkOutDate: '2025-12-01',
+        roomPrice: { '2025-11-30': 188 },
+        status: 'pending',
+        stayType: '客房'
+      }));
+
+      const response = await request(app)
+        .delete(`/api/room-types/${typeCode}`);
+
+      expect(response.statusCode).toBe(400);
+      expect(response.body.message).toBe('无法删除，还有订单使用此房型');
+    } finally {
+      // 清理测试数据，避免影响其他用例
+      await query('DELETE FROM orders WHERE room_type = $1', [typeCode]);
+      await query('DELETE FROM rooms WHERE type_code = $1', [typeCode]);
+      await query('DELETE FROM room_types WHERE type_code = $1', [typeCode]);
+    }
   });
 
   test('获取所有房型', async () => {

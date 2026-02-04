@@ -69,7 +69,13 @@ const statusOptions = [
 
 watch(() => props.modelValue, (val) => {
   if (val && props.roomData) {
-    form.value = { ...props.roomData, price: Number(props.roomData.price) }
+    // 仅保留后端允许的字段，避免更新房间接口校验失败
+    form.value = {
+      room_number: props.roomData.room_number,
+      type_code: props.roomData.type_code,
+      status: props.roomData.status,
+      price: Number(props.roomData.price)
+    }
   } else if (val) {
     // 重置表单
     form.value = { room_number: '', type_code: '', status: 'available', price: 0 }

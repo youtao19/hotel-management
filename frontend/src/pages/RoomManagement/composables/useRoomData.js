@@ -35,9 +35,11 @@ export function useRoomData() {
   // 提交保存（添加或更新）
   const handleSaveRoom = async (formData) => {
     try {
-      // 确保价格是数字
+      // 仅提交后端允许的字段，避免额外字段触发校验失败
       const payload = {
-        ...formData,
+        room_number: formData.room_number,
+        type_code: formData.type_code,
+        status: formData.status,
         price: Number(formData.price)
       }
 

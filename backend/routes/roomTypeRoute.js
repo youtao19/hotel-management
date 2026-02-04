@@ -200,6 +200,12 @@ router.delete('/:code', async (req, res) => {
   try {
     const { code } = req.params;
 
+    // 检查是否有订单使用此房型（orders.room_type 外键约束）
+    const orderCheck = await query('SELECT COUNT(*) as count FROM orders WHERE room_type = $1', [code]);
+    if (parseInt(orderCheck.rows[0].count) > 0) {
+      return res.status(400).json({ message: '无法删除，还有订单使用此房型' });
+    }
+
     // 检查是否有房间使用此房型
     const roomCheck = await query('SELECT COUNT(*) as count FROM rooms WHERE type_code = $1', [code]);
     if (parseInt(roomCheck.rows[0].count) > 0) {
@@ -219,6 +225,10 @@ router.delete('/:code', async (req, res) => {
     res.status(200).json({ message: '房型删除成功' });
   } catch (err) {
     console.error('删除房型错误:', err);
+    // 外键约束错误时返回可读的业务提示
+    if (err.code === '23503') {
+      return res.status(400).json({ message: '无法删除，存在关联数据' });
+    }
     res.status(500).json({
       message: '服务器错误',
       error: err.message
