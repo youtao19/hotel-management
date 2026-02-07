@@ -459,13 +459,7 @@ async function changeOrderRoom(orderNumber, oldRoomNumber, newRoomNumber) {
   throw err;
     }
 
-    // 3. 验证新房间与原订单房型是否相同
-    if (newRoom.type_code !== order.room_type) {
-  const err = new Error(`新房间房型(${newRoom.type_code})与订单房型(${order.room_type})不一致，无法更换`);
-  err.code = 'ROOM_TYPE_MISMATCH';
-  throw err;
-    }
-
+    // 3. 允许跨房型更换，继续校验新房间的可用状态
     // 对于已入住的订单，新房间必须是可用状态
     if (order.status === 'checked-in' && newRoom.status !== 'available') {
   const err = new Error(`新房间当前状态为"${newRoom.status}"，已入住订单只能换到可用房间`);
