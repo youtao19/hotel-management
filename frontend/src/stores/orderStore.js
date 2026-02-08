@@ -106,6 +106,16 @@ export const useOrderStore = defineStore('order', () => {
     return source.toString() || 'front_desk'
   }
 
+  function normalizePaymentSplits(splits) {
+    if (!Array.isArray(splits)) return []
+    return splits
+      .map(item => ({
+        method: String(item?.method || '').trim(),
+        amount: Number(item?.amount || 0)
+      }))
+      .filter(item => item.method && item.amount > 0)
+  }
+
 
   /**
    *
@@ -445,13 +455,25 @@ export const useOrderStore = defineStore('order', () => {
   }
 
   // 办理入住
-  async function checkIn(orderNumber, depositAmount) {
+  async function checkIn(orderNumber, checkInPayload = {}) {
     try {
       loading.value = true;
       error.value = null;
+      const payload = (checkInPayload && typeof checkInPayload === 'object' && !Array.isArray(checkInPayload))
+        ? { ...checkInPayload }
+        : { deposit: checkInPayload };
+      const depositAmount = payload.deposit;
       console.log(`🚀 开始办理入住，订单号: ${orderNumber}, 押金: ${depositAmount}`);
 
-      const checkInData = depositAmount !== undefined ? { deposit: depositAmount } : {};
+      const checkInData = {
+        ...(depositAmount !== undefined ? { deposit: depositAmount } : {}),
+        ...(Array.isArray(payload.roomFeePaymentSplits) && payload.roomFeePaymentSplits.length
+          ? { roomFeePaymentSplits: normalizePaymentSplits(payload.roomFeePaymentSplits) }
+          : {}),
+        ...(Array.isArray(payload.depositPaymentSplits) && payload.depositPaymentSplits.length
+          ? { depositPaymentSplits: normalizePaymentSplits(payload.depositPaymentSplits) }
+          : {})
+      };
       const result = await orderApi.checkIn(orderNumber, checkInData);
 
       const index = orders.value.findIndex(o => o.orderNumber === orderNumber);
@@ -493,6 +515,8 @@ export const useOrderStore = defineStore('order', () => {
         paymentMethod: viewStore.normalizePaymentMethodForDB(typeof order.paymentMethod === 'object' ? order.paymentMethod.value?.toString() : order.paymentMethod?.toString()),
         roomPrice: order.roomPrice,
         deposit: parseFloat(order.deposit) || 0,
+        roomFeePaymentSplits: normalizePaymentSplits(order.roomFeePaymentSplits),
+        depositPaymentSplits: normalizePaymentSplits(order.depositPaymentSplits),
         remarks: order.remarks?.toString() || '',
         orderSource: normalizeOrderSource(order.source),
         idSource: order.sourceNumber?.toString() || '',

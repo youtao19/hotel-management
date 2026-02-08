@@ -12,6 +12,21 @@ addFormats(ajv);
 
 // 定义有效的订单状态
 const VALID_ORDER_STATES = ['pending', 'reserved', 'checked-in', 'checked-out', 'occupied', 'cancelled'];
+const SPLIT_PAY_WAYS = ['现金', '微信', '微邮付', '平台'];
+const splitItemSchema = {
+  type: 'object',
+  properties: {
+    method: { type: 'string', enum: SPLIT_PAY_WAYS },
+    amount: {
+      anyOf: [
+        { type: 'number', exclusiveMinimum: 0 },
+        { type: 'string', pattern: '^(0|[1-9]\\d*)(\\.\\d{1,2})?$', not: { const: '0' } }
+      ]
+    }
+  },
+  required: ['method', 'amount'],
+  additionalProperties: false
+};
 
 
 const createOrderSchema = {
@@ -45,6 +60,28 @@ const createOrderSchema = {
     deposit: { type: 'number' },
     isPrepaid: { type: 'boolean' },
     prepaidAmount: { type: 'number', minimum: 0 },
+    roomFeePaymentSplits: {
+      anyOf: [
+        {
+          type: 'array',
+          minItems: 1,
+          items: splitItemSchema
+        },
+        {
+          type: 'object',
+          additionalProperties: {
+            type: 'array',
+            minItems: 1,
+            items: splitItemSchema
+          }
+        }
+      ]
+    },
+    depositPaymentSplits: {
+      type: 'array',
+      minItems: 1,
+      items: splitItemSchema
+    },
     stayType: { type: 'string', enum: ['客房', '休息房'] },
     createTime: { type: 'string', format: 'date-time' },
     remarks: { type: 'string' }
@@ -553,9 +590,12 @@ router.get('/:order_id/deposit-info', async (req, res) => {
 router.post('/:orderId/check-in', async (req, res) => {
   try {
     const { orderId } = req.params;
-    const { deposit } = req.body;
+    const { deposit, roomFeePaymentSplits, depositPaymentSplits } = req.body || {};
 
-    await orderModule.checkIn(orderId, deposit);
+    await orderModule.checkIn(orderId, deposit, undefined, {
+      roomFeePaymentSplits,
+      depositPaymentSplits
+    });
 
     return res.status(200).json({
       success: true,
@@ -595,6 +635,8 @@ router.post('/fast-check-in', async (req, res) => {
       deposit: body.deposit,
       isPrepaid: body.isPrepaid,
       prepaidAmount: body.prepaidAmount || body.prepaid_amount,
+      roomFeePaymentSplits: body.roomFeePaymentSplits || body.room_fee_payment_splits,
+      depositPaymentSplits: body.depositPaymentSplits || body.deposit_payment_splits,
       stayType: body.stayType || body.stay_type,
       createTime: body.createTime || body.create_time,
       remarks: body.remarks

@@ -63,7 +63,8 @@
       v-model="showCheckInDialog"
       :order="pendingCheckInOrder"
       :get-room-type-name="viewStore.getRoomTypeName"
-      :get-payment-method-name="(val) => val"
+      :get-payment-method-name="viewStore.getPaymentMethodName"
+      :payment-options="viewStore.paymentMethodOptions"
       :format-date="(d) => d"
       @confirm="handleCheckInConfirm"
     />

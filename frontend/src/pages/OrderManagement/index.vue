@@ -97,6 +97,7 @@
         :order="checkInOrder_ref"
         :getRoomTypeName="viewStore.getRoomTypeName"
         :getPaymentMethodName="viewStore.getPaymentMethodName"
+        :payment-options="viewStore.paymentMethodOptions"
         :formatDate="formatDate"
         @confirm="handleCheckInConfirm"
       />
@@ -245,7 +246,11 @@ async function handleCheckInConfirm(order) {
   dialogs.checkInConfirm = false
   loadingOrders.value = true
   try {
-    await orderStore.checkIn(order.orderNumber, order.deposit)
+    await orderStore.checkIn(order.orderNumber, {
+      deposit: order.deposit,
+      roomFeePaymentSplits: order.roomFeePaymentSplits,
+      depositPaymentSplits: order.depositPaymentSplits
+    })
     $q.notify({ type: 'positive', message: '入住成功' })
     await fetchAllOrders()
     await roomStore.fetchAllRooms()

@@ -52,6 +52,7 @@
       :order="pendingCheckInOrder"
       :get-room-type-name="viewStore.getRoomTypeName"
       :get-payment-method-name="viewStore.getPaymentMethodName"
+      :payment-options="viewStore.paymentMethodOptions"
       :format-date="formatDateForDialog"
       @confirm="handleCheckInConfirm"
     />
@@ -151,7 +152,11 @@ async function checkInRoom(room) {
 // 确认入住回调
 async function handleCheckInConfirm(order) {
   try {
-    await orderStore.checkIn(order.orderNumber, order.deposit)
+    await orderStore.checkIn(order.orderNumber, {
+      deposit: order.deposit,
+      roomFeePaymentSplits: order.roomFeePaymentSplits,
+      depositPaymentSplits: order.depositPaymentSplits
+    })
     $q.notify({ type: 'positive', message: '入住成功' })
     showCheckInConfirmDialog.value = false
     // 操作成功后，调用 Hook 里的刷新方法

@@ -1,34 +1,33 @@
-## 目标
-1.你需要先给我创建一个Progress.md文件，列出你的修改流程
-2.让我确认你的修改流程
-3.执行修改后，你需要给我写一个测试样例，并且让我确认。
-4.完成测试后，你需要使用中文写好commit message，然后执行git commit，你需要 git add 所有文件，然后git commit -m "commit message"
+# Repository Guidelines
 
-## 要求
-+ 当你完成一个progress的流程后，你需要同步修改progress.md文件，表示这一步已经完成
-+ 当你执行修改时，先查看progress的完成进度，然后根据进度继续执行代码修改
-+ 前端尽量不做逻辑判断（除非 不做逻辑判断就无法完成这个任务）
-+ 你在任何时候都不能修改这个文件 `AGENTS.md` 文件，除非我让你修改
-+ 在执行修改时，你需要先查看`业务说明.md`文件，确认业务逻辑。
-+ 在任何时候，你都不能修改`业务说明.md`文件，除非我让你修改
-+ 你写的任何代码都需要有注释
-+ commit message 需要用中文书写
+## Project Structure & Module Organization
+- `frontend/` is a Quasar (Vue 3) SPA. Core code lives in `frontend/src/` with pages, components, stores (Pinia), and router setup.
+- `backend/` is an Express app. Key areas: `backend/routes/`, `backend/modules/`, `backend/database/`, and `backend/appSettings/`. Jest tests live in `backend/tests/`.
+- `e2e/` contains Playwright specs and helpers (`*.spec.js`), organized by feature folders.
+- Root files include `compose.yaml` (Docker), `dev.env` / `dev.env.template` (envs), and `playwright.config.js`.
 
-## Node.js 事件处理规范（必须遵守）
+## Build, Test, and Development Commands
+- `npm install` installs workspace dependencies.
+- `npm start` runs frontend + backend together (Quasar on `:9000`, API on `:3000`).
+- `npm run dev:frontend` / `npm run dev:backend` run each side independently.
+- `npm run build` builds the frontend bundle.
+- `npm run test` runs backend Jest tests with `.env.test`.
+- `npm run test:e2e` runs Playwright E2E; `test:e2e:ui` for interactive mode.
+- `npm run db:init` initializes Postgres schema; `npm run db:migrate` applies migrations.
 
-1. 禁止对Date字段使用:
-- new Date(date)
-- toISOString()
+## Coding Style & Naming Conventions
+- Indentation is 2 spaces, LF line endings, trailing whitespace trimmed (`.editorconfig`).
+- Frontend linting uses ESLint with Vue 3 essentials and Prettier integration (`frontend/.eslintrc.cjs`).
+- Test naming: unit/integration tests use `*.test.js`; E2E tests use `*.spec.js`.
 
-DATE 字段在 Node.js 中应:
-- 作为字符串直接使用
-- 或仅用于格式化展示(如 dayjs(date).format('YYYY-MM-DD'))
+## Testing Guidelines
+- Jest tests live in `backend/tests/`; run `npm run test:watch` for watch mode or `npm run test:coverage` for coverage.
+- Playwright specs live in `e2e/` with config at `playwright.config.js`. Use `npm run test:e2e:debug` for headed debugging.
 
-2. 对timestamptz字段：
-- 不做手动市区换算
-- 不加減8小时
-- 不使用 toISOString() 直接返回给前端
+## Commit & Pull Request Guidelines
+- Commit messages in history are short, descriptive, and often in Chinese. Follow that style and include the affected area and tests when relevant (e.g., “修复房间更新校验与房型删除约束，补充测试”).
+- PRs should include: a brief summary, test commands run, and screenshots for UI changes. Call out any new env vars, DB migrations, or breaking behavior.
 
-3. PostgreSQL 驱动(pg / ORM):
-- 不强制设置 timezone = 'UTC'
-- 依赖数据库 + 会话时区自动转换
+## Security & Configuration Tips
+- Copy `dev.env.template` to `dev.env` before local runs and keep secrets out of version control.
+- Keep database/Redis credentials consistent with `compose.yaml` when using Docker.

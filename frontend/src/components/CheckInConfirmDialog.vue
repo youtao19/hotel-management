@@ -25,7 +25,7 @@
               <div class="row q-col-gutter-xs text-body2">
                 <div class="col-4">
                   <span class="text-grey-7">订单:</span>
-                  <span class="text-weight-medium q-ml-xs">{{ order.orderNumber }}</span>
+                  <span class="text-weight-medium q-ml-xs">{{ order.orderNumber || order.orderId || order.order_id }}</span>
                 </div>
                 <div class="col-4">
                   <span class="text-grey-7">客人:</span>
@@ -167,7 +167,7 @@
                     <div class="fee-card-label">支付方式</div>
                     <div class="fee-card-input">
                       <q-input
-                        :model-value="getPaymentMethodName(order.paymentMethod)"
+                        :model-value="getPaymentMethodName(order.paymentMethod || order.payment_method)"
                         readonly
                         dense
                         borderless
@@ -187,6 +187,136 @@
                 </div>
                 <div class="total-amount-right">
                   ¥{{ totalAmount }}
+                </div>
+              </div>
+
+              <div class="split-panel q-mt-md">
+                <div class="text-caption text-weight-bold q-mb-sm">
+                  <q-icon name="payments" color="primary" size="16px" class="q-mr-xs" />
+                  收款拆分
+                </div>
+
+                <div class="split-group q-mb-sm">
+                  <div class="row items-center q-mb-xs">
+                    <div class="col text-body2 text-weight-medium">
+                      房费拆分（应收 ¥{{ remainingRoomFee.toFixed(2) }}）
+                    </div>
+                    <div class="col-auto">
+                      <q-btn
+                        flat
+                        dense
+                        size="sm"
+                        color="primary"
+                        icon="add"
+                        label="新增"
+                        @click="addRoomFeeSplit"
+                        :disable="remainingRoomFee <= 0"
+                      />
+                    </div>
+                  </div>
+                  <div
+                    v-for="(split, index) in roomFeePaymentSplits"
+                    :key="`room-split-${index}`"
+                    class="row q-col-gutter-sm items-center q-mb-xs"
+                  >
+                    <div class="col-6">
+                      <q-select
+                        v-model="split.method"
+                        :options="normalizedPaymentOptions"
+                        emit-value
+                        map-options
+                        dense
+                        outlined
+                        label="方式"
+                      />
+                    </div>
+                    <div class="col-5">
+                      <q-input
+                        v-model.number="split.amount"
+                        type="number"
+                        dense
+                        outlined
+                        label="金额"
+                        prefix="¥"
+                      />
+                    </div>
+                    <div class="col-1 text-right">
+                      <q-btn
+                        flat
+                        dense
+                        round
+                        icon="close"
+                        color="negative"
+                        @click="removeRoomFeeSplit(index)"
+                        :disable="roomFeePaymentSplits.length === 1"
+                      />
+                    </div>
+                  </div>
+                  <div class="text-caption" :class="roomFeeSplitDiffCents === 0 ? 'text-positive' : 'text-negative'">
+                    合计 ¥{{ roomFeeSplitTotal.toFixed(2) }}，
+                    {{ roomFeeSplitDiffCents === 0 ? '已平衡' : `差额 ¥${formatDiff(roomFeeSplitDiffCents)}` }}
+                  </div>
+                </div>
+
+                <div class="split-group" v-if="(Number(depositAmount) || 0) > 0">
+                  <div class="row items-center q-mb-xs">
+                    <div class="col text-body2 text-weight-medium">
+                      押金拆分（应收 ¥{{ Number(depositAmount || 0).toFixed(2) }}）
+                    </div>
+                    <div class="col-auto">
+                      <q-btn
+                        flat
+                        dense
+                        size="sm"
+                        color="primary"
+                        icon="add"
+                        label="新增"
+                        @click="addDepositSplit"
+                      />
+                    </div>
+                  </div>
+                  <div
+                    v-for="(split, index) in depositPaymentSplits"
+                    :key="`deposit-split-${index}`"
+                    class="row q-col-gutter-sm items-center q-mb-xs"
+                  >
+                    <div class="col-6">
+                      <q-select
+                        v-model="split.method"
+                        :options="normalizedPaymentOptions"
+                        emit-value
+                        map-options
+                        dense
+                        outlined
+                        label="方式"
+                      />
+                    </div>
+                    <div class="col-5">
+                      <q-input
+                        v-model.number="split.amount"
+                        type="number"
+                        dense
+                        outlined
+                        label="金额"
+                        prefix="¥"
+                      />
+                    </div>
+                    <div class="col-1 text-right">
+                      <q-btn
+                        flat
+                        dense
+                        round
+                        icon="close"
+                        color="negative"
+                        @click="removeDepositSplit(index)"
+                        :disable="depositPaymentSplits.length === 1"
+                      />
+                    </div>
+                  </div>
+                  <div class="text-caption" :class="depositSplitDiffCents === 0 ? 'text-positive' : 'text-negative'">
+                    合计 ¥{{ depositSplitTotal.toFixed(2) }}，
+                    {{ depositSplitDiffCents === 0 ? '已平衡' : `差额 ¥${formatDiff(depositSplitDiffCents)}` }}
+                  </div>
                 </div>
               </div>
             </q-card-section>
@@ -241,6 +371,7 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
+import { useQuasar } from 'quasar'
 
 // Props
 const props = defineProps({
@@ -260,6 +391,10 @@ const props = defineProps({
     type: Function,
     required: true
   },
+  paymentOptions: {
+    type: Array,
+    default: () => []
+  },
   formatDate: {
     type: Function,
     required: true
@@ -268,19 +403,120 @@ const props = defineProps({
 
 // Emits
 const emit = defineEmits(['update:modelValue', 'confirm'])
+const $q = useQuasar()
 
 // 加载状态
 const loading = ref(false)
 
 // 押金金额（可编辑）
 const depositAmount = ref(0)
+const roomFeePaymentSplits = ref([])
+const depositPaymentSplits = ref([])
 
 // 押金输入框引用
 const depositInput = ref(null)
 
-watch(() => props.order, (newOrder) => {
-  depositAmount.value = newOrder ? (parseFloat(newOrder.deposit) || 0) : 0
-}, { immediate: true })
+const fallbackPaymentOptions = [
+  { label: '微邮付', value: '微邮付' },
+  { label: '微信', value: '微信' },
+  { label: '现金', value: '现金' },
+  { label: '平台', value: '平台' }
+]
+
+const normalizedPaymentOptions = computed(() => {
+  const source = Array.isArray(props.paymentOptions) && props.paymentOptions.length
+    ? props.paymentOptions
+    : fallbackPaymentOptions
+  return source
+    .map((option) => {
+      if (typeof option === 'string') {
+        return { label: option, value: option }
+      }
+      const label = String(option?.label || option?.value || '').trim()
+      const value = String(option?.value || option?.label || '').trim()
+      if (!label || !value) return null
+      return { label, value }
+    })
+    .filter(Boolean)
+})
+
+const normalizedPaymentValues = computed(() => normalizedPaymentOptions.value.map(option => option.value))
+
+const normalizeAmount = (value) => Number((Number(value) || 0).toFixed(2))
+const toCents = (value) => Math.round((Number(value) || 0) * 100)
+
+function normalizeMethod(method) {
+  const val = String(method || '').trim()
+  if (normalizedPaymentValues.value.includes(val)) return val
+  return normalizedPaymentValues.value[0] || '现金'
+}
+
+function getDefaultMethod() {
+  return normalizeMethod(props.order?.paymentMethod || props.order?.payment_method)
+}
+
+function buildSingleSplit(amount, method) {
+  const normalizedAmount = normalizeAmount(amount)
+  if (normalizedAmount <= 0) return []
+  return [{ method: normalizeMethod(method), amount: normalizedAmount }]
+}
+
+function normalizeIncomingSplits(rawSplits, targetAmount, defaultMethod) {
+  const normalizedTarget = normalizeAmount(targetAmount)
+  if (normalizedTarget <= 0) return []
+  if (Array.isArray(rawSplits) && rawSplits.length > 0) {
+    const cleaned = rawSplits
+      .map(item => ({
+        method: normalizeMethod(item?.method),
+        amount: normalizeAmount(item?.amount)
+      }))
+      .filter(item => item.amount > 0)
+    if (cleaned.length > 0) return cleaned
+  }
+  return buildSingleSplit(normalizedTarget, defaultMethod)
+}
+
+function sumSplitAmount(splits) {
+  return normalizeAmount((splits || []).reduce((sum, split) => sum + (Number(split.amount) || 0), 0))
+}
+
+function formatDiff(diffCents) {
+  return Math.abs((Number(diffCents) || 0) / 100).toFixed(2)
+}
+
+function addRoomFeeSplit() {
+  if (remainingRoomFee.value <= 0) return
+  roomFeePaymentSplits.value.push({ method: getDefaultMethod(), amount: 0 })
+}
+
+function removeRoomFeeSplit(index) {
+  if (roomFeePaymentSplits.value.length <= 1) return
+  roomFeePaymentSplits.value.splice(index, 1)
+}
+
+function addDepositSplit() {
+  if ((Number(depositAmount.value) || 0) <= 0) return
+  depositPaymentSplits.value.push({ method: getDefaultMethod(), amount: 0 })
+}
+
+function removeDepositSplit(index) {
+  if (depositPaymentSplits.value.length <= 1) return
+  depositPaymentSplits.value.splice(index, 1)
+}
+
+function resetPaymentSplits(newOrder) {
+  const defaultMethod = normalizeMethod(newOrder?.paymentMethod || newOrder?.payment_method)
+  roomFeePaymentSplits.value = normalizeIncomingSplits(
+    newOrder?.roomFeePaymentSplits,
+    remainingRoomFee.value,
+    defaultMethod
+  )
+  depositPaymentSplits.value = normalizeIncomingSplits(
+    newOrder?.depositPaymentSplits,
+    depositAmount.value,
+    defaultMethod
+  )
+}
 
 // 聚焦押金输入框
 function focusDepositInput() {
@@ -356,14 +592,93 @@ const totalAmount = computed(() => {
   return (roomFee + deposit).toFixed(2)
 })
 
+const roomFeeSplitTotal = computed(() => sumSplitAmount(roomFeePaymentSplits.value))
+const roomFeeSplitDiffCents = computed(() => {
+  return toCents(roomFeeSplitTotal.value) - toCents(remainingRoomFee.value)
+})
+
+const depositSplitTotal = computed(() => sumSplitAmount(depositPaymentSplits.value))
+const depositSplitDiffCents = computed(() => {
+  return toCents(depositSplitTotal.value) - toCents(depositAmount.value)
+})
+
+watch(() => props.order, (newOrder) => {
+  depositAmount.value = newOrder ? normalizeAmount(newOrder.deposit) : 0
+  resetPaymentSplits(newOrder)
+}, { immediate: true })
+
+watch(remainingRoomFee, (newValue) => {
+  const amount = normalizeAmount(newValue)
+  if (amount <= 0) {
+    roomFeePaymentSplits.value = []
+    return
+  }
+  if (roomFeePaymentSplits.value.length <= 1) {
+    roomFeePaymentSplits.value = buildSingleSplit(amount, roomFeePaymentSplits.value[0]?.method || getDefaultMethod())
+  }
+})
+
+watch(depositAmount, (newValue) => {
+  const amount = normalizeAmount(newValue)
+  if (amount <= 0) {
+    depositPaymentSplits.value = []
+    return
+  }
+  if (depositPaymentSplits.value.length <= 1) {
+    depositPaymentSplits.value = buildSingleSplit(amount, depositPaymentSplits.value[0]?.method || getDefaultMethod())
+  }
+})
+
+function sanitizeSplits(rawSplits, targetAmount) {
+  const targetCents = toCents(targetAmount)
+  if (targetCents <= 0) return []
+
+  const cleaned = (rawSplits || [])
+    .map(split => ({
+      method: normalizeMethod(split?.method),
+      amount: normalizeAmount(split?.amount)
+    }))
+    .filter(split => split.amount > 0)
+
+  if (!cleaned.length) return null
+
+  const totalCents = cleaned.reduce((sum, split) => sum + toCents(split.amount), 0)
+  if (totalCents !== targetCents) return null
+
+  return cleaned
+}
+
 // 确认办理入住
 async function confirmCheckIn() {
   loading.value = true
   try {
+    if (roomFeeSplitDiffCents.value !== 0) {
+      $q.notify({ type: 'negative', message: '房费拆分合计与应收金额不一致' })
+      return
+    }
+    if ((Number(depositAmount.value) || 0) > 0 && depositSplitDiffCents.value !== 0) {
+      $q.notify({ type: 'negative', message: '押金拆分合计与应收金额不一致' })
+      return
+    }
+
+    const normalizedRoomFeeSplits = sanitizeSplits(roomFeePaymentSplits.value, remainingRoomFee.value)
+    const normalizedDepositSplits = sanitizeSplits(depositPaymentSplits.value, depositAmount.value)
+
+    if (remainingRoomFee.value > 0 && !normalizedRoomFeeSplits) {
+      $q.notify({ type: 'negative', message: '房费拆分数据无效，请检查后重试' })
+      return
+    }
+    if ((Number(depositAmount.value) || 0) > 0 && !normalizedDepositSplits) {
+      $q.notify({ type: 'negative', message: '押金拆分数据无效，请检查后重试' })
+      return
+    }
+
     // 将修改后的押金金额传递给父组件
     const orderWithDeposit = {
       ...props.order,
-      deposit: depositAmount.value
+      deposit: normalizeAmount(depositAmount.value),
+      roomFeePaymentSplits: normalizedRoomFeeSplits || [],
+      depositPaymentSplits: normalizedDepositSplits || []
     }
     emit('confirm', orderWithDeposit)
   } finally {
@@ -601,6 +916,18 @@ ul {
   color: #1976d2;
   letter-spacing: -0.5px;
   line-height: 1;
+}
+
+.split-panel {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.split-group + .split-group {
+  border-top: 1px dashed #d1d5db;
+  padding-top: 10px;
 }
 
 /* 响应式调整 */

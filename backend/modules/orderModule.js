@@ -7,6 +7,8 @@ const tableName = "orders";
 
 // 定义有效的订单状态
 const VALID_ORDER_STATES = ['pending', 'reserved', 'checked-in', 'checked-out', 'occupied', 'cancelled'];
+const DEFAULT_PAY_WAY = '现金';
+const ALLOWED_SPLIT_PAY_WAYS = new Set(['现金', '微信', '微邮付', '平台']);
 
 /**
  * 检查orders表是否存在
@@ -38,6 +40,175 @@ function isRestRoom(orderData) {
   const checkOutDateStr = formatDate(orderData.check_out_date);
   if (!checkInDateStr || !checkOutDateStr) return false;
   return checkInDateStr === checkOutDateStr;
+}
+
+function amountToCents(value) {
+  return Math.round(toAmountNumber(value || 0) * 100);
+}
+
+function centsToAmount(cents) {
+  return toAmountNumber((Number(cents) || 0) / 100);
+}
+
+function createCheckInSplitError(message, details = null) {
+  const err = new Error(message);
+  err.code = 'CHECK_IN_INVALID_SPLIT';
+  err.statusCode = 400;
+  if (details) err.details = details;
+  return err;
+}
+
+function normalizePayWay(method, fallback = DEFAULT_PAY_WAY) {
+  const normalized = String(method || '').trim();
+  if (!normalized) return fallback;
+  return ALLOWED_SPLIT_PAY_WAYS.has(normalized) ? normalized : fallback;
+}
+
+function parseSplitArray(rawSplits, expectedCents, label, defaultMethod) {
+  if (!Array.isArray(rawSplits) || rawSplits.length === 0) {
+    throw createCheckInSplitError(`${label}必须是非空数组`);
+  }
+
+  const splits = rawSplits.map((item, index) => {
+    if (!item || typeof item !== 'object') {
+      throw createCheckInSplitError(`${label}第 ${index + 1} 项格式不正确`);
+    }
+    const method = normalizePayWay(item.method || item.pay_way || item.payWay, defaultMethod);
+    const amountCents = amountToCents(item.amount ?? item.change_price ?? item.changePrice);
+    if (amountCents <= 0) {
+      throw createCheckInSplitError(`${label}第 ${index + 1} 项金额必须大于 0`);
+    }
+    return { method, cents: amountCents };
+  });
+
+  const totalCents = splits.reduce((sum, split) => sum + split.cents, 0);
+  if (totalCents !== expectedCents) {
+    throw createCheckInSplitError(
+      `${label}金额合计不正确，期望 ${centsToAmount(expectedCents)}，实际 ${centsToAmount(totalCents)}`
+    );
+  }
+  return splits;
+}
+
+function convertSplitCentsToAmount(splitRows) {
+  return splitRows.map((row) => ({
+    method: row.method,
+    amount: centsToAmount(row.cents)
+  }));
+}
+
+function normalizeRoomFeePaymentSplits(orderRows, roomFeePaymentSplits, fallbackMethod) {
+  const normalizedFallbackMethod = normalizePayWay(fallbackMethod);
+  const days = orderRows.map((row) => ({
+    stayDate: formatDate(row.stay_date),
+    cents: amountToCents(row.total_price)
+  }));
+  const totalExpectedCents = days.reduce((sum, day) => sum + day.cents, 0);
+
+  const defaultByDay = new Map(
+    days.map((day) => [
+      day.stayDate,
+      [{ method: normalizedFallbackMethod, amount: centsToAmount(day.cents) }]
+    ])
+  );
+
+  if (totalExpectedCents <= 0) {
+    return defaultByDay;
+  }
+
+  if (!roomFeePaymentSplits) {
+    return defaultByDay;
+  }
+
+  if (Array.isArray(roomFeePaymentSplits)) {
+    const parsed = parseSplitArray(roomFeePaymentSplits, totalExpectedCents, '房费拆分', normalizedFallbackMethod);
+    const queue = parsed.map((item) => ({ ...item }));
+    const byDay = new Map();
+    let splitIndex = 0;
+
+    for (const day of days) {
+      let remainingDay = day.cents;
+      const daySplits = [];
+
+      while (remainingDay > 0) {
+        while (splitIndex < queue.length && queue[splitIndex].cents <= 0) splitIndex++;
+        if (splitIndex >= queue.length) {
+          throw createCheckInSplitError('房费拆分金额不足，无法覆盖全部住宿日');
+        }
+
+        const current = queue[splitIndex];
+        const allocated = Math.min(remainingDay, current.cents);
+        daySplits.push({ method: current.method, cents: allocated });
+        current.cents -= allocated;
+        remainingDay -= allocated;
+      }
+
+      byDay.set(day.stayDate, convertSplitCentsToAmount(daySplits));
+    }
+
+    const remainingSplitCents = queue.reduce((sum, item) => sum + item.cents, 0);
+    if (remainingSplitCents !== 0) {
+      throw createCheckInSplitError('房费拆分金额超过应收房费');
+    }
+
+    return byDay;
+  }
+
+  if (typeof roomFeePaymentSplits === 'object') {
+    const byDay = new Map();
+    const validDateSet = new Set(days.map((day) => day.stayDate));
+
+    for (const rawDateKey of Object.keys(roomFeePaymentSplits)) {
+      const dateKey = formatDate(rawDateKey);
+      if (!validDateSet.has(dateKey)) {
+        throw createCheckInSplitError(`房费拆分日期 ${rawDateKey} 不在订单住宿日范围内`);
+      }
+    }
+
+    for (const day of days) {
+      const rawDaySplit = roomFeePaymentSplits[day.stayDate];
+      if (!rawDaySplit) {
+        byDay.set(day.stayDate, [{ method: normalizedFallbackMethod, amount: centsToAmount(day.cents) }]);
+        continue;
+      }
+      const parsed = parseSplitArray(rawDaySplit, day.cents, `${day.stayDate} 的房费拆分`, normalizedFallbackMethod);
+      byDay.set(day.stayDate, convertSplitCentsToAmount(parsed));
+    }
+    return byDay;
+  }
+
+  throw createCheckInSplitError('roomFeePaymentSplits 格式错误，应为数组或按日期分组的对象');
+}
+
+function normalizeDepositPaymentSplits(depositPaymentSplits, depositAmount, fallbackMethod) {
+  const expectedCents = amountToCents(depositAmount);
+  if (expectedCents <= 0) return [];
+
+  const normalizedFallbackMethod = normalizePayWay(fallbackMethod);
+  if (!depositPaymentSplits) {
+    return [{ method: normalizedFallbackMethod, amount: centsToAmount(expectedCents) }];
+  }
+  if (!Array.isArray(depositPaymentSplits)) {
+    throw createCheckInSplitError('depositPaymentSplits 格式错误，应为数组');
+  }
+
+  const parsed = parseSplitArray(depositPaymentSplits, expectedCents, '押金拆分', normalizedFallbackMethod);
+  return convertSplitCentsToAmount(parsed);
+}
+
+function getRoomFeeSummaryPaymentMethod(roomFeeSplitsByDay, fallbackMethod) {
+  const methods = new Set();
+  for (const daySplits of roomFeeSplitsByDay.values()) {
+    for (const split of daySplits || []) {
+      const cents = amountToCents(split.amount);
+      if (cents > 0) {
+        methods.add(normalizePayWay(split.method, fallbackMethod));
+      }
+    }
+  }
+  if (methods.size > 1) return '混合支付';
+  if (methods.size === 1) return [...methods][0];
+  return normalizePayWay(fallbackMethod);
 }
 
 
@@ -1160,9 +1331,10 @@ async function getEarlyCheckoutRecommendation(orderNumber, actualCheckoutTime, h
  * 办理入住：创建房费/押金账单并更新订单状态
  * @param {string} orderId 订单号
  * @param {number|string} depositAmount 实收押金
+ * @param {Object} paymentSplitPayload 支付拆分参数
  * @returns {Promise<Array>} 创建的账单记录
  */
-async function checkIn(orderId, depositAmount, client) {
+async function checkIn(orderId, depositAmount, client, paymentSplitPayload = {}) {
   const manageTx = !client; // 是否需要自行管理事务
   const runner = client || await getClient();
   let txStarted = false; // 事务是否已开始
@@ -1202,6 +1374,28 @@ async function checkIn(orderId, depositAmount, client) {
       console.log('✅ [check-in] 事务开始');
     }
 
+    const roomFeeSplitsByDay = normalizeRoomFeePaymentSplits(
+      orderRows,
+      paymentSplitPayload?.roomFeePaymentSplits,
+      firstOrder.payment_method
+    );
+    const depositSplits = normalizeDepositPaymentSplits(
+      paymentSplitPayload?.depositPaymentSplits,
+      parsedDeposit,
+      firstOrder.payment_method
+    );
+
+    const summaryPaymentMethod = getRoomFeeSummaryPaymentMethod(roomFeeSplitsByDay, firstOrder.payment_method);
+    if (summaryPaymentMethod !== firstOrder.payment_method) {
+      await runner.query(
+        `UPDATE orders
+            SET payment_method = $1
+          WHERE order_id = $2`,
+        [summaryPaymentMethod, orderId]
+      );
+      console.log(`🧾 [check-in] 更新订单支付方式摘要: ${firstOrder.payment_method} -> ${summaryPaymentMethod}`);
+    }
+
     // 给订单设置押金
     if (hasDeposit) {
       const updateDepositQuery = `
@@ -1212,20 +1406,21 @@ async function checkIn(orderId, depositAmount, client) {
       await runner.query(updateDepositQuery, [parsedDeposit, firstOrder.id]);
       console.log(`📝 [check-in] 更新订单 ${orderId} 押金: ${firstOrder.deposit} -> ${parsedDeposit}`);
 
-      const dpData = {
-        order_id: orderId,
-        room_number: firstOrder.room_number,
-        guest_name: firstOrder.guest_name,
-        change_price: parsedDeposit,
-        change_type: '收押',
-        pay_way: firstOrder.payment_method,
-        remarks: '办理入住押金',
-        stay_type: firstOrder.stay_type,
-        stay_date: firstOrder.check_in_date
-      };
-      // 插入押金账单
-      const depositBill = await billModule.addBill(dpData, runner);
-      createdBills.push(depositBill);
+      for (const split of depositSplits) {
+        const dpData = {
+          order_id: orderId,
+          room_number: firstOrder.room_number,
+          guest_name: firstOrder.guest_name,
+          change_price: split.amount,
+          change_type: '收押',
+          pay_way: split.method,
+          remarks: depositSplits.length > 1 ? '办理入住押金(拆分)' : '办理入住押金',
+          stay_type: firstOrder.stay_type,
+          stay_date: firstOrder.check_in_date
+        };
+        const depositBill = await billModule.addBill(dpData, runner);
+        createdBills.push(depositBill);
+      }
       console.log(`📝 [check-in] 插入押金账单，金额: ${parsedDeposit}`);
     }
 
@@ -1243,20 +1438,25 @@ async function checkIn(orderId, depositAmount, client) {
     // 为每个住宿日插入房费账单
     for (const ord of orderRows) {
       const stayDateStr = formatDate(ord.stay_date);
-
-      const billData = {
-        order_id: orderId,
-        room_number: ord.room_number,
-        guest_name: ord.guest_name,
-        change_price: toAmountNumber(ord.total_price),
-        change_type: '房费',
-        pay_way: ord.payment_method,
-        remarks: '办理入住房费',
-        stay_type: ord.stay_type,
-        stay_date: stayDateStr
-      };
-      const roomBill = await billModule.addBill(billData, runner);
-      createdBills.push(roomBill);
+      const daySplits = roomFeeSplitsByDay.get(stayDateStr) || [{
+        method: normalizePayWay(ord.payment_method),
+        amount: toAmountNumber(ord.total_price)
+      }];
+      for (const split of daySplits) {
+        const billData = {
+          order_id: orderId,
+          room_number: ord.room_number,
+          guest_name: ord.guest_name,
+          change_price: split.amount,
+          change_type: '房费',
+          pay_way: split.method,
+          remarks: daySplits.length > 1 ? '办理入住房费(拆分)' : '办理入住房费',
+          stay_type: ord.stay_type,
+          stay_date: stayDateStr
+        };
+        const roomBill = await billModule.addBill(billData, runner);
+        createdBills.push(roomBill);
+      }
       console.log(`📝 [check-in] 插入房费账单，金额: ${ord.total_price}，入住日期: ${stayDateStr}`);
     }
 
@@ -1304,6 +1504,8 @@ async function fastCheckIn(orderData, createdBy = 'system') {
       checkOutDate: orderData.checkOutDate || orderData.check_out_date,
       paymentMethod: orderData.paymentMethod || orderData.payment_method,
       roomPrice: orderData.roomPrice || orderData.total_price,
+      roomFeePaymentSplits: orderData.roomFeePaymentSplits || orderData.room_fee_payment_splits,
+      depositPaymentSplits: orderData.depositPaymentSplits || orderData.deposit_payment_splits,
       stayType: orderData.stayType || orderData.stay_type,
       status: 'pending'
     };
@@ -1316,7 +1518,10 @@ async function fastCheckIn(orderData, createdBy = 'system') {
       await createOrder(normalized, client);
       console.log('✅ [fastCheckIn] 订单创建成功');
 
-      await checkIn(normalized.orderId, depositAmount, client);
+      await checkIn(normalized.orderId, depositAmount, client, {
+        roomFeePaymentSplits: normalized.roomFeePaymentSplits,
+        depositPaymentSplits: normalized.depositPaymentSplits
+      });
 
       await client.query('COMMIT');
 
@@ -1719,13 +1924,26 @@ async function updateOrderWithBillsV2(orderNumber, orderData = {}, roomPrice = {
 
     // 5) 支付方式变更：同步更新房费账单支付方式
     if (normalizedOrderData.payment_method !== undefined) {
-      await client.query(
-        `UPDATE bills
-            SET pay_way = $1
-          WHERE order_id = $2
+      const { rows: [paywayStat] } = await client.query(
+        `SELECT COUNT(DISTINCT pay_way) AS payway_count
+           FROM bills
+          WHERE order_id = $1
             AND change_type = '房费'`,
-        [normalizedOrderData.payment_method, orderNumber]
+        [orderNumber]
       );
+      const paywayCount = Number(paywayStat?.payway_count || 0);
+
+      if (paywayCount <= 1) {
+        await client.query(
+          `UPDATE bills
+              SET pay_way = $1
+            WHERE order_id = $2
+              AND change_type = '房费'`,
+          [normalizedOrderData.payment_method, orderNumber]
+        );
+      } else {
+        console.log(`ℹ️ [updateOrderWithBillsV2] 订单 ${orderNumber} 存在混合支付房费账单，跳过 pay_way 同步`);
+      }
     }
 
     await client.query('COMMIT');

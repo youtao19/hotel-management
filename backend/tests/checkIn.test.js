@@ -41,6 +41,83 @@ describe('办理入住接口', () => {
 
   });
 
+  test('支持房费与押金拆分支付办理入住', async () => {
+    const orderPayload = buildOrderPayload({
+      orderId: `split_checkin_${Date.now()}`,
+      guestName: '拆分支付测试客户',
+      roomType: 'bo_ye_shuang',
+      roomNumber: '307',
+      checkInDate: '2025-12-11',
+      checkOutDate: '2025-12-13',
+      roomPrice: {
+        '2025-12-11': 100,
+        '2025-12-12': 120
+      },
+      paymentMethod: '现金',
+      status: 'pending',
+      deposit: 0
+    });
+    await createOrder(orderPayload);
+
+    const response = await request(app)
+      .post(`/api/orders/${orderPayload.orderId}/check-in`)
+      .send({
+        deposit: 80,
+        roomFeePaymentSplits: {
+          '2025-12-11': [
+            { method: '现金', amount: 40 },
+            { method: '微信', amount: 60 }
+          ],
+          '2025-12-12': [
+            { method: '微信', amount: 20 },
+            { method: '微邮付', amount: 100 }
+          ]
+        },
+        depositPaymentSplits: [
+          { method: '现金', amount: 30 },
+          { method: '微信', amount: 50 }
+        ]
+      });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.success).toBe(true);
+
+    const roomFeeGrouped = await query(
+      `SELECT pay_way, SUM(change_price) AS total
+         FROM bills
+        WHERE order_id = $1
+          AND change_type = '房费'
+        GROUP BY pay_way`,
+      [orderPayload.orderId]
+    );
+    const roomFeeMap = Object.fromEntries(
+      roomFeeGrouped.rows.map(row => [row.pay_way, Number(row.total)])
+    );
+    expect(roomFeeMap['现金']).toBeCloseTo(40, 5);
+    expect(roomFeeMap['微信']).toBeCloseTo(80, 5);
+    expect(roomFeeMap['微邮付']).toBeCloseTo(100, 5);
+
+    const depositGrouped = await query(
+      `SELECT pay_way, SUM(change_price) AS total
+         FROM bills
+        WHERE order_id = $1
+          AND change_type = '收押'
+        GROUP BY pay_way`,
+      [orderPayload.orderId]
+    );
+    const depositMap = Object.fromEntries(
+      depositGrouped.rows.map(row => [row.pay_way, Number(row.total)])
+    );
+    expect(depositMap['现金']).toBeCloseTo(30, 5);
+    expect(depositMap['微信']).toBeCloseTo(50, 5);
+
+    const orderSummary = await query(
+      'SELECT payment_method FROM orders WHERE order_id = $1 LIMIT 1',
+      [orderPayload.orderId]
+    );
+    expect(orderSummary.rows[0].payment_method).toBe('混合支付');
+  });
+
   test('未收取押金办理入住仅生成房费账单', async () => {
     const orderPayload = buildOrderPayload({
       roomTypes: 'you_ge_yuan_zi',
@@ -231,6 +308,74 @@ describe('快速入住接口', () => {
     // 房间状态为占领
     const roomStatus = await query('SELECT status FROM rooms WHERE room_number = $1', [payload.roomNumber]);
     expect(roomStatus.rows[0].status).toBe('occupied');
+  });
+
+  test('快速入住支持全单房费拆分支付', async () => {
+    const payload = buildOrderPayload({
+      orderId: `fast_checkin_split_${Date.now()}`,
+      guestName: '快速入住拆分客户',
+      roomType: 'asu_xiao_zhu',
+      roomNumber: '102',
+      checkInDate: '2025-12-20',
+      checkOutDate: '2025-12-22',
+      roomPrice: {
+        '2025-12-20': 150,
+        '2025-12-21': 150
+      },
+      stayType: '客房',
+      paymentMethod: '现金',
+      deposit: 60,
+      roomFeePaymentSplits: [
+        { method: '现金', amount: 120 },
+        { method: '微信', amount: 180 }
+      ],
+      depositPaymentSplits: [
+        { method: '现金', amount: 20 },
+        { method: '微邮付', amount: 40 }
+      ],
+      status: 'pending'
+    });
+
+    const response = await request(app)
+      .post('/api/orders/fast-check-in')
+      .send(payload);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.success).toBe(true);
+
+    const roomFeeGrouped = await query(
+      `SELECT pay_way, SUM(change_price) AS total
+         FROM bills
+        WHERE order_id = $1
+          AND change_type = '房费'
+        GROUP BY pay_way`,
+      [payload.orderId]
+    );
+    const roomFeeMap = Object.fromEntries(
+      roomFeeGrouped.rows.map(row => [row.pay_way, Number(row.total)])
+    );
+    expect(roomFeeMap['现金']).toBeCloseTo(120, 5);
+    expect(roomFeeMap['微信']).toBeCloseTo(180, 5);
+
+    const depositGrouped = await query(
+      `SELECT pay_way, SUM(change_price) AS total
+         FROM bills
+        WHERE order_id = $1
+          AND change_type = '收押'
+        GROUP BY pay_way`,
+      [payload.orderId]
+    );
+    const depositMap = Object.fromEntries(
+      depositGrouped.rows.map(row => [row.pay_way, Number(row.total)])
+    );
+    expect(depositMap['现金']).toBeCloseTo(20, 5);
+    expect(depositMap['微邮付']).toBeCloseTo(40, 5);
+
+    const orderSummary = await query(
+      'SELECT payment_method FROM orders WHERE order_id = $1 LIMIT 1',
+      [payload.orderId]
+    );
+    expect(orderSummary.rows[0].payment_method).toBe('混合支付');
   });
 
   test('快速入住支持超过10位房号（防止账单字段长度回归）', async () => {
