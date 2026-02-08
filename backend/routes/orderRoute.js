@@ -82,6 +82,7 @@ const createOrderSchema = {
       minItems: 1,
       items: splitItemSchema
     },
+    depositPaymentMethod: { type: 'string', enum: SPLIT_PAY_WAYS },
     stayType: { type: 'string', enum: ['客房', '休息房'] },
     createTime: { type: 'string', format: 'date-time' },
     remarks: { type: 'string' }
@@ -590,11 +591,12 @@ router.get('/:order_id/deposit-info', async (req, res) => {
 router.post('/:orderId/check-in', async (req, res) => {
   try {
     const { orderId } = req.params;
-    const { deposit, roomFeePaymentSplits, depositPaymentSplits } = req.body || {};
+    const { deposit, roomFeePaymentSplits, depositPaymentSplits, depositPaymentMethod } = req.body || {};
 
     await orderModule.checkIn(orderId, deposit, undefined, {
       roomFeePaymentSplits,
-      depositPaymentSplits
+      depositPaymentSplits,
+      depositPaymentMethod
     });
 
     return res.status(200).json({
@@ -637,6 +639,7 @@ router.post('/fast-check-in', async (req, res) => {
       prepaidAmount: body.prepaidAmount || body.prepaid_amount,
       roomFeePaymentSplits: body.roomFeePaymentSplits || body.room_fee_payment_splits,
       depositPaymentSplits: body.depositPaymentSplits || body.deposit_payment_splits,
+      depositPaymentMethod: body.depositPaymentMethod || body.deposit_payment_method,
       stayType: body.stayType || body.stay_type,
       createTime: body.createTime || body.create_time,
       remarks: body.remarks

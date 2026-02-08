@@ -467,6 +467,9 @@ export const useOrderStore = defineStore('order', () => {
 
       const checkInData = {
         ...(depositAmount !== undefined ? { deposit: depositAmount } : {}),
+        ...(typeof payload.depositPaymentMethod === 'string' && payload.depositPaymentMethod.trim()
+          ? { depositPaymentMethod: payload.depositPaymentMethod.trim() }
+          : {}),
         ...(Array.isArray(payload.roomFeePaymentSplits) && payload.roomFeePaymentSplits.length
           ? { roomFeePaymentSplits: normalizePaymentSplits(payload.roomFeePaymentSplits) }
           : {}),
@@ -515,6 +518,9 @@ export const useOrderStore = defineStore('order', () => {
         paymentMethod: viewStore.normalizePaymentMethodForDB(typeof order.paymentMethod === 'object' ? order.paymentMethod.value?.toString() : order.paymentMethod?.toString()),
         roomPrice: order.roomPrice,
         deposit: parseFloat(order.deposit) || 0,
+        depositPaymentMethod: typeof order.depositPaymentMethod === 'string'
+          ? order.depositPaymentMethod.trim()
+          : undefined,
         roomFeePaymentSplits: normalizePaymentSplits(order.roomFeePaymentSplits),
         depositPaymentSplits: normalizePaymentSplits(order.depositPaymentSplits),
         remarks: order.remarks?.toString() || '',

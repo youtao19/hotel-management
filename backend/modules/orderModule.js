@@ -1379,10 +1379,18 @@ async function checkIn(orderId, depositAmount, client, paymentSplitPayload = {})
       paymentSplitPayload?.roomFeePaymentSplits,
       firstOrder.payment_method
     );
+    const depositMethodFallback = normalizePayWay(
+      paymentSplitPayload?.depositPaymentMethod
+        || paymentSplitPayload?.deposit_payment_method
+        || paymentSplitPayload?.depositPayWay
+        || paymentSplitPayload?.deposit_pay_way
+        || firstOrder.payment_method,
+      firstOrder.payment_method
+    );
     const depositSplits = normalizeDepositPaymentSplits(
       paymentSplitPayload?.depositPaymentSplits,
       parsedDeposit,
-      firstOrder.payment_method
+      depositMethodFallback
     );
 
     const summaryPaymentMethod = getRoomFeeSummaryPaymentMethod(roomFeeSplitsByDay, firstOrder.payment_method);
@@ -1506,6 +1514,7 @@ async function fastCheckIn(orderData, createdBy = 'system') {
       roomPrice: orderData.roomPrice || orderData.total_price,
       roomFeePaymentSplits: orderData.roomFeePaymentSplits || orderData.room_fee_payment_splits,
       depositPaymentSplits: orderData.depositPaymentSplits || orderData.deposit_payment_splits,
+      depositPaymentMethod: orderData.depositPaymentMethod || orderData.deposit_payment_method,
       stayType: orderData.stayType || orderData.stay_type,
       status: 'pending'
     };
@@ -1520,7 +1529,8 @@ async function fastCheckIn(orderData, createdBy = 'system') {
 
       await checkIn(normalized.orderId, depositAmount, client, {
         roomFeePaymentSplits: normalized.roomFeePaymentSplits,
-        depositPaymentSplits: normalized.depositPaymentSplits
+        depositPaymentSplits: normalized.depositPaymentSplits,
+        depositPaymentMethod: normalized.depositPaymentMethod
       });
 
       await client.query('COMMIT');

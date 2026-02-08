@@ -41,6 +41,41 @@ describe('办理入住接口', () => {
 
   });
 
+  test('办理入住可单独指定押金支付方式', async () => {
+    const orderPayload = buildOrderPayload({
+      orderId: `deposit_method_${Date.now()}`,
+      guestName: `押金方式客户_${Date.now()}`,
+      status: 'pending',
+      paymentMethod: '现金',
+      deposit: 0
+    });
+    await createOrder(orderPayload);
+
+    const response = await request(app)
+      .post(`/api/orders/${orderPayload.orderId}/check-in`)
+      .send({
+        deposit: 66,
+        depositPaymentMethod: '微信'
+      });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.success).toBe(true);
+
+    const depositBill = await query(
+      `SELECT pay_way, change_price
+         FROM bills
+        WHERE order_id = $1
+          AND change_type = '收押'
+        ORDER BY bill_id ASC
+        LIMIT 1`,
+      [orderPayload.orderId]
+    );
+
+    expect(depositBill.rows.length).toBe(1);
+    expect(depositBill.rows[0].pay_way).toBe('微信');
+    expect(Number(depositBill.rows[0].change_price)).toBeCloseTo(66, 5);
+  });
+
   test('支持房费与押金拆分支付办理入住', async () => {
     const orderPayload = buildOrderPayload({
       orderId: `split_checkin_${Date.now()}`,

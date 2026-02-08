@@ -248,6 +248,7 @@ async function handleCheckInConfirm(order) {
   try {
     await orderStore.checkIn(order.orderNumber, {
       deposit: order.deposit,
+      depositPaymentMethod: order.depositPaymentMethod,
       roomFeePaymentSplits: order.roomFeePaymentSplits,
       depositPaymentSplits: order.depositPaymentSplits
     })

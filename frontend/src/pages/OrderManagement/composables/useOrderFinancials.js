@@ -46,14 +46,20 @@ export function useOrderFinancials(currentOrderRef) {
     const order = currentOrderRef.value
     if (!order) return false
 
-    // 只有已退房状态才能彻底退押金 (根据业务逻辑调整)
-    const allowedStatuses = ['checked-out']
+    // 与后端规则保持一致：已退房/已取消均可退押
+    const allowedStatuses = ['checked-out', 'cancelled']
     if (!allowedStatuses.includes(order.status)) return false
 
-    // 剩余押金 > 0 且 已退金额计算无误
-    // 这里简化逻辑：只要剩余押金 > 0 即可
-    // 注意：这里的 remainingDeposit 是 ref，需要 .value
-    return remainingDeposit.value > 0
+    // 优先使用后端实时余额；接口未返回时，回退到订单快照，避免按钮误隐藏
+    const orderId = String(order.orderNumber || '')
+    const remoteOrderId = String(depositInfo.value?.orderId || '')
+    if (orderId && remoteOrderId && orderId === remoteOrderId) {
+      return remainingDeposit.value > 0
+    }
+
+    const localDeposit = Number(order.deposit) || 0
+    const localRefunded = Number(order.refundedDeposit) || 0
+    return localDeposit - localRefunded > 0
   })
 
   return {

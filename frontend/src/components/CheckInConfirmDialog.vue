@@ -275,6 +275,19 @@
                       />
                     </div>
                   </div>
+                  <div class="row q-col-gutter-sm items-center q-mb-xs">
+                    <div class="col-12 col-sm-6">
+                      <q-select
+                        v-model="depositPaymentMethod"
+                        :options="normalizedPaymentOptions"
+                        emit-value
+                        map-options
+                        dense
+                        outlined
+                        label="押金支付方式"
+                      />
+                    </div>
+                  </div>
                   <div
                     v-for="(split, index) in depositPaymentSplits"
                     :key="`deposit-split-${index}`"
@@ -410,6 +423,7 @@ const loading = ref(false)
 
 // 押金金额（可编辑）
 const depositAmount = ref(0)
+const depositPaymentMethod = ref('现金')
 const roomFeePaymentSplits = ref([])
 const depositPaymentSplits = ref([])
 
@@ -496,7 +510,7 @@ function removeRoomFeeSplit(index) {
 
 function addDepositSplit() {
   if ((Number(depositAmount.value) || 0) <= 0) return
-  depositPaymentSplits.value.push({ method: getDefaultMethod(), amount: 0 })
+  depositPaymentSplits.value.push({ method: normalizeMethod(depositPaymentMethod.value), amount: 0 })
 }
 
 function removeDepositSplit(index) {
@@ -506,6 +520,9 @@ function removeDepositSplit(index) {
 
 function resetPaymentSplits(newOrder) {
   const defaultMethod = normalizeMethod(newOrder?.paymentMethod || newOrder?.payment_method)
+  depositPaymentMethod.value = normalizeMethod(
+    newOrder?.depositPaymentMethod || newOrder?.deposit_payment_method || defaultMethod
+  )
   roomFeePaymentSplits.value = normalizeIncomingSplits(
     newOrder?.roomFeePaymentSplits,
     remainingRoomFee.value,
@@ -514,7 +531,7 @@ function resetPaymentSplits(newOrder) {
   depositPaymentSplits.value = normalizeIncomingSplits(
     newOrder?.depositPaymentSplits,
     depositAmount.value,
-    defaultMethod
+    depositPaymentMethod.value
   )
 }
 
@@ -629,6 +646,22 @@ watch(depositAmount, (newValue) => {
   }
 })
 
+watch(depositPaymentMethod, (method) => {
+  const normalized = normalizeMethod(method)
+  if (normalized !== method) {
+    depositPaymentMethod.value = normalized
+    return
+  }
+  if (depositPaymentSplits.value.length <= 1) {
+    const amount = normalizeAmount(depositAmount.value)
+    if (amount <= 0) {
+      depositPaymentSplits.value = []
+      return
+    }
+    depositPaymentSplits.value = buildSingleSplit(amount, normalized)
+  }
+})
+
 function sanitizeSplits(rawSplits, targetAmount) {
   const targetCents = toCents(targetAmount)
   if (targetCents <= 0) return []
@@ -677,6 +710,7 @@ async function confirmCheckIn() {
     const orderWithDeposit = {
       ...props.order,
       deposit: normalizeAmount(depositAmount.value),
+      depositPaymentMethod: normalizeMethod(depositPaymentMethod.value),
       roomFeePaymentSplits: normalizedRoomFeeSplits || [],
       depositPaymentSplits: normalizedDepositSplits || []
     }

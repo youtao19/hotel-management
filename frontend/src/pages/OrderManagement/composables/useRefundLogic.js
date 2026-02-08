@@ -14,10 +14,22 @@ export function useRefundLogic(refreshAllData) {
   const refundDepositOrder = ref(null)
   const refundableMap = ref({})
 
-  const allowedRefundStatuses = ['checked-out']
+  const allowedRefundStatuses = ['checked-out', 'cancelled']
 
   const toDecimal = (val) => {
     try { return new Decimal(val || 0) } catch (e) { return new Decimal(0) }
+  }
+
+  function isEligibleRefundOrder(order) {
+    if (!order) return false
+    const deposit = toDecimal(order.deposit)
+    return allowedRefundStatuses.includes(order.status) && deposit.gt(0)
+  }
+
+  function getLocalRemainingDeposit(order) {
+    const deposit = toDecimal(order?.deposit)
+    const refunded = toDecimal(order?.refundedDeposit || 0)
+    return deposit.minus(refunded)
   }
 
   // 核心计算：判断订单是否可退押
@@ -27,8 +39,8 @@ export function useRefundLogic(refreshAllData) {
       const key = String(order.orderNumber)
       const deposit = toDecimal(order.deposit)
 
-      // 基础校验：非退房状态或无押金，直接不可退
-      if (!allowedRefundStatuses.includes(order.status) || deposit.lte(0)) {
+      // 基础校验：非可退状态或无押金，直接不可退
+      if (!isEligibleRefundOrder(order)) {
         refundableMap.value[key] = false
         return
       }
@@ -64,8 +76,13 @@ export function useRefundLogic(refreshAllData) {
   // 批量刷新所有订单的可退状态
   async function refreshRefundableStatus(orders = []) {
     const list = Array.isArray(orders) ? orders : []
+    const nextMap = {}
+    list.forEach((o) => {
+      if (o?.orderNumber) nextMap[String(o.orderNumber)] = false
+    })
+    refundableMap.value = nextMap
     const tasks = list
-      .filter(o => allowedRefundStatuses.includes(o.status) && toDecimal(o.deposit).gt(0))
+      .filter(o => isEligibleRefundOrder(o))
       .map(o => computeRefundable(o))
     if (tasks.length) await Promise.allSettled(tasks)
   }
@@ -73,11 +90,13 @@ export function useRefundLogic(refreshAllData) {
   // 同步判断 helper (用于 Template)
   function canRefundDeposit(order) {
     try {
-      if (!order) return false
+      if (!isEligibleRefundOrder(order)) return false
       const key = String(order.orderNumber)
       const cached = refundableMap.value[key]
-      if (cached === undefined) return false
-      return cached === true
+      if (cached !== undefined) return cached === true
+
+      // 缓存尚未建立时兜底：用订单快照估算，避免按钮被误隐藏
+      return getLocalRemainingDeposit(order).greaterThan(0)
     } catch (e) {
       return false
     }

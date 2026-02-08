@@ -56,4 +56,39 @@ test.describe('押金测试', () => {
 
   });
 
+  test('已取消订单显示退押按钮', async ({ page }) => {
+    const { guestName } = await checkIn(page);
+
+    await filterOrdersByKeyword(page, guestName);
+
+    const checkedInRow = page
+      .locator('table tbody tr')
+      .filter({ has: page.locator('.q-badge', { hasText: '已入住' }) })
+      .first();
+    await expect(checkedInRow).toBeVisible();
+
+    // 取消已入住订单（保留押金），随后应允许退押
+    await checkedInRow.getByTestId('orders-row-cancel').click();
+    await expect(page.getByText('确认取消')).toBeVisible();
+    await page.getByRole('button', { name: '确定' }).click();
+
+    const cancelSuccessNotify = page.locator('.q-notification.bg-positive').filter({
+      hasText: '订单已取消'
+    });
+    await expect(cancelSuccessNotify).toBeVisible();
+
+    await filterOrdersByKeyword(page, guestName);
+
+    const cancelledRow = page
+      .locator('table tbody tr')
+      .filter({ has: page.locator('.q-badge', { hasText: '已取消' }) })
+      .first();
+    await expect(cancelledRow).toBeVisible();
+    await expect(cancelledRow.getByTestId('orders-row-refund')).toBeVisible();
+
+    // 验证按钮可点击并能打开退押弹窗
+    await cancelledRow.getByTestId('orders-row-refund').click();
+    await expect(page.getByText('account_balance_wallet 退押金')).toBeVisible();
+  });
+
 });
