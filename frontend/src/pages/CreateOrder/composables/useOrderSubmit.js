@@ -69,11 +69,21 @@ export function useOrderSubmit(orderData, dailyPrices, dateList, totalPrice) {
 
   async function handleCheckInConfirm(orderWithDeposit) {
     try {
-        // ... (原有的快速入住 payload 组装逻辑)
+        const {
+          roomFeePaymentSplits: rawRoomFeeSplits,
+          depositPaymentSplits: rawDepositSplits,
+          ...restOrder
+        } = orderWithDeposit || {}
+
         const payload = {
-            ...orderWithDeposit,
-            // 确保格式正确，此处简化展示，请保留原有详细字段映射
-            status: 'checked-in'
+          ...restOrder,
+          status: 'checked-in',
+          ...(Array.isArray(rawRoomFeeSplits) && rawRoomFeeSplits.length
+            ? { roomFeePaymentSplits: rawRoomFeeSplits }
+            : {}),
+          ...(Array.isArray(rawDepositSplits) && rawDepositSplits.length
+            ? { depositPaymentSplits: rawDepositSplits }
+            : {})
         }
         await orderApi.fastCheckIn(payload)
         $q.notify({ type: 'positive', message: '快速入住成功' })

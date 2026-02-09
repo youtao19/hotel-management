@@ -28,6 +28,17 @@ const splitItemSchema = {
   additionalProperties: false
 };
 
+function normalizeOptionalSplitField(rawValue) {
+  if (rawValue === undefined || rawValue === null) return undefined;
+  if (Array.isArray(rawValue)) {
+    return rawValue.length > 0 ? rawValue : undefined;
+  }
+  if (typeof rawValue === 'object') {
+    return Object.keys(rawValue).length > 0 ? rawValue : undefined;
+  }
+  return rawValue;
+}
+
 
 const createOrderSchema = {
   type: 'object',
@@ -621,6 +632,12 @@ router.post('/:orderId/check-in', async (req, res) => {
 router.post('/fast-check-in', async (req, res) => {
   try {
     const body = req.body || {};
+    const normalizedRoomFeeSplits = normalizeOptionalSplitField(
+      body.roomFeePaymentSplits ?? body.room_fee_payment_splits
+    );
+    const normalizedDepositSplits = normalizeOptionalSplitField(
+      body.depositPaymentSplits ?? body.deposit_payment_splits
+    );
     const orderData = {
       orderId: body.orderId || body.order_id,
       sourceNumber: body.sourceNumber || body.idSource || body.id_source || '',
@@ -637,8 +654,8 @@ router.post('/fast-check-in', async (req, res) => {
       deposit: body.deposit,
       isPrepaid: body.isPrepaid,
       prepaidAmount: body.prepaidAmount || body.prepaid_amount,
-      roomFeePaymentSplits: body.roomFeePaymentSplits || body.room_fee_payment_splits,
-      depositPaymentSplits: body.depositPaymentSplits || body.deposit_payment_splits,
+      roomFeePaymentSplits: normalizedRoomFeeSplits,
+      depositPaymentSplits: normalizedDepositSplits,
       depositPaymentMethod: body.depositPaymentMethod || body.deposit_payment_method,
       stayType: body.stayType || body.stay_type,
       createTime: body.createTime || body.create_time,

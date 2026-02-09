@@ -266,6 +266,44 @@ describe('快速入住接口', () => {
     expect(roomStatus.rows[0].status).toBe('occupied');
   });
 
+  test('快速入住兼容空支付拆分字段', async () => {
+    const payload = buildOrderPayload({
+      orderId: `fast_checkin_empty_split_${Date.now()}`,
+      guestName: '快速入住空拆分客户',
+      roomTypes: 'asu_xiao_zhu',
+      roomNumber: '109',
+      checkInDate: '2025-12-18',
+      checkOutDate: '2025-12-19',
+      stayType: '客房',
+      paymentMethod: '微信',
+      deposit: 0,
+      roomFeePaymentSplits: [],
+      depositPaymentSplits: [],
+      status: 'pending'
+    });
+
+    const response = await request(app)
+      .post('/api/orders/fast-check-in')
+      .send(payload);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.message).toBe('快速入住成功');
+
+    const roomFeeBills = await query(
+      `SELECT pay_way, change_price
+         FROM bills
+        WHERE order_id = $1
+          AND change_type = '房费'
+        ORDER BY bill_id ASC`,
+      [payload.orderId]
+    );
+
+    expect(roomFeeBills.rows.length).toBe(1);
+    expect(roomFeeBills.rows[0].pay_way).toBe('微信');
+    expect(Number.isFinite(Number(roomFeeBills.rows[0].change_price))).toBe(true);
+  });
+
   test('快速入住休息房', async () => {
     const payload = buildOrderPayload({
       orderId: `fast_checkin_Rest`,

@@ -505,6 +505,9 @@ export const useOrderStore = defineStore('order', () => {
       loading.value = true;
       error.value = null;
 
+      const normalizedRoomFeeSplits = normalizePaymentSplits(order.roomFeePaymentSplits)
+      const normalizedDepositSplits = normalizePaymentSplits(order.depositPaymentSplits)
+
       // Prepare data (similar to addOrder)
       const orderData = {
         orderId: order.orderNumber?.toString(),
@@ -521,8 +524,12 @@ export const useOrderStore = defineStore('order', () => {
         depositPaymentMethod: typeof order.depositPaymentMethod === 'string'
           ? order.depositPaymentMethod.trim()
           : undefined,
-        roomFeePaymentSplits: normalizePaymentSplits(order.roomFeePaymentSplits),
-        depositPaymentSplits: normalizePaymentSplits(order.depositPaymentSplits),
+        ...(normalizedRoomFeeSplits.length
+          ? { roomFeePaymentSplits: normalizedRoomFeeSplits }
+          : {}),
+        ...(normalizedDepositSplits.length
+          ? { depositPaymentSplits: normalizedDepositSplits }
+          : {}),
         remarks: order.remarks?.toString() || '',
         orderSource: normalizeOrderSource(order.source),
         idSource: order.sourceNumber?.toString() || '',
