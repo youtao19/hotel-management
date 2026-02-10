@@ -202,6 +202,65 @@ describe('账单金额调整接口', () => {
     expect(parseFloat(stored.rows[0].change_price)).toBeCloseTo(-payload.change_price);
     expect(Math.sign(parseFloat(stored.rows[0].change_price))).toBe(-1);
   });
+
+  test('按日期查询账单时，不应因订单多日记录重复返回同一账单', async () => {
+    const uniqueSuffix = Date.now();
+    const orderId = `BILL_BY_DATE_${uniqueSuffix}`;
+    const targetDate = '2026-02-09';
+
+    const multiDayOrder = buildOrderPayload({
+      orderId,
+      roomTypes: 'you_ge_yuan_zi',
+      roomNumber: '115',
+      checkInDate: '2036-01-01',
+      checkOutDate: '2036-01-03',
+      roomPrice: {
+        '2036-01-01': 188,
+        '2036-01-02': 188
+      }
+    });
+    await createOrder(multiDayOrder);
+
+    const billInsert = await query(
+      `INSERT INTO bills (
+        order_id,
+        room_number,
+        guest_name,
+        change_price,
+        change_type,
+        pay_way,
+        create_time,
+        stay_type,
+        stay_date
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7::timestamptz,$8,$9::date)
+      RETURNING bill_id`,
+      [
+        orderId,
+        '115',
+        '去重测试',
+        100,
+        '房费',
+        '微信',
+        `${targetDate}T08:00:00+08:00`,
+        '客房',
+        targetDate
+      ]
+    );
+
+    expect(billInsert.rows.length).toBe(1);
+    const insertedBillId = billInsert.rows[0].bill_id;
+
+    const response = await request(app).get(`/api/bills/by-date/${targetDate}`);
+    expect(response.statusCode).toBe(200);
+    expect(response.body.success).toBe(true);
+
+    const { hotelBills = [], restBills = [], carBills = [] } = response.body.data || {};
+    const allBills = [...hotelBills, ...restBills, ...carBills];
+    const matched = allBills.filter((bill) => bill.order_id === orderId);
+
+    expect(matched.length).toBe(1);
+    expect(matched[0].bill_id).toBe(insertedBillId);
+  });
 });
 
 describe('退押金接口', () => {

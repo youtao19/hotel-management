@@ -195,6 +195,7 @@ router.get('/by-date/:date', async (req, res) => {
     const { date } = req.params;
     // 查询指定日期的所有账单，关联订单信息
     // 规则：全部账单统一按 create_time 的日期过滤
+    // 注意：orders 为按天拆分结构，同一 order_id 可能有多行，需避免 join 造成账单重复展开
     const sql = `
       SELECT
         b.bill_id,
@@ -210,7 +211,24 @@ router.get('/by-date/:date', async (req, res) => {
         o.phone,
         o.status as order_status
       FROM bills b
-      LEFT JOIN orders o ON b.order_id = o.order_id
+      LEFT JOIN LATERAL (
+        SELECT
+          ord.stay_type,
+          ord.room_number,
+          ord.guest_name,
+          ord.phone,
+          ord.status,
+          ord.stay_date,
+          ord.create_time
+        FROM orders ord
+        WHERE ord.order_id = b.order_id
+        ORDER BY
+          (ord.stay_date = b.stay_date) DESC,
+          (ord.stay_date = DATE(b.create_time)) DESC,
+          ord.stay_date DESC NULLS LAST,
+          ord.create_time DESC NULLS LAST
+        LIMIT 1
+      ) o ON TRUE
       WHERE DATE(b.create_time) = $1::date
         AND COALESCE(b.pay_way, '') <> '平台'
       ORDER BY o.stay_type, b.order_id, b.bill_id ASC
