@@ -461,8 +461,27 @@ router.put('/:orderNumber/with-bills-v2', authenticationMiddleware, async (req, 
   const { orderNumber } = req.params;
   try {
     const body = req.body || {};
-    const { orderData, roomPrice, changedBy } = body;
-    const result = await orderModule.updateOrderWithBillsV2(orderNumber, orderData, roomPrice, changedBy);
+    const {
+      orderData,
+      roomPrice,
+      changedBy,
+      roomFeePaymentSplits,
+      depositPaymentSplits,
+      depositPaymentMethod
+    } = body;
+    // 说明：修改订单支持传入房费/押金拆分，后端统一做金额校验与账单落库。
+    const paymentSplitPayload = {
+      roomFeePaymentSplits,
+      depositPaymentSplits,
+      depositPaymentMethod
+    };
+    const result = await orderModule.updateOrderWithBillsV2(
+      orderNumber,
+      orderData,
+      roomPrice,
+      changedBy,
+      paymentSplitPayload
+    );
     res.json(result);
   } catch (error) {
     console.error(`联合更新订单(v2) ${orderNumber} 失败:`, error);

@@ -31,6 +31,35 @@ export function useChangeOrderLogic({ modelValueRef, orderRef, availableRoomsRef
 
   const paymentMethodOptions = computed(() => viewStore.paymentMethodOptions)
 
+  const normalizeMethod = (method) => {
+    const normalized = viewStore.normalizePaymentMethodForDB(method)
+    return normalized || viewStore.paymentMethodOptions[0]?.value || '现金'
+  }
+
+  const normalizeSplitRows = (rawSplits, fallbackMethod, fallbackAmount = 0) => {
+    const rows = Array.isArray(rawSplits)
+      ? rawSplits
+        .map((split) => ({
+          method: normalizeMethod(split?.method),
+          amount: toAmountNumber(split?.amount)
+        }))
+        .filter((split) => split.amount > 0)
+      : []
+    if (rows.length) return rows
+    const amount = toAmountNumber(fallbackAmount)
+    if (amount <= 0) return []
+    return [{ method: normalizeMethod(fallbackMethod), amount }]
+  }
+
+  const sanitizeSplitRows = (rawSplits) => {
+    return (Array.isArray(rawSplits) ? rawSplits : [])
+      .map((split) => ({
+        method: normalizeMethod(split?.method),
+        amount: toAmountNumber(split?.amount)
+      }))
+      .filter((split) => split.amount > 0)
+  }
+
   // 生成房间选项列表，用于下拉选择
   // 格式：房间号 (房型) - ¥价格
   const roomOptions = computed(() => {
@@ -51,15 +80,24 @@ export function useChangeOrderLogic({ modelValueRef, orderRef, availableRoomsRef
     return toAmountNumber(sum)
   })
 
+  const roomFeeSplitTotal = computed(() => {
+    return sanitizeSplitRows(editableOrder.value?.roomFeePaymentSplits).reduce((sum, split) => sum + split.amount, 0)
+  })
+
+  const depositSplitTotal = computed(() => {
+    return sanitizeSplitRows(editableOrder.value?.depositPaymentSplits).reduce((sum, split) => sum + split.amount, 0)
+  })
+
   /**
    * 格式化日期用于显示（M月D日）
    */
   function formatDay(dateStr) {
     if (!dateStr) return ''
-    try {
-      const d = new Date(dateStr)
-      return `${d.getMonth() + 1}月${d.getDate()}日`
-    } catch { return dateStr }
+    // 不使用 Date 对账务日期做解析，直接按 YYYY-MM-DD 字符串展示。
+    const normalized = String(dateStr).slice(0, 10)
+    const parts = normalized.split('-')
+    if (parts.length !== 3) return normalized
+    return `${Number(parts[1])}月${Number(parts[2])}日`
   }
 
   function reset() {
@@ -98,6 +136,16 @@ export function useChangeOrderLogic({ modelValueRef, orderRef, availableRoomsRef
 
     clonedOrder.paymentMethod = clonedOrder.paymentMethod || viewStore.paymentMethodOptions[0]?.value || ''
     clonedOrder.deposit = toAmountNumber(clonedOrder.deposit || 0)
+    clonedOrder.roomFeePaymentSplits = normalizeSplitRows(
+      clonedOrder.roomFeePaymentSplits,
+      clonedOrder.paymentMethod,
+      Object.values(clonedOrder.roomPrice || {}).reduce((sum, amount) => sum + (Number(amount) || 0), 0)
+    )
+    clonedOrder.depositPaymentSplits = normalizeSplitRows(
+      clonedOrder.depositPaymentSplits,
+      clonedOrder.paymentMethod,
+      clonedOrder.deposit
+    )
 
     editableOrder.value = clonedOrder
     originalRoomNumber.value = newOrder.roomNumber
@@ -132,6 +180,82 @@ export function useChangeOrderLogic({ modelValueRef, orderRef, availableRoomsRef
     editableOrder.value.roomPrice = updatedPrices
   }
 
+  function addRoomFeeSplitRow() {
+    if (!editableOrder.value) return
+    editableOrder.value.roomFeePaymentSplits = [
+      ...(editableOrder.value.roomFeePaymentSplits || []),
+      { method: normalizeMethod(editableOrder.value.paymentMethod), amount: 0 }
+    ]
+  }
+
+  function removeRoomFeeSplitRow(index) {
+    if (!editableOrder.value) return
+    const rows = Array.isArray(editableOrder.value.roomFeePaymentSplits)
+      ? editableOrder.value.roomFeePaymentSplits
+      : []
+    if (rows.length <= 1) return
+    rows.splice(index, 1)
+  }
+
+  function addDepositSplitRow() {
+    if (!editableOrder.value) return
+    editableOrder.value.depositPaymentSplits = [
+      ...(editableOrder.value.depositPaymentSplits || []),
+      { method: normalizeMethod(editableOrder.value.paymentMethod), amount: 0 }
+    ]
+  }
+
+  function removeDepositSplitRow(index) {
+    if (!editableOrder.value) return
+    const rows = Array.isArray(editableOrder.value.depositPaymentSplits)
+      ? editableOrder.value.depositPaymentSplits
+      : []
+    if (rows.length <= 1) return
+    rows.splice(index, 1)
+  }
+
+  watch(totalRoomPrice, (newTotal) => {
+    if (!editableOrder.value) return
+    const rows = Array.isArray(editableOrder.value.roomFeePaymentSplits)
+      ? editableOrder.value.roomFeePaymentSplits
+      : []
+    // 仅在单条拆分时自动跟随金额变化，避免覆盖用户的多拆分输入。
+    if (rows.length === 1) {
+      rows[0].amount = toAmountNumber(newTotal)
+      rows[0].method = normalizeMethod(rows[0].method || editableOrder.value.paymentMethod)
+    }
+  })
+
+  watch(() => editableOrder.value?.deposit, (newDeposit) => {
+    if (!editableOrder.value) return
+    const rows = Array.isArray(editableOrder.value.depositPaymentSplits)
+      ? editableOrder.value.depositPaymentSplits
+      : []
+    // 仅在单条拆分时自动跟随金额变化，避免覆盖用户的多拆分输入。
+    if (rows.length === 1) {
+      rows[0].amount = toAmountNumber(newDeposit)
+      rows[0].method = normalizeMethod(rows[0].method || editableOrder.value.paymentMethod)
+    }
+  })
+
+  watch(() => editableOrder.value?.paymentMethod, (newMethod) => {
+    if (!editableOrder.value) return
+    const normalized = normalizeMethod(newMethod)
+    if (normalized !== newMethod) {
+      editableOrder.value.paymentMethod = normalized
+      return
+    }
+    const roomRows = Array.isArray(editableOrder.value.roomFeePaymentSplits)
+      ? editableOrder.value.roomFeePaymentSplits
+      : []
+    const depositRows = Array.isArray(editableOrder.value.depositPaymentSplits)
+      ? editableOrder.value.depositPaymentSplits
+      : []
+    // 默认支付方式变化时，单条拆分自动同步方法，多条拆分保持用户输入。
+    if (roomRows.length === 1) roomRows[0].method = normalized
+    if (depositRows.length === 1) depositRows[0].method = normalized
+  })
+
   /**
    * 提交订单修改
    * 1. 计算总价
@@ -152,14 +276,23 @@ export function useChangeOrderLogic({ modelValueRef, orderRef, availableRoomsRef
         room_number: editableOrder.value.roomNumber,
         remarks: editableOrder.value.remarks,
         deposit: toAmountNumber(editableOrder.value.deposit),
-        payment_method: editableOrder.value.paymentMethod
+        payment_method: normalizeMethod(editableOrder.value.paymentMethod)
+      }
+      const roomFeePaymentSplits = sanitizeSplitRows(editableOrder.value.roomFeePaymentSplits)
+      const depositPaymentSplits = sanitizeSplitRows(editableOrder.value.depositPaymentSplits)
+      const paymentSplitPayload = {
+        // 将多支付方式拆分交给后端统一校验与落账，前端仅做录入。
+        roomFeePaymentSplits,
+        depositPaymentSplits,
+        depositPaymentMethod: depositPaymentSplits[0]?.method || normalizeMethod(editableOrder.value.paymentMethod)
       }
 
       await orderApi.updateOrderWithBillsV2(
         editableOrder.value.orderNumber,
         orderData,
         editableOrder.value.roomPrice || {},
-        'user'
+        'user',
+        paymentSplitPayload
       )
 
       $q.notify({ type: 'positive', message: '订单更新成功' })
@@ -191,8 +324,14 @@ export function useChangeOrderLogic({ modelValueRef, orderRef, availableRoomsRef
     paymentMethodOptions,
     roomOptions,
     totalRoomPrice,
+    roomFeeSplitTotal,
+    depositSplitTotal,
     formatDay,
     handleRoomChange,
+    addRoomFeeSplitRow,
+    removeRoomFeeSplitRow,
+    addDepositSplitRow,
+    removeDepositSplitRow,
     submitChange
   }
 }

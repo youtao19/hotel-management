@@ -127,13 +127,117 @@
                 <q-select
                   v-model="editableOrder.paymentMethod"
                   :options="paymentMethodOptions"
-                  label="支付方式"
+                  label="默认支付方式"
                   filled
                   dense
                   emit-value
                   map-options
                 />
               </div>
+            </div>
+            <div class="q-mt-md">
+              <div class="text-caption text-grey-8 q-mb-xs">
+                房费拆分（应收 ¥{{ totalRoomPrice }}，已分配 ¥{{ roomFeeSplitTotal.toFixed(2) }}）
+              </div>
+              <q-markup-table flat bordered dense>
+                <tbody>
+                  <tr
+                    v-for="(split, index) in (editableOrder.roomFeePaymentSplits || [])"
+                    :key="`room-fee-split-${index}`"
+                  >
+                    <td style="width: 50%">
+                      <q-select
+                        v-model="split.method"
+                        :options="paymentMethodOptions"
+                        filled
+                        dense
+                        emit-value
+                        map-options
+                      />
+                    </td>
+                    <td style="width: 40%">
+                      <q-input
+                        v-model.number="split.amount"
+                        type="number"
+                        filled
+                        dense
+                        prefix="¥"
+                      />
+                    </td>
+                    <td style="width: 10%" class="text-center">
+                      <q-btn
+                        flat
+                        round
+                        dense
+                        color="negative"
+                        icon="remove_circle"
+                        @click="removeRoomFeeSplitRow(index)"
+                      />
+                    </td>
+                  </tr>
+                </tbody>
+              </q-markup-table>
+              <q-btn
+                flat
+                dense
+                color="primary"
+                icon="add"
+                label="新增房费支付方式"
+                class="q-mt-sm"
+                @click="addRoomFeeSplitRow"
+              />
+            </div>
+            <div class="q-mt-md">
+              <div class="text-caption text-grey-8 q-mb-xs">
+                押金拆分（应收 ¥{{ Number(editableOrder.deposit || 0).toFixed(2) }}，已分配 ¥{{ depositSplitTotal.toFixed(2) }}）
+              </div>
+              <q-markup-table flat bordered dense>
+                <tbody>
+                  <tr
+                    v-for="(split, index) in (editableOrder.depositPaymentSplits || [])"
+                    :key="`deposit-split-${index}`"
+                  >
+                    <td style="width: 50%">
+                      <q-select
+                        v-model="split.method"
+                        :options="paymentMethodOptions"
+                        filled
+                        dense
+                        emit-value
+                        map-options
+                      />
+                    </td>
+                    <td style="width: 40%">
+                      <q-input
+                        v-model.number="split.amount"
+                        type="number"
+                        filled
+                        dense
+                        prefix="¥"
+                      />
+                    </td>
+                    <td style="width: 10%" class="text-center">
+                      <q-btn
+                        flat
+                        round
+                        dense
+                        color="negative"
+                        icon="remove_circle"
+                        @click="removeDepositSplitRow(index)"
+                      />
+                    </td>
+                  </tr>
+                </tbody>
+              </q-markup-table>
+              <q-btn
+                flat
+                dense
+                color="primary"
+                icon="add"
+                label="新增押金支付方式"
+                class="q-mt-sm"
+                @click="addDepositSplitRow"
+              />
             </div>
           </div>
 
@@ -184,8 +288,14 @@ const {
   paymentMethodOptions,
   roomOptions,
   totalRoomPrice,
+  roomFeeSplitTotal,
+  depositSplitTotal,
   formatDay,
   handleRoomChange,
+  addRoomFeeSplitRow,
+  removeRoomFeeSplitRow,
+  addDepositSplitRow,
+  removeDepositSplitRow,
   submitChange
 } = useChangeOrderLogic({
   modelValueRef: toRef(props, 'modelValue'),

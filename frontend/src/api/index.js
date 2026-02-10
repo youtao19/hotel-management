@@ -147,9 +147,23 @@ export const orderApi = {
   updateOrderWithBills: (orderId, orderData, billUpdates, changedBy = 'system') =>
     api.put(`/orders/${orderId}/with-bills`, { orderData, billUpdates, changedBy }),
 
-  // 更新订单和相关账单（联合事务 v2：后端计算差异 + 按日同步）
-  updateOrderWithBillsV2: (orderId, orderData, roomPrice, changedBy = 'system') =>
-    api.put(`/orders/${orderId}/with-bills-v2`, { orderData, roomPrice, changedBy }),
+  // 更新订单和相关账单（联合事务 v2：后端计算差异 + 按日同步 + 支付拆分）
+  updateOrderWithBillsV2: (
+    orderId,
+    orderData,
+    roomPrice,
+    changedBy = 'system',
+    paymentSplitPayload = {}
+  ) => {
+    // 支付拆分参数保持可选，避免影响历史调用方。
+    const payload = {
+      orderData,
+      roomPrice,
+      changedBy,
+      ...paymentSplitPayload
+    }
+    return api.put(`/orders/${orderId}/with-bills-v2`, payload)
+  },
 
   // 退押金
   refundDeposit: (order_id, refundData) => api.post(`/orders/${order_id}/refund-deposit`, refundData),

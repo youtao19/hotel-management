@@ -1830,8 +1830,9 @@ async function updateOrderWithBills(orderNumber, updatedData, billUpdates = {}, 
  * @param {Object} orderData - 订单通用字段（蛇形命名）
  * @param {Object} roomPrice - { 'YYYY-MM-DD': number|string } 每日房费
  * @param {string} changedBy
+ * @param {Object} paymentSplitPayload - 支付拆分参数（房费/押金多支付方式）
  */
-async function updateOrderWithBillsV2(orderNumber, orderData = {}, roomPrice = {}, changedBy = 'system') {
+async function updateOrderWithBillsV2(orderNumber, orderData = {}, roomPrice = {}, changedBy = 'system', paymentSplitPayload = {}) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
@@ -1849,6 +1850,105 @@ async function updateOrderWithBillsV2(orderNumber, orderData = {}, roomPrice = {
 
     const normalizedOrderData = orderData && typeof orderData === 'object' ? orderData : {};
     const normalizedRoomPrice = roomPrice && typeof roomPrice === 'object' ? roomPrice : {};
+    const normalizedPaymentSplitPayload = paymentSplitPayload && typeof paymentSplitPayload === 'object'
+      ? paymentSplitPayload
+      : {};
+    const roomFeeSplitInput = normalizedPaymentSplitPayload.roomFeePaymentSplits ?? normalizedPaymentSplitPayload.room_fee_payment_splits;
+    const depositSplitInput = normalizedPaymentSplitPayload.depositPaymentSplits ?? normalizedPaymentSplitPayload.deposit_payment_splits;
+    const depositMethodInput = normalizedPaymentSplitPayload.depositPaymentMethod ?? normalizedPaymentSplitPayload.deposit_payment_method;
+    const hasRoomFeeSplitPayload = roomFeeSplitInput !== undefined;
+    const shouldSyncDepositSplits = (
+      normalizedOrderData.deposit !== undefined
+      || depositSplitInput !== undefined
+      || depositMethodInput !== undefined
+    );
+
+    /**
+     * 将同类型账单同步到目标拆分结构（更新/新增/删除）。
+     * 说明：前端只负责录入拆分项，金额校验与账单结构修正统一在后端完成。
+     */
+    const syncSplitBills = async ({
+      existingBills,
+      desiredSplits,
+      changeType,
+      baseRow,
+      stayDate,
+      singleRemark,
+      splitRemark
+    }) => {
+      const rows = Array.isArray(existingBills) ? existingBills : [];
+      const splits = Array.isArray(desiredSplits) ? desiredSplits : [];
+      const remark = splits.length > 1 ? splitRemark : singleRemark;
+      const normalizedStayDate = formatDate(stayDate);
+      const normalizedRoomNumber = normalizedOrderData.room_number || baseRow?.room_number || null;
+      const normalizedGuestName = normalizedOrderData.guest_name || baseRow?.guest_name || null;
+      const normalizedStayType = baseRow?.stay_type || null;
+      let updated = 0;
+      let inserted = 0;
+      let deleted = 0;
+
+      // 优先复用已有账单，保持 bill_id 稳定。
+      for (let i = 0; i < splits.length && i < rows.length; i++) {
+        const split = splits[i];
+        const amount = Math.abs(toAmountNumber(split.amount));
+        await client.query(
+          `UPDATE bills
+              SET change_price = $1,
+                  pay_way = $2,
+                  room_number = $3,
+                  guest_name = $4,
+                  stay_type = $5,
+                  remarks = $6,
+                  stay_date = $7::date
+            WHERE bill_id = $8`,
+          [
+            amount,
+            normalizePayWay(split.method, DEFAULT_PAY_WAY),
+            normalizedRoomNumber,
+            normalizedGuestName,
+            normalizedStayType,
+            remark,
+            normalizedStayDate,
+            rows[i].bill_id
+          ]
+        );
+        updated++;
+      }
+
+      // 不足部分补充新增账单。
+      for (let i = rows.length; i < splits.length; i++) {
+        const split = splits[i];
+        await billModule.addBill(
+          {
+            order_id: orderNumber,
+            room_number: normalizedRoomNumber,
+            guest_name: normalizedGuestName,
+            change_price: Math.abs(toAmountNumber(split.amount)),
+            change_type: changeType,
+            pay_way: normalizePayWay(split.method, DEFAULT_PAY_WAY),
+            remarks: remark,
+            stay_type: normalizedStayType,
+            stay_date: normalizedStayDate
+          },
+          client
+        );
+        inserted++;
+      }
+
+      // 多余账单删除，避免老拆分残留。
+      if (rows.length > splits.length) {
+        const deleteIds = rows.slice(splits.length).map((row) => Number(row.bill_id)).filter((id) => Number.isFinite(id));
+        if (deleteIds.length) {
+          await client.query(
+            `DELETE FROM bills WHERE bill_id = ANY($1::int[])`,
+            [deleteIds]
+          );
+          deleted = deleteIds.length;
+        }
+      }
+
+      return { updated, inserted, deleted };
+    };
 
     // 1) 更新订单通用字段（更新所有分行）
     const updateableFields = ['guest_name', 'phone', 'room_type', 'room_number', 'payment_method', 'remarks', 'deposit'];
@@ -1904,27 +2004,106 @@ async function updateOrderWithBillsV2(orderNumber, orderData = {}, roomPrice = {
       billUpdateResults.push({ stayDate, orderUpdated, billUpdated });
     }
 
-    // 3) 押金：同步更新收押账单（若存在）
-    if (normalizedOrderData.deposit !== undefined) {
-      const deposit = toAmountNumber(normalizedOrderData.deposit);
-      const { rows: depositBills } = await client.query(
+    const { rows: latestOrderRows } = await client.query(
+      `SELECT * FROM ${tableName} WHERE order_id = $1 ORDER BY stay_date`,
+      [orderNumber]
+    );
+    const firstOrderRow = latestOrderRows[0];
+
+    // 3) 房费拆分：支持将一个订单拆分到多个支付方式（按日同步）。
+    if (hasRoomFeeSplitPayload) {
+      const roomFeeFallbackMethod = normalizePayWay(
+        normalizedOrderData.payment_method || firstOrderRow?.payment_method,
+        firstOrderRow?.payment_method || DEFAULT_PAY_WAY
+      );
+      const roomFeeSplitsByDay = normalizeRoomFeePaymentSplits(
+        latestOrderRows,
+        roomFeeSplitInput,
+        roomFeeFallbackMethod
+      );
+      for (const row of latestOrderRows) {
+        const stayDate = formatDate(row.stay_date);
+        const desiredSplits = roomFeeSplitsByDay.get(stayDate) || [];
+        const { rows: existingBills } = await client.query(
+          `SELECT bill_id
+             FROM bills
+            WHERE order_id = $1
+              AND change_type = '房费'
+              AND stay_date = $2::date
+            ORDER BY bill_id ASC
+            FOR UPDATE`,
+          [orderNumber, stayDate]
+        );
+        const syncResult = await syncSplitBills({
+          existingBills,
+          desiredSplits,
+          changeType: '房费',
+          baseRow: row,
+          stayDate,
+          singleRemark: '修改订单房费',
+          splitRemark: '修改订单房费(拆分)'
+        });
+        billUpdateResults.push({
+          stayDate,
+          orderUpdated: 1,
+          billUpdated: syncResult.updated + syncResult.inserted,
+          billDeleted: syncResult.deleted
+        });
+      }
+
+      // 房费存在多支付方式时，订单摘要支付方式自动切换为“混合支付”。
+      const summaryPaymentMethod = getRoomFeeSummaryPaymentMethod(roomFeeSplitsByDay, roomFeeFallbackMethod);
+      await client.query(
+        `UPDATE ${tableName}
+            SET payment_method = $1
+          WHERE order_id = $2`,
+        [summaryPaymentMethod, orderNumber]
+      );
+      normalizedOrderData.payment_method = summaryPaymentMethod;
+    }
+
+    // 4) 押金拆分：支持收押金额拆分到多个支付方式。
+    if (shouldSyncDepositSplits) {
+      const currentDeposit = normalizedOrderData.deposit !== undefined
+        ? toAmountNumber(normalizedOrderData.deposit)
+        : toAmountNumber(firstOrderRow?.deposit || 0);
+      const depositFallbackMethod = normalizePayWay(
+        depositMethodInput || normalizedOrderData.payment_method || firstOrderRow?.payment_method,
+        firstOrderRow?.payment_method || DEFAULT_PAY_WAY
+      );
+      const desiredDepositSplits = normalizeDepositPaymentSplits(
+        depositSplitInput,
+        currentDeposit,
+        depositFallbackMethod
+      );
+      const { rows: existingDepositBills } = await client.query(
         `SELECT bill_id
            FROM bills
           WHERE order_id = $1
             AND change_type = '收押'
-          ORDER BY create_time ASC
-          LIMIT 1`,
+          ORDER BY bill_id ASC
+          FOR UPDATE`,
         [orderNumber]
       );
-      if (depositBills.length) {
-        await client.query(
-          `UPDATE bills SET change_price = $1 WHERE bill_id = $2`,
-          [Math.abs(deposit), depositBills[0].bill_id]
-        );
-      }
+      const syncResult = await syncSplitBills({
+        existingBills: existingDepositBills,
+        desiredSplits: desiredDepositSplits,
+        changeType: '收押',
+        baseRow: firstOrderRow,
+        stayDate: firstOrderRow?.check_in_date,
+        singleRemark: '修改订单押金',
+        splitRemark: '修改订单押金(拆分)'
+      });
+      billUpdateResults.push({
+        stayDate: formatDate(firstOrderRow?.check_in_date),
+        orderUpdated: 1,
+        billUpdated: syncResult.updated + syncResult.inserted,
+        billDeleted: syncResult.deleted,
+        changeType: '收押'
+      });
     }
 
-    // 4) 换房：同步更新账单房间号（如果 room_number 变化）
+    // 5) 换房：同步更新账单房间号（如果 room_number 变化）。
     if (normalizedOrderData.room_number !== undefined) {
       await client.query(
         `UPDATE bills SET room_number = $1 WHERE order_id = $2`,
@@ -1932,8 +2111,8 @@ async function updateOrderWithBillsV2(orderNumber, orderData = {}, roomPrice = {
       );
     }
 
-    // 5) 支付方式变更：同步更新房费账单支付方式
-    if (normalizedOrderData.payment_method !== undefined) {
+    // 6) 单一支付方式更新：仅在未传房费拆分时保留原有同步行为。
+    if (!hasRoomFeeSplitPayload && normalizedOrderData.payment_method !== undefined) {
       const { rows: [paywayStat] } = await client.query(
         `SELECT COUNT(DISTINCT pay_way) AS payway_count
            FROM bills
@@ -1970,6 +2149,7 @@ async function updateOrderWithBillsV2(orderNumber, orderData = {}, roomPrice = {
             action: 'update_order_with_bills_v2',
             order_fields: normalizedOrderData,
             room_price: normalizedRoomPrice,
+            payment_splits: normalizedPaymentSplitPayload,
             bill_updates: billUpdateResults
           }),
           normalizedOrderData.reason || '订单信息更新（含房费/账单同步）'
