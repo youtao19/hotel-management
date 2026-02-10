@@ -437,27 +437,11 @@ router.put('/:orderNumber/day-room', authenticationMiddleware, async (req, res) 
 });
 
 /**
- * 更新订单和相关账单（联合事务）
+ * 更新订单和相关账单（联合事务：后端计算差异 + 按日同步）
  * PUT /api/orders/:orderNumber/with-bills
- */
-router.put('/:orderNumber/with-bills', authenticationMiddleware, async (req, res) => {
-  const { orderNumber } = req.params;
-  try {
-    const { orderData, billUpdates, changedBy } = req.body;
-    const result = await orderModule.updateOrderWithBills(orderNumber, orderData, billUpdates, changedBy);
-    res.json(result);
-  } catch (error) {
-    console.error(`联合更新订单 ${orderNumber} 失败:`, error);
-    res.status(500).json({ success: false, message: '联合更新失败', error: error.message });
-  }
-});
-
-/**
- * 更新订单和相关账单（联合事务，新版：后端计算差异 + 按日同步）
- * PUT /api/orders/:orderNumber/with-bills-v2
  * body: { orderData, roomPrice, changedBy }
  */
-router.put('/:orderNumber/with-bills-v2', authenticationMiddleware, async (req, res) => {
+router.put('/:orderNumber/with-bills', authenticationMiddleware, async (req, res) => {
   const { orderNumber } = req.params;
   try {
     const body = req.body || {};
@@ -475,7 +459,7 @@ router.put('/:orderNumber/with-bills-v2', authenticationMiddleware, async (req, 
       depositPaymentSplits,
       depositPaymentMethod
     };
-    const result = await orderModule.updateOrderWithBillsV2(
+    const result = await orderModule.updateOrderWithBills(
       orderNumber,
       orderData,
       roomPrice,
@@ -484,13 +468,13 @@ router.put('/:orderNumber/with-bills-v2', authenticationMiddleware, async (req, 
     );
     res.json(result);
   } catch (error) {
-    console.error(`联合更新订单(v2) ${orderNumber} 失败:`, error);
+    console.error(`联合更新订单 ${orderNumber} 失败:`, error);
     const status = error.statusCode || 500;
     res.status(status).json({
       success: false,
       message: status === 500 ? '联合更新失败' : error.message,
       error: error.message,
-      code: error.code || 'UPDATE_WITH_BILLS_V2_ERROR'
+      code: error.code || 'UPDATE_WITH_BILLS_ERROR'
     });
   }
 });

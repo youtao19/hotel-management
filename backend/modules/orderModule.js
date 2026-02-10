@@ -1625,204 +1625,6 @@ async function checkOut(orderId, client) {
 }
 
 /**
- * 更新订单和相关账单（联合事务）
- * @param {string} orderNumber - 订单号
- * @param {Object} updatedData - 更新数据
- * @param {Object} billUpdates - 账单更新数据 { "2025-09-12": { room_fee: 300 }, "2025-09-13": { room_fee: 350 } }
- * @param {string} changedBy - 修改人
- * @returns {Promise<Object>} 更新结果
- */
-async function updateOrderWithBills(orderNumber, updatedData, billUpdates = {}, changedBy = 'system') {
-  const client = await getClient();
-  try {
-    await client.query('BEGIN');
-
-    // 获取原始订单数据
-    const { rows: [oldOrder] } = await client.query(
-      `SELECT * FROM ${tableName} WHERE order_id = $1`,
-      [orderNumber]
-    );
-
-    if (!oldOrder) {
-      throw new Error(`订单 ${orderNumber} 不存在`);
-    }
-
-    const { rows: billColumnRows } = await client.query(
-      `SELECT column_name
-         FROM information_schema.columns
-        WHERE table_schema = current_schema()
-          AND table_name = 'bills'`
-    );
-    const existingBillColumns = new Set(billColumnRows.map(row => row.column_name));
-    const hasChangePriceColumn = existingBillColumns.has('change_price');
-    const billFieldMap = {
-      room_fee: existingBillColumns.has('room_fee') ? 'room_fee' : (hasChangePriceColumn ? 'change_price' : null),
-      deposit: existingBillColumns.has('deposit') ? 'deposit' : null,
-      refund_deposit: existingBillColumns.has('refund_deposit') ? 'refund_deposit' : null,
-      total_income: existingBillColumns.has('total_income') ? 'total_income' : null,
-      pay_way: existingBillColumns.has('pay_way') ? 'pay_way' : null,
-      remarks: existingBillColumns.has('remarks') ? 'remarks' : null,
-      change_price: hasChangePriceColumn ? 'change_price' : null
-    };
-
-    // 1. 更新账单表
-    const billUpdateResults = [];
-    for (const [stayDate, billData] of Object.entries(billUpdates)) {
-      if (billData && Object.keys(billData).length > 0) {
-        console.log(`📝 [updateOrderWithBills] 更新日期 ${stayDate} 的账单:`, billData);
-
-        const updateFields = [];
-        const values = [];
-        const skippedFields = [];
-        let paramIndex = 1;
-
-        Object.entries(billData).forEach(([field, rawValue]) => {
-          const normalizedField = typeof field === 'string' ? field.trim() : field;
-          let targetColumn = billFieldMap[normalizedField];
-
-          if (!targetColumn && existingBillColumns.has(normalizedField)) {
-            targetColumn = normalizedField;
-          }
-
-          if (!targetColumn) {
-            skippedFields.push(normalizedField);
-            console.warn(`⚠️ [updateOrderWithBills] 字段 ${normalizedField} 在 bills 表中不存在，已跳过`);
-            return;
-          }
-
-          let value = rawValue;
-          if (['room_fee', 'change_price', 'deposit', 'refund_deposit', 'total_income'].includes(targetColumn)) {
-            const parsed = Number(rawValue);
-            value = Number.isFinite(parsed) ? parsed : 0;
-          }
-
-          if (normalizedField === 'room_fee' && targetColumn === 'change_price') {
-            console.log('ℹ️ [updateOrderWithBills] 将 room_fee 映射为 change_price 字段');
-          }
-
-          updateFields.push(`${targetColumn} = $${paramIndex}`);
-          values.push(value);
-          paramIndex++;
-        });
-
-        if (updateFields.length > 0) {
-          const billUpdateQuery = `
-            UPDATE bills
-            SET ${updateFields.join(', ')}
-            WHERE order_id = $${paramIndex} AND DATE(stay_date) = DATE($${paramIndex + 1})
-            RETURNING *
-          `;
-          values.push(orderNumber, stayDate);
-
-          const billResult = await client.query(billUpdateQuery, values);
-          billUpdateResults.push({
-            date: stayDate,
-            updated: billResult.rows.length > 0,
-            data: billResult.rows[0] || null,
-            skippedFields
-          });
-
-          if (billResult.rows.length === 0) {
-            console.warn(`⚠️ [updateOrderWithBills] 未找到订单 ${orderNumber} 日期 ${stayDate} 的账单记录`);
-          } else {
-            console.log(`✅ [updateOrderWithBills] 成功更新日期 ${stayDate} 的账单`);
-          }
-        } else {
-          billUpdateResults.push({
-            date: stayDate,
-            updated: false,
-            data: null,
-            skippedFields
-          });
-          console.warn(`⚠️ [updateOrderWithBills] 日期 ${stayDate} 没有可更新字段，已跳过`);
-        }
-      }
-    }
-
-    // 2. 更新订单表
-    let updatedOrder = oldOrder;
-    let paymentMethodUpdated = false;
-    let newPaymentMethod = null;
-
-    if (updatedData && Object.keys(updatedData).length > 0) {
-      const updates = [];
-      const orderValues = [];
-      const changes = {}; // 记录变更
-      let paramIndex = 1;
-
-      // 处理可更新字段
-      const updateableFields = ['guest_name', 'phone', 'room_type',
-        'room_number', 'check_in_date', 'check_out_date',
-        'payment_method', 'total_price', 'deposit', 'remarks'];
-
-      updateableFields.forEach(field => {
-        if (updatedData[field] !== undefined) {
-          const nextValue = updatedData[field];
-          updates.push(`${field} = $${paramIndex}`);
-          orderValues.push(nextValue);
-          changes[field] = {
-            old: oldOrder[field],
-            new: nextValue
-          };
-          if (field === 'payment_method' && nextValue !== oldOrder[field]) {
-            paymentMethodUpdated = true;
-            newPaymentMethod = nextValue;
-          }
-          paramIndex++;
-        }
-      });
-
-      if (updates.length > 0) {
-        // 更新订单表
-        const updateQuery = `
-          UPDATE ${tableName}
-          SET ${updates.join(', ')}
-          WHERE order_id = $${paramIndex}
-          RETURNING *
-        `;
-        orderValues.push(orderNumber);
-
-        const { rows: [orderResult] } = await client.query(updateQuery, orderValues);
-        updatedOrder = orderResult;
-
-        console.log(`📝 [updateOrderWithBills] 订单更新成功:`, changes);
-      }
-    }
-
-    if (paymentMethodUpdated) {
-      const { rowCount: syncedCount } = await client.query(
-        `UPDATE bills
-            SET pay_way = $1
-          WHERE order_id = $2
-            AND change_type = '房费'`,
-        [newPaymentMethod, orderNumber]
-      );
-      if (syncedCount > 0) {
-        console.log(`🧾 [updateOrderWithBills] 同步更新 ${syncedCount} 条房费账单支付方式 -> ${newPaymentMethod}`);
-      } else {
-        console.log('ℹ️ [updateOrderWithBills] 未找到需要同步支付方式的房费账单');
-      }
-    }
-
-    await client.query('COMMIT');
-
-    return {
-      success: true,
-      order: updatedOrder,
-      billUpdates: billUpdateResults,
-      message: '订单和账单更新成功'
-    };
-
-  } catch (error) {
-    await client.query('ROLLBACK');
-    console.error(`❌ [updateOrderWithBills] 更新订单 ${orderNumber} 和账单失败:`, error);
-    throw error;
-  } finally {
-    client.release();
-  }
-}
-
-/**
  * 联合更新订单与账单（新版：后端负责差异计算与按日更新）
  * - 订单为多日分行结构：按 stay_date 更新 orders.total_price
  * - 同步更新 bills（change_type='房费'）对应 stay_date 的 change_price
@@ -1832,7 +1634,7 @@ async function updateOrderWithBills(orderNumber, updatedData, billUpdates = {}, 
  * @param {string} changedBy
  * @param {Object} paymentSplitPayload - 支付拆分参数（房费/押金多支付方式）
  */
-async function updateOrderWithBillsV2(orderNumber, orderData = {}, roomPrice = {}, changedBy = 'system', paymentSplitPayload = {}) {
+async function updateOrderWithBills(orderNumber, orderData = {}, roomPrice = {}, changedBy = 'system', paymentSplitPayload = {}) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
@@ -2131,7 +1933,7 @@ async function updateOrderWithBillsV2(orderNumber, orderData = {}, roomPrice = {
           [normalizedOrderData.payment_method, orderNumber]
         );
       } else {
-        console.log(`ℹ️ [updateOrderWithBillsV2] 订单 ${orderNumber} 存在混合支付房费账单，跳过 pay_way 同步`);
+        console.log(`ℹ️ [updateOrderWithBills] 订单 ${orderNumber} 存在混合支付房费账单，跳过 pay_way 同步`);
       }
     }
 
@@ -2146,7 +1948,7 @@ async function updateOrderWithBillsV2(orderNumber, orderData = {}, roomPrice = {
           orderNumber,
           changedBy,
           JSON.stringify({
-            action: 'update_order_with_bills_v2',
+            action: 'update_order_with_bills',
             order_fields: normalizedOrderData,
             room_price: normalizedRoomPrice,
             payment_splits: normalizedPaymentSplitPayload,
@@ -2156,7 +1958,7 @@ async function updateOrderWithBillsV2(orderNumber, orderData = {}, roomPrice = {
         ]
       );
     } catch (e) {
-      console.warn('⚠️ [updateOrderWithBillsV2] 保存变更记录失败:', e.message);
+      console.warn('⚠️ [updateOrderWithBills] 保存变更记录失败:', e.message);
     }
 
     return {
@@ -2167,7 +1969,7 @@ async function updateOrderWithBillsV2(orderNumber, orderData = {}, roomPrice = {
     };
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error(`❌ [updateOrderWithBillsV2] 更新订单 ${orderNumber} 和账单失败:`, error);
+    console.error(`❌ [updateOrderWithBills] 更新订单 ${orderNumber} 和账单失败:`, error);
     throw error;
   } finally {
     client.release();
@@ -2191,7 +1993,6 @@ const table = {
   earlyCheckout,
   getEarlyCheckoutRecommendation,
   updateOrderWithBills,
-  updateOrderWithBillsV2,
   checkIn,
   fastCheckIn,
   checkOut

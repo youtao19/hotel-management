@@ -75,7 +75,7 @@ describe('订单修改接口集成测试', () => {
     expect(checkInResponse.statusCode).toBe(200);
 
     const updateResponse = await request(app)
-      .put(`/api/orders/${orderId}/with-bills-v2`)
+      .put(`/api/orders/${orderId}/with-bills`)
       .send({
         orderData: {
           payment_method: '现金',

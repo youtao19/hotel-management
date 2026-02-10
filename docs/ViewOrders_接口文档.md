@@ -248,9 +248,9 @@
 
 ## 3.4 订单编辑与按日房间
 
-### 3.4.1 修改订单（联合账单更新 v2）
+### 3.4.1 修改订单（联合账单更新）
 - Method：`PUT`
-- Path：`/api/orders/:orderNumber/with-bills-v2`
+- Path：`/api/orders/:orderNumber/with-bills`
 - 用途：修改订单弹窗保存（客人信息/房费/押金/支付方式等）
 - Body：
 ```json
@@ -469,4 +469,3 @@
   - 订单状态是否满足操作前置条件
   - 金额是否保留两位且总和一致
   - 日期格式是否为 `YYYY-MM-DD` 或 `YYYY-MM-DDTHH:mm`
-

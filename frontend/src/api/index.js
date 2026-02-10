@@ -143,12 +143,8 @@ export const orderApi = {
   // 更新订单（支持多字段）
   updateOrder: (orderId, updatedFields) => api.put(`/orders/${orderId}`, updatedFields),
 
-  // 更新订单和相关账单（联合事务）
-  updateOrderWithBills: (orderId, orderData, billUpdates, changedBy = 'system') =>
-    api.put(`/orders/${orderId}/with-bills`, { orderData, billUpdates, changedBy }),
-
-  // 更新订单和相关账单（联合事务 v2：后端计算差异 + 按日同步 + 支付拆分）
-  updateOrderWithBillsV2: (
+  // 更新订单和相关账单（联合事务：后端计算差异 + 按日同步 + 支付拆分）
+  updateOrderWithBills: (
     orderId,
     orderData,
     roomPrice,
@@ -162,7 +158,7 @@ export const orderApi = {
       changedBy,
       ...paymentSplitPayload
     }
-    return api.put(`/orders/${orderId}/with-bills-v2`, payload)
+    return api.put(`/orders/${orderId}/with-bills`, payload)
   },
 
   // 退押金

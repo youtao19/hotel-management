@@ -287,7 +287,7 @@ export function useChangeOrderLogic({ modelValueRef, orderRef, availableRoomsRef
         depositPaymentMethod: depositPaymentSplits[0]?.method || normalizeMethod(editableOrder.value.paymentMethod)
       }
 
-      await orderApi.updateOrderWithBillsV2(
+      await orderApi.updateOrderWithBills(
         editableOrder.value.orderNumber,
         orderData,
         editableOrder.value.roomPrice || {},
