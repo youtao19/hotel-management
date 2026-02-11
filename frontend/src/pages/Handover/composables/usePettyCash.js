@@ -28,7 +28,8 @@ export function usePettyCash() {
 
   const confirmReserveCash = () => {
     updateTotal();
-    retainedAmounts.value = createPaywayBucket({ 现金: pettyCashRows.value[0].cash });
+    // 留存款口径固定：现金留存 320，不受页面展示值影响。
+    retainedAmounts.value = createPaywayBucket({ 现金: DEFAULT_CASH_RESERVE });
   };
 
   const mapReserveRowToBuckets = () => {
@@ -42,10 +43,11 @@ export function usePettyCash() {
   };
 
   const applyYesterdayReserve = (amounts = {}) => {
+    // 备用金口径固定：现金320、微信取后端返回值、微邮付和其他固定0。
     pettyCashRows.value[0].cash = DEFAULT_CASH_RESERVE;
-    pettyCashRows.value[0].wechat = amounts.wechat || 0;
-    pettyCashRows.value[0].weiyoufu = amounts.weiyoufu || 0;
-    pettyCashRows.value[0].other = amounts.other || 0;
+    pettyCashRows.value[0].wechat = Number(amounts.wechat) || 0;
+    pettyCashRows.value[0].weiyoufu = 0;
+    pettyCashRows.value[0].other = 0;
     updateTotal();
   };
 

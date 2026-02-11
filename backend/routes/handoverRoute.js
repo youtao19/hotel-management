@@ -479,6 +479,15 @@ router.get('/check-yesterday', async (req, res) => {
       console.log('查询到的交接款金额:', handoverAmounts);
     }
 
+    // 备用金确认页默认值口径：
+    // 现金固定320，微信取“昨日交接款(微信)”，微邮付与其他固定为0。
+    const reserveDefaults = {
+      cash: 320,
+      wechat: isComplete ? handoverAmounts.wechat : 0,
+      weiyoufu: 0,
+      other: 0
+    };
+
     const responseData = {
       date: queryDate,  // 返回实际查询的日期
       hasRecord,
@@ -487,7 +496,8 @@ router.get('/check-yesterday', async (req, res) => {
       paymentTypes: hasRecord ? result.rows[0].payment_types : [],
       handoverPerson: hasRecord ? result.rows[0].handover_person : null,
       takeoverPerson: hasRecord ? result.rows[0].takeover_person : null,
-      handoverAmounts: handoverAmounts  // 新增：返回昨日的交接款金额
+      handoverAmounts: handoverAmounts,  // 返回昨日的交接款金额
+      reserveDefaults  // 返回备用金确认页默认值
     };
 
     console.log('交接记录检查结果:', responseData);

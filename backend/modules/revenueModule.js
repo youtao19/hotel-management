@@ -67,25 +67,77 @@ function diffDays(date1, date2) {
 
 function buildRevenueExpandedCTE() {
   // 中文注释：
-  // 本任务的“房费收入”口径改为 orders 表：
-  // - 以 orders.total_price 为单日房费（按 stay_date 计入）
-  // - 排除取消订单：status='cancelled'
-  // - 不从 bills 推导（bills 仅用于“详细收入数据”明细表）
+  // 统一“收入统计”口径：
+  // 1) 基础房费：orders.total_price（按 stay_date 计入，排除 cancelled）
+  // 2) 订单补收：bills.change_type='补收' 且金额>0（按 DATE(create_time) 计入）
+  // 3) 租车收入：bills.stay_type='租车收入' 且金额>0（按 DATE(create_time) 计入）
+  // 说明：将不同来源收入统一映射到 revenue_events，后续统计统一从该 CTE 聚合，避免接口口径不一致。
   return `
     WITH order_room_fee AS (
       SELECT
         o.order_id,
         o.room_type,
-        o.room_number,
-        MAX(o.guest_name) AS guest_name,
-        MAX(o.payment_method) AS payment_method,
         o.stay_date::date AS stay_date,
         SUM(COALESCE(o.total_price, 0)) AS room_fee
       FROM orders o
       WHERE o.stay_date::date BETWEEN $1::date AND $2::date
         AND o.status NOT IN ('cancelled')
         AND ($3::text IS NULL OR o.room_type = $3::text)
-      GROUP BY o.order_id, o.room_type, o.room_number, o.stay_date::date
+      GROUP BY o.order_id, o.room_type, o.stay_date::date
+    ),
+    bill_extra_income AS (
+      SELECT
+        b.order_id,
+        CASE
+          WHEN COALESCE(b.stay_type, '') = '租车收入' THEN NULL
+          ELSE ord.room_type
+        END AS room_type,
+        DATE(b.create_time) AS stay_date,
+        SUM(COALESCE(b.change_price, 0)) AS extra_income
+      FROM bills b
+      LEFT JOIN LATERAL (
+        SELECT
+          o.room_type
+        FROM orders o
+        WHERE o.order_id = b.order_id
+        ORDER BY o.stay_date DESC NULLS LAST, o.create_time DESC NULLS LAST
+        LIMIT 1
+      ) ord ON TRUE
+      WHERE DATE(b.create_time) BETWEEN $1::date AND $2::date
+        AND COALESCE(b.change_price, 0) > 0
+        AND (
+          b.change_type = '补收'
+          OR COALESCE(b.stay_type, '') = '租车收入'
+        )
+        AND (
+          $3::text IS NULL
+          OR (
+            COALESCE(b.stay_type, '') <> '租车收入'
+            AND ord.room_type = $3::text
+          )
+        )
+      GROUP BY
+        b.order_id,
+        CASE
+          WHEN COALESCE(b.stay_type, '') = '租车收入' THEN NULL
+          ELSE ord.room_type
+        END,
+        DATE(b.create_time)
+    ),
+    revenue_events AS (
+      SELECT
+        order_id,
+        room_type,
+        stay_date,
+        room_fee AS revenue_amount
+      FROM order_room_fee
+      UNION ALL
+      SELECT
+        order_id,
+        room_type,
+        stay_date,
+        extra_income AS revenue_amount
+      FROM bill_extra_income
     )
   `;
 }
@@ -103,8 +155,8 @@ async function getDailyRevenue(startDate, endDate, roomType) {
       SELECT
         stay_date AS date,
         COUNT(DISTINCT order_id) AS order_count,
-        ROUND(SUM(room_fee)::numeric, 2) AS total_revenue
-      FROM order_room_fee
+        ROUND(SUM(revenue_amount)::numeric, 2) AS total_revenue
+      FROM revenue_events
       GROUP BY stay_date
     ),
     calendar AS (
@@ -140,8 +192,8 @@ async function getWeeklyRevenue(startDate, endDate, roomType) {
       SELECT
         stay_date AS date,
         COUNT(DISTINCT order_id) AS order_count,
-        ROUND(SUM(room_fee)::numeric, 2) AS total_revenue
-      FROM order_room_fee
+        ROUND(SUM(revenue_amount)::numeric, 2) AS total_revenue
+      FROM revenue_events
       GROUP BY stay_date
     ),
     weekly AS (
@@ -184,8 +236,8 @@ async function getMonthlyRevenue(startDate, endDate, roomType) {
       SELECT
         stay_date AS date,
         COUNT(DISTINCT order_id) AS order_count,
-        ROUND(SUM(room_fee)::numeric, 2) AS total_revenue
-      FROM order_room_fee
+        ROUND(SUM(revenue_amount)::numeric, 2) AS total_revenue
+      FROM revenue_events
       GROUP BY stay_date
     ),
     monthly AS (
@@ -227,8 +279,8 @@ async function getOverview(startDate, endDate) {
     ${buildRevenueExpandedCTE()}
     SELECT
       COUNT(DISTINCT order_id)::int AS total_orders,
-      ROUND(COALESCE(SUM(room_fee)::numeric, 0), 2) AS total_revenue
-    FROM order_room_fee
+      ROUND(COALESCE(SUM(revenue_amount)::numeric, 0), 2) AS total_revenue
+    FROM revenue_events
   `;
 
   const res = await query(sql, [startDate, endDate, null]);
@@ -249,7 +301,7 @@ function minDateString(a, b) {
 /**
  * 获取快速统计（今日/本周/本月）
  * 中文注释：
- * - 今日收入：stay_date = today 且 status != 'cancelled' 的 total_price 汇总
+ * - 今日收入：orders.total_price + bills(补收/租车收入) 的合并口径
  * - 本周/本月：始终以数据库 current_date 为截止日（不跟随前端单日筛选）
  * - 通过 1 次汇总 SQL 同时计算三张卡片数据，减少重复查询
  */
@@ -269,14 +321,14 @@ async function getQuickStatsSummary(selectedToday) {
     ${buildRevenueExpandedCTE()}
     SELECT
       COUNT(DISTINCT CASE WHEN stay_date = $4::date THEN order_id END)::int AS today_orders,
-      ROUND(COALESCE(SUM(CASE WHEN stay_date = $4::date THEN room_fee END)::numeric, 0), 2) AS today_revenue,
+      ROUND(COALESCE(SUM(CASE WHEN stay_date = $4::date THEN revenue_amount END)::numeric, 0), 2) AS today_revenue,
 
       COUNT(DISTINCT CASE WHEN stay_date BETWEEN $5::date AND $2::date THEN order_id END)::int AS week_orders,
-      ROUND(COALESCE(SUM(CASE WHEN stay_date BETWEEN $5::date AND $2::date THEN room_fee END)::numeric, 0), 2) AS week_revenue,
+      ROUND(COALESCE(SUM(CASE WHEN stay_date BETWEEN $5::date AND $2::date THEN revenue_amount END)::numeric, 0), 2) AS week_revenue,
 
       COUNT(DISTINCT CASE WHEN stay_date BETWEEN $6::date AND $2::date THEN order_id END)::int AS month_orders,
-      ROUND(COALESCE(SUM(CASE WHEN stay_date BETWEEN $6::date AND $2::date THEN room_fee END)::numeric, 0), 2) AS month_revenue
-    FROM order_room_fee
+      ROUND(COALESCE(SUM(CASE WHEN stay_date BETWEEN $6::date AND $2::date THEN revenue_amount END)::numeric, 0), 2) AS month_revenue
+    FROM revenue_events
   `;
 
   const res = await query(sql, [
@@ -319,11 +371,13 @@ async function getRoomTypeRevenue(startDate, endDate) {
   const sql = `
     ${buildRevenueExpandedCTE()}
     , type_agg AS (
+      -- 中文注释：房型维度仅统计可归属房型的收入；租车收入无房型归属，不纳入该表。
       SELECT
         room_type,
         COUNT(DISTINCT order_id)::int AS order_count,
-        ROUND(SUM(room_fee)::numeric, 2) AS total_revenue
-      FROM order_room_fee
+        ROUND(SUM(revenue_amount)::numeric, 2) AS total_revenue
+      FROM revenue_events
+      WHERE room_type IS NOT NULL
       GROUP BY room_type
     )
     SELECT
@@ -350,19 +404,52 @@ async function getRoomTypeRevenue(startDate, endDate) {
 /**
  * 详细收入数据（账单明细）
  */
-async function getRevenueBillDetails({ date: filterDate, roomNumber } = {}) {
+async function getRevenueBillDetails({
+  date: filterDate,
+  roomNumber,
+  orderId,
+  guestName,
+  payWay,
+  changeType
+} = {}) {
   try {
     const params = [];
     const conditions = [];
 
+    // 按单日过滤（create_time 的日期）
     if (filterDate) {
       params.push(filterDate);
       conditions.push(`DATE(b.create_time) = $${params.length}`);
     }
 
+    // 房号精确匹配
     if (roomNumber) {
       params.push(roomNumber);
       conditions.push(`b.room_number = $${params.length}`);
+    }
+
+    // 订单号模糊匹配，便于快速检索
+    if (orderId) {
+      params.push(`%${orderId}%`);
+      conditions.push(`b.order_id ILIKE $${params.length}`);
+    }
+
+    // 客人名模糊匹配
+    if (guestName) {
+      params.push(`%${guestName}%`);
+      conditions.push(`b.guest_name ILIKE $${params.length}`);
+    }
+
+    // 支付方式精确筛选
+    if (payWay) {
+      params.push(payWay);
+      conditions.push(`b.pay_way = $${params.length}`);
+    }
+
+    // 账单类型精确筛选
+    if (changeType) {
+      params.push(changeType);
+      conditions.push(`b.change_type = $${params.length}`);
     }
 
     const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -378,7 +465,8 @@ async function getRevenueBillDetails({ date: filterDate, roomNumber } = {}) {
         b.pay_way,
         b.create_time,
         b.remarks,
-        b.stay_date
+        b.stay_date,
+        b.stay_type
       FROM bills b
       ${whereClause}
       ORDER BY DATE(b.create_time) DESC, b.room_number DESC, b.bill_id DESC

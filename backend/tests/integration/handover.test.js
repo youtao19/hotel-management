@@ -394,6 +394,13 @@ describe('交接班接口集成测试', () => {
       weiyoufu: 0,
       other: 0
     });
+    // 备用金确认口径：现金固定320，其他渠道按后端默认值返回。
+    expect(checkYesterdayRes.body.data.reserveDefaults).toEqual({
+      cash: 320,
+      wechat: 0,
+      weiyoufu: 0,
+      other: 0
+    });
 
     const billsRes = await request(app)
       .get(`/api/bills/by-date/${targetDate}`);
@@ -491,6 +498,13 @@ describe('交接班接口集成测试', () => {
       'wechat': 2197.5,
       'weiyoufu': 1144,
       'other': 0
+    });
+    // 微信备用金来自昨日微信交接款，微邮付与其他固定为0。
+    expect(checkYesterdayRes.body.data.reserveDefaults).toEqual({
+      cash: 320,
+      wechat: 2197.5,
+      weiyoufu: 0,
+      other: 0
     });
 
     const reserve = checkYesterdayRes.body.data.handoverAmounts;

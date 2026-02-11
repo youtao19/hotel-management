@@ -221,8 +221,8 @@ router.get('/quick-stats', async (req, res) => {
 });
 
 /**
- * 获取账单明细（支持日期、房间号过滤）
- * GET /api/revenue/bills?date=YYYY-MM-DD&roomNumber=101
+ * 获取账单明细（支持多条件过滤）
+ * GET /api/revenue/bills?date=YYYY-MM-DD&roomNumber=101&orderId=ORD&guestName=张三&payWay=微信&changeType=补收
  * 前端使用位置：
  * - `frontend/src/api/index.js`：`revenueApi.getRevenueBills(params)`
  * - `frontend/src/pages/Revenue/composables/useDetailedBills.js`：`fetchData()`（DetailedBillTable）
@@ -232,21 +232,37 @@ router.get('/quick-stats', async (req, res) => {
  */
 router.get('/bills', async (req, res) => {
     try {
-        const { date: queryDate, roomNumber } = req.query;
+        const {
+            date: queryDate,
+            roomNumber,
+            orderId,
+            guestName,
+            payWay,
+            changeType
+        } = req.query;
 
-        if (queryDate) {
-            if (!isDateString(queryDate)) {
-                return res.status(400).json({
-                    success: false,
-                    message: '日期格式错误，请使用YYYY-MM-DD'
-                });
-            }
+        // 单日过滤参数校验
+        if (queryDate && !isDateString(queryDate)) {
+            return res.status(400).json({
+                success: false,
+                message: 'date 日期格式错误，请使用YYYY-MM-DD'
+            });
         }
 
+        // 字符串参数统一去空格，避免输入首尾空格导致筛选异常
         const sanitizedRoomNumber = roomNumber ? String(roomNumber).trim() : undefined;
+        const sanitizedOrderId = orderId ? String(orderId).trim() : undefined;
+        const sanitizedGuestName = guestName ? String(guestName).trim() : undefined;
+        const sanitizedPayWay = payWay ? String(payWay).trim() : undefined;
+        const sanitizedChangeType = changeType ? String(changeType).trim() : undefined;
+
         const bills = await getRevenueBillDetails({
             date: queryDate || undefined,
-            roomNumber: sanitizedRoomNumber || undefined
+            roomNumber: sanitizedRoomNumber || undefined,
+            orderId: sanitizedOrderId || undefined,
+            guestName: sanitizedGuestName || undefined,
+            payWay: sanitizedPayWay || undefined,
+            changeType: sanitizedChangeType || undefined
         });
 
         res.json({
@@ -266,7 +282,7 @@ router.get('/bills', async (req, res) => {
 
 
 /**
- * 获取每日营收明细 (基于orders订单表)
+ * 获取每日营收明细（统一收入口径）
  * GET /api/revenue/daily-details
  * @param {string} startDate - 开始日期 (YYYY-MM-DD)
  * @param {string} endDate - 结束日期 (YYYY-MM-DD)
@@ -297,45 +313,100 @@ router.get('/daily-details', async (req, res) => {
             });
         }
 
-        console.log('获取每日营收明细(orders.total_price):', { startDate, endDate, roomType });
+        console.log('获取每日营收明细(orders + bills补收/租车):', { startDate, endDate, roomType });
 
         // 中文注释：
-        // - “每日营收明细”口径改为 orders 表（按 stay_date 展示单日房费 total_price）
-        // - 排除取消订单：status='cancelled'
-        // - 不从 bills 推导（bills 仅用于“详细收入数据”）
-        let sql = `
+        // - 订单房费收入：orders.total_price（按 stay_date）
+        // - 订单补收收入：bills.change_type='补收'（按 DATE(create_time)）
+        // - 租车收入：bills.stay_type='租车收入'（按 DATE(create_time)）
+        // - roomType 过滤只作用于可归属房型收入（租车收入无房型归属，筛选房型时不计入）
+        const sql = `
+            WITH order_income AS (
+                SELECT
+                    o.order_id::text AS id,
+                    o.order_id::text AS order_number,
+                    o.room_number,
+                    o.guest_name,
+                    o.room_type,
+                    rt.type_name AS room_type_name,
+                    o.stay_date::date AS stay_date,
+                    COALESCE(o.total_price, 0) AS total_amount,
+                    o.payment_method,
+                    o.check_out_date,
+                    1 AS sort_type
+                FROM orders o
+                LEFT JOIN room_types rt ON o.room_type = rt.type_code
+                WHERE o.stay_date::date BETWEEN $1::date AND $2::date
+                  AND o.status NOT IN ('cancelled')
+                  AND ($3::text IS NULL OR o.room_type = $3::text)
+            ),
+            bill_income AS (
+                SELECT
+                    ('BILL-' || b.bill_id)::text AS id,
+                    COALESCE(b.order_id, ('CAR-' || b.bill_id)::text) AS order_number,
+                    COALESCE(b.room_number, '租车收入') AS room_number,
+                    COALESCE(b.guest_name, '未知客户') AS guest_name,
+                    CASE
+                        WHEN COALESCE(b.stay_type, '') = '租车收入' THEN NULL
+                        ELSE ord.room_type
+                    END AS room_type,
+                    CASE
+                        WHEN COALESCE(b.stay_type, '') = '租车收入' THEN '租车收入'
+                        ELSE COALESCE(rt.type_name, ord.room_type)
+                    END AS room_type_name,
+                    DATE(b.create_time) AS stay_date,
+                    COALESCE(b.change_price, 0) AS total_amount,
+                    b.pay_way AS payment_method,
+                    NULL::date AS check_out_date,
+                    2 AS sort_type
+                FROM bills b
+                LEFT JOIN LATERAL (
+                    SELECT
+                        o.room_type
+                    FROM orders o
+                    WHERE o.order_id = b.order_id
+                    ORDER BY o.stay_date DESC NULLS LAST, o.create_time DESC NULLS LAST
+                    LIMIT 1
+                ) ord ON TRUE
+                LEFT JOIN room_types rt ON rt.type_code = ord.room_type
+                WHERE DATE(b.create_time) BETWEEN $1::date AND $2::date
+                  AND COALESCE(b.change_price, 0) > 0
+                  AND (
+                    b.change_type = '补收'
+                    OR COALESCE(b.stay_type, '') = '租车收入'
+                  )
+                  AND (
+                    $3::text IS NULL
+                    OR (
+                        COALESCE(b.stay_type, '') <> '租车收入'
+                        AND ord.room_type = $3::text
+                    )
+                  )
+            )
             SELECT
-                o.order_id,
-                o.room_number,
-                o.guest_name,
-                o.room_type,
-                rt.type_name as room_type_name,
-                o.stay_date::date AS stay_date,
-                COALESCE(o.total_price, 0) AS total_amount,
-                o.payment_method,
-                o.check_out_date
-            FROM orders o
-            LEFT JOIN room_types rt ON o.room_type = rt.type_code
-            WHERE o.stay_date::date BETWEEN $1::date AND $2::date
-              AND o.status NOT IN ('cancelled')
+                id,
+                order_number,
+                room_number,
+                guest_name,
+                room_type,
+                room_type_name,
+                stay_date,
+                total_amount,
+                payment_method,
+                check_out_date
+            FROM (
+                SELECT * FROM order_income
+                UNION ALL
+                SELECT * FROM bill_income
+            ) t
+            ORDER BY stay_date DESC, sort_type ASC, room_number ASC, order_number ASC
         `;
 
-        const params = [startDate, endDate];
-
-        if (roomType) {
-            sql += ` AND o.room_type = $3`;
-            params.push(roomType);
-        }
-
-        sql += `
-            ORDER BY o.stay_date::date DESC, o.room_number ASC, o.order_id ASC
-        `;
-
-        const result = await query(sql, params);
+        const result = await query(sql, [startDate, endDate, roomType || null]);
 
         const filteredDetails = (result.rows || []).map(row => ({
-            id: row.order_id,
-            order_number: row.order_id,
+            id: row.id,
+            order_number: row.order_number,
             room_number: row.room_number,
             guest_name: row.guest_name || '未知客户',
             room_type: row.room_type,
@@ -343,7 +414,7 @@ router.get('/daily-details', async (req, res) => {
             total_amount: parseFloat(row.total_amount || 0),
             payment_method: row.payment_method,
             stay_date: String(row.stay_date || ''),
-            check_out_date: String(row.check_out_date || ''),
+            check_out_date: row.check_out_date ? String(row.check_out_date) : '',
             stay_date_display: String(row.stay_date || '')
         }));
 

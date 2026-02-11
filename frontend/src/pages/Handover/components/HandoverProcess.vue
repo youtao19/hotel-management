@@ -64,36 +64,43 @@
             class="reserve-cash-table"
           >
             <template #body-cell-cash="props">
-              <q-td :props="props" class="input-cell">
-                <q-input v-model.number="props.row.cash" type="number" dense borderless prefix="¥" @update:model-value="updateTotal" />
+              <q-td :props="props">
+                <div class="amount-cell">¥{{ formatAmount(props.row.cash) }}</div>
               </q-td>
             </template>
             <template #body-cell-wechat="props">
-              <q-td :props="props" class="input-cell">
-                <q-input v-model.number="props.row.wechat" type="number" dense borderless prefix="¥" @update:model-value="updateTotal" />
+              <q-td :props="props">
+                <div class="amount-cell">¥{{ formatAmount(props.row.wechat) }}</div>
               </q-td>
             </template>
             <template #body-cell-weiyoufu="props">
-              <q-td :props="props" class="input-cell">
-                <q-input v-model.number="props.row.weiyoufu" type="number" dense borderless prefix="¥" @update:model-value="updateTotal" />
+              <q-td :props="props">
+                <div class="amount-cell">¥{{ formatAmount(props.row.weiyoufu) }}</div>
               </q-td>
             </template>
             <template #body-cell-other="props">
-              <q-td :props="props" class="input-cell">
-                <q-input v-model.number="props.row.other" type="number" dense borderless prefix="¥" @update:model-value="updateTotal" />
+              <q-td :props="props">
+                <div class="amount-cell">¥{{ formatAmount(props.row.other) }}</div>
               </q-td>
             </template>
             <template #body-cell-total="props">
               <q-td :props="props" class="total-amount-cell">
                 <div class="text-weight-bold text-primary total-amount">
-                  ¥{{ props.row.total.toFixed(2) }}
+                  ¥{{ formatAmount(props.row.total) }}
                 </div>
               </q-td>
             </template>
           </q-table>
 
           <div class="text-center q-mt-md">
-            <q-btn color="positive" icon="check" label="确认备用金" @click="confirmReserveCash" />
+            <q-btn
+              :color="reserveConfirmed ? 'grey-6' : 'positive'"
+              :icon="reserveConfirmed ? 'check_circle' : 'check'"
+              :label="reserveConfirmed ? '备用金已确认' : '确认备用金'"
+              :loading="isConfirmingReserve"
+              :disable="isConfirmingReserve || reserveConfirmed"
+              @click="handleConfirmReserveCash"
+            />
           </div>
         </q-card-section>
       </q-card>
@@ -202,7 +209,6 @@
 import { computed, ref, onMounted } from "vue";
 import { useQuasar } from "quasar";
 import { useUserStore } from "src/stores/userStore";
-import { useShiftHandoverStore } from "src/stores/shiftHandoverStore";
 import CheckData from "./CheckData.vue";
 import ShiftHandoverPaymentTable from "./ShiftHandoverPaymentTable.vue";
 import ShiftHandoverSpecialStats from "./ShiftHandoverSpecialStats.vue";
@@ -224,11 +230,12 @@ const emit = defineEmits(["step-change", "complete", "logout"]);
 
 const $q = useQuasar();
 const userStore = useUserStore();
-const shiftHandoverStore = useShiftHandoverStore();
 
 const { isCheckingRecord, recordCheckResult, checkYesterdayRecord } = useYesterdayRecord();
 
-const { pettyCashRows, retainedAmounts, updateTotal, confirmReserveCash, mapReserveRowToBuckets, applyYesterdayReserve } = usePettyCash();
+const { pettyCashRows, retainedAmounts, confirmReserveCash, mapReserveRowToBuckets, applyYesterdayReserve } = usePettyCash();
+const isConfirmingReserve = ref(false);
+const reserveConfirmed = ref(false);
 const pettyCashColumns = [
   { name: "label", label: "项目", field: "label", align: "left" },
   { name: "cash", label: "现金", field: "cash", align: "center" },
@@ -308,6 +315,26 @@ const onConfirmRow = ({ row }) => {
   confirmRow(row);
 };
 
+// 备用金金额统一展示为两位小数，避免不同浏览器数字宽度抖动。
+function formatAmount(value) {
+  const normalized = Number(value);
+  if (!Number.isFinite(normalized)) {
+    return "0.00";
+  }
+  return normalized.toFixed(2);
+}
+
+const handleConfirmReserveCash = async () => {
+  try {
+    isConfirmingReserve.value = true;
+    confirmReserveCash();
+    reserveConfirmed.value = true;
+    $q.notify({ type: "positive", message: "备用金确认完成", position: "top" });
+  } finally {
+    isConfirmingReserve.value = false;
+  }
+};
+
 const nextStep = async () => {
   try {
     stepLoading.value = true;
@@ -315,8 +342,14 @@ const nextStep = async () => {
       $q.notify({ type: "warning", message: "请先检查昨日交接记录", position: "top" });
       return;
     }
-    if (props.currentStep === 1 && recordCheckResult.value.hasRecord) {
-      applyYesterdayReserve(shiftHandoverStore.yesterdayHandoverAmounts || {});
+    if (props.currentStep === 1) {
+      // 第2步直接使用后端返回的备用金默认值，不再在前端做业务口径判断。
+      applyYesterdayReserve(recordCheckResult.value.reserveDefaults || {});
+      reserveConfirmed.value = false;
+    }
+    if (props.currentStep === 2 && !reserveConfirmed.value) {
+      $q.notify({ type: "warning", message: "请先确认备用金", position: "top" });
+      return;
     }
     if (props.currentStep === 3) {
       if (!dataCheckCompleted.value) {
@@ -382,8 +415,36 @@ onMounted(() => {
   display: none;
 }
 
+.reserve-cash-table :deep(thead th) {
+  background: #fafafa;
+  font-weight: 600;
+  padding: 14px 12px;
+}
+
+.reserve-cash-table :deep(tbody td) {
+  padding: 16px 12px;
+  vertical-align: middle;
+}
+
 .reserve-cash-table :deep(th),
 .reserve-cash-table :deep(td) {
   text-align: center;
+}
+
+.reserve-cash-table :deep(th:first-child),
+.reserve-cash-table :deep(td:first-child) {
+  width: 120px;
+  text-align: left;
+  padding-left: 20px;
+}
+
+.reserve-cash-table :deep(th:last-child),
+.reserve-cash-table :deep(td:last-child) {
+  width: 170px;
+}
+
+.amount-cell,
+.total-amount {
+  font-variant-numeric: tabular-nums;
 }
 </style>

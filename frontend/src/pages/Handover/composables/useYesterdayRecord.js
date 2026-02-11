@@ -1,12 +1,10 @@
 import { ref } from "vue";
 import { useQuasar } from "quasar";
 import { shiftHandoverApi } from "src/api";
-import { useShiftHandoverStore } from "src/stores/shiftHandoverStore";
 import { useDecimalUtils } from "./useDecimalUtils";
 
 export function useYesterdayRecord() {
   const $q = useQuasar();
-  const shiftHandoverStore = useShiftHandoverStore();
   const { sumDecimals, toAmountNumber } = useDecimalUtils();
 
   const isCheckingRecord = ref(false);
@@ -15,7 +13,13 @@ export function useYesterdayRecord() {
     hasRecord: false,
     yesterdayDate: "",
     recordCount: 0,
-    reserveAmount: 0
+    reserveAmount: 0,
+    reserveDefaults: {
+      cash: 320,
+      wechat: 0,
+      weiyoufu: 0,
+      other: 0
+    }
   });
 
   const formatLocalDate = (date) => {
@@ -53,12 +57,20 @@ export function useYesterdayRecord() {
         throw new Error(response.message || "检查失败");
       }
 
-      const { date, isComplete, paymentCount, handoverAmounts } = response.data || {};
+      const { date, isComplete, paymentCount, handoverAmounts, reserveDefaults } = response.data || {};
+      // 统一后端口径：现金固定320，微信来自昨日交接款，微邮付/其他固定为0。
+      const normalizedReserveDefaults = {
+        cash: 320,
+        wechat: Number(reserveDefaults?.wechat) || 0,
+        weiyoufu: 0,
+        other: 0
+      };
       recordCheckResult.value.checked = true;
       recordCheckResult.value.hasRecord = Boolean(isComplete);
       recordCheckResult.value.yesterdayDate = date || queryDateStr;
       recordCheckResult.value.recordCount = paymentCount || 0;
       recordCheckResult.value.reserveAmount = 0;
+      recordCheckResult.value.reserveDefaults = normalizedReserveDefaults;
 
       if (isComplete && handoverAmounts) {
         const totalReserve = sumDecimals(
@@ -68,7 +80,6 @@ export function useYesterdayRecord() {
           handoverAmounts.other
         );
         recordCheckResult.value.reserveAmount = toAmountNumber(totalReserve);
-        shiftHandoverStore.setYesterdayHandoverAmounts(handoverAmounts);
         $q.notify({
           type: "positive",
           message: `昨日（${recordCheckResult.value.yesterdayDate}）交接记录完整，交接款 ¥${recordCheckResult.value.reserveAmount.toFixed(
@@ -77,10 +88,9 @@ export function useYesterdayRecord() {
           position: "top"
         });
       } else {
-        shiftHandoverStore.clearYesterdayHandoverAmounts();
         $q.notify({
           type: "warning",
-          message: `昨日（${recordCheckResult.value.yesterdayDate}）无完整交接记录，请在下一步手动输入备用金`,
+          message: `昨日（${recordCheckResult.value.yesterdayDate}）无完整交接记录，微信备用金按 0 处理`,
           position: "top"
         });
       }
@@ -93,6 +103,12 @@ export function useYesterdayRecord() {
       });
       recordCheckResult.value.checked = true;
       recordCheckResult.value.hasRecord = false;
+      recordCheckResult.value.reserveDefaults = {
+        cash: 320,
+        wechat: 0,
+        weiyoufu: 0,
+        other: 0
+      };
     } finally {
       isCheckingRecord.value = false;
     }
