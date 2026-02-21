@@ -61,9 +61,14 @@ export function useEarlyCheckoutLogic(props, emit) {
   // 警告：实际退房时间晚于原计划退房时间 (此时不应属于提前退房)
   const showNotEarlyWarning = computed(() => {
     if (!hasStayed.value) return false
-    if (!recommendation.value) return false
-    return new Date(actualCheckoutTime.value) > new Date(recommendation.value.originalCheckOutTime)
+    // 中文注释：提前退房可行性由后端 recommendation.validation 决定，前端不再自行比较日期。
+    const canEarlyCheckout = recommendation.value?.validation?.canEarlyCheckout
+    if (canEarlyCheckout === undefined) return false
+    return !canEarlyCheckout
   })
+
+  // 后端返回的不可提前退房原因（用于提示文案）
+  const notEarlyWarningText = computed(() => recommendation.value?.validation?.message || '实际退房时间需要早于原退房时间，当前选择可能无法触发提前退房。')
 
   // 表单提交按钮是否可用
   const canSubmit = computed(() => {
@@ -259,6 +264,7 @@ export function useEarlyCheckoutLogic(props, emit) {
     refundAmountRules,
     refundDiffText,
     showNotEarlyWarning,
+    notEarlyWarningText,
     canSubmit,
     // actions
     formatDate,

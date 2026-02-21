@@ -123,9 +123,19 @@ export const roomApi = {
 // 订单相关接口
 export const orderApi = {
   // 获取所有订单
-  getAllOrders: () => {
-    const cacheBuster = `_=${Date.now()}`
-    return api.get(`/orders?${cacheBuster}`)
+  getAllOrders: (filters = {}) => {
+    // 中文注释：列表筛选由后端处理，前端只透传筛选参数。
+    const params = new URLSearchParams()
+    const normalizedSearch = String(filters?.search || '').trim()
+    const normalizedStatus = String(filters?.status || '').trim()
+    const normalizedDate = String(filters?.date || '').trim()
+
+    if (normalizedSearch) params.append('search', normalizedSearch)
+    if (normalizedStatus) params.append('status', normalizedStatus)
+    if (normalizedDate) params.append('date', normalizedDate)
+    params.append('_', String(Date.now()))
+
+    return api.get(`/orders?${params.toString()}`)
   },
 
   // 根据ID获取订单

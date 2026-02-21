@@ -1,12 +1,9 @@
 import { ref } from 'vue'
 import { useQuasar } from 'quasar'
-import Decimal from 'decimal.js'
-import { useBillStore } from 'src/stores/billStore'
 import { useOrderStore } from 'src/stores/orderStore'
 
 export function useRefundLogic(refreshAllData) {
   const $q = useQuasar()
-  const billStore = useBillStore()
   const orderStore = useOrderStore()
 
   // 状态
@@ -16,57 +13,38 @@ export function useRefundLogic(refreshAllData) {
 
   const allowedRefundStatuses = ['checked-out', 'cancelled']
 
-  const toDecimal = (val) => {
-    try { return new Decimal(val || 0) } catch (e) { return new Decimal(0) }
+  // 中文注释：订单列表筛选后端已返回 remainingDeposit，前端只做最小数值归一化。
+  function getRemainingDeposit(order) {
+    const direct = Number(order?.remainingDeposit)
+    if (Number.isFinite(direct)) return Math.max(0, direct)
+
+    // 兜底：兼容未升级数据结构时，使用本地快照估算。
+    const deposit = Number(order?.deposit || 0)
+    const refunded = Number(order?.refundedDeposit || 0)
+    if (!Number.isFinite(deposit) || !Number.isFinite(refunded)) return 0
+    return Math.max(0, deposit - refunded)
   }
 
   function isEligibleRefundOrder(order) {
     if (!order) return false
-    const deposit = toDecimal(order.deposit)
-    return allowedRefundStatuses.includes(order.status) && deposit.gt(0)
+    return allowedRefundStatuses.includes(order.status)
   }
 
-  function getLocalRemainingDeposit(order) {
-    const deposit = toDecimal(order?.deposit)
-    const refunded = toDecimal(order?.refundedDeposit || 0)
-    return deposit.minus(refunded)
-  }
-
-  // 核心计算：判断订单是否可退押
-  async function computeRefundable(order) {
+  // 中文注释：退押按钮资格以后端返回 canRefundDeposit 为准，前端不再解析账单明细。
+  function computeRefundable(order) {
     try {
       if (!order) return
       const key = String(order.orderNumber)
-      const deposit = toDecimal(order.deposit)
-
-      // 基础校验：非可退状态或无押金，直接不可退
       if (!isEligibleRefundOrder(order)) {
         refundableMap.value[key] = false
         return
       }
-
-      // 获取账单计算已退金额
-      const bills = await billStore.getBillsByOrderId(key)
-
-      let refundedFromBills = new Decimal(0)
-      ;(bills || []).forEach(b => {
-        if (b?.change_type === '退押') {
-          const cp = toDecimal(b?.change_price)
-          if (cp.isNegative()) refundedFromBills = refundedFromBills.plus(cp.abs())
-        }
-      })
-
-      const legacyRefund = (bills || []).reduce((sum, b) => {
-        const rd = toDecimal(b?.refund_deposit)
-        if (rd.isNegative()) return sum.plus(rd.abs())
-        return sum
-      }, new Decimal(0))
-
-      const refundedDeposit = toDecimal(order.refundedDeposit || 0)
-      const totalRefunded = Decimal.max(refundedFromBills.plus(legacyRefund), refundedDeposit)
-
-      // 剩余押金 > 0 才显示按钮
-      refundableMap.value[key] = deposit.minus(totalRefunded).greaterThan(0)
+      const backendFlag = order?.canRefundDeposit
+      if (backendFlag === true || backendFlag === false) {
+        refundableMap.value[key] = backendFlag
+        return
+      }
+      refundableMap.value[key] = getRemainingDeposit(order) > 0
     } catch (e) {
       console.warn('computeRefundable 失败，按不可退处理:', e)
       if (order?.orderNumber) refundableMap.value[String(order.orderNumber)] = false
@@ -81,10 +59,9 @@ export function useRefundLogic(refreshAllData) {
       if (o?.orderNumber) nextMap[String(o.orderNumber)] = false
     })
     refundableMap.value = nextMap
-    const tasks = list
+    list
       .filter(o => isEligibleRefundOrder(o))
-      .map(o => computeRefundable(o))
-    if (tasks.length) await Promise.allSettled(tasks)
+      .forEach((o) => computeRefundable(o))
   }
 
   // 同步判断 helper (用于 Template)
@@ -95,8 +72,11 @@ export function useRefundLogic(refreshAllData) {
       const cached = refundableMap.value[key]
       if (cached !== undefined) return cached === true
 
-      // 缓存尚未建立时兜底：用订单快照估算，避免按钮被误隐藏
-      return getLocalRemainingDeposit(order).greaterThan(0)
+      // 缓存尚未建立时兜底：优先走后端字段，避免前端做复杂计算。
+      if (order?.canRefundDeposit === true || order?.canRefundDeposit === false) {
+        return order.canRefundDeposit === true
+      }
+      return getRemainingDeposit(order) > 0
     } catch (e) {
       return false
     }
@@ -122,11 +102,10 @@ export function useRefundLogic(refreshAllData) {
 
       // 刷新数据
       await refreshAllData() // 调用外部传入的刷新函数
-      await billStore.fetchAllBills()
 
-      // 重新计算该订单状态
+      // 重新计算该订单状态（基于最新后端字段）。
       const order = await orderStore.getOrderByNumber(refundData.order_id)
-      if (order) await computeRefundable(order)
+      if (order) computeRefundable(order)
 
       // 交互反馈：退押金成功后提示（用于用户确认与 E2E 断言）
       $q.notify({ type: 'positive', message: '退押金成功', position: 'top' })

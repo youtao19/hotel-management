@@ -9,6 +9,7 @@ const tableName = "orders";
 const VALID_ORDER_STATES = ['pending', 'reserved', 'checked-in', 'checked-out', 'occupied', 'cancelled'];
 const DEFAULT_PAY_WAY = '现金';
 const ALLOWED_SPLIT_PAY_WAYS = new Set(['现金', '微信', '微邮付', '平台']);
+const DATE_FILTER_REGEX = /^\d{4}-\d{2}-\d{2}$/; // 订单列表日期筛选仅接受 YYYY-MM-DD
 
 /**
  * 检查orders表是否存在
@@ -406,38 +407,90 @@ async function getPricingBreakdown(payload) {
  * 在多日分行结构中，按 order_id 聚合，返回订单汇总信息，返回总房费和押金
  * @returns {Promise<Array>} 所有订单列表（聚合后）
  */
-async function getAllOrders() {
+async function getAllOrders(filters = {}) {
   try {
-    // 聚合查询：按 order_id 分组，计算总价和住宿天数
+    // 中文注释：兼容历史调用（无参数时不过滤），并将订单列表筛选统一下沉到后端 SQL。
+    const normalizedFilters = (filters && typeof filters === 'object') ? filters : {};
+    const rawSearch = String(normalizedFilters.search || '').trim();
+    const rawStatus = String(normalizedFilters.status || '').trim();
+    const rawDate = String(normalizedFilters.date || '').trim();
+
+    const searchLike = rawSearch ? `%${rawSearch}%` : null;
+    const statusFilter = rawStatus || null;
+    const dateFilter = DATE_FILTER_REGEX.test(rawDate) ? rawDate : null;
+
+    // 中文注释：先聚合订单，再对聚合结果做筛选，保证筛选口径和列表展示字段一致。
     const result = await query(`
+      WITH aggregated_orders AS (
+        SELECT
+          order_id,
+          MAX(id_source) as id_source,
+          MAX(order_source) as order_source,
+          MAX(guest_name) as guest_name,
+          MAX(phone) as phone,
+          MAX(room_type) as room_type,
+          MAX(room_number) as room_number,
+          MIN(check_in_date) as check_in_date,
+          MAX(check_out_date) as check_out_date,
+          MAX(status) as status,
+          MAX(payment_method) as payment_method,
+          SUM(total_price) as total_price,
+          SUM(deposit) as deposit,
+          MAX(COALESCE(deposit, 0)) as deposit_for_refund,
+          BOOL_OR(is_prepaid) as is_prepaid,
+          SUM(prepaid_amount) as prepaid_amount,
+          GREATEST(SUM(total_price) - SUM(prepaid_amount), 0) as remaining_room_fee,
+          MIN(create_time) as create_time,
+          MAX(stay_type) as stay_type,
+          MAX(remarks) as remarks,
+          COUNT(*) as stay_days,
+          (MIN(check_in_date) = MAX(check_out_date)) as is_rest_room,
+          ARRAY_AGG(stay_date ORDER BY stay_date) as stay_dates,
+          JSONB_OBJECT_AGG(stay_date::text, total_price) as daily_prices
+        FROM orders
+        GROUP BY order_id
+      ),
+      refund_summary AS (
+        -- 中文注释：订单退押统计口径=退押类型且金额为负，按绝对值累计。
+        SELECT
+          b.order_id,
+          ROUND(
+            COALESCE(
+              SUM(
+                CASE
+                  WHEN b.change_type = '退押' THEN ABS(LEAST(COALESCE(b.change_price, 0), 0))
+                  ELSE 0
+                END
+              ),
+              0
+            )::numeric,
+            2
+          ) AS refunded_deposit
+        FROM bills b
+        GROUP BY b.order_id
+      )
       SELECT
-        order_id,
-        MAX(id_source) as id_source,
-        MAX(order_source) as order_source,
-        MAX(guest_name) as guest_name,
-        MAX(phone) as phone,
-        MAX(room_type) as room_type,
-        MAX(room_number) as room_number,
-        MIN(check_in_date) as check_in_date,
-        MAX(check_out_date) as check_out_date,
-        MAX(status) as status,
-        MAX(payment_method) as payment_method,
-        SUM(total_price) as total_price,
-        SUM(deposit) as deposit,
-        BOOL_OR(is_prepaid) as is_prepaid,
-        SUM(prepaid_amount) as prepaid_amount,
-        GREATEST(SUM(total_price) - SUM(prepaid_amount), 0) as remaining_room_fee,
-        MIN(create_time) as create_time,
-        MAX(stay_type) as stay_type,
-        MAX(remarks) as remarks,
-        COUNT(*) as stay_days,
-        (MIN(check_in_date) = MAX(check_out_date)) as is_rest_room,
-        ARRAY_AGG(stay_date ORDER BY stay_date) as stay_dates,
-        JSONB_OBJECT_AGG(stay_date::text, total_price) as daily_prices
-      FROM orders
-      GROUP BY order_id
-      ORDER BY MIN(create_time) DESC
-    `);
+        ao.*,
+        COALESCE(rs.refunded_deposit, 0)::numeric AS refunded_deposit,
+        GREATEST(COALESCE(ao.deposit_for_refund, 0) - COALESCE(rs.refunded_deposit, 0), 0)::numeric AS remaining_deposit,
+        CASE
+          WHEN ao.status IN ('checked-out', 'cancelled')
+            AND GREATEST(COALESCE(ao.deposit_for_refund, 0) - COALESCE(rs.refunded_deposit, 0), 0) > 0
+          THEN TRUE
+          ELSE FALSE
+        END AS can_refund_deposit
+      FROM aggregated_orders ao
+      LEFT JOIN refund_summary rs ON rs.order_id = ao.order_id
+      WHERE ($1::text IS NULL OR (
+          ao.order_id ILIKE $1
+          OR COALESCE(ao.guest_name, '') ILIKE $1
+          OR COALESCE(ao.phone, '') ILIKE $1
+          OR COALESCE(ao.room_number, '') ILIKE $1
+        ))
+        AND ($2::text IS NULL OR ao.status = $2)
+        AND ($3::date IS NULL OR ao.check_in_date = $3::date OR ao.check_out_date = $3::date)
+      ORDER BY ao.create_time DESC
+    `, [searchLike, statusFilter, dateFilter]);
     return result.rows;
   } catch (error) {
     console.error('获取所有订单失败:', error);
@@ -1290,17 +1343,15 @@ async function getEarlyCheckoutRecommendation(orderNumber, actualCheckoutTime, h
     err.statusCode = 400; // 参数错误返回 400
     throw err; // 中断流程
   }
-  const sqlText = hasStayedFlag // 根据是否已入住选择 SQL
-    ? `SELECT order_id, room_number, guest_name, stay_type, payment_method, check_out_date, total_price, deposit, status, stay_date
-       FROM orders
-      WHERE order_id = $1 and stay_date >= $2
-      ORDER BY stay_date`
-    : `SELECT order_id, room_number, guest_name, stay_type, payment_method, check_out_date, total_price, deposit, status, stay_date
+
+  // 中文注释：推荐接口统一查询整笔订单，再由后端判断“是否属于提前退房”，前端只负责展示。
+  const orderRows = await query(
+    `SELECT order_id, room_number, guest_name, stay_type, payment_method, check_out_date, total_price, deposit, status, stay_date
        FROM orders
       WHERE order_id = $1
-      ORDER BY stay_date`; // 未入住退房时，推荐退款覆盖全部天数
-  const sqlParams = hasStayedFlag ? [orderNumber, actualCheckoutDateStr] : [orderNumber]; // 动态组装查询参数
-  const orderRows = await query(sqlText, sqlParams); // 查询订单明细行
+      ORDER BY stay_date`,
+    [orderNumber]
+  );
 
   // 验证订单存在
   if (!orderRows.rows.length) {
@@ -1310,7 +1361,20 @@ async function getEarlyCheckoutRecommendation(orderNumber, actualCheckoutTime, h
     throw err;
   }
 
-  const refundableNights = orderRows.rows.map((row) => ({ // 生成可退款金额明细
+  const allRows = orderRows.rows;
+  const lastRow = allRows[allRows.length - 1];
+  const originalCheckOutTime = formatDate(lastRow?.check_out_date);
+  const canEarlyCheckout = !hasStayedFlag || (actualCheckoutDateStr < originalCheckOutTime);
+  const validationMessage = canEarlyCheckout ? '' : '实际退房日期未早于原退房日期，无法执行提前退房';
+
+  const candidateRows = hasStayedFlag
+    ? allRows.filter((row) => {
+      const stayDate = formatDate(row.stay_date);
+      return Boolean(stayDate && stayDate >= actualCheckoutDateStr);
+    })
+    : allRows;
+
+  const refundableNights = candidateRows.map((row) => ({ // 生成可退款金额明细
     stayDate: formatDate(row.stay_date), // 返回可退款日期用于前端展示
     roomPrice: toAmountNumber(row.total_price) // 统一金额精度用于展示
   }));
@@ -1321,7 +1385,14 @@ async function getEarlyCheckoutRecommendation(orderNumber, actualCheckoutTime, h
 
   return { // 返回推荐退款金额
     recommendedRefund, // 建议退款金额
-    refundableNights // 可退款日期明细
+    refundableNights, // 可退款日期明细
+    originalCheckOutTime, // 原计划退房日（兼容前端展示）
+    actualCheckoutDate: actualCheckoutDateStr || '', // 当前输入的实际退房日
+    validation: { // 前端可直接根据该字段做禁用/提示，不再自行比较日期。
+      canEarlyCheckout,
+      code: canEarlyCheckout ? 'OK' : 'NOT_EARLY',
+      message: validationMessage
+    }
   };
 }
 

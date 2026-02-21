@@ -64,23 +64,67 @@
             class="reserve-cash-table"
           >
             <template #body-cell-cash="props">
-              <q-td :props="props">
-                <div class="amount-cell">¥{{ formatAmount(props.row.cash) }}</div>
+              <q-td :props="props" class="input-cell">
+                <div class="currency-input-wrap">
+                  <span class="currency-symbol">¥</span>
+                  <!-- 原生输入框：固定宽度，避免 Quasar 前缀导致符号与数字分离 -->
+                  <input
+                    v-model.number="props.row.cash"
+                    class="reserve-native-input"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    @input="handleReserveInputChange"
+                  />
+                </div>
               </q-td>
             </template>
             <template #body-cell-wechat="props">
-              <q-td :props="props">
-                <div class="amount-cell">¥{{ formatAmount(props.row.wechat) }}</div>
+              <q-td :props="props" class="input-cell">
+                <div class="currency-input-wrap">
+                  <span class="currency-symbol">¥</span>
+                  <!-- 原生输入框：固定宽度，避免 Quasar 前缀导致符号与数字分离 -->
+                  <input
+                    v-model.number="props.row.wechat"
+                    class="reserve-native-input"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    @input="handleReserveInputChange"
+                  />
+                </div>
               </q-td>
             </template>
             <template #body-cell-weiyoufu="props">
-              <q-td :props="props">
-                <div class="amount-cell">¥{{ formatAmount(props.row.weiyoufu) }}</div>
+              <q-td :props="props" class="input-cell">
+                <div class="currency-input-wrap">
+                  <span class="currency-symbol">¥</span>
+                  <!-- 原生输入框：固定宽度，避免 Quasar 前缀导致符号与数字分离 -->
+                  <input
+                    v-model.number="props.row.weiyoufu"
+                    class="reserve-native-input"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    @input="handleReserveInputChange"
+                  />
+                </div>
               </q-td>
             </template>
             <template #body-cell-other="props">
-              <q-td :props="props">
-                <div class="amount-cell">¥{{ formatAmount(props.row.other) }}</div>
+              <q-td :props="props" class="input-cell">
+                <div class="currency-input-wrap">
+                  <span class="currency-symbol">¥</span>
+                  <!-- 原生输入框：固定宽度，避免 Quasar 前缀导致符号与数字分离 -->
+                  <input
+                    v-model.number="props.row.other"
+                    class="reserve-native-input"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    @input="handleReserveInputChange"
+                  />
+                </div>
               </q-td>
             </template>
             <template #body-cell-total="props">
@@ -233,7 +277,7 @@ const userStore = useUserStore();
 
 const { isCheckingRecord, recordCheckResult, checkYesterdayRecord } = useYesterdayRecord();
 
-const { pettyCashRows, retainedAmounts, confirmReserveCash, mapReserveRowToBuckets, applyYesterdayReserve } = usePettyCash();
+const { pettyCashRows, retainedAmounts, updateTotal, confirmReserveCash, mapReserveRowToBuckets, applyYesterdayReserve } = usePettyCash();
 const isConfirmingReserve = ref(false);
 const reserveConfirmed = ref(false);
 const pettyCashColumns = [
@@ -313,6 +357,12 @@ const handleRetainedAmountUpdate = ({ payWay, value }) => updateRetainedAmount(p
 
 const onConfirmRow = ({ row }) => {
   confirmRow(row);
+};
+
+// 编辑备用金后，实时更新合计并要求重新确认。
+const handleReserveInputChange = () => {
+  updateTotal();
+  reserveConfirmed.value = false;
 };
 
 // 备用金金额统一展示为两位小数，避免不同浏览器数字宽度抖动。
@@ -424,6 +474,53 @@ onMounted(() => {
 .reserve-cash-table :deep(tbody td) {
   padding: 16px 12px;
   vertical-align: middle;
+}
+
+.reserve-cash-table :deep(.input-cell .q-field__native),
+.reserve-cash-table :deep(.input-cell input) {
+  font-variant-numeric: tabular-nums;
+}
+
+.currency-input-wrap {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.currency-symbol {
+  color: #2f2f2f;
+  line-height: 1;
+  width: 12px;
+  text-align: center;
+}
+
+.reserve-native-input {
+  width: 86px;
+  border: 0;
+  background: transparent;
+  color: #2f2f2f;
+  font-size: 16px;
+  line-height: 1;
+  text-align: left;
+  padding: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.reserve-native-input:focus {
+  outline: none;
+}
+
+/* 隐藏 number 输入框默认上下箭头，减少列对齐抖动。 */
+.reserve-cash-table :deep(.input-cell input::-webkit-outer-spin-button),
+.reserve-cash-table :deep(.input-cell input::-webkit-inner-spin-button) {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.reserve-cash-table :deep(.input-cell input[type="number"]) {
+  -moz-appearance: textfield;
 }
 
 .reserve-cash-table :deep(th),

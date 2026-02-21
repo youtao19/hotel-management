@@ -1,6 +1,5 @@
 /* 筛选逻辑 */
 import { ref, computed } from 'vue'
-import { date } from 'quasar'
 
 export function useOrderFilters(allOrdersRef) {
   const searchQuery = ref('')
@@ -14,46 +13,28 @@ export function useOrderFilters(allOrdersRef) {
     { label: '已取消', value: 'cancelled' }
   ]
 
-  // 辅助格式化
+  // 中文注释：日期输入统一裁剪到 YYYY-MM-DD，避免前端参与复杂日期解析。
   const formatDate = (dateStr) => {
     if (!dateStr) return ''
-    if (typeof dateStr === 'string' && dateStr.includes('T')) return dateStr.split('T')[0]
-    const d = new Date(dateStr)
-    return isNaN(d.getTime()) ? dateStr : date.formatDate(d, 'YYYY-MM-DD')
+    const normalized = String(dateStr).trim()
+    if (!normalized) return ''
+    return normalized.slice(0, 10)
   }
 
-  const filteredOrders = computed(() => {
-    let result = allOrdersRef.value || []
-
-    // 搜索
-    if (searchQuery.value) {
-      const query = String(searchQuery.value).toLowerCase()
-      result = result.filter(order => {
-        const orderNo = order.orderNumber ? String(order.orderNumber).toLowerCase() : ''
-        const guest = order.guestName ? String(order.guestName).toLowerCase() : ''
-        const phone = order.phone ? String(order.phone) : ''
-        const room = order.roomNumber ? String(order.roomNumber).toLowerCase() : ''
-        return orderNo.includes(query) || guest.includes(query) || phone.includes(query) || room.includes(query)
-      })
+  // 中文注释：筛选条件由后端执行，这里仅组装查询参数。
+  const queryFilters = computed(() => {
+    const normalizedSearch = String(searchQuery.value || '').trim()
+    const normalizedStatus = filterStatus.value ? String(filterStatus.value).trim() : ''
+    const normalizedDate = formatDate(filterDate.value)
+    return {
+      search: normalizedSearch,
+      status: normalizedStatus,
+      date: normalizedDate
     }
-
-    // 状态筛选
-    if (filterStatus.value) {
-      result = result.filter(order => order.status === filterStatus.value)
-    }
-
-    // 日期筛选
-    if (filterDate.value) {
-      const targetDate = formatDate(filterDate.value)
-      result = result.filter(order => {
-        const checkIn = order.checkInDate ? formatDate(order.checkInDate) : ''
-        const checkOut = order.checkOutDate ? formatDate(order.checkOutDate) : ''
-        return checkIn === targetDate || checkOut === targetDate
-      })
-    }
-
-    return result
   })
+
+  // 中文注释：展示列表直接使用后端返回结果，不在前端二次过滤。
+  const filteredOrders = computed(() => allOrdersRef.value || [])
 
   const clearFilters = () => {
     searchQuery.value = ''
@@ -66,6 +47,7 @@ export function useOrderFilters(allOrdersRef) {
     filterStatus,
     filterDate,
     statusOptions,
+    queryFilters,
     filteredOrders,
     clearFilters,
     formatDate

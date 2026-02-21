@@ -9,6 +9,7 @@ const Ajv = require('ajv');
 const ajv = new Ajv();
 const addFormats = require("ajv-formats");
 addFormats(ajv);
+const ORDER_DATE_FILTER_REGEX = /^\d{4}-\d{2}-\d{2}$/; // 列表筛选日期格式校验
 
 // 定义有效的订单状态
 const VALID_ORDER_STATES = ['pending', 'reserved', 'checked-in', 'checked-out', 'occupied', 'cancelled'];
@@ -173,8 +174,30 @@ const pricingBreakdownSchema = {
  */
 router.get('/', async (req, res) => {
   try {
-    console.log('获取所有订单请求');
-    const orders = await orderModule.getAllOrders();
+    const { search, status, date } = req.query || {};
+    const normalizedSearch = search ? String(search).trim() : '';
+    const normalizedStatus = status ? String(status).trim() : '';
+    const normalizedDate = date ? String(date).trim() : '';
+
+    if (normalizedStatus && !VALID_ORDER_STATES.includes(normalizedStatus)) {
+      return res.status(400).json({
+        message: '订单状态筛选参数不合法',
+        error: 'INVALID_STATUS_FILTER'
+      });
+    }
+    if (normalizedDate && !ORDER_DATE_FILTER_REGEX.test(normalizedDate)) {
+      return res.status(400).json({
+        message: '日期筛选格式错误，请使用 YYYY-MM-DD',
+        error: 'INVALID_DATE_FILTER'
+      });
+    }
+
+    // 中文注释：订单列表筛选逻辑统一在后端处理，前端只传筛选条件。
+    const orders = await orderModule.getAllOrders({
+      search: normalizedSearch || undefined,
+      status: normalizedStatus || undefined,
+      date: normalizedDate || undefined
+    });
     console.log(`成功获取 ${orders.length} 条订单数据`);
     res.status(200).json({ data: orders });
   } catch (err) {

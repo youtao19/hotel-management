@@ -147,11 +147,15 @@ const fetchError = ref(null)
 const { dialogs } = useDialogState()
 
 // --- 2. 核心数据获取 ---
-async function fetchAllOrders() {
+async function fetchAllOrders(explicitFilters = null) {
   try {
     fetchError.value = null
     loadingOrders.value = true
-    await orderStore.fetchAllOrders()
+    // 中文注释：订单筛选逻辑下沉后端，页面只透传筛选参数。
+    const requestFilters = (explicitFilters && typeof explicitFilters === 'object')
+      ? explicitFilters
+      : (queryFilters.value || {})
+    await orderStore.fetchAllOrders(requestFilters)
     await refreshRefundableStatus(orderStore.orders)
   } catch (error) {
     console.error('获取订单数据失败:', error)
@@ -164,12 +168,23 @@ async function retryFetchOrders() { await fetchAllOrders() }
 
 // --- 3. 筛选逻辑 Hook ---
 const {
-  searchQuery, filterStatus, filterDate, statusOptions, filteredOrders, clearFilters, formatDate
+  searchQuery,
+  filterStatus,
+  filterDate,
+  statusOptions,
+  queryFilters,
+  filteredOrders,
+  clearFilters: resetFilterInputs,
+  formatDate
 } = useOrderFilters(toRef(orderStore, 'orders'))
 
-function searchOrders() {
-  loadingOrders.value = true
-  setTimeout(() => { loadingOrders.value = false }, 100)
+async function searchOrders() {
+  await fetchAllOrders(queryFilters.value)
+}
+
+async function clearFilters() {
+  resetFilterInputs()
+  await fetchAllOrders({})
 }
 
 // --- 4. 基础操作 Hook (取消、退房) ---

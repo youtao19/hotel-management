@@ -41,7 +41,13 @@
 - Method：`GET`
 - Path：`/api/orders`
 - 用途：列表加载、刷新
-- Query：无（前端会加 `_` 防缓存参数）
+- Query（均可选）：
+  - `search`：关键词，支持订单号/客人姓名/手机号/房间号模糊匹配
+  - `status`：订单状态（`pending | checked-in | checked-out | cancelled | reserved | occupied`）
+  - `date`：日期（`YYYY-MM-DD`，匹配 `check_in_date` 或 `check_out_date`）
+- 说明：
+  - 订单筛选逻辑由后端执行，前端不再做本地过滤。
+  - 前端仍会附带 `_` 防缓存参数。
 - 成功响应示例：
 ```json
 {
@@ -52,11 +58,18 @@
       "room_number": "201",
       "status": "pending",
       "total_price": 520,
-      "deposit": 100
+      "deposit": 100,
+      "refunded_deposit": 20,
+      "remaining_deposit": 80,
+      "can_refund_deposit": false
     }
   ]
 }
 ```
+- 字段说明（退押按钮口径）：
+  - `refunded_deposit`：该订单累计已退押金额（按 `bills.change_type='退押'` 且负金额汇总）。
+  - `remaining_deposit`：可退押余额，口径为 `max(deposit) - refunded_deposit`（最小为 0）。
+  - `can_refund_deposit`：后端计算后的退押资格（状态需为 `checked-out/cancelled` 且 `remaining_deposit > 0`）。
 
 ### 3.1.2 获取订单详情（按日明细）
 - Method：`GET`
@@ -159,7 +172,14 @@
     "recommendedRefund": 120,
     "refundableNights": [
       { "stayDate": "2026-01-11", "roomPrice": 120 }
-    ]
+    ],
+    "originalCheckOutTime": "2026-01-12",
+    "actualCheckoutDate": "2026-01-11",
+    "validation": {
+      "canEarlyCheckout": true,
+      "code": "OK",
+      "message": ""
+    }
   }
 }
 ```

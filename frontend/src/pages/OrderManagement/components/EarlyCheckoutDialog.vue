@@ -25,7 +25,7 @@
         </div>
 
         <q-banner v-if="logic.showNotEarlyWarning" dense rounded class="bg-orange-1 text-orange-10 q-mb-md">
-          实际退房时间需要早于原退房时间，当前选择可能无法触发提前退房。
+          {{ logic.notEarlyWarningText }}
         </q-banner>
 
         <q-form @submit.prevent="logic.handleSubmit" class="q-gutter-md">

@@ -16,25 +16,42 @@ export const useOrderStore = defineStore('order', () => {
 
   // 防重入：共享进行中的获取请求，避免并发拉取导致级联触发
   let inFlightFetchAll = null
+  let inFlightFetchAllKey = ''
+  let latestFetchToken = 0 // 仅允许最新一次查询结果落地，避免筛选切换时数据回跳
 
-  // 获取所有订单
-  async function fetchAllOrders(retryCount = 0) {
-    // 如果已有进行中的请求，直接返回该请求的结果
-    if (inFlightFetchAll) {
+  // 中文注释：订单列表筛选参数统一标准化，前端只负责透传给后端 API。
+  function normalizeListFilters(filters = {}) {
+    return {
+      search: String(filters?.search || '').trim(),
+      status: String(filters?.status || '').trim(),
+      date: String(filters?.date || '').trim()
+    }
+  }
+
+  // 获取所有订单（支持后端筛选参数）
+  async function fetchAllOrders(filters = {}, retryCount = 0) {
+    const normalizedFilters = normalizeListFilters(filters)
+    const requestKey = JSON.stringify(normalizedFilters)
+    const fetchToken = ++latestFetchToken
+
+    // 如果已有同参数的进行中请求，则复用该请求结果。
+    if (inFlightFetchAll && inFlightFetchAllKey === requestKey) {
       try { return await inFlightFetchAll } finally { }
     }
+
+    inFlightFetchAllKey = requestKey
     inFlightFetchAll = (async () => {
       try {
         loading.value = true
         error.value = null
-        console.log('开始获取订单数据...')
+        console.log('开始获取订单数据...', normalizedFilters)
 
-        const response = await orderApi.getAllOrders()
+        const response = await orderApi.getAllOrders(normalizedFilters)
 
         const rawOrders = response?.data?.data || response?.data || (Array.isArray(response) ? response : [])
         console.log(`成功获取 ${rawOrders.length} 条订单数据`)
 
-        orders.value = rawOrders.map(order => ({
+        const mappedOrders = rawOrders.map(order => ({
           orderNumber: order.order_id,
           guestName: order.guest_name,
           phone: order.phone,
@@ -47,6 +64,9 @@ export const useOrderStore = defineStore('order', () => {
           roomPrice: order.total_price,
           deposit: order.deposit,
           refundedDeposit: order.refunded_deposit || 0,
+          // 中文注释：退押资格相关字段由后端统一计算，前端只读使用。
+          remainingDeposit: order.remaining_deposit ?? null,
+          canRefundDeposit: Boolean(order.can_refund_deposit),
           refundRecords: [],
           createTime: order.create_time,
           remarks: order.remarks,
@@ -61,13 +81,18 @@ export const useOrderStore = defineStore('order', () => {
           remainingRoomFee: order.remaining_room_fee
         }))
 
-        return orders.value
+        // 中文注释：只落地最新请求结果，避免慢请求覆盖快请求（例如连续切换筛选条件）。
+        if (fetchToken === latestFetchToken) {
+          orders.value = mappedOrders
+        }
+
+        return mappedOrders
       } catch (err) {
         console.error('获取订单数据失败:', err.response ? err.response.data : err.message)
 
         if (err.code === 'ECONNABORTED' && err.message.includes('timeout') && retryCount < 2) {
           console.log(`订单数据请求超时，正在进行第 ${retryCount + 1} 次重试...`)
-          return await fetchAllOrders(retryCount + 1)
+          return await fetchAllOrders(normalizedFilters, retryCount + 1)
         }
 
         const errorMessage = typeof err.message === 'string' && err.message.startsWith('<!DOCTYPE html>')
@@ -87,7 +112,11 @@ export const useOrderStore = defineStore('order', () => {
     try {
       return await inFlightFetchAll
     } finally {
-      inFlightFetchAll = null
+      // 中文注释：仅清理当前 requestKey 的 in-flight 状态，避免覆盖后续新请求。
+      if (inFlightFetchAllKey === requestKey) {
+        inFlightFetchAll = null
+        inFlightFetchAllKey = ''
+      }
     }
   }
 
