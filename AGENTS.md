@@ -70,3 +70,4 @@ DATE 字段在 Node.js 中应:
 
 ** 当你了解了我的需求后，你也可以逐渐完善我的 `业务说明.md` 文件，来让它更清晰和完整。**
 
+Always use Context7 MCP when I need library/API documentation, code generation, setup or configuration steps without me having to explicitly ask.
