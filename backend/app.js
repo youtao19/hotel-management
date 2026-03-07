@@ -24,18 +24,26 @@ app.use(cors({
 }));
 
 // 解析中间件
+function captureRawBody(req, res, buf) {
+  // OTA 验签需要原始请求体，其他接口复用该字段不会影响现有逻辑。
+  req.rawBody = buf && buf.length ? buf.toString('utf8') : '';
+}
+
 app.use(express.json({
   limit: setup.reqSizeLimit,
-  strict: false
+  strict: false,
+  verify: captureRawBody
 }));
 
 app.use(express.urlencoded({
   extended: true,
-  limit: setup.reqSizeLimit
+  limit: setup.reqSizeLimit,
+  verify: captureRawBody
 }));
 
 app.use(express.text({
-  limit: setup.reqSizeLimit
+  limit: setup.reqSizeLimit,
+  verify: captureRawBody
 }));
 
 // 初始化 session 和 Redis store 的函数
@@ -77,6 +85,9 @@ async function initializeSession() {
 
     const orderRoute = require("./routes/orderRoute");
     app.use("/api/orders", orderRoute);
+
+    const otaRoute = require("./routes/otaRoute");
+    app.use("/api/ota/v1", otaRoute);
 
     const roomRoute = require("./routes/roomRoute");
     app.use("/api/rooms", roomRoute);

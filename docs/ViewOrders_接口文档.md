@@ -6,6 +6,7 @@
 对应代码：
 - 前端接口封装：`frontend/src/api/index.js`
 - 后端路由：`backend/routes/orderRoute.js`、`backend/routes/roomRoute.js`、`backend/routes/billRoute.js`
+- 相关 OTA 文档：`docs/OTA_接口文档.md`
 
 ## 2. 基础约定
 - 前端 Axios `baseURL`：`/api`

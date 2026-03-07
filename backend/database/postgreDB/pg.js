@@ -133,10 +133,12 @@ const room_type = require("./tables/room_type");
 const room = require("./tables/room");
 const order_change = require("./tables/change_order");
 const dashboard_memo = require("./tables/dashboard_memo");
+const ota_inventory_quota = require("./tables/ota_inventory_quota");
 
 //table order here is important
 //since we have foreign key reference other table
 tables.push(room_type);
+tables.push(ota_inventory_quota);
 tables.push(room);
 tables.push(order);
 tables.push(bill);
@@ -193,6 +195,12 @@ async function initializePostgreDB() {
   } catch (err) {
     // 如果表不存在或字段不可变更，保留原错误信息用于排查；正常情况下不会触发。
     console.warn('[initializePostgreDB] bills.room_number 字段升级跳过:', err.message);
+  }
+  // OTA 库存配额备注字段保持可选，兼容历史表结构差异。
+  try {
+    await pool.query(`ALTER TABLE ota_inventory_quota ALTER COLUMN updated_by SET DEFAULT 'system';`);
+  } catch (err) {
+    console.warn('[initializePostgreDB] ota_inventory_quota 默认值修复跳过:', err.message);
   }
   await createIndex();
 }
