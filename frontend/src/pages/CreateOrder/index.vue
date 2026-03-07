@@ -1,6 +1,7 @@
 <template>
   <q-page class="check-in q-pa-md" style="max-width: 90%; margin: 0 auto;">
-    <!-- <h1 class="text-h4 q-mb-md">创建订单</h1> -->
+    <!-- 保留页面主标题，兼容自动化测试与页面语义结构。 -->
+    <h1 class="text-h4 q-mb-md">创建订单</h1>
     <q-card>
       <q-card-section>
         <q-form @submit="submitOrder" class="q-gutter-md">

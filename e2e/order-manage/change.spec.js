@@ -34,6 +34,14 @@ async function openChangeOrderDialog(page, guestName) {
 }
 
 test.describe('订单管理 - 订单变更', () => {
+  /**
+   * 获取“修改订单”弹窗中的房费明细输入框。
+   * 说明：弹窗内还有房费拆分、押金拆分等数字输入，不能直接全局匹配。
+   */
+  function getRoomPriceInputs(page) {
+    return page.locator('.q-dialog .q-markup-table').first().locator('input[type="number"]');
+  }
+
   test('修改房间', async ({ page }) => {
     const { guestName } = await checkIn(page);
     await openChangeOrderDialog(page, guestName);
@@ -69,8 +77,7 @@ test.describe('订单管理 - 订单变更', () => {
     await openChangeOrderDialog(page, guestName);
 
     // 定位房费表格中的单日金额输入框并修改
-    const roomFeeTable = page.locator('.q-markup-table');
-    const roomFeeInputs = roomFeeTable.locator('input[type="number"]');
+    const roomFeeInputs = getRoomPriceInputs(page);
     await expect(roomFeeInputs).toHaveCount(1);
     await roomFeeInputs.first().fill('300');
 
@@ -90,8 +97,7 @@ test.describe('订单管理 - 订单变更', () => {
     await openChangeOrderDialog(page, guestName);
 
     // 定位房费表格中的多日金额输入框并分别修改
-    const roomFeeTable = page.locator('.q-markup-table');
-    const roomFeeInputs = roomFeeTable.locator('input[type="number"]');
+    const roomFeeInputs = getRoomPriceInputs(page);
     await expect(roomFeeInputs.first()).toBeVisible();
     await roomFeeInputs.nth(0).fill('280');
     await roomFeeInputs.nth(1).fill('260');

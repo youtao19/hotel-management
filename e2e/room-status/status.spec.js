@@ -7,36 +7,40 @@ async function openRoomStatusPage(page) {
   // 进入房间状态页面
   await page.goto('http://localhost:9011/room-status');
 
-  // 等待筛选栏核心按钮出现，确保页面已加载
-  await expect(page.getByRole('button', { name: '查询房间状态' })).toBeVisible();
+  // 兼容当前筛选栏文案，确认房态页筛选区已完成渲染。
+  await expect(page.getByRole('button', { name: '查询' })).toBeVisible();
 }
 
 /**
  * 在筛选栏中选择“可入住”状态并触发查询
  */
 async function filterAvailableStatus(page) {
-  // 展开“状态”下拉框
-  await page.getByRole('combobox', { name: '状态' }).click();
+  const statusCombobox = page.locator('.room-filter-card').getByRole('combobox').nth(1);
+
+  // 房态页筛选默认展示“全部状态”，这里直接按当前可访问名称定位。
+  await statusCombobox.click();
 
   // 选择“可入住”
   await page.getByRole('option', { name: '可入住' }).click();
 
-  // 点击“查询房间状态”按钮
-  await page.getByRole('button', { name: '查询房间状态' }).click();
+  // 触发查询，等待当前筛选条件落到列表。
+  await page.getByRole('button', { name: '查询' }).click();
 }
 
 /**
  * 切换状态筛选并触发查询
  */
 async function filterStatusByLabel(page, label) {
-  // 展开“状态”下拉框
-  await page.getByRole('combobox', { name: '状态' }).click();
+  const statusCombobox = page.locator('.room-filter-card').getByRole('combobox').nth(1);
+
+  // 展开状态下拉框，兼容“全部状态/具体状态”展示值。
+  await statusCombobox.click();
 
   // 选择目标状态
   await page.getByRole('option', { name: label }).click();
 
-  // 点击“查询房间状态”按钮
-  await page.getByRole('button', { name: '查询房间状态' }).click();
+  // 点击查询按钮，刷新当前列表。
+  await page.getByRole('button', { name: '查询' }).click();
 
   // 等待列表刷新
   await expect(page.locator('.room-card').first()).toBeVisible();
@@ -107,7 +111,7 @@ test.describe('房间管理 - 房间状态', () => {
 
     // 验证设置清洁成功提示
     const cleaningNotify = page.locator('.q-notification.bg-positive').filter({
-      hasText: '已设置为清洁状态'
+      hasText: '已设为清扫状态'
     });
     await expect(cleaningNotify).toBeVisible();
 
@@ -143,7 +147,7 @@ test.describe('房间管理 - 房间状态', () => {
 
     // 验证设置维修成功提示
     const maintenanceNotify = page.locator('.q-notification.bg-positive').filter({
-      hasText: '已设置为维修状态'
+      hasText: '已设为维修状态'
     });
     await expect(maintenanceNotify).toBeVisible();
 
