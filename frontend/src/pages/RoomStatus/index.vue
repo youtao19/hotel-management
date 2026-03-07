@@ -1,51 +1,78 @@
 <template>
   <q-page class="room-status">
-    <div class="q-pa-md">
-
+    <div class="room-status-shell q-pa-md">
       <RoomFilterBar
-        v-model:date="selectedDate"
-        v-model:type="selectedRoomType"
-        v-model:status="filterStatus"
+        :view-mode="viewMode"
+        :date="selectedDate"
+        :start-date="calendarStartDate"
+        :type="selectedRoomType"
+        :status="filterStatus"
+        :keyword="keyword"
         :room-type-options="roomTypeSelectOptions"
         :status-options="statusOptions"
-        :loading="roomStore.loading"
-        :total-available="totalAvailableRooms"
+        :summary="activeSummary"
+        :loading="loading"
+        @update:view-mode="switchView"
+        @update:date="selectedDate = $event"
+        @update:start-date="calendarStartDate = $event"
+        @update:type="selectedRoomType = $event"
+        @update:status="filterStatus = $event"
+        @update:keyword="keyword = $event"
         @search="queryRoomStatus"
         @reset="resetAllFilters"
-        @update:date="onDateChange"
+        @jump-today="jumpToToday"
+        @prev-range="goPrevRange"
+        @next-range="goNextRange"
       />
 
-      <div class="room-grid">
-        <div class="row q-col-gutter-md">
-          <div
-            v-for="room in filteredRooms"
-            :key="room.room_number"
-            class="col-lg-3 col-md-4 col-sm-6 col-xs-12"
-          >
-            <RoomCard
-              :room="room"
-              @click-card="showRoomCalendar"
-              @show-remarks="showOrderRemarks"
-              @book="handleBookRoomClick"
-              @check-in="checkInRoom"
-              @check-out="checkOut"
-              @set-cleaning="room => setRoomCleaning(room.room_number)"
-              @set-maintenance="room => setMaintenance(room.room_number)"
-              @finish-maintenance="room => clearMaintenance(room.room_number)"
-              @finish-cleaning="room => clearCleaning(room.room_number)"
-            />
+      <!-- <div class="view-banner">
+        <div>
+          <div class="view-title">{{ viewMode === 'day' ? '单日房态' : '14 天日历房' }}</div>
+          <div class="view-subtitle">
+            {{ viewMode === 'day' ? `${selectedDate} 的现场房态与操作` : `${calendarStartDate} 起的 14 天排房总览` }}
           </div>
         </div>
-      </div>
+      </div> -->
 
-      <div v-if="filteredRooms.length === 0" class="text-center q-pa-lg">
-        <q-icon name="search_off" size="5rem" color="grey-5" />
-        <div class="text-h6 text-grey-7 q-mt-md">没有找到符合条件的房间</div>
-        <q-btn color="primary" label="重置筛选" @click="resetAllFilters" class="q-mt-md" />
-      </div>
+      <RoomDayView
+        v-if="viewMode === 'day'"
+        :rooms="dayRooms"
+        @open-detail="openDayRoomDetail"
+        @show-remarks="showOrderRemarks"
+        @book="handleBookRoomClick"
+        @check-in="checkInRoom"
+        @check-out="checkOut"
+        @set-cleaning="setRoomCleaning"
+        @set-maintenance="setMaintenance"
+        @finish-maintenance="clearMaintenance"
+        @finish-cleaning="clearCleaning"
+      />
+
+      <RoomCalendarBoard
+        v-else
+        :rooms="calendarRooms"
+        :daily-summary="calendarDailySummary"
+        :today-date="todayDate"
+        @open-cell="openCalendarCellDetail"
+      />
     </div>
 
-    <RoomCalendarDialog ref="calendarDialogRef" />
+    <RoomStatusDetailDrawer
+      v-model="showDetailDrawer"
+      :room="detailRoom"
+      :cell="detailCell"
+      :view-mode="viewMode"
+      :today-date="todayDate"
+      @go-day-view="handleGoDayView"
+      @book="handleBookRoomClick"
+      @show-remarks="showOrderRemarks"
+      @check-in="checkInRoom"
+      @check-out="checkOut"
+      @set-cleaning="setRoomCleaning"
+      @set-maintenance="setMaintenance"
+      @finish-cleaning="clearCleaning"
+      @finish-maintenance="clearMaintenance"
+    />
 
     <CheckInConfirmDialog
       v-model="showCheckInConfirmDialog"
@@ -60,96 +87,136 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue' // 移除 computed, useRoute, useRouter 因为逻辑移走了
-import { useQuasar } from 'quasar'
-
-// Stores
-import { useRoomStore } from '../../stores/roomStore'
-import { useViewStore } from '../../stores/viewStore'
-import { useOrderStore } from '../../stores/orderStore'
-
-// Hooks (Composables)
+import { ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { useQuasar, date as qDate } from 'quasar'
+import { useRoomStore } from 'src/stores/roomStore'
+import { useViewStore } from 'src/stores/viewStore'
+import { useOrderStore } from 'src/stores/orderStore'
 import { useRoomFilters } from './composables/useRoomFilters'
-
-// Components
-import RoomCard from './components/RoomCard.vue'
 import RoomFilterBar from './components/RoomFilterBar.vue'
-import RoomCalendarDialog from './components/RoomCalendarDialog.vue'
-import CheckInConfirmDialog from '../../components/CheckInConfirmDialog.vue'
+import RoomDayView from './components/RoomDayView.vue'
+import RoomCalendarBoard from './components/RoomCalendarBoard.vue'
+import RoomStatusDetailDrawer from './components/RoomStatusDetailDrawer.vue'
+import CheckInConfirmDialog from 'src/components/CheckInConfirmDialog.vue'
 
-// --- 初始化 ---
 const $q = useQuasar()
+const router = useRouter()
 const roomStore = useRoomStore()
 const viewStore = useViewStore()
 const orderStore = useOrderStore()
+const todayDate = qDate.formatDate(Date.now(), 'YYYY-MM-DD')
 
-// --- 引入核心逻辑 Hook ---
-// 这里解构出来的变量，直接在 template 中使用，不需要再定义一遍
 const {
+  viewMode,
   selectedDate,
+  calendarStartDate,
   selectedRoomType,
   filterStatus,
+  keyword,
   statusOptions,
-  filteredRooms,
   roomTypeSelectOptions,
-  totalAvailableRooms,
+  dayRooms,
+  calendarRooms,
+  calendarDailySummary,
+  activeSummary,
+  loading,
+  refreshCurrentView,
   queryRoomStatus,
   resetAllFilters,
-  onDateChange,
-  loadRoomDataForDate // 从 Hook 中获取数据加载函数
+  jumpToToday,
+  switchView,
+  goPrevRange,
+  goNextRange,
+  openDayViewByDate
 } = useRoomFilters()
 
-// --- 本地 UI 状态 ---
-const calendarDialogRef = ref(null)
+const showDetailDrawer = ref(false)
+const detailRoom = ref(null)
+const detailCell = ref(null)
 const showCheckInConfirmDialog = ref(false)
 const pendingCheckInOrder = ref(null)
 
-// --- 剩余的业务逻辑 (弹窗、跳转、特定操作) ---
-
-// 监听弹窗关闭清理数据
-watch(showCheckInConfirmDialog, (isOpen) => {
-  if (!isOpen) pendingCheckInOrder.value = null
+watch(showCheckInConfirmDialog, (visible) => {
+  // 中文注释：入住确认弹窗关闭后清理缓存订单，避免切换房间时串数据。
+  if (!visible) pendingCheckInOrder.value = null
 })
 
-// 辅助函数
+watch(showDetailDrawer, (visible) => {
+  if (visible) return
+  detailRoom.value = null
+  detailCell.value = null
+})
+
 const formatDateForDialog = (dateString) => viewStore.formatDate(dateString)
 
-// 打开日历弹窗
-function showRoomCalendar(room) {
-  calendarDialogRef.value?.open(room)
+function buildDayDetailCell(room) {
+  // 中文注释：单日卡片点开详情时，抽屉统一消费与日历格子相同的数据结构。
+  return {
+    date: selectedDate.value,
+    display_status: room.display_status,
+    price: room.price,
+    order_id: room.order_id,
+    order_status: room.order_status,
+    guest_name: room.guest_name,
+    phone: room.phone,
+    remarks: room.remarks,
+    check_in_date: room.check_in_date,
+    check_out_date: room.check_out_date
+  }
 }
 
-// 预订跳转
-function bookRoom(room) {
-  if (!room?.room_number) return
-  // 这里需要引入 router，如果 useRoomFilters 里没暴露 router，可以重新 use 一次
-  // 或者直接使用 options api 风格，但还是建议 import
+function openDayRoomDetail(room) {
+  detailRoom.value = room
+  detailCell.value = buildDayDetailCell(room)
+  showDetailDrawer.value = true
 }
-// 为了 bookRoom 跳转，这里需要补一个 router
-import { useRouter } from 'vue-router'
-const router = useRouter() // 重新获取 router 实例用于跳转
 
-function handleBookRoomClick(room) { // 重命名一下避免潜在冲突，虽然不必要
-  if (!room?.room_number) return
+function openCalendarCellDetail(room, cell) {
+  detailRoom.value = {
+    ...room,
+    display_status: cell.display_status,
+    guest_name: cell.guest_name,
+    phone: cell.phone,
+    remarks: cell.remarks,
+    check_in_date: cell.check_in_date,
+    check_out_date: cell.check_out_date,
+    order_id: cell.order_id,
+    order_status: cell.order_status
+  }
+  detailCell.value = cell
+  showDetailDrawer.value = true
+}
+
+function handleBookRoomClick(room, cell = null) {
+  const targetCell = cell?.date ? cell : detailCell.value
   router.push({
     path: '/CreateOrder',
-    query: { roomNumber: room.room_number, roomType: room.type_code }
+    query: {
+      roomNumber: room.room_number,
+      roomType: room.type_code,
+      checkInDate: targetCell?.date || selectedDate.value
+    }
   })
 }
 
-// 办理入住逻辑
 async function checkInRoom(room) {
-  const orderId = room.order_id || room.orderId
-  if (!orderId) return $q.notify({ type: 'warning', message: '无订单信息' })
+  const orderId = room.order_id || room.orderId || detailCell.value?.order_id
+  if (!orderId) {
+    $q.notify({ type: 'warning', message: '当前房间没有可办理入住的订单' })
+    return
+  }
 
   const order = await orderStore.getOrderByNumber(orderId)
-  if (!order) return $q.notify({ type: 'negative', message: '未找到订单' })
+  if (!order) {
+    $q.notify({ type: 'negative', message: '未找到订单详情' })
+    return
+  }
 
   pendingCheckInOrder.value = { ...order, orderNumber: order.orderNumber || order.order_id }
   showCheckInConfirmDialog.value = true
 }
 
-// 确认入住回调
 async function handleCheckInConfirm(order) {
   try {
     await orderStore.checkIn(order.orderNumber, {
@@ -158,84 +225,109 @@ async function handleCheckInConfirm(order) {
       roomFeePaymentSplits: order.roomFeePaymentSplits,
       depositPaymentSplits: order.depositPaymentSplits
     })
-    $q.notify({ type: 'positive', message: '入住成功' })
     showCheckInConfirmDialog.value = false
-    // 操作成功后，调用 Hook 里的刷新方法
-    await loadRoomDataForDate(selectedDate.value)
-  } catch (e) {
-    $q.notify({ type: 'negative', message: e.message || '入住失败' })
+    showDetailDrawer.value = false
+    await refreshCurrentView()
+    $q.notify({ type: 'positive', message: '入住成功' })
+  } catch (error) {
+    $q.notify({ type: 'negative', message: error.message || '入住失败' })
   }
 }
 
-// 退房逻辑
 async function checkOut(room) {
-  const orderId = room.order_id || room.orderId
+  const orderId = room.order_id || room.orderId || detailCell.value?.order_id
+  if (!orderId) {
+    $q.notify({ type: 'warning', message: '当前房间没有可退房订单' })
+    return
+  }
+
   $q.dialog({
     title: '确认退房',
-    message: `确定要为房间 ${room.room_number} 办理退房吗？`,
+    message: `确定为房间 ${room.room_number} 办理退房吗？`,
     cancel: true,
     persistent: true
   }).onOk(async () => {
     try {
-      if (orderId) await orderStore.updateOrderStatusViaApi(orderId, 'checked-out')
+      await orderStore.updateOrderStatusViaApi(orderId, 'checked-out')
       await roomStore.checkOutRoom(room.room_number)
       await orderStore.fetchAllOrders()
-      // 刷新列表
-      await loadRoomDataForDate(selectedDate.value)
+      showDetailDrawer.value = false
+      await refreshCurrentView()
       $q.notify({ type: 'positive', message: '退房成功' })
-    } catch (e) {
-      console.error(e)
+    } catch (error) {
+      console.error(error)
       $q.notify({ type: 'negative', message: '退房失败' })
     }
   })
 }
 
-// 简单的状态变更操作封装
-const createStatusHandler = (actionName, apiFunc, successMsg) => async (roomNumber) => {
-  try {
-    const success = await apiFunc(roomNumber)
-    if (success) {
-      $q.notify({ type: 'positive', message: successMsg })
-      await loadRoomDataForDate(selectedDate.value)
-    } else {
-      throw new Error('操作未成功')
+function createStatusHandler(actionName, apiFunc, successMessage) {
+  return async (room) => {
+    try {
+      const success = await apiFunc(room.room_number)
+      if (!success) throw new Error(`${actionName}失败`)
+      showDetailDrawer.value = false
+      await refreshCurrentView()
+      $q.notify({ type: 'positive', message: successMessage })
+    } catch (error) {
+      $q.notify({ type: 'negative', message: `${actionName}失败` })
     }
-  } catch (e) {
-    $q.notify({ type: 'negative', message: `${actionName}失败` })
   }
 }
 
-const setRoomCleaning = createStatusHandler('设置清洁', (id) => roomStore.updateRoomStatus(id, 'cleaning'), '已设置为清洁状态')
-const setMaintenance = createStatusHandler('设置维修', roomStore.setMaintenance, '已设置为维修状态')
+const setRoomCleaning = createStatusHandler('设置清洁', (roomNumber) => roomStore.updateRoomStatus(roomNumber, 'cleaning'), '已设为清扫状态')
+const setMaintenance = createStatusHandler('设置维修', roomStore.setMaintenance, '已设为维修状态')
 const clearMaintenance = createStatusHandler('完成维修', roomStore.clearMaintenance, '维修已完成')
 const clearCleaning = createStatusHandler('完成清洁', roomStore.clearCleaning, '清洁已完成')
 
-// 查看备注
 async function showOrderRemarks(room) {
-  const orderId = room.order_id || room.orderId
+  const orderId = room.order_id || room.orderId || detailCell.value?.order_id
   let order = orderId ? await orderStore.getOrderByNumber(orderId) : null
 
   if (!order) {
-    const candidates = (orderStore.orders || []).filter(o => o.roomNumber === room.room_number)
-    order = candidates.find(o => ['checked-in', 'pending'].includes(o.status)) || candidates[0]
+    const candidates = (orderStore.orders || []).filter(item => item.roomNumber === room.room_number)
+    order = candidates.find(item => ['checked-in', 'pending', 'reserved'].includes(item.status)) || candidates[0]
   }
 
-  const guest = order?.guestName || room.currentGuest || '未知客人'
-  const remarks = order?.remarks?.trim() || '无备注'
-
+  const guest = order?.guestName || detailCell.value?.guest_name || room.guest_name || '未知客人'
+  const remarks = order?.remarks?.trim() || detailCell.value?.remarks?.trim() || room.remarks?.trim() || '无备注'
   $q.dialog({ title: '客人备注', message: `${guest}\n\n${remarks}`, ok: '关闭' })
+}
+
+async function handleGoDayView(dateString) {
+  showDetailDrawer.value = false
+  await openDayViewByDate(dateString)
 }
 </script>
 
 <style scoped>
-/* 仅保留页面布局相关的 CSS */
 .room-status {
   max-width: 100%;
   margin: 0 auto;
 }
 
-/* 确保网格布局间距正常 */
-.room-grid {
-  margin-top: 16px;
+.room-status-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.view-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 4px 0;
+}
+
+.view-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.view-subtitle {
+  margin-top: 4px;
+  font-size: 13px;
+  color: #64748b;
 }
 </style>

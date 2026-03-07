@@ -72,18 +72,6 @@ const autoBillConfig = {
   monitorWithEmailOnly: true
 };
 
-const otaConfig = {
-  enabled: String(process.env.OTA_API_ENABLED || 'false').toLowerCase() !== 'false',
-  signSkewSeconds: Number(process.env.OTA_SIGN_SKEW_SECONDS || 300),
-  nonceTtlSeconds: Number(process.env.OTA_NONCE_TTL_SECONDS || 600),
-  channels: {
-    meituan: {
-      key: process.env.OTA_MEITUAN_KEY || '',
-      secret: process.env.OTA_MEITUAN_SECRET || ''
-    }
-  }
-};
-
 const setup = {
   opanaiKey: process.env.OPENAI_O_KEY,
   openaiHost: process.env.OPENAI_HOST,
@@ -141,7 +129,6 @@ const setup = {
     sampleSizeMax: 22,
   },
   autoBillJob: autoBillConfig,
-  ota: otaConfig,
   workers: [],
   totalWorkerNum: 20,
   changeType: {

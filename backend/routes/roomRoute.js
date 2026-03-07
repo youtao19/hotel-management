@@ -25,29 +25,45 @@ const RoomSchema = {
 // 获取所有房间
 router.get('/', async (req, res) => {
   try {
-    const { date } = req.query;
+    const { date, typeCode, status, keyword } = req.query || {};
+    const normalizedDate = date ? String(date).trim() : '';
+    const normalizedTypeCode = typeCode ? String(typeCode).trim() : '';
+    const normalizedStatus = status ? String(status).trim() : '';
+    const normalizedKeyword = keyword ? String(keyword).trim() : '';
 
     // 如果提供了日期参数，验证日期格式
-    if (date) {
+    if (normalizedDate) {
       const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-      if (!dateRegex.test(date)) {
+      if (!dateRegex.test(normalizedDate)) {
         return res.status(400).json({ message: '日期格式必须为 YYYY-MM-DD' });
       }
 
-      console.log(`查询 ${date} 日期的房间状态`);
+      console.log(`查询 ${normalizedDate} 日期的房间状态`);
     }
 
-    const rooms = await roomModule.getAllRooms(date);
-
-    if (rooms.length === 0) {
-      res.status(204).json({ data: [], message: '没有查询到房间数据' });
-    } else {
-      res.status(200).json({
-        data: rooms,
-        queryDate: date || null,
-        message: date ? `查询到 ${date} 的房间状态` : '查询到当前房间状态'
-      });
+    // 中文注释：单日页状态筛选只接受统一 display_status 枚举。
+    if (normalizedStatus && !VALID_ROOM_STATES.includes(normalizedStatus)) {
+      return res.status(400).json({ message: '无效的房态筛选值' });
     }
+
+    const result = await roomModule.getAllRooms({
+      date: normalizedDate || null,
+      typeCode: normalizedTypeCode || null,
+      status: normalizedStatus || null,
+      keyword: normalizedKeyword || null
+    });
+
+    res.status(200).json({
+      data: result.rows,
+      summary: result.summary,
+      query: {
+        date: normalizedDate || null,
+        typeCode: normalizedTypeCode || null,
+        status: normalizedStatus || null,
+        keyword: normalizedKeyword || null
+      },
+      message: normalizedDate ? `查询到 ${normalizedDate} 的房间状态` : '查询到当前房间状态'
+    });
   } catch (err) {
     console.error('获取房间数据错误:', err);
     if (err?.code === '22007') {
@@ -132,6 +148,51 @@ router.get('/status-range', async (req, res) => {
     });
   } catch (err) {
     console.error('查询日期范围房态失败:', err);
+    if (err?.code === '22007') {
+      return res.status(400).json({ message: '无效的日期' });
+    }
+    res.status(500).json({
+      message: '服务器错误',
+      error: err.message
+    });
+  }
+});
+
+// 获取日历房主视图数据
+router.get('/calendar-board', async (req, res) => {
+  try {
+    const { startDate, days, typeCode, status, keyword } = req.query || {};
+    const normalizedStartDate = startDate ? String(startDate).trim() : '';
+    const normalizedTypeCode = typeCode ? String(typeCode).trim() : '';
+    const normalizedStatus = status ? String(status).trim() : '';
+    const normalizedKeyword = keyword ? String(keyword).trim() : '';
+    const normalizedDays = Number(days || 14);
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+
+    if (!normalizedStartDate) {
+      return res.status(400).json({ message: '必须提供 startDate' });
+    }
+    if (!dateRegex.test(normalizedStartDate)) {
+      return res.status(400).json({ message: 'startDate 格式必须为 YYYY-MM-DD' });
+    }
+    if (normalizedDays !== 14) {
+      return res.status(400).json({ message: 'days 当前仅支持 14' });
+    }
+    if (normalizedStatus && !VALID_ROOM_STATES.includes(normalizedStatus)) {
+      return res.status(400).json({ message: '无效的房态筛选值' });
+    }
+
+    const result = await roomModule.getCalendarBoard({
+      startDate: normalizedStartDate,
+      days: normalizedDays,
+      typeCode: normalizedTypeCode || null,
+      status: normalizedStatus || null,
+      keyword: normalizedKeyword || null
+    });
+
+    res.status(200).json(result);
+  } catch (err) {
+    console.error('查询日历房数据失败:', err);
     if (err?.code === '22007') {
       return res.status(400).json({ message: '无效的日期' });
     }

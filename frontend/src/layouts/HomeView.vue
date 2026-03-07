@@ -4,21 +4,34 @@
 
       <!-- 页面顶部导航栏 -->
       <q-header elevated class="bg-primary text-white">
-        <!-- 工具栏部分 -->
-        <q-toolbar>
+        <!-- 顶部单行导航：系统标题、功能导航和用户区保持在同一行 -->
+        <q-toolbar class="header-toolbar">
           <!-- 左侧菜单按钮 -->
           <!-- <q-btn dense flat round icon="menu" @click="toggleLeftDrawer" /> -->
 
           <!-- 标题部分 -->
-          <q-toolbar-title>
+          <div class="header-brand">
             <q-avatar>
               <img src="/favicon.ico">
             </q-avatar>
-            酒店管理系统
-          </q-toolbar-title>
+            <div class="header-brand__title">酒店管理系统</div>
+          </div>
+
+          <!-- 中间导航标签区域 -->
+          <q-tabs class="header-tabs" align="left" dense inline-label>
+            <q-route-tab to="/Dash-board" label="仪表盘" icon="dashboard" />
+            <q-route-tab to="/CreateOrder" label="创建订单" icon="note_add" />
+            <q-route-tab to="/room-status" label="房间状态" icon="meeting_room" />
+            <q-route-tab to="/room-management" label="房间管理" icon="home_work" />
+            <q-route-tab to="/ViewOrders" label="查看订单" icon="receipt_long" />
+            <q-route-tab to="/review-management" label="好评管理" icon="sentiment_satisfied_alt" />
+            <q-route-tab to="/revenue-statistics" label="收入统计" icon="bar_chart" />
+            <q-route-tab to="/handover" label="交接班" icon="swap_horiz" />
+            <q-route-tab to="/other-income" label="其他收入" icon="payments" />
+          </q-tabs>
 
           <!-- 用户信息显示区域 -->
-          <div class="q-ml-md">
+          <div class="header-user">
             <q-btn v-if="userStore.user.isLoggedIn" flat no-caps class="user-profile-btn">
               <q-avatar size="28px" class="user-avatar">
                 <img :src="userStore.user.avatar">
@@ -90,19 +103,6 @@
           <!-- 右侧菜单按钮 -->
           <!-- <q-btn dense flat round icon="menu" @click="toggleRightDrawer" /> -->
         </q-toolbar>
-
-        <!-- 导航标签栏 -->
-        <q-tabs align="left" dense inline-label>
-          <q-route-tab to="/Dash-board" label="仪表盘" icon="dashboard" />
-          <q-route-tab to="/CreateOrder" label="创建订单" icon="note_add" />
-          <q-route-tab to="/room-status" label="房间状态" icon="meeting_room" />
-          <q-route-tab to="/room-management" label="房间管理" icon="home_work" />
-          <q-route-tab to="/ViewOrders" label="查看订单" icon="receipt_long" />
-          <q-route-tab to="/review-management" label="好评管理" icon="sentiment_satisfied_alt" />
-          <q-route-tab to="/revenue-statistics" label="收入统计" icon="bar_chart" />
-          <q-route-tab to="/handover" label="交接班" icon="swap_horiz" />
-          <q-route-tab to="/other-income" label="其他收入" icon="payments" />
-        </q-tabs>
       </q-header>
 
       <!-- 左侧抽屉菜单 -->
@@ -235,6 +235,49 @@ function onLogoutSuccess() {
 </script>
 
 <style scoped>
+/* 顶部工具栏保持单行布局，避免标题、导航和用户区拆成两行 */
+.header-toolbar {
+  gap: 12px;
+  min-height: 64px;
+  padding: 0 16px;
+}
+
+/* 左侧品牌区保留原有图标和标题文案 */
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.header-brand__title {
+  font-size: 20px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* 导航标签占据中间主要空间，维持原有功能入口不变 */
+.header-tabs {
+  flex: 1;
+  min-width: 0;
+}
+
+.header-tabs :deep(.q-tabs__content) {
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+}
+
+.header-tabs :deep(.q-tab) {
+  min-height: 64px;
+  padding: 0 14px;
+}
+
+/* 右侧用户区固定在工具栏末端 */
+.header-user {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
 /* 用户下拉菜单样式 */
 .user-dropdown-menu :deep(.q-menu) {
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
@@ -338,6 +381,29 @@ function onLogoutSuccess() {
 
 /* 响应式调整 */
 @media (max-width: 599px) {
+  .header-toolbar {
+    flex-wrap: wrap;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .header-brand {
+    width: 100%;
+  }
+
+  .header-tabs {
+    order: 3;
+    width: 100%;
+  }
+
+  .header-tabs :deep(.q-tab) {
+    min-height: 48px;
+  }
+
+  .header-user {
+    margin-left: 0;
+  }
+
   .user-dropdown-list {
     min-width: 180px !important;
   }

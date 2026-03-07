@@ -1,6 +1,7 @@
 import { defineRouter } from '#q-app/wrappers'
 import { createRouter, createMemoryHistory, createWebHistory, createWebHashHistory } from 'vue-router'
 import routes from './routes'
+import { useUserStore } from 'src/stores/userStore'
 
 /*
  * If not building with SSR mode, you can
@@ -28,8 +29,7 @@ export default defineRouter(function (/* { store, ssrContext } */) {
 
   // 添加路由守卫
   Router.beforeEach(async (to, from, next) => {
-    // 动态导入userStore，避免循环依赖
-    const { useUserStore } = await import('src/stores/userStore')
+    // 统一使用静态导入，避免构建时出现同模块动静态混合加载告警
     const userStore = useUserStore()
 
     // 定义不需要认证的路由

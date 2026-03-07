@@ -1,7 +1,7 @@
 <template>
   <q-page class="revenue-statistics">
     <div class="q-pa-md">
-      <div class="text-h4 q-mb-md text-primary">收入统计</div>
+      <!-- <div class="text-h4 q-mb-md text-primary">收入统计</div> -->
 
       <QuickStatsCards
         :quick-stats="quickStats"

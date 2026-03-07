@@ -67,11 +67,43 @@ api.interceptors.response.use(
 // 房间相关接口
 export const roomApi = {
   // 获取所有房间
-  getAllRooms: (date = null) => {
-    const url = date ? `/rooms?date=${date}` : '/rooms';
-    const cacheBuster = `_=${new Date().getTime()}`;
-    const finalUrl = url.includes('?') ? `${url}&${cacheBuster}` : `${url}?${cacheBuster}`;
-    return api.get(finalUrl);
+  getAllRooms: (filters = null) => {
+    // 中文注释：兼容历史调用，允许直接传日期字符串，也允许传完整筛选对象。
+    const normalizedFilters = (filters && typeof filters === 'object' && !Array.isArray(filters))
+      ? filters
+      : { date: filters || null }
+    const params = new URLSearchParams()
+    const normalizedDate = String(normalizedFilters?.date || '').trim()
+    const normalizedTypeCode = String(normalizedFilters?.typeCode || '').trim()
+    const normalizedStatus = String(normalizedFilters?.status || '').trim()
+    const normalizedKeyword = String(normalizedFilters?.keyword || '').trim()
+
+    if (normalizedDate) params.append('date', normalizedDate)
+    if (normalizedTypeCode) params.append('typeCode', normalizedTypeCode)
+    if (normalizedStatus) params.append('status', normalizedStatus)
+    if (normalizedKeyword) params.append('keyword', normalizedKeyword)
+    params.append('_', String(Date.now()))
+
+    return api.get(`/rooms?${params.toString()}`)
+  },
+
+  // 获取日历房主视图数据
+  getCalendarBoard: (filters = {}) => {
+    // 中文注释：日历页只允许固定 14 天窗口，这里统一补齐默认参数。
+    const params = new URLSearchParams({
+      startDate: String(filters?.startDate || '').trim(),
+      days: String(filters?.days || 14),
+      _: String(Date.now())
+    })
+    const normalizedTypeCode = String(filters?.typeCode || '').trim()
+    const normalizedStatus = String(filters?.status || '').trim()
+    const normalizedKeyword = String(filters?.keyword || '').trim()
+
+    if (normalizedTypeCode) params.append('typeCode', normalizedTypeCode)
+    if (normalizedStatus) params.append('status', normalizedStatus)
+    if (normalizedKeyword) params.append('keyword', normalizedKeyword)
+
+    return api.get(`/rooms/calendar-board?${params.toString()}`)
   },
 
   // 获取指定房间在日期范围内的每日房态（用于日历按天渲染）

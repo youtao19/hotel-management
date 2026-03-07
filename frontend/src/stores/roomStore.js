@@ -25,25 +25,94 @@ function normalizeDisplayStatus(status) {
   return ROOM_STATES.AVAILABLE
 }
 
+// 中文注释：房态接口兼容旧的日期字符串调用和新的筛选对象调用。
+function normalizeRoomQueryFilters(input) {
+  if (input && typeof input === 'object' && !Array.isArray(input)) {
+    return input
+  }
+  return { date: input || null }
+}
+
 export const useRoomStore = defineStore('room', () => {
   const rooms = ref([])
   const roomTypes = ref([])
   const loading = ref(false)
   const error = ref(null)
+  const roomSummary = ref({
+    date: null,
+    total: 0,
+    available: 0,
+    occupied: 0,
+    reserved: 0,
+    cleaning: 0,
+    repair: 0
+  })
+  const calendarBoard = ref({
+    query: null,
+    summary: null,
+    dailySummary: [],
+    rooms: []
+  })
 
-  async function fetchAllRooms(queryDate = null) {
+  async function fetchAllRooms(queryFilters = null) {
     try {
       loading.value = true
       error.value = null
 
-      const response = await roomApi.getAllRooms(queryDate)
+      const response = await roomApi.getAllRooms(normalizeRoomQueryFilters(queryFilters))
       rooms.value = response?.data || []
+      roomSummary.value = response?.summary || {
+        date: null,
+        total: 0,
+        available: 0,
+        occupied: 0,
+        reserved: 0,
+        cleaning: 0,
+        repair: 0
+      }
       return rooms.value
     } catch (err) {
       console.error('获取房间数据失败:', err)
       error.value = '获取房间数据失败: ' + (err?.message || String(err))
       rooms.value = []
+      roomSummary.value = {
+        date: null,
+        total: 0,
+        available: 0,
+        occupied: 0,
+        reserved: 0,
+        cleaning: 0,
+        repair: 0
+      }
       return []
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function fetchCalendarBoard(filters = {}) {
+    try {
+      loading.value = true
+      error.value = null
+
+      const response = await roomApi.getCalendarBoard(filters)
+      calendarBoard.value = {
+        query: response?.query || null,
+        summary: response?.summary || null,
+        dailySummary: response?.dailySummary || [],
+        rooms: response?.rooms || []
+      }
+      return calendarBoard.value
+    } catch (err) {
+      console.error('获取日历房数据失败:', err)
+      error.value = '获取日历房数据失败: ' + (err?.message || String(err))
+      calendarBoard.value = {
+        query: null,
+        summary: null,
+        dailySummary: [],
+        rooms: []
+      }
+      return calendarBoard.value
     } finally {
       loading.value = false
     }
@@ -197,11 +266,14 @@ export const useRoomStore = defineStore('room', () => {
     roomTypes,
     loading,
     error,
+    roomSummary,
+    calendarBoard,
 
     totalRooms,
     countByStatus,
 
     fetchAllRooms,
+    fetchCalendarBoard,
     fetchRoomTypes,
     refreshData,
 

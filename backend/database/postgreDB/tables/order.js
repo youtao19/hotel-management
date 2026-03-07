@@ -36,12 +36,6 @@ const createIndexQueryStrings = [
   `CREATE INDEX IF NOT EXISTS idx_orders_check_dates ON ${tableName}(check_in_date, check_out_date)`,
   `CREATE INDEX IF NOT EXISTS idx_orders_stay_date ON ${tableName}(stay_date)`,
   `CREATE INDEX IF NOT EXISTS idx_orders_create_time ON ${tableName}(create_time DESC)`,
-  // OTA 幂等约束只锁定订单首日分行，兼容现有多日分行结构。
-  `CREATE UNIQUE INDEX IF NOT EXISTS uniq_orders_source_id_source_primary_row
-     ON ${tableName} (order_source, id_source)
-   WHERE id_source IS NOT NULL
-     AND btrim(id_source) <> ''
-     AND stay_date = check_in_date`,
   // 活跃订单唯一约束：同一人、同一房、同一天、同一类型不能重复 (允许同日 休息房+客房)
   `CREATE UNIQUE INDEX IF NOT EXISTS uniq_orders_guest_stay ON ${tableName} (guest_name, room_number, stay_date, stay_type) WHERE status NOT IN ('cancelled', 'checked-out')`
 ];

@@ -1,184 +1,200 @@
 <template>
-  <div class="q-mb-lg filters-row">
-    <q-card flat bordered class="filter-card glassy-card">
-      <q-card-section class="q-pa-lg">
-        <div class="row q-col-gutter-md items-center">
-          <div class="col-12 col-md-4 col-lg-3">
-            <q-input
-              filled dense stack-label readonly
-              input-class="filter-input"
-              label="查看指定日期房间状态"
-              placeholder="YYYY-MM-DD"
-              :model-value="formattedDate || ''"
-              clearable
-              clear-icon="close"
-              @clear="$emit('update:date', null)"
-            >
-              <template #prepend>
-                <q-icon name="event" color="teal-6" />
-              </template>
-              <template #append>
-                <q-btn round dense flat icon="expand_more" color="grey-7" class="date-icon-btn">
-                  <q-popup-proxy cover transition-show="scale" transition-hide="scale">
-                    <q-date
-                      :model-value="date"
-                      @update:model-value="(val) => $emit('update:date', val)"
-                      default-view="Calendar"
-                      today-btn
-                      :locale="locale"
-                    >
-                      <div class="row items-center justify-end q-pa-sm">
-                        <q-btn v-close-popup label="确定" color="primary" flat />
-                      </div>
-                    </q-date>
-                  </q-popup-proxy>
-                </q-btn>
-              </template>
-            </q-input>
-          </div>
+  <q-card flat bordered class="q-mb-md bg-white room-filter-card">
+    <q-card-section class="q-pa-md">
+      <div class="row q-col-gutter-md items-center">
+        <!-- 视图切换 -->
+        <div class="col-auto">
+          <q-btn-toggle
+            :model-value="viewMode"
+            @update:model-value="emit('update:viewMode', $event)"
+            :options="viewOptions"
+            toggle-color="primary"
+            unelevated
+            class="view-mode-toggle"
+            padding="6px 20px"
+          />
+        </div>
 
-          <div class="col-12 col-md-3 col-lg-2">
-            <q-select
-              :model-value="type"
-              @update:model-value="(val) => $emit('update:type', val)"
-              :options="roomTypeOptions"
-              label="房型筛选"
-              filled dense emit-value map-options
-              :clearable="!!type"
-              clear-icon="close"
-              input-class="filter-input"
-              popup-content-class="rounded-popup"
-              dropdown-icon="expand_more"
-            >
-              <template #prepend>
-                <q-icon :name="getRoomTypeIcon(type)" color="teal-6" />
-              </template>
-            </q-select>
-          </div>
+        <!-- 日期控制 -->
+        <div class="col-auto flex items-center q-gutter-x-sm">
+          <q-btn flat round icon="chevron_left" color="primary" @click="emit('prev-range')" />
+          <q-input
+            dense
+            outlined
+            type="date"
+            :model-value="activeDate"
+            @update:model-value="handleDateChange"
+            :label="dateCaption"
+            style="width: 150px;"
+          />
+          <q-btn flat round icon="chevron_right" color="primary" @click="emit('next-range')" />
+          <q-btn flat color="primary" label="今天" @click="emit('jump-today')" class="text-weight-bold" />
+        </div>
 
-          <div class="col-12 col-md-3 col-lg-2">
-            <q-select
-              :model-value="status"
-              @update:model-value="(val) => $emit('update:status', val)"
-              :options="statusOptions"
-              label="状态"
-              filled dense emit-value map-options
-              :clearable="!!status"
-              clear-icon="close"
-              input-class="filter-input"
-              popup-content-class="rounded-popup"
-              dropdown-icon="expand_more"
-            >
-              <template #prepend>
-                <q-icon name="credit_card" color="teal-6" />
-              </template>
-            </q-select>
-          </div>
+        <q-separator vertical class="q-mx-sm" />
 
-          <div class="col-12 col-lg-5">
-            <div class="row items-center q-gutter-md">
-              <div class="col-auto">
-                <q-btn
-                  color="primary" icon="search" label="查询房间状态"
-                  unelevated class="search-btn"
-                  :loading="loading"
-                  @click="$emit('search')"
-                />
-              </div>
-              <div class="col-auto">
-                <q-chip color="positive" text-color="white" size="md" icon="check_circle" class="pill-chip">
-                  总可用: {{ totalAvailable }}间
-                </q-chip>
-              </div>
-              <div class="col-auto flex items-center q-gutter-sm">
-                <q-btn
-                  outline color="grey" icon="restart_alt" size="sm" round
-                  class="refresh-btn"
-                  @click="$emit('reset')"
-                >
-                  <q-tooltip>重置筛选</q-tooltip>
-                </q-btn>
-              </div>
-            </div>
+        <!-- 筛选条件 -->
+        <div class="col-auto">
+          <q-select
+            dense
+            outlined
+            :model-value="type"
+            @update:model-value="emit('update:type', $event)"
+            :options="extendedRoomTypeOptions"
+            emit-value
+            map-options
+            style="min-width: 140px"
+          />
+        </div>
+
+        <div class="col-auto">
+          <q-select
+            dense
+            outlined
+            :model-value="status"
+            @update:model-value="emit('update:status', $event)"
+            :options="extendedStatusOptions"
+            emit-value
+            map-options
+            style="min-width: 140px"
+          />
+        </div>
+
+        <!-- 关键词搜索 -->
+        <div class="col">
+          <q-input
+            dense
+            outlined
+            :model-value="keyword"
+            @update:model-value="emit('update:keyword', $event)"
+            placeholder="房号 / 订单号 / 客人 / 手机 / 备注"
+            @keyup.enter="emit('search')"
+            clearable
+          >
+            <template v-slot:prepend>
+              <q-icon name="search" />
+            </template>
+          </q-input>
+        </div>
+
+        <!-- 操作按钮 -->
+        <div class="col-auto flex q-gutter-x-sm">
+          <q-btn
+            unelevated
+            color="primary"
+            icon="search"
+            label="查询"
+            @click="emit('search')"
+            :loading="loading"
+            class="q-px-md"
+          />
+          <q-btn
+            outline
+            color="grey-8"
+            icon="restart_alt"
+            label="重置"
+            @click="emit('reset')"
+            class="q-px-md"
+          />
+        </div>
+      </div>
+      
+      <!-- 统计信息栏 -->
+      <div class="row items-center q-mt-md q-px-md q-py-sm bg-grey-1 rounded-borders summary-row" v-if="props.summary">
+        <div class="text-caption text-grey-8 q-mr-xl flex items-center">
+          <q-icon name="insights" size="18px" class="q-mr-xs" />
+          房态统计
+        </div>
+        <div class="flex q-gutter-x-xl">
+          <div v-for="item in summaryItems" :key="item.key" class="flex items-center">
+            <span class="text-subtitle2 q-mr-sm text-grey-8">{{ item.label }}:</span>
+            <span class="text-weight-bolder" :class="item.color" style="font-size: 18px;">{{ item.value }}</span>
           </div>
         </div>
-      </q-card-section>
-    </q-card>
-  </div>
+      </div>
+    </q-card-section>
+  </q-card>
 </template>
 
 <script setup>
 import { computed } from 'vue'
-import langZhCn from 'quasar/lang/zh-CN' // 导入中文语言包
 
-const locale = langZhCn.date
+const viewOptions = [
+  { label: '单日', value: 'day' },
+  { label: '日历', value: 'calendar' }
+]
 
-// 定义 Props：接收父组件的数据
 const props = defineProps({
-  date: String,
-  type: String, // 选中的房型
-  status: String, // 选中的状态
-  roomTypeOptions: Array, // 房型选项列表
-  statusOptions: Array, // 状态选项列表
-  loading: Boolean, // 加载状态
-  totalAvailable: Number // 可用房间数
+  viewMode: { type: String, required: true },
+  date: { type: String, required: true },
+  startDate: { type: String, required: true },
+  type: { type: String, default: null },
+  status: { type: String, default: null },
+  keyword: { type: String, default: '' },
+  roomTypeOptions: { type: Array, default: () => [] },
+  statusOptions: { type: Array, default: () => [] },
+  summary: { type: Object, default: () => ({}) },
+  loading: { type: Boolean, default: false }
 })
 
-// 定义 Emits：支持 v-model 和按钮事件
 const emit = defineEmits([
+  'update:viewMode',
   'update:date',
+  'update:startDate',
   'update:type',
   'update:status',
+  'update:keyword',
   'search',
-  'reset'
+  'reset',
+  'jump-today',
+  'prev-range',
+  'next-range'
 ])
 
-// 格式化日期显示 (原逻辑迁移至此)
-const formattedDate = computed(() => {
-  if (!props.date) return ''
-  let dateStr = props.date.replace(/\//g, '-') // 兼容处理
-  const d = new Date(dateStr)
-  if (isNaN(d.getTime())) return props.date
+const activeDate = computed(() => (props.viewMode === 'calendar' ? props.startDate : props.date))
+const dateCaption = computed(() => (props.viewMode === 'calendar' ? '14 天起始日' : '单日房态'))
 
-  return d.toLocaleDateString('zh-CN', {
-    year: 'numeric', month: 'long', day: 'numeric', weekday: 'long'
-  })
-})
+const extendedRoomTypeOptions = computed(() => [
+  { label: '全部房型', value: null },
+  ...props.roomTypeOptions
+])
 
-// 简单的图标辅助函数 (如果图标逻辑很简单，可以放这里；如果复杂，建议父组件传 icon 或者保持现状)
-const getRoomTypeIcon = (selectedType) => {
-  // 这里为了解耦，简单处理：如果有选中，返回默认图标，或者父组件可以通过 slot/props 传递更详细的配置
-  // 暂时保留一个默认逻辑，或者你可以把 getRoomTypeIcon 的逻辑通过 composables 引入
-  return selectedType ? 'bed' : 'apartment'
+const extendedStatusOptions = computed(() => [
+  { label: '全部状态', value: null },
+  ...props.statusOptions
+])
+
+const summaryItems = computed(() => ([
+  { key: 'available', label: '可入住', value: props.summary?.available || 0, color: 'text-positive' },
+  { key: 'reserved', label: '已预订', value: props.summary?.reserved || 0, color: 'text-primary' },
+  { key: 'occupied', label: '已入住', value: props.summary?.occupied || 0, color: 'text-negative' }
+]))
+
+function handleDateChange(nextValue) {
+  if (!nextValue) return
+
+  // 中文注释：单日与日历共用这一套原生日期输入，仅分发不同字段。
+  if (props.viewMode === 'calendar') {
+    emit('update:startDate', nextValue)
+    return
+  }
+  emit('update:date', nextValue)
 }
 </script>
 
 <style scoped>
-/* 搬运原有的 CSS */
-.filters-row .filter-card {
-  border-radius: 16px;
-  box-shadow: 0 8px 20px rgba(33, 118, 255, 0.08);
-  border: 1px solid rgba(229, 232, 236, 0.9);
-  background: #fff;
+.room-filter-card {
+  border-radius: 8px;
+  border-color: #e2e8f0;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03) !important;
 }
-.glassy-card {
-  border-radius: 16px;
-  box-shadow: 0 10px 24px rgba(50, 115, 220, 0.08);
-  border: 1px solid rgba(229, 232, 236, 0.9);
+
+.view-mode-toggle {
+  border: 1px solid var(--q-primary);
+  border-radius: 6px;
 }
-.filter-input { padding: 0 8px; }
-.rounded-popup { border-radius: 12px; }
-.search-btn {
-  height: 42px;
-  border-radius: 12px;
-  box-shadow: 0 8px 16px rgba(33, 118, 255, 0.24);
-  transition: all 0.2s ease;
+
+.summary-row {
+  border: 1px solid #e2e8f0;
 }
-.search-btn:hover {
-  filter: brightness(1.04);
-  transform: translateY(-1px);
-}
-.pill-chip { border-radius: 999px; }
-.date-icon-btn { background: #f1f4f9; }
-.refresh-btn { border-color: #d3d7dd; }
 </style>

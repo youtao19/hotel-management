@@ -1,12 +1,67 @@
 "use strict";
 const { query, getClient } = require('../database/postgreDB/pg');
+// 中文注释：房态筛选仅允许展示层状态，避免前端和后端状态枚举不一致。
+const DISPLAY_STATUSES = ['available', 'occupied', 'reserved', 'cleaning', 'repair'];
+
+// 中文注释：统一生成房态摘要，供单日页工具栏和日历页顶部芯片直接渲染。
+function createRoomSummary(roomRows = [], summaryDate = null) {
+  const summary = {
+    date: summaryDate || null,
+    total: 0,
+    available: 0,
+    occupied: 0,
+    reserved: 0,
+    cleaning: 0,
+    repair: 0
+  };
+
+  for (const row of roomRows) {
+    const status = DISPLAY_STATUSES.includes(row?.display_status) ? row.display_status : 'available';
+    summary.total += 1;
+    summary[status] += 1;
+  }
+
+  return summary;
+}
+
+// 中文注释：关键词统一在后端做小写匹配，前端只传原始输入。
+function normalizeRoomKeyword(keyword) {
+  return String(keyword || '').trim().toLowerCase();
+}
+
+// 中文注释：单日与日历都复用同一套关键词匹配字段，保证筛选体验一致。
+function matchesRoomKeyword(roomRow, normalizedKeyword) {
+  if (!normalizedKeyword) return true;
+  const haystack = [
+    roomRow?.room_number,
+    roomRow?.order_id,
+    roomRow?.guest_name,
+    roomRow?.phone,
+    roomRow?.remarks
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  return haystack.includes(normalizedKeyword);
+}
+
 /**
  * 获取所有房间
- * @param {string} [queryDate] - 查询日期 YYYY-MM-DD，如果不提供则查询当前活跃订单
- * @returns {Promise<Array>} 所有房间列表
+ * @param {Object|string|null} [filters] - 单日房态筛选
+ * @returns {Promise<Object>} 房间列表和摘要
  */
-async function getAllRooms(queryDate = null) {
+async function getAllRooms(filters = null) {
   try {
+    // 中文注释：兼容历史调用方式，允许直接传日期字符串。
+    const normalizedFilters = (filters && typeof filters === 'object' && !Array.isArray(filters))
+      ? filters
+      : { date: filters || null };
+    const queryDate = normalizedFilters?.date ? String(normalizedFilters.date).trim() : null;
+    const typeCode = normalizedFilters?.typeCode ? String(normalizedFilters.typeCode).trim() : null;
+    const status = normalizedFilters?.status ? String(normalizedFilters.status).trim() : null;
+    const keyword = normalizeRoomKeyword(normalizedFilters?.keyword);
+
     // 说明：
     // - 房态最终显示(display_status)由 SQL 直接计算，前端仅渲染该字段
     // - 日期字段不使用 new Date()/toISOString() 做业务计算，统一以 YYYY-MM-DD 字符串传递给数据库
@@ -15,13 +70,17 @@ async function getAllRooms(queryDate = null) {
         SELECT COALESCE($1::date, CURRENT_DATE) AS stay_date
       )
       SELECT
+        sd.stay_date::text AS query_date,
         r.room_id,
         r.room_number,
         r.type_code,
+        rt.type_name,
         r.status,
         r.price,
         r.is_closed,
         o.guest_name,
+        o.phone,
+        o.remarks,
         o.check_out_date,
         o.order_status,
         o.order_id,
@@ -39,9 +98,12 @@ async function getAllRooms(queryDate = null) {
         END AS display_status
       FROM rooms r
       CROSS JOIN selected_date sd
+      LEFT JOIN room_types rt ON rt.type_code = r.type_code
       LEFT JOIN LATERAL (
         SELECT
           o.guest_name,
+          o.phone,
+          o.remarks,
           o.check_out_date,
           o.status AS order_status,
           o.order_id,
@@ -64,7 +126,19 @@ async function getAllRooms(queryDate = null) {
     `;
 
     const result = await query(sql, [queryDate]);
-    return result.rows;
+    const filteredRows = result.rows.filter((row) => {
+      // 中文注释：单日页的全部筛选统一在后端完成，前端只消费结果。
+      if (typeCode && row.type_code !== typeCode) return false;
+      if (status && row.display_status !== status) return false;
+      if (!matchesRoomKeyword(row, keyword)) return false;
+      return true;
+    });
+    const summaryDate = filteredRows[0]?.query_date || result.rows[0]?.query_date || queryDate || null;
+
+    return {
+      rows: filteredRows,
+      summary: createRoomSummary(filteredRows, summaryDate)
+    };
   } catch (error) {
     console.error('获取所有房间失败:', error);
     throw error;
@@ -153,6 +227,204 @@ async function getRoomStatusRange(roomNumber, startDate, endDate) {
     return result.rows;
   } catch (error) {
     console.error('获取房间日期范围房态失败:', error);
+    throw error;
+  }
+}
+
+/**
+ * 获取日历房主视图数据
+ * @param {Object} filters - 日历范围筛选
+ * @returns {Promise<Object>} 日历矩阵数据
+ */
+async function getCalendarBoard(filters = {}) {
+  try {
+    const startDate = String(filters?.startDate || '').trim();
+    const days = Number(filters?.days || 14);
+    const typeCode = filters?.typeCode ? String(filters.typeCode).trim() : null;
+    const status = filters?.status ? String(filters.status).trim() : null;
+    const keyword = normalizeRoomKeyword(filters?.keyword);
+
+    const sql = `
+      WITH date_series AS (
+        SELECT generate_series(
+          $1::date,
+          ($1::date + (($2::int - 1) * interval '1 day'))::date,
+          interval '1 day'
+        )::date AS stay_date
+      ),
+      room_base AS (
+        SELECT
+          r.room_number,
+          r.type_code,
+          rt.type_name,
+          r.status,
+          r.price,
+          r.is_closed
+        FROM rooms r
+        LEFT JOIN room_types rt ON rt.type_code = r.type_code
+        WHERE ($3::text IS NULL OR r.type_code = $3)
+      )
+      SELECT
+        ds.stay_date::text AS stay_date,
+        rb.room_number,
+        rb.type_code,
+        rb.type_name,
+        rb.price,
+        rb.status AS room_status,
+        rb.is_closed,
+        bo.order_id,
+        bo.guest_name,
+        bo.phone,
+        bo.remarks,
+        bo.check_in_date,
+        bo.check_out_date,
+        bo.order_status,
+        CASE
+          WHEN rb.is_closed = TRUE OR rb.status = 'repair' THEN 'repair'
+          WHEN bo.order_status IN ('checked-in', 'occupied') THEN 'occupied'
+          WHEN bo.order_status IN ('pending', 'reserved') THEN 'reserved'
+          WHEN rb.status = 'cleaning' THEN 'cleaning'
+          ELSE 'available'
+        END AS display_status
+      FROM date_series ds
+      CROSS JOIN room_base rb
+      LEFT JOIN LATERAL (
+        SELECT
+          o.order_id,
+          o.guest_name,
+          o.phone,
+          o.remarks,
+          o.check_in_date,
+          o.check_out_date,
+          o.status AS order_status,
+          o.create_time
+        FROM orders o
+        WHERE o.room_number = rb.room_number
+          AND o.stay_date = ds.stay_date
+          AND o.status IN ('pending', 'reserved', 'checked-in', 'occupied')
+        ORDER BY
+          CASE
+            WHEN o.status IN ('checked-in', 'occupied') THEN 2
+            WHEN o.status IN ('pending', 'reserved') THEN 1
+            ELSE 0
+          END DESC,
+          o.create_time DESC
+        LIMIT 1
+      ) bo ON TRUE
+      ORDER BY rb.type_code, rb.room_number, ds.stay_date
+    `;
+
+    const result = await query(sql, [startDate, days, typeCode]);
+    const roomMap = new Map();
+    const dateMap = new Map();
+
+    for (const row of result.rows) {
+      // 中文注释：日历按房间聚合，便于前端直接渲染每行 14 个格子。
+      if (!roomMap.has(row.room_number)) {
+        roomMap.set(row.room_number, {
+          room_number: row.room_number,
+          type_code: row.type_code,
+          type_name: row.type_name,
+          room_status: row.room_status,
+          is_closed: row.is_closed,
+          price: row.price,
+          calendar: []
+        });
+      }
+
+      const roomEntry = roomMap.get(row.room_number);
+      roomEntry.calendar.push({
+        date: row.stay_date,
+        display_status: row.display_status,
+        price: row.price,
+        order_id: row.order_id,
+        order_status: row.order_status,
+        guest_name: row.guest_name,
+        phone: row.phone,
+        remarks: row.remarks,
+        check_in_date: row.check_in_date,
+        check_out_date: row.check_out_date
+      });
+
+      // 中文注释：先准备每一天的状态计数，后续会在筛选后重算到最终 dailySummary。
+      if (!dateMap.has(row.stay_date)) {
+        dateMap.set(row.stay_date, {
+          date: row.stay_date,
+          total: 0,
+          available: 0,
+          occupied: 0,
+          reserved: 0,
+          cleaning: 0,
+          repair: 0,
+          available_count: 0
+        });
+      }
+    }
+
+    const filteredRooms = Array.from(roomMap.values())
+      .filter((room) => {
+        // 中文注释：日历状态筛选按 14 天范围内“任一日期命中”保留整行房间。
+        const statusMatched = !status || room.calendar.some(cell => cell.display_status === status);
+        if (!statusMatched) return false;
+
+        // 中文注释：关键词同样按可见范围内任一单元格命中保留房间。
+        if (!keyword) return true;
+        return room.calendar.some(cell => matchesRoomKeyword({
+          room_number: room.room_number,
+          order_id: cell.order_id,
+          guest_name: cell.guest_name,
+          phone: cell.phone,
+          remarks: cell.remarks
+        }, keyword));
+      })
+      .sort((left, right) => {
+        // 中文注释：先按房型再按房号排序，前端可以直接按当前顺序渲染分组。
+        const groupCompare = String(left.type_name || left.type_code || '').localeCompare(
+          String(right.type_name || right.type_code || ''),
+          'zh-Hans-CN'
+        );
+        if (groupCompare !== 0) return groupCompare;
+        return String(left.room_number).localeCompare(String(right.room_number), 'zh-Hans-CN');
+      });
+
+    const filteredRows = [];
+    for (const room of filteredRooms) {
+      // 中文注释：汇总和顶部剩余房数都基于过滤后的最终可见房间集。
+      for (const cell of room.calendar) {
+        filteredRows.push({
+          room_number: room.room_number,
+          display_status: cell.display_status,
+          stay_date: cell.date
+        });
+        const dateEntry = dateMap.get(cell.date);
+        if (!dateEntry) continue;
+        dateEntry.total += 1;
+        dateEntry[cell.display_status] += 1;
+        if (cell.display_status === 'available') {
+          dateEntry.available_count += 1;
+        }
+      }
+    }
+
+    const dailySummary = Array.from(dateMap.values())
+      .filter(item => item.total > 0)
+      .sort((left, right) => String(left.date).localeCompare(String(right.date), 'zh-Hans-CN'));
+    const summaryRows = filteredRows.filter(row => row.stay_date === startDate);
+
+    return {
+      query: {
+        startDate,
+        days,
+        typeCode,
+        status,
+        keyword: String(filters?.keyword || '').trim()
+      },
+      summary: createRoomSummary(summaryRows, startDate),
+      dailySummary,
+      rooms: filteredRooms
+    };
+  } catch (error) {
+    console.error('获取日历房数据失败:', error);
     throw error;
   }
 }
@@ -565,6 +837,7 @@ async function changeOrderRoom(orderNumber, oldRoomNumber, newRoomNumber) {
 // 导出表定义和功能函数
 module.exports = {
   getAllRooms,
+  getCalendarBoard,
   getRoomStatusRange,
   getRoomByNumber,
   updateRoomStatus,

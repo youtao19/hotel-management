@@ -1,6 +1,6 @@
 <template>
   <q-page class="check-in q-pa-md" style="max-width: 90%; margin: 0 auto;">
-    <h1 class="text-h4 q-mb-md">创建订单</h1>
+    <!-- <h1 class="text-h4 q-mb-md">创建订单</h1> -->
     <q-card>
       <q-card-section>
         <q-form @submit="submitOrder" class="q-gutter-md">
@@ -74,6 +74,7 @@
 <script setup>
 import { onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { date as qDate } from 'quasar'
 
 // 引入子组件
 import OrderInfoSection from './components/OrderInfoSection.vue'
@@ -130,9 +131,15 @@ const normalizeRouteParam = (param) => {
   const str = String(param).trim()
   return str === '' ? null : str
 }
+const normalizeRouteDateParam = (param) => {
+  const normalized = normalizeRouteParam(param)
+  if (normalized && /^\d{4}-\d{2}-\d{2}$/.test(normalized)) return normalized
+  return null
+}
 const pendingRouteSelection = ref({
   roomNumber: normalizeRouteParam(route.query.roomNumber),
-  roomType: normalizeRouteParam(route.query.roomType)
+  roomType: normalizeRouteParam(route.query.roomType),
+  checkInDate: normalizeRouteDateParam(route.query.checkInDate)
 })
 
 // --- 胶水逻辑：处理跨模块副作用 ---
@@ -157,11 +164,12 @@ watch(
 
 // 监听路由参数变化，支持从房态页跳转预选房间
 watch(
-  () => [route.query.roomNumber, route.query.roomType],
+  () => [route.query.roomNumber, route.query.roomType, route.query.checkInDate],
   () => {
     pendingRouteSelection.value = {
       roomNumber: normalizeRouteParam(route.query.roomNumber),
-      roomType: normalizeRouteParam(route.query.roomType)
+      roomType: normalizeRouteParam(route.query.roomType),
+      checkInDate: normalizeRouteDateParam(route.query.checkInDate)
     }
     applyRouteSelection()
   }
@@ -179,8 +187,17 @@ watch(() => orderData.value.roomNumber, async (newVal) => {
 })
 
 async function applyRouteSelection() {
-  const { roomNumber, roomType } = pendingRouteSelection.value
-  if (!roomNumber && !roomType) return
+  const { roomNumber, roomType, checkInDate } = pendingRouteSelection.value
+  if (!roomNumber && !roomType && !checkInDate) return
+
+  if (checkInDate) {
+    // 中文注释：从房态页带入入住日期时，默认同步一晚离店日期，减少手工输入。
+    orderData.value.checkInDate = checkInDate
+    orderData.value.checkOutDate = qDate.formatDate(
+      qDate.addToDate(qDate.extractDate(checkInDate, 'YYYY-MM-DD'), { days: 1 }),
+      'YYYY-MM-DD'
+    )
+  }
 
   if (roomType) {
     orderData.value.roomType = roomType
@@ -206,7 +223,7 @@ async function applyRouteSelection() {
     autoSelectRandomRoom()
   }
 
-  pendingRouteSelection.value = { roomNumber: null, roomType: null }
+  pendingRouteSelection.value = { roomNumber: null, roomType: null, checkInDate: null }
 }
 
 // 初始化
