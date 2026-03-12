@@ -133,6 +133,11 @@ const room_type = require("./tables/room_type");
 const room = require("./tables/room");
 const order_change = require("./tables/change_order");
 const dashboard_memo = require("./tables/dashboard_memo");
+const douyin_account_config = require("./tables/douyin_account_config");
+const douyin_room_mapping = require("./tables/douyin_room_mapping");
+const douyin_order = require("./tables/douyin_order");
+const douyin_order_event = require("./tables/douyin_order_event");
+const douyin_outbox = require("./tables/douyin_outbox");
 
 //table order here is important
 //since we have foreign key reference other table
@@ -140,6 +145,11 @@ tables.push(room_type);
 tables.push(room);
 tables.push(order);
 tables.push(bill);
+tables.push(douyin_account_config);
+tables.push(douyin_room_mapping);
+tables.push(douyin_order);
+tables.push(douyin_order_event);
+tables.push(douyin_outbox);
 tables.push(handover);
 tables.push(dashboard_memo);
 tables.push(review_invitation);
@@ -193,6 +203,13 @@ async function initializePostgreDB() {
   } catch (err) {
     // 如果表不存在或字段不可变更，保留原错误信息用于排查；正常情况下不会触发。
     console.warn('[initializePostgreDB] bills.room_number 字段升级跳过:', err.message);
+  }
+  // 抖音 SDK 直连需要 account_id、hotel_id 两个业务标识，这里做幂等补列。
+  try {
+    await pool.query(`ALTER TABLE douyin_account_config ADD COLUMN IF NOT EXISTS account_id VARCHAR(100);`);
+    await pool.query(`ALTER TABLE douyin_account_config ADD COLUMN IF NOT EXISTS hotel_id VARCHAR(100);`);
+  } catch (err) {
+    console.warn('[initializePostgreDB] douyin_account_config 字段升级跳过:', err.message);
   }
   await createIndex();
 }

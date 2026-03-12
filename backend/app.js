@@ -12,6 +12,17 @@ let app = express();
 
 app.disable('x-powered-by');
 
+/**
+ * 保留原始请求体，供渠道签名校验使用。
+ * @param {import('express').Request} req 请求对象
+ * @param {import('express').Response} _res 响应对象
+ * @param {Buffer} buf 原始缓冲区
+ * @returns {void}
+ */
+function captureRawBody(req, _res, buf) {
+  req.rawBody = buf && buf.length ? buf.toString('utf8') : '';
+}
+
 // 静态文件路径：Docker 环境统一使用 ./frontend_dist
 const staticFileRoot = path.join(__dirname, 'frontend_dist');
 
@@ -26,16 +37,19 @@ app.use(cors({
 // 解析中间件
 app.use(express.json({
   limit: setup.reqSizeLimit,
-  strict: false
+  strict: false,
+  verify: captureRawBody
 }));
 
 app.use(express.urlencoded({
   extended: true,
-  limit: setup.reqSizeLimit
+  limit: setup.reqSizeLimit,
+  verify: captureRawBody
 }));
 
 app.use(express.text({
-  limit: setup.reqSizeLimit
+  limit: setup.reqSizeLimit,
+  verify: captureRawBody
 }));
 
 // 初始化 session 和 Redis store 的函数
@@ -99,6 +113,9 @@ async function initializeSession() {
 
     const dashboardMemoRoute = require("./routes/dashboardMemoRoute");
     app.use("/api/dashboard/memos", dashboardMemoRoute);
+
+    const otaRoute = require("./routes/ota");
+    app.use("/ota", otaRoute);
 
     app.get("/api/hup", (req, res) => res.status(200).json({ ok: true }));
 
