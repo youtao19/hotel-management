@@ -138,6 +138,8 @@ const douyin_room_mapping = require("./tables/douyin_room_mapping");
 const douyin_order = require("./tables/douyin_order");
 const douyin_order_event = require("./tables/douyin_order_event");
 const douyin_outbox = require("./tables/douyin_outbox");
+const ota_order_relation = require("./tables/ota_order_relation");
+const ota_roomType_relation = require("./tables/ota_roomType_relation");
 
 //table order here is important
 //since we have foreign key reference other table
@@ -150,6 +152,8 @@ tables.push(douyin_room_mapping);
 tables.push(douyin_order);
 tables.push(douyin_order_event);
 tables.push(douyin_outbox);
+tables.push(ota_order_relation);
+tables.push(ota_roomType_relation);
 tables.push(handover);
 tables.push(dashboard_memo);
 tables.push(review_invitation);
@@ -178,11 +182,58 @@ async function createIndex() {
   for (let table of tables) {
     if (table.createIndexQueryStrings) {
       for (let indexQuery of table.createIndexQueryStrings) {
-        await pool.query(indexQuery);
+        try {
+          await pool.query(indexQuery);
+        } catch (err) {
+          if (err.code === '42P07' || err.code === '23505') {
+            console.warn('[createIndex] 索引已存在，跳过:', err.message);
+            continue;
+          }
+          throw err;
+        }
       }
     }
   }
 }
+
+async function createComments() {
+  for (let table of tables) {
+    if (table.createCommentQueryStrings) {
+      for (let commentQuery of table.createCommentQueryStrings) {
+        await pool.query(commentQuery);
+      }
+    }
+  }
+}
+
+async function optimizeOtaTables() {
+  try {
+    await pool.query(`DROP INDEX IF EXISTS uniq_ota_order_relation_platform_order;`);
+    await pool.query(`DROP INDEX IF EXISTS idx_ota_order_relation_local_order;`);
+    await pool.query(`DROP INDEX IF EXISTS idx_ota_order_relation_status;`);
+    await pool.query(`ALTER TABLE ota_order_relation ADD COLUMN IF NOT EXISTS ota_room_type VARCHAR(50);`);
+    await pool.query(`ALTER TABLE ota_order_relation ADD COLUMN IF NOT EXISTS ota_guest_name VARCHAR(100);`);
+    await pool.query(`ALTER TABLE ota_order_relation ADD COLUMN IF NOT EXISTS ota_check_in_date DATE;`);
+    await pool.query(`ALTER TABLE ota_order_relation ADD COLUMN IF NOT EXISTS ota_check_out_date DATE;`);
+    await pool.query(`ALTER TABLE ota_order_relation ADD COLUMN IF NOT EXISTS ota_total_price NUMERIC(10,2);`);
+    await pool.query(`ALTER TABLE ota_order_relation ADD COLUMN IF NOT EXISTS ota_order_status VARCHAR(30);`);
+      await pool.query(`
+      ALTER TABLE ota_order_relation
+      DROP COLUMN IF EXISTS channel_account_id,
+      DROP COLUMN IF EXISTS ota_sub_order_id,
+      DROP COLUMN IF EXISTS order_source,
+      DROP COLUMN IF EXISTS current_order_status,
+      DROP COLUMN IF EXISTS current_pay_status,
+      DROP COLUMN IF EXISTS current_cancel_status,
+      DROP COLUMN IF EXISTS first_request_at,
+      DROP COLUMN IF EXISTS last_request_at;
+    `);
+    await pool.query(`DROP INDEX IF EXISTS idx_ota_order_relation_status;`);
+  } catch (err) {
+    console.warn('[initializePostgreDB] ota_order_relation 精简跳过:', err.message);
+  }
+}
+
 async function tearDownPostgreDB() {
   createPool();
   //await createDatabase();
@@ -211,7 +262,13 @@ async function initializePostgreDB() {
   } catch (err) {
     console.warn('[initializePostgreDB] douyin_account_config 字段升级跳过:', err.message);
   }
+  await optimizeOtaTables();
   await createIndex();
+  await createComments();
+}
+
+async function initializeHotelDB() {
+  await initializePostgreDB();
 }
 
 
@@ -225,6 +282,7 @@ async function closePool() {
 const db = {
   query,
   connect,
+  initializeHotelDB,
   initializePostgreDB,
   getClient,
   tearDownPostgreDB,

@@ -47,6 +47,7 @@
 + 所有函数都需要规范的中文注释，包括参数、返回值、异常等。
 + 代码中的所有变量、函数、类、接口等都需要规范的中文注释。
 + 代码中的所有常量都需要规范的中文注释。
++ 不要写'中文注释'到代码中，直接写中文注释内容。
 
   
 
@@ -68,3 +69,6 @@ DATE 字段在 Node.js 中应:
 当你了解了我的需求后，你也可以逐渐完善我的 `业务说明.md` 文件，来让它更清晰和完整。
 
 Always use Context7 MCP when I need library/API documentation, code generation, setup or configuration steps without me having to explicitly ask.
+
+## 修改代码
+你要修改代码的时候，先将你要修改的思路告诉我，等我同意后再修改代码。

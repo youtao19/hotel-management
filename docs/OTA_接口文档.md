@@ -227,3 +227,63 @@ GET /api/ota/v1/inventory?startDate=2026-03-10&endDate=2026-03-12&roomType=asu_x
 - `OTA_MEITUAN_SECRET`: 美团渠道 secret
 - `OTA_SIGN_SKEW_SECONDS`: 时间戳允许偏差秒数
 - `OTA_NONCE_TTL_SECONDS`: nonce 防重放缓存秒数
+
+## 8. 插件接单接口（动态签名）
+
+### 8.1 请求
+- Method: `POST`
+- Path: `/api/plugin/orders`
+- 鉴权请求头：
+  - `x-plugin-key`: 插件调用方标识
+  - `x-plugin-timestamp`: 时间戳（10位秒 / 13位毫秒）
+  - `x-plugin-nonce`: 单次请求随机串（8~128位）
+  - `x-plugin-signature`: HMAC-SHA256 签名（hex 小写）
+
+签名基串：
+
+```text
+METHOD
+PATH
+TIMESTAMP
+NONCE
+SHA256(rawBody)
+```
+
+说明：
+- `METHOD`：大写 HTTP 方法，例如 `POST`
+- `PATH`：不含 query 的路径，例如 `/api/plugin/orders`
+- `rawBody`：原始请求体字符串（服务端按原始报文参与验签）
+
+签名计算：
+
+```text
+signature = HMAC_SHA256(PLUGIN_API_SECRET, signPayload)
+```
+
+### 8.2 典型鉴权错误码
+- `PLUGIN_AUTH_NOT_CONFIGURED`：服务端未配置 key/secret
+- `PLUGIN_AUTH_MISSING_HEADERS`：缺少签名请求头
+- `PLUGIN_AUTH_INVALID_KEY`：`x-plugin-key` 不匹配
+- `PLUGIN_AUTH_INVALID_TIMESTAMP`：时间戳格式错误
+- `PLUGIN_AUTH_TIMESTAMP_EXPIRED`：时间戳超窗
+- `PLUGIN_AUTH_INVALID_NONCE`：nonce 长度不合法
+- `PLUGIN_AUTH_NONCE_REPLAYED`：nonce 重放
+- `PLUGIN_AUTH_INVALID_SIGNATURE`：签名不匹配
+
+### 8.3 关系表快照落库字段
+- `platform` <- `platform`
+- `ota_order_id` <- `otaOrderId`
+- `local_order_id` <- 本地创建的 `orderId`
+- `ota_room_type` <- `roomType`
+- `ota_guest_name` <- `guestName`
+- `ota_check_in_date` <- `checkInDate`
+- `ota_check_out_date` <- `checkOutDate`
+- `ota_total_price` <- `totalPrice`（缺失时回退 `roomPrice` 汇总）
+- `ota_order_status` <- `otaOrderStatus`
+- `latest_payload` <- 请求快照（含签名上下文，不含 secret）
+
+### 8.4 插件鉴权环境变量
+- `PLUGIN_API_KEY`: 插件调用方标识
+- `PLUGIN_API_SECRET`: 插件签名密钥
+- `PLUGIN_SIGN_SKEW_SECONDS`: 时间戳允许偏差秒数（默认 `300`）
+- `PLUGIN_NONCE_TTL_SECONDS`: nonce 防重放缓存秒数（默认 `600`）

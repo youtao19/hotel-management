@@ -11,6 +11,7 @@ const tables = [
   'douyin_outbox',
   'douyin_order_event',
   'douyin_order',
+  'ota_order_relation',
   'douyin_room_mapping',
   'douyin_account_config',
   'review_invitations',

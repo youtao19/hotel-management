@@ -230,8 +230,8 @@ async function createOrder(orderData, client) {
       isPrepaid, prepaidAmount, stayType
     } = orderData;
 
-    const normalizedOrderSource = orderSource || orderData.order_source || 'front_desk';
-    const normalizedStayType = stayType || orderData.stay_type || '客房';
+    const normalizedOrderSource = orderSource || 'front_desk';
+    const normalizedStayType = stayType || '客房';
     const normalizedIsPrepaid = Boolean(isPrepaid);
     const normalizedPrepaidAmount = toAmountNumber(prepaidAmount || 0);
 

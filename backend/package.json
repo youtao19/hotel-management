@@ -16,7 +16,7 @@
     "export-all": "node scripts/exportAll.js",
     "douyin:discover": "node scripts/queryDouyinHotelParams.js",
     "db:backup": "node scripts/exportAll.js",
-    "db:init": "node -e \"require('./database/postgreDB/pg').initializeHotelDB()\"",
+    "db:init": "dotenv -e ../dev.env -- node -e \"require('./database/postgreDB/pg').initializeHotelDB()\"",
     "db:migrate": "node database/postgreDB/migrations/run-migrations.js"
   },
   "dependencies": {

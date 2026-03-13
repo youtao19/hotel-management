@@ -110,12 +110,14 @@ async function initializeSession() {
     const revenueRoute = require("./routes/revenueRoute");
     app.use("/api/revenue", revenueRoute);
 
-
     const dashboardMemoRoute = require("./routes/dashboardMemoRoute");
     app.use("/api/dashboard/memos", dashboardMemoRoute);
 
     const otaRoute = require("./routes/ota");
     app.use("/ota", otaRoute);
+
+    const pluginRoute = require("./routes/plugin/plugin-order.routes");
+    app.use("/api/plugin", pluginRoute);
 
     app.get("/api/hup", (req, res) => res.status(200).json({ ok: true }));
 
