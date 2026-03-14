@@ -287,3 +287,146 @@ signature = HMAC_SHA256(PLUGIN_API_SECRET, signPayload)
 - `PLUGIN_API_SECRET`: 插件签名密钥
 - `PLUGIN_SIGN_SKEW_SECONDS`: 时间戳允许偏差秒数（默认 `300`）
 - `PLUGIN_NONCE_TTL_SECONDS`: nonce 防重放缓存秒数（默认 `600`）
+
+## 9. 插件房型映射接口
+
+### 9.1 鉴权方式
+房型映射接口当前使用 Bearer Token 鉴权，请求头如下：
+
+```http
+Authorization: Bearer <PLUGIN_API_TOKEN>
+```
+
+环境变量：
+- `PLUGIN_API_TOKEN`: 插件调用接口的访问令牌
+
+鉴权失败时的典型响应：
+- 未配置 `PLUGIN_API_TOKEN`：`500`
+- 缺少 `Authorization` 请求头：`401`
+- `Authorization` 格式错误：`401`
+- Token 无效：`401`
+
+### 9.2 查询房型映射列表
+
+- Method: `GET`
+- Path: `/api/plugin/room-type-mapping`
+
+#### 查询参数
+- `platform`: 可选，平台标识，例如 `meituan`
+
+#### 请求示例
+
+```bash
+curl -X GET 'http://localhost:3000/api/plugin/room-type-mapping?platform=meituan' \
+  -H 'Authorization: Bearer <PLUGIN_API_TOKEN>'
+```
+
+#### 成功响应示例
+
+```json
+{
+  "success": true,
+  "code": "PLUGIN_ROOM_TYPE_MAPPING_LIST",
+  "data": [
+    {
+      "id": 1,
+      "platform": "meituan",
+      "ota_room_type": "畅想影音 云端全景大床房",
+      "local_room_type": "asu_xiao_zhu",
+      "created_at": "2026-03-14 10:00:00+08",
+      "updated_at": "2026-03-14 10:00:00+08"
+    },
+    {
+      "id": 2,
+      "platform": "meituan",
+      "ota_room_type": "行云阁 大床房",
+      "local_room_type": "xing_yun_ge",
+      "created_at": "2026-03-14 10:00:00+08",
+      "updated_at": "2026-03-14 10:00:00+08"
+    }
+  ],
+  "message": "插件房型映射列表获取成功"
+}
+```
+
+### 9.3 批量保存房型映射
+
+- Method: `POST`
+- Path: `/api/plugin/room-type-mapping`
+
+#### 请求体字段
+- `platform`: 必填，平台标识
+- `mappings`: 必填，对象类型，key 为 OTA 房型名称，value 为本地房型映射信息
+
+`mappings` 结构说明：
+- 对象 key：OTA 房型名称
+- `value`: 本地房型编码，对应 `room_types.type_code`
+- `label`: 本地房型名称，当前仅用于插件侧展示，服务端当前不落库
+
+#### 请求示例
+
+```json
+{
+  "platform": "meituan",
+  "mappings": {
+    "畅想影音 云端全景大床房": {
+      "value": "asu_xiao_zhu",
+      "label": "阿蘇小筑"
+    },
+    "行云阁 大床房": {
+      "value": "xing_yun_ge",
+      "label": "行云阁"
+    }
+  }
+}
+```
+
+#### 处理规则
+- 服务端会将 `mappings` 展开为多条映射记录批量处理
+- 以 `(platform, ota_room_type)` 作为唯一键
+- 已存在则更新 `local_room_type` 和 `updated_at`
+- 不存在则新增
+
+#### 成功响应示例
+
+```json
+{
+  "success": true,
+  "code": "PLUGIN_ROOM_TYPE_MAPPING_SAVED",
+  "data": [
+    {
+      "id": 1,
+      "platform": "meituan",
+      "ota_room_type": "畅想影音 云端全景大床房",
+      "local_room_type": "asu_xiao_zhu",
+      "created_at": "2026-03-14 10:00:00+08",
+      "updated_at": "2026-03-14 10:05:00+08"
+    },
+    {
+      "id": 2,
+      "platform": "meituan",
+      "ota_room_type": "行云阁 大床房",
+      "local_room_type": "xing_yun_ge",
+      "created_at": "2026-03-14 10:00:00+08",
+      "updated_at": "2026-03-14 10:05:00+08"
+    }
+  ],
+  "message": "插件房型映射保存成功"
+}
+```
+
+#### 典型错误响应
+- `platform` 缺失：`400`
+- `mappings` 不是对象：`400`
+- `mappings` 为空对象：`400`
+- 某个房型缺少 `value`：`400`
+
+### 9.4 数据库存储说明
+房型映射保存到表 `plugin_room_type_mapping`，字段含义如下：
+
+- `id`: 主键 ID
+- `platform`: 平台标识
+- `ota_room_type`: OTA 房型名称或标识
+- `local_room_type`: 本地房型编码，对应 `room_types.type_code`
+- `created_at`: 创建时间
+- `updated_at`: 更新时间

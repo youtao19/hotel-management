@@ -52,7 +52,7 @@ async function createPluginOrder(req, res) {
 
     const result = await createPluginOrderService({
       ...body,
-      pluginAuth: req.pluginAuth
+      pluginToken: req.pluginToken
     });
     console.log("createPluginOrder result:", result.message);
 

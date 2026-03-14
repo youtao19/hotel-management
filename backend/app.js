@@ -119,6 +119,12 @@ async function initializeSession() {
     const pluginRoute = require("./routes/plugin/plugin-order.routes");
     app.use("/api/plugin", pluginRoute);
 
+    const pluginRoomTypeRoute = require("./routes/plugin/plugin-room-types.api");
+    app.use("/api/plugin/room-types", pluginRoomTypeRoute);
+
+    const pluginRoomTypeMappingRoute = require("./routes/plugin/room-map/room-map.routes");
+    app.use("/api/plugin/room-type-mapping", pluginRoomTypeMappingRoute);
+
     app.get("/api/hup", (req, res) => res.status(200).json({ ok: true }));
 
     // ✅ SPA History Fallback - 必须在静态文件服务之前

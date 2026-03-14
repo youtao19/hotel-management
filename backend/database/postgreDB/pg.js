@@ -140,6 +140,7 @@ const douyin_order_event = require("./tables/douyin_order_event");
 const douyin_outbox = require("./tables/douyin_outbox");
 const ota_order_relation = require("./tables/ota_order_relation");
 const ota_roomType_relation = require("./tables/ota_roomType_relation");
+const plugin_room_type_mapping = require("./tables/plugin_room_type_mapping");
 
 //table order here is important
 //since we have foreign key reference other table
@@ -154,6 +155,7 @@ tables.push(douyin_order_event);
 tables.push(douyin_outbox);
 tables.push(ota_order_relation);
 tables.push(ota_roomType_relation);
+tables.push(plugin_room_type_mapping);
 tables.push(handover);
 tables.push(dashboard_memo);
 tables.push(review_invitation);
