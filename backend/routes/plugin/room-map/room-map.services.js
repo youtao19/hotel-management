@@ -1,19 +1,29 @@
 const { query, getClient } = require('../../../database/postgreDB/pg');
 
+/**
+ * 查询插件房型映射列表。
+ * @param {Object} params 查询参数
+ * @param {string} params.platform 平台标识，可选
+ * @returns {Promise<Array<Object>>} 映射列表（含本地房型名称）
+ * @throws {Error} 数据库查询失败时抛出异常
+ */
 async function listPluginRoomTypeMappingsService({ platform }) {
   /**
    * 基础查询 SQL。
-   * 按平台、OTA 房型、主键升序返回，保证结果稳定。
+   * 联表 room_types 返回本地房型名称，前端可以直接展示名称。
    */
   let sql = `
     SELECT
-      id,
-      platform,
-      ota_room_type,
-      local_room_type,
-      created_at,
-      updated_at
-    FROM plugin_room_type_mapping
+      prm.id,
+      prm.platform,
+      prm.ota_room_type,
+      prm.local_room_type,
+      rt.type_name AS local_room_type_name,
+      prm.created_at,
+      prm.updated_at
+    FROM plugin_room_type_mapping prm
+    LEFT JOIN room_types rt
+      ON rt.type_code = prm.local_room_type
   `;
 
   /**
@@ -22,11 +32,11 @@ async function listPluginRoomTypeMappingsService({ platform }) {
   const values = [];
 
   if (platform) {
-    sql += ` WHERE platform = $1`;
+    sql += ` WHERE prm.platform = $1`;
     values.push(platform);
   }
 
-  sql += ` ORDER BY platform ASC, ota_room_type ASC, id ASC`;
+  sql += ` ORDER BY prm.platform ASC, prm.ota_room_type ASC, prm.id ASC`;
 
   const result = await query(sql, values);
   return result.rows;
@@ -52,17 +62,36 @@ async function createPluginRoomTypeMappingService({ platform, mappingList }) {
      * 当平台和 OTA 房型已存在时，仅更新本地房型和更新时间。
      */
     const upsertSql = `
-      INSERT INTO plugin_room_type_mapping (
-        platform,
-        ota_room_type,
-        local_room_type
+      WITH upserted AS (
+        INSERT INTO plugin_room_type_mapping (
+          platform,
+          ota_room_type,
+          local_room_type
+        )
+        VALUES ($1, $2, $3)
+        ON CONFLICT (platform, ota_room_type)
+        DO UPDATE SET
+          local_room_type = EXCLUDED.local_room_type,
+          updated_at = now()
+        RETURNING
+          id,
+          platform,
+          ota_room_type,
+          local_room_type,
+          created_at,
+          updated_at
       )
-      VALUES ($1, $2, $3)
-      ON CONFLICT (platform, ota_room_type)
-      DO UPDATE SET
-        local_room_type = EXCLUDED.local_room_type,
-        updated_at = now()
-      RETURNING id, platform, ota_room_type, local_room_type, created_at, updated_at
+      SELECT
+        upserted.id,
+        upserted.platform,
+        upserted.ota_room_type,
+        upserted.local_room_type,
+        rt.type_name AS local_room_type_name,
+        upserted.created_at,
+        upserted.updated_at
+      FROM upserted
+      LEFT JOIN room_types rt
+        ON rt.type_code = upserted.local_room_type
     `;
 
     // 保存后的映射结果

@@ -333,6 +333,7 @@ curl -X GET 'http://localhost:3000/api/plugin/room-type-mapping?platform=meituan
       "platform": "meituan",
       "ota_room_type": "畅想影音 云端全景大床房",
       "local_room_type": "asu_xiao_zhu",
+      "local_room_type_name": "阿苏晓筑",
       "created_at": "2026-03-14 10:00:00+08",
       "updated_at": "2026-03-14 10:00:00+08"
     },
@@ -341,6 +342,7 @@ curl -X GET 'http://localhost:3000/api/plugin/room-type-mapping?platform=meituan
       "platform": "meituan",
       "ota_room_type": "行云阁 大床房",
       "local_room_type": "xing_yun_ge",
+      "local_room_type_name": "行云阁",
       "created_at": "2026-03-14 10:00:00+08",
       "updated_at": "2026-03-14 10:00:00+08"
     }
@@ -361,7 +363,7 @@ curl -X GET 'http://localhost:3000/api/plugin/room-type-mapping?platform=meituan
 `mappings` 结构说明：
 - 对象 key：OTA 房型名称
 - `value`: 本地房型编码，对应 `room_types.type_code`
-- `label`: 本地房型名称，当前仅用于插件侧展示，服务端当前不落库
+- `label`: 本地房型名称，可选字段，仅用于插件侧展示，服务端不落库
 
 #### 请求示例
 
@@ -399,6 +401,7 @@ curl -X GET 'http://localhost:3000/api/plugin/room-type-mapping?platform=meituan
       "platform": "meituan",
       "ota_room_type": "畅想影音 云端全景大床房",
       "local_room_type": "asu_xiao_zhu",
+      "local_room_type_name": "阿苏晓筑",
       "created_at": "2026-03-14 10:00:00+08",
       "updated_at": "2026-03-14 10:05:00+08"
     },
@@ -407,6 +410,7 @@ curl -X GET 'http://localhost:3000/api/plugin/room-type-mapping?platform=meituan
       "platform": "meituan",
       "ota_room_type": "行云阁 大床房",
       "local_room_type": "xing_yun_ge",
+      "local_room_type_name": "行云阁",
       "created_at": "2026-03-14 10:00:00+08",
       "updated_at": "2026-03-14 10:05:00+08"
     }
@@ -428,5 +432,6 @@ curl -X GET 'http://localhost:3000/api/plugin/room-type-mapping?platform=meituan
 - `platform`: 平台标识
 - `ota_room_type`: OTA 房型名称或标识
 - `local_room_type`: 本地房型编码，对应 `room_types.type_code`
+- `local_room_type_name`: 本地房型名称（查询/保存响应通过关联 `room_types.type_name` 返回）
 - `created_at`: 创建时间
 - `updated_at`: 更新时间
