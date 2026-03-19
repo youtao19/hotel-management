@@ -1,4 +1,4 @@
-FROM node:22.20.0 AS builder
+FROM node:20.20.0 AS builder
 
 WORKDIR /app
 
@@ -8,7 +8,7 @@ COPY backend/package*.json ./
 # Install dependencies in the container (not copying from host)
 RUN npm install --omit=dev
 
-FROM node:22.20.0 AS runner
+FROM node:20.20.0 AS runner
 
 RUN mkdir -p /home/node/app/node_modules && chown -R node:node /home/node/app
 

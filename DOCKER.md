@@ -5,7 +5,7 @@
 本项目已完全 Docker 化，包含以下服务：
 - **PostgreSQL 17.6** - 数据库服务
 - **Redis 7** - 缓存服务
-- **Backend (Node.js 22)** - 后端 API 服务
+- **Backend (Node.js 20.20.0)** - 后端 API 服务
 - **Frontend (Quasar/Vue.js)** - 前端 Web 应用
 
 ## 🚀 快速开始
@@ -166,6 +166,26 @@ docker compose build --no-cache backend
 
 # 重新构建并启动
 docker compose up -d --build
+```
+
+### 容器内运行后端测试
+
+```bash
+# 启动依赖服务（数据库与 Redis）
+docker compose up -d postgres redis
+
+# 运行一次后端测试容器（按需构建 test 镜像）
+docker compose --profile test run --rm backend-test
+```
+
+### 容器内运行 E2E 测试
+
+```bash
+# 启动依赖服务（数据库与 Redis）
+docker compose up -d postgres redis
+
+# 运行 Playwright E2E（首次会安装依赖，耗时较长）
+docker compose --profile test run --rm e2e
 ```
 
 ### 进入容器

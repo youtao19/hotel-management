@@ -3,10 +3,7 @@ node_modules
 npm-debug.log
 .npm
 
-# Ignore test files
-tests
-*.test.js
-__mocks__
+# 保留 tests 与 __mocks__，测试镜像需要这些文件
 
 # Ignore development files
 .env

@@ -1,0 +1,19 @@
+FROM node:20.20.0
+
+# 测试容器工作目录
+WORKDIR /home/node/app
+
+# 先复制依赖清单，利用层缓存加速重复构建
+COPY package*.json ./
+
+# 安装完整依赖（包含 Jest、dotenv-cli 等测试依赖）
+RUN npm install
+
+# 复制后端全部源码与测试文件
+COPY . ./
+
+# 使用非 root 用户执行测试，避免权限风险
+USER node
+
+# 默认执行后端 Jest 测试（提高栈深避免抖音 SDK 在 Jest 运行态触发栈溢出）
+CMD ["sh", "-lc", "NODE_ENV=test node --stack_size=8192 ./node_modules/.bin/jest --runInBand --rootDir=."]

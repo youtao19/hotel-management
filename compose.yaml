@@ -25,7 +25,7 @@ services:
   backend:
     build:
       context: .
-      dockerfile: backend/Dockerfile
+      dockerfile: backend/dockerfile
     depends_on:
       postgres:
         condition: service_healthy
@@ -36,7 +36,63 @@ services:
     ports:
       - "3000:3000"
 
+  backend-test:
+    # 测试服务按需启用，避免影响常规 docker compose up
+    profiles:
+      - test
+    build:
+      context: ./backend
+      dockerfile: dockerfile.test
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    # 复用测试环境变量，并覆盖容器内的主机名为 compose 服务名
+    env_file:
+      - .env.test
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+    volumes:
+      - ./sql:/home/node/sql:ro
+
+  e2e:
+    # E2E 测试按需启用，避免影响默认开发启动流程
+    profiles:
+      - test
+    image: mcr.microsoft.com/playwright:v1.57.0-jammy
+    working_dir: /work
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      # 容器内 E2E 进程通过服务名访问数据库与 Redis
+      E2E_POSTGRES_HOST: postgres
+      E2E_REDIS_HOST: redis
+      # Playwright 的 global-setup/global-teardown 直接读取这些变量
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      E2E_BASE_URL: http://localhost:9011
+      CI: "1"
+    volumes:
+      # 挂载项目源码，便于直接执行 Playwright 与工作区脚本
+      - ./:/work
+      # 使用独立 node_modules，避免与宿主机依赖冲突（如 bcrypt 二进制）
+      - e2e_root_node_modules:/work/node_modules
+      - e2e_backend_node_modules:/work/backend/node_modules
+      - e2e_frontend_node_modules:/work/frontend/node_modules
+      # 缓存 npm 下载目录，减少重复安装耗时
+      - e2e_npm_cache:/root/.npm
+    command: >
+      sh -lc "npm install && npm run test:e2e"
 
 volumes:
   pgdata:
   redis:
+  e2e_root_node_modules:
+  e2e_backend_node_modules:
+  e2e_frontend_node_modules:
+  e2e_npm_cache:
