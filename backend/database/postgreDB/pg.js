@@ -219,6 +219,7 @@ async function optimizeOtaTables() {
     await pool.query(`ALTER TABLE ota_order_relation ADD COLUMN IF NOT EXISTS ota_check_out_date DATE;`);
     await pool.query(`ALTER TABLE ota_order_relation ADD COLUMN IF NOT EXISTS ota_total_price NUMERIC(10,2);`);
     await pool.query(`ALTER TABLE ota_order_relation ADD COLUMN IF NOT EXISTS ota_order_status VARCHAR(30);`);
+    await pool.query(`ALTER TABLE ota_order_relation DROP COLUMN IF EXISTS latest_payload;`);
       await pool.query(`
       ALTER TABLE ota_order_relation
       DROP COLUMN IF EXISTS channel_account_id,

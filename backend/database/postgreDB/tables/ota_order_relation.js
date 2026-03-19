@@ -3,7 +3,7 @@
 // 通用 OTA 订单映射表名，用于维护 OTA 订单与本地逻辑订单的一对一关系。
 const tableName = "ota_order_relation";
 
-// 创建 OTA 订单映射表，保存外部订单与本地订单的映射，以及插件侧关键快照字段。
+// 创建 OTA 订单映射表，保存外部订单与本地订单的映射，以及插件侧关键业务字段。
 const createQuery = `
   CREATE TABLE IF NOT EXISTS ${tableName} (
     id BIGSERIAL PRIMARY KEY,
@@ -16,7 +16,6 @@ const createQuery = `
     ota_check_out_date DATE,
     ota_total_price NUMERIC(10, 2),
     ota_order_status VARCHAR(30),
-    latest_payload JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
   );
@@ -33,7 +32,7 @@ const createIndexQueryStrings = [
 
 // 映射表注释 SQL 集合，统一为表和关键字段补充数据库注释，方便后续排查与维护。
 const createCommentQueryStrings = [
-  `COMMENT ON TABLE ${tableName} IS 'OTA订单映射表：保存渠道订单与本地逻辑订单的一对一关系，以及插件侧关键快照字段';`,
+  `COMMENT ON TABLE ${tableName} IS 'OTA订单映射表：保存渠道订单与本地逻辑订单的一对一关系，以及插件侧关键业务字段';`,
   `COMMENT ON COLUMN ${tableName}.id IS '主键ID';`,
   `COMMENT ON COLUMN ${tableName}.platform IS 'OTA渠道平台标识，例如 meituan、ctrip、douyin';`,
   `COMMENT ON COLUMN ${tableName}.ota_order_id IS 'OTA主订单号';`,
@@ -44,7 +43,6 @@ const createCommentQueryStrings = [
   `COMMENT ON COLUMN ${tableName}.ota_check_out_date IS '插件侧传入的离店日期';`,
   `COMMENT ON COLUMN ${tableName}.ota_total_price IS '插件侧传入的订单总费用';`,
   `COMMENT ON COLUMN ${tableName}.ota_order_status IS '插件侧订单状态';`,
-  `COMMENT ON COLUMN ${tableName}.latest_payload IS '最近一次接收到的OTA原始报文';`,
   `COMMENT ON COLUMN ${tableName}.created_at IS '记录创建时间';`,
   `COMMENT ON COLUMN ${tableName}.updated_at IS '记录更新时间';`
 ];

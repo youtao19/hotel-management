@@ -282,7 +282,23 @@ signature = HMAC_SHA256(PLUGIN_API_SECRET, signPayload)
 - `ota_order_status` <- `otaOrderStatus`
 - `latest_payload` <- 请求快照（含签名上下文，不含 secret）
 
-### 8.4 插件鉴权环境变量
+### 8.4 创建处理规则
+- 服务端创建插件订单时，会先按 `(platform, otaOrderId)` 检查 `ota_order_relation`
+- 如果该 OTA 订单已经存在，则直接返回 `PLUGIN_ORDER_ALREADY_EXISTS`
+- 重复订单判断优先级高于房型校验和排房逻辑，避免“已创建订单再次推送”被误判为“无可用房间”
+- 仅当 OTA 订单不存在时，服务端才继续执行房型校验、排房和创建订单
+
+重复创建响应示例：
+
+```json
+{
+  "success": false,
+  "code": "PLUGIN_ORDER_ALREADY_EXISTS",
+  "message": "插件订单已存在"
+}
+```
+
+### 8.5 插件鉴权环境变量
 - `PLUGIN_API_KEY`: 插件调用方标识
 - `PLUGIN_API_SECRET`: 插件签名密钥
 - `PLUGIN_SIGN_SKEW_SECONDS`: 时间戳允许偏差秒数（默认 `300`）
