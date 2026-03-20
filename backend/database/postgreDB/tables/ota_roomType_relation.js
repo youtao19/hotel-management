@@ -28,7 +28,7 @@ const createIndexQueryStrings = [
 const createCommentQueryStrings = [
   `COMMENT ON TABLE ${tableName} IS 'OTA房型映射表：保存渠道房型与本地房型的一对一关系';`,
   `COMMENT ON COLUMN ${tableName}.id IS '主键ID';`,
-  `COMMENT ON COLUMN ${tableName}.platform IS 'OTA渠道平台标识，例如 meituan、ctrip、douyin';`,
+  `COMMENT ON COLUMN ${tableName}.platform IS 'OTA渠道平台标识，例如 meituan、ctrip、fliggy';`,
   `COMMENT ON COLUMN ${tableName}.ota_room_type IS 'OTA房型标识或名称';`,
   `COMMENT ON COLUMN ${tableName}.local_room_type_id IS '本地房型ID，对应 rooms.room_type_id';`,
   `COMMENT ON COLUMN ${tableName}.created_at IS '记录创建时间';`,

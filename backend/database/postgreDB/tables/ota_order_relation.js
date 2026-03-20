@@ -34,7 +34,7 @@ const createIndexQueryStrings = [
 const createCommentQueryStrings = [
   `COMMENT ON TABLE ${tableName} IS 'OTA订单映射表：保存渠道订单与本地逻辑订单的一对一关系，以及插件侧关键业务字段';`,
   `COMMENT ON COLUMN ${tableName}.id IS '主键ID';`,
-  `COMMENT ON COLUMN ${tableName}.platform IS 'OTA渠道平台标识，例如 meituan、ctrip、douyin';`,
+  `COMMENT ON COLUMN ${tableName}.platform IS 'OTA渠道平台标识，例如 meituan、ctrip、fliggy';`,
   `COMMENT ON COLUMN ${tableName}.ota_order_id IS 'OTA主订单号';`,
   `COMMENT ON COLUMN ${tableName}.local_order_id IS '本地逻辑订单号，对应 orders.order_id';`,
   `COMMENT ON COLUMN ${tableName}.ota_room_type IS '插件侧传入的房型标识或房型名称';`,

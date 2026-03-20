@@ -15,5 +15,5 @@ COPY . ./
 # 使用非 root 用户执行测试，避免权限风险
 USER node
 
-# 默认执行后端 Jest 测试（提高栈深避免抖音 SDK 在 Jest 运行态触发栈溢出）
+# 默认执行后端 Jest 测试
 CMD ["sh", "-lc", "NODE_ENV=test node --stack_size=8192 ./node_modules/.bin/jest --runInBand --rootDir=."]

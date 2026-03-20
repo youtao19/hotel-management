@@ -72,13 +72,6 @@ const autoBillConfig = {
   monitorWithEmailOnly: true
 };
 
-const douyinOutboxJobConfig = {
-  enabled: String(process.env.DOUYIN_OUTBOX_JOB_ENABLED || '').toLowerCase() !== 'false',
-  cron: process.env.DOUYIN_OUTBOX_JOB_CRON || '*/1 * * * *',
-  timezone: process.env.DOUYIN_OUTBOX_JOB_TZ || 'Asia/Shanghai',
-  batchSize: Number(process.env.DOUYIN_OUTBOX_JOB_BATCH_SIZE || 10) || 10
-};
-
 const setup = {
   opanaiKey: process.env.OPENAI_O_KEY,
   openaiHost: process.env.OPENAI_HOST,
@@ -136,7 +129,6 @@ const setup = {
     sampleSizeMax: 22,
   },
   autoBillJob: autoBillConfig,
-  douyinOutboxJob: douyinOutboxJobConfig,
   workers: [],
   totalWorkerNum: 20,
   changeType: {
