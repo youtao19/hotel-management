@@ -67,7 +67,20 @@ ADD COLUMN IF NOT EXISTS remark_from_douyin TEXT,
 ADD COLUMN IF NOT EXISTS remark_from_guest TEXT,
 ADD COLUMN IF NOT EXISTS daily_rates JSONB,
 ADD COLUMN IF NOT EXISTS occupancies JSONB,
-ADD COLUMN IF NOT EXISTS member_info JSONB;
+ADD COLUMN IF NOT EXISTS member_info JSONB,
+ADD COLUMN IF NOT EXISTS cancel_id VARCHAR(64),
+ADD COLUMN IF NOT EXISTS cancel_type INTEGER,
+ADD COLUMN IF NOT EXISTS need_audit BOOLEAN,
+ADD COLUMN IF NOT EXISTS after_sale_type INTEGER,
+ADD COLUMN IF NOT EXISTS refund_type INTEGER,
+ADD COLUMN IF NOT EXISTS refund_amount DECIMAL(12, 2),
+ADD COLUMN IF NOT EXISTS user_refund_amount DECIMAL(12, 2),
+ADD COLUMN IF NOT EXISTS penalty_amount DECIMAL(12, 2),
+ADD COLUMN IF NOT EXISTS cancel_reason TEXT,
+ADD COLUMN IF NOT EXISTS cancel_order_time VARCHAR(19),
+ADD COLUMN IF NOT EXISTS refund_order_detail JSONB,
+ADD COLUMN IF NOT EXISTS cancel_status VARCHAR(32),
+ADD COLUMN IF NOT EXISTS cancel_audit_deadline VARCHAR(19);
 
 COMMENT ON COLUMN douyin_orders.source_order_id IS '预售来源订单号';
 COMMENT ON COLUMN douyin_orders.hotel_id IS '抖音酒店ID';
@@ -82,6 +95,19 @@ COMMENT ON COLUMN douyin_orders.remark_from_guest IS '客人备注';
 COMMENT ON COLUMN douyin_orders.daily_rates IS '抖音分日价格明细';
 COMMENT ON COLUMN douyin_orders.occupancies IS '入住人明细';
 COMMENT ON COLUMN douyin_orders.member_info IS '会员信息';
+COMMENT ON COLUMN douyin_orders.cancel_id IS '取消单唯一标识';
+COMMENT ON COLUMN douyin_orders.cancel_type IS '取消类型';
+COMMENT ON COLUMN douyin_orders.need_audit IS '是否需要审核';
+COMMENT ON COLUMN douyin_orders.after_sale_type IS '售后方式';
+COMMENT ON COLUMN douyin_orders.refund_type IS '退款类型';
+COMMENT ON COLUMN douyin_orders.refund_amount IS '申请退款金额';
+COMMENT ON COLUMN douyin_orders.user_refund_amount IS '用户实退金额';
+COMMENT ON COLUMN douyin_orders.penalty_amount IS '罚金金额';
+COMMENT ON COLUMN douyin_orders.cancel_reason IS '取消原因';
+COMMENT ON COLUMN douyin_orders.cancel_order_time IS '取消时间';
+COMMENT ON COLUMN douyin_orders.refund_order_detail IS '售后间夜明细';
+COMMENT ON COLUMN douyin_orders.cancel_status IS '取消处理状态';
+COMMENT ON COLUMN douyin_orders.cancel_audit_deadline IS '审核截止时间';
 
 
 ALTER TABLE douyin_orders

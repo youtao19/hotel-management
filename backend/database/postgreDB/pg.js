@@ -274,6 +274,19 @@ async function initializePostgreDB() {
     await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS daily_rates JSONB;`);
     await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS occupancies JSONB;`);
     await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS member_info JSONB;`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS cancel_id VARCHAR(64);`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS cancel_type INTEGER;`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS need_audit BOOLEAN;`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS after_sale_type INTEGER;`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS refund_type INTEGER;`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS refund_amount DECIMAL(12, 2);`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS user_refund_amount DECIMAL(12, 2);`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS penalty_amount DECIMAL(12, 2);`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS cancel_reason TEXT;`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS cancel_order_time VARCHAR(19);`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS refund_order_detail JSONB;`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS cancel_status VARCHAR(32);`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS cancel_audit_deadline VARCHAR(19);`);
   } catch (err) {
     // 老库未创建 douyin_orders 时允许跳过。
     console.warn('[initializePostgreDB] douyin_orders 创单字段升级跳过:', err.message);
