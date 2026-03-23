@@ -66,6 +66,35 @@ describe('handleDouyinHotelBooking', () => {
     })
   })
 
+  test('无可用房时返回入住时期内已满错误码', async () => {
+    findByOtaOrderId.mockResolvedValue(null)
+    createDouyinOrder.mockRejectedValue(new Error('No available room for mapped room type'))
+
+    await expect(handleDouyinHotelBooking({
+      order_id: 'DY_001',
+      hotel_id: 'HOTEL_001',
+      room_id: 'ROOM_001',
+      rate_plan_id: 'RATE_001',
+      biz_type: 2021,
+      check_in_date: '2026-03-24',
+      check_out_date: '2026-03-25',
+      number_of_units: 1,
+      number_of_guests: 1,
+      total_amount: 10000,
+      daily_rates: [
+        {
+          original_amount: 10000,
+          period_start_date: '2026-03-24',
+          period_end_date: '2026-03-25',
+        },
+      ],
+      contact_info: { name: '王五', phone: '13700000000' },
+    })).rejects.toMatchObject({
+      douyinErrorCode: 4,
+      douyinDescription: '入住时期内已满',
+    })
+  })
+
   test('新订单应创建并落库存储扩展字段', async () => {
     findByOtaOrderId.mockResolvedValue(null)
     createDouyinOrder.mockImplementation(async (payload) => ({

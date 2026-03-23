@@ -1,6 +1,16 @@
 const postgreDB = require('../../../database/postgreDB/pg')
 const { updateOrderStatus } = require('../../orderModule')
 const { submitDouyinCancelAuditResult } = require('./cancelAuditResult.service')
+const { DOUYIN_CANCEL_ERROR } = require('../constants/errorCodes')
+const {
+  DOUYIN_CANCEL_MODE,
+  DOUYIN_CANCEL_AUDIT_RESULT,
+  DOUYIN_CANCEL_ACTION,
+  DOUYIN_CANCEL_STATUS,
+  DOUYIN_CANCEL_AUDIT_STATUS,
+  LOCAL_ORDER_STATUS,
+} = require('../constants/enums')
+const { createDouyinBusinessError } = require('../utils/douyinError')
 
 /**
  * 将分转换为元。
@@ -41,21 +51,6 @@ function formatUnixSeconds(unixSeconds) {
 }
 
 /**
- * 创建抖音取消订单业务异常。
- *
- * @param {number} code 抖音错误码。
- * @param {string} description 错误描述。
- * @param {string} message 内部错误信息。
- * @returns {Error} 带错误码的异常对象。
- */
-function createDouyinCancelError(code, description, message) {
-  const error = new Error(message || description)
-  error.douyinErrorCode = code
-  error.douyinDescription = description
-  return error
-}
-
-/**
  * 从取消通知中提取并规范化字段。
  *
  * @param {Object} payload 抖音取消通知原始请求体。
@@ -91,27 +86,27 @@ function mapDouyinCancelPayload(payload = {}) {
  */
 function validateDouyinCancelPayload(payload) {
   if (!payload.otaOrderId) {
-    throw createDouyinCancelError(13, '缺少抖音订单号', 'Missing order_id in cancel payload')
+    throw createDouyinBusinessError(DOUYIN_CANCEL_ERROR.MISSING_ORDER_ID, 'Missing order_id in cancel payload')
   }
 
   if (!payload.cancelId) {
-    throw createDouyinCancelError(13, '缺少取消单号', 'Missing cancel_id in cancel payload')
+    throw createDouyinBusinessError(DOUYIN_CANCEL_ERROR.MISSING_CANCEL_ID, 'Missing cancel_id in cancel payload')
   }
 
   if (payload.cancelType === null || Number.isNaN(payload.cancelType)) {
-    throw createDouyinCancelError(13, '取消类型不合法', 'Missing cancel_type in cancel payload')
+    throw createDouyinBusinessError(DOUYIN_CANCEL_ERROR.INVALID_CANCEL_TYPE, 'Missing cancel_type in cancel payload')
   }
 
   if (payload.bizType === null || Number.isNaN(payload.bizType)) {
-    throw createDouyinCancelError(13, '业务类型不合法', 'Missing biz_type in cancel payload')
+    throw createDouyinBusinessError(DOUYIN_CANCEL_ERROR.INVALID_BIZ_TYPE, 'Missing biz_type in cancel payload')
   }
 
   if (payload.afterSaleType === null || Number.isNaN(payload.afterSaleType)) {
-    throw createDouyinCancelError(13, '售后方式不合法', 'Missing after_sale_type in cancel payload')
+    throw createDouyinBusinessError(DOUYIN_CANCEL_ERROR.INVALID_AFTER_SALE_TYPE, 'Missing after_sale_type in cancel payload')
   }
 
   if (payload.refundType === null || Number.isNaN(payload.refundType)) {
-    throw createDouyinCancelError(13, '退款类型不合法', 'Missing refund_type in cancel payload')
+    throw createDouyinBusinessError(DOUYIN_CANCEL_ERROR.INVALID_REFUND_TYPE, 'Missing refund_type in cancel payload')
   }
 }
 
@@ -248,19 +243,27 @@ function buildCancelAuditDecision({
     return null
   }
 
-  if (['pending', 'reserved', 'cancelled'].includes(localOrderStatus)) {
+  if ([
+    LOCAL_ORDER_STATUS.PENDING,
+    LOCAL_ORDER_STATUS.RESERVED,
+    LOCAL_ORDER_STATUS.CANCELLED,
+  ].includes(localOrderStatus)) {
     return {
-      cancelResult: 1,
+      cancelResult: DOUYIN_CANCEL_AUDIT_RESULT.APPROVED,
       reason: cancelReason || '审核同意取消',
-      auditStatus: 'pending_push',
+      auditStatus: DOUYIN_CANCEL_AUDIT_STATUS.PENDING_PUSH,
     }
   }
 
-  if (['checked-in', 'occupied', 'checked-out'].includes(localOrderStatus)) {
+  if ([
+    LOCAL_ORDER_STATUS.CHECKED_IN,
+    LOCAL_ORDER_STATUS.OCCUPIED,
+    LOCAL_ORDER_STATUS.CHECKED_OUT,
+  ].includes(localOrderStatus)) {
     return {
-      cancelResult: 2,
+      cancelResult: DOUYIN_CANCEL_AUDIT_RESULT.REJECTED,
       reason: cancelReason || `订单当前状态为 ${localOrderStatus}，拒绝取消`,
-      auditStatus: 'pending_push',
+      auditStatus: DOUYIN_CANCEL_AUDIT_STATUS.PENDING_PUSH,
     }
   }
 
@@ -300,23 +303,23 @@ async function pushCancelAuditResult({
       otaOrderId,
       cancelAuditResult: auditDecision.cancelResult,
       cancelAuditReason: auditDecision.reason,
-      cancelAuditStatus: 'sent',
+      cancelAuditStatus: DOUYIN_CANCEL_AUDIT_STATUS.SENT,
       cancelAuditResponse: auditResponse?.raw || auditResponse,
       cancelAuditRetryCount: nextRetryCount,
     })
 
-    return 'sent'
+    return DOUYIN_CANCEL_AUDIT_STATUS.SENT
   } catch (error) {
     await updateDouyinCancelAuditInfo({
       otaOrderId,
       cancelAuditResult: auditDecision.cancelResult,
       cancelAuditReason: auditDecision.reason,
-      cancelAuditStatus: 'push_failed',
+      cancelAuditStatus: DOUYIN_CANCEL_AUDIT_STATUS.PUSH_FAILED,
       cancelAuditResponse: error?.response?.raw || { message: error.message },
       cancelAuditRetryCount: nextRetryCount,
     })
 
-    return 'push_failed'
+    return DOUYIN_CANCEL_AUDIT_STATUS.PUSH_FAILED
   }
 }
 
@@ -355,7 +358,7 @@ async function handleDouyinCancelOrder(payload = {}) {
     const douyinOrder = douyinOrderResult.rows[0]
 
     if (!douyinOrder) {
-      throw createDouyinCancelError(9, '订单不存在或状态异常', `Douyin order not found: ${normalizedPayload.otaOrderId}`)
+      throw createDouyinBusinessError(DOUYIN_CANCEL_ERROR.ORDER_NOT_FOUND, `Douyin order not found: ${normalizedPayload.otaOrderId}`)
     }
 
     currentRetryCount = Number(douyinOrder.cancel_audit_retry_count || 0)
@@ -363,10 +366,10 @@ async function handleDouyinCancelOrder(payload = {}) {
     const localOrder = await findLocalOrder(normalizedPayload, client)
 
     if (!localOrder) {
-      await updateDouyinCancelInfo(normalizedPayload, 'missing_local_order', client)
+      await updateDouyinCancelInfo(normalizedPayload, DOUYIN_CANCEL_STATUS.MISSING_LOCAL_ORDER, client)
       await client.query('COMMIT')
 
-      throw createDouyinCancelError(9, '订单不存在或状态异常', `Local order not found: ${normalizedPayload.otaOrderId}`)
+      throw createDouyinBusinessError(DOUYIN_CANCEL_ERROR.ORDER_NOT_FOUND, `Local order not found: ${normalizedPayload.otaOrderId}`)
     }
 
     auditDecision = buildCancelAuditDecision({
@@ -375,41 +378,49 @@ async function handleDouyinCancelOrder(payload = {}) {
       cancelReason: normalizedPayload.cancelReason,
     })
 
-    if (localOrder.status === 'cancelled') {
-      await updateDouyinCancelInfo(normalizedPayload, 'already_cancelled', client)
+    if (localOrder.status === LOCAL_ORDER_STATUS.CANCELLED) {
+      await updateDouyinCancelInfo(normalizedPayload, DOUYIN_CANCEL_STATUS.ALREADY_CANCELLED, client)
       await client.query('COMMIT')
 
       result = {
-        action: 'already_cancelled',
-        cancelMode: 2,
+        action: DOUYIN_CANCEL_ACTION.ALREADY_CANCELLED,
+        cancelMode: DOUYIN_CANCEL_MODE.ASYNC,
         cancelResult: null,
         reason: normalizedPayload.cancelReason || '订单已取消',
         localOrderId: localOrder.order_id,
       }
-    } else if (normalizedPayload.needAudit && ['checked-in', 'occupied', 'checked-out'].includes(localOrder.status)) {
-      await updateDouyinCancelInfo(normalizedPayload, 'pending_audit', client)
+    } else if (normalizedPayload.needAudit && [
+      LOCAL_ORDER_STATUS.CHECKED_IN,
+      LOCAL_ORDER_STATUS.OCCUPIED,
+      LOCAL_ORDER_STATUS.CHECKED_OUT,
+    ].includes(localOrder.status)) {
+      await updateDouyinCancelInfo(normalizedPayload, DOUYIN_CANCEL_STATUS.PENDING_AUDIT, client)
       await client.query('COMMIT')
 
       result = {
-        action: 'pending_audit',
-        cancelMode: 2,
+        action: DOUYIN_CANCEL_ACTION.PENDING_AUDIT,
+        cancelMode: DOUYIN_CANCEL_MODE.ASYNC,
         cancelResult: null,
         reason: normalizedPayload.cancelReason || `订单当前状态为 ${localOrder.status}，需异步审核`,
         localOrderId: localOrder.order_id,
       }
-    } else if (!['pending', 'reserved'].includes(localOrder.status)) {
-      await updateDouyinCancelInfo(normalizedPayload, 'invalid_status', client)
+    } else if (![LOCAL_ORDER_STATUS.PENDING, LOCAL_ORDER_STATUS.RESERVED].includes(localOrder.status)) {
+      await updateDouyinCancelInfo(normalizedPayload, DOUYIN_CANCEL_STATUS.INVALID_STATUS, client)
       await client.query('COMMIT')
 
-      throw createDouyinCancelError(9, '订单不存在或状态异常', `Local order status invalid for cancel: ${localOrder.status}`)
+      throw createDouyinBusinessError(DOUYIN_CANCEL_ERROR.ORDER_NOT_FOUND, `Local order status invalid for cancel: ${localOrder.status}`)
     } else {
-      await updateOrderStatus(localOrder.order_id, 'cancelled', client)
-      await updateDouyinCancelInfo(normalizedPayload, normalizedPayload.needAudit ? 'pending_audit' : 'cancelled', client)
+      await updateOrderStatus(localOrder.order_id, LOCAL_ORDER_STATUS.CANCELLED, client)
+      await updateDouyinCancelInfo(
+        normalizedPayload,
+        normalizedPayload.needAudit ? DOUYIN_CANCEL_STATUS.PENDING_AUDIT : DOUYIN_CANCEL_STATUS.CANCELLED,
+        client
+      )
       await client.query('COMMIT')
 
       result = {
-        action: 'cancelled',
-        cancelMode: 2,
+        action: DOUYIN_CANCEL_ACTION.CANCELLED,
+        cancelMode: DOUYIN_CANCEL_MODE.ASYNC,
         cancelResult: null,
         reason: normalizedPayload.cancelReason || '取消成功',
         localOrderId: localOrder.order_id,

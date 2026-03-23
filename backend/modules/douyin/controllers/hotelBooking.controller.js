@@ -3,6 +3,9 @@ const { requestDouyinOpenApi } = require('../clients/douyinOpenApi.client')
 const { handleDouyinHotelBooking } = require('../services/hotelBooking.service')
 const { syncDouyinOrderToSystem } = require('../services/orderSync.service')
 const { autoConfirmDouyinOrder } = require('../services/autoConfirm.service')
+const { DOUYIN_SUCCESS_RESULT } = require('../constants/errorCodes')
+const { DOUYIN_CONFIRM_MODE } = require('../constants/enums')
+const { resolveDouyinBusinessError } = require('../utils/douyinError')
 const { douyinConfig } = require('../../../appSettings/douyin.config')
 
 /**
@@ -31,12 +34,12 @@ function resolveDouyinOrderId(payload = {}) {
 function buildDouyinSuccessResponse({ otaOrderId, systemOrderId }) {
   return {
     data: {
-      error_code: 0,
-      description: 'success',
+      error_code: DOUYIN_SUCCESS_RESULT.code,
+      description: DOUYIN_SUCCESS_RESULT.description,
       order_id: otaOrderId,
       order_out_id: systemOrderId || '',
       confirm_info: {
-        confirm_mode: 2,
+        confirm_mode: DOUYIN_CONFIRM_MODE.ASYNC,
       },
     },
   }
@@ -186,10 +189,8 @@ async function receiveSpiCallback(req, res) {
       systemOrderId: syncResult?.systemOrderId || result.order?.system_order_id || '',
     }))
   } catch (error) {
-    /** @type {number} 抖音业务错误码。 */
-    const errorCode = Number.isInteger(error?.douyinErrorCode) ? error.douyinErrorCode : 13
-    /** @type {string} 抖音业务错误描述。 */
-    const description = error?.douyinDescription || '其他异常'
+    /** @type {{errorCode:number, description:string}} 抖音业务错误码与描述。 */
+    const { errorCode, description } = resolveDouyinBusinessError(error)
 
     console.error('[receiveSpiCallback] failed:', error.message)
 

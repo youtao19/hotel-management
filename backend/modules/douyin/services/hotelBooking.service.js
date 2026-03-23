@@ -4,21 +4,11 @@ const {
   createDouyinOrder,
   updateDouyinOrderByOtaOrderId,
 } = require('../repositories/douyinOrder.repository')
-
-/**
- * 创建抖音创单业务异常。
- *
- * @param {number} code 抖音酒店交易错误码。
- * @param {string} description 错误描述。
- * @param {string} message 内部错误信息。
- * @returns {Error} 带有抖音错误码的异常对象。
- */
-function createDouyinBookingError(code, description, message) {
-  const error = new Error(message || description)
-  error.douyinErrorCode = code
-  error.douyinDescription = description
-  return error
-}
+const {
+  DOUYIN_COMMON_ERROR,
+  DOUYIN_BOOKING_ERROR,
+} = require('../constants/errorCodes')
+const { createDouyinBusinessError } = require('../utils/douyinError')
 
 /**
  * 判断是否为 yyyy-MM-dd 格式日期。
@@ -39,39 +29,39 @@ function isValidDateString(value) {
  */
 function validateDouyinBookingPayload(mapped) {
   if (!mapped.otaOrderId) {
-    throw createDouyinBookingError(13, '缺少抖音订单号', 'Missing otaOrderId(order_id) in Douyin payload')
+    throw createDouyinBusinessError(DOUYIN_BOOKING_ERROR.MISSING_ORDER_ID, 'Missing otaOrderId(order_id) in Douyin payload')
   }
 
   if (!mapped.hotelId) {
-    throw createDouyinBookingError(13, '缺少抖音酒店ID', 'Missing hotelId in Douyin payload')
+    throw createDouyinBusinessError(DOUYIN_BOOKING_ERROR.MISSING_HOTEL_ID, 'Missing hotelId in Douyin payload')
   }
 
   if (!mapped.roomId || !mapped.ratePlanId) {
-    throw createDouyinBookingError(1, '房型不存在/失效', 'Missing roomId or ratePlanId in Douyin payload')
+    throw createDouyinBusinessError(DOUYIN_BOOKING_ERROR.ROOM_TYPE_INVALID, 'Missing roomId or ratePlanId in Douyin payload')
   }
 
   if (mapped.bizType === null || mapped.bizType === undefined) {
-    throw createDouyinBookingError(13, '缺少业务类型', 'Missing bizType in Douyin payload')
+    throw createDouyinBusinessError(DOUYIN_BOOKING_ERROR.MISSING_BIZ_TYPE, 'Missing bizType in Douyin payload')
   }
 
   if (!isValidDateString(mapped.checkInDate) || !isValidDateString(mapped.checkOutDate) || mapped.checkOutDate < mapped.checkInDate) {
-    throw createDouyinBookingError(5, '日期格式错误', 'Invalid checkInDate/checkOutDate in Douyin payload')
+    throw createDouyinBusinessError(DOUYIN_BOOKING_ERROR.INVALID_DATE, 'Invalid checkInDate/checkOutDate in Douyin payload')
   }
 
   if (!mapped.roomCount || mapped.roomCount <= 0) {
-    throw createDouyinBookingError(13, '预定间数不合法', 'Invalid number_of_units in Douyin payload')
+    throw createDouyinBusinessError(DOUYIN_BOOKING_ERROR.INVALID_ROOM_COUNT, 'Invalid number_of_units in Douyin payload')
   }
 
   if (!mapped.numberOfGuests || mapped.numberOfGuests <= 0) {
-    throw createDouyinBookingError(13, '入住人数不合法', 'Invalid number_of_guests in Douyin payload')
+    throw createDouyinBusinessError(DOUYIN_BOOKING_ERROR.INVALID_GUEST_COUNT, 'Invalid number_of_guests in Douyin payload')
   }
 
   if (!mapped.amount || mapped.amount <= 0) {
-    throw createDouyinBookingError(13, '订单金额不合法', 'Invalid total amount in Douyin payload')
+    throw createDouyinBusinessError(DOUYIN_BOOKING_ERROR.INVALID_AMOUNT, 'Invalid total amount in Douyin payload')
   }
 
   if (!mapped.guestName) {
-    throw createDouyinBookingError(6, '姓名/联系电话格式错', 'Missing guest name in Douyin payload')
+    throw createDouyinBusinessError(DOUYIN_BOOKING_ERROR.INVALID_CONTACT, 'Missing guest name in Douyin payload')
   }
 }
 
@@ -89,26 +79,26 @@ function normalizeDouyinBookingError(error) {
   const message = String(error?.message || '')
 
   if (message.includes('Douyin room type is not mapped')) {
-    return createDouyinBookingError(1, '房型不存在/失效', message)
+    return createDouyinBusinessError(DOUYIN_BOOKING_ERROR.ROOM_TYPE_INVALID, message)
   }
 
   if (message.includes('No available room')) {
-    return createDouyinBookingError(4, '入住时期内已满', message)
+    return createDouyinBusinessError(DOUYIN_BOOKING_ERROR.ROOM_FULL, message)
   }
 
   if (message.includes('无效的日期格式') || message.includes('Invalid checkInDate/checkOutDate')) {
-    return createDouyinBookingError(5, '日期格式错误', message)
+    return createDouyinBusinessError(DOUYIN_BOOKING_ERROR.INVALID_DATE, message)
   }
 
   if (message.includes('电话号码')) {
-    return createDouyinBookingError(6, '姓名/联系电话格式错', message)
+    return createDouyinBusinessError(DOUYIN_BOOKING_ERROR.INVALID_CONTACT, message)
   }
 
   if (error?.code === '40001' || error?.code === '40P01') {
-    return createDouyinBookingError(100, '需要重试', message || 'Database transaction should retry')
+    return createDouyinBusinessError(DOUYIN_COMMON_ERROR.RETRY_LATER, message || 'Database transaction should retry')
   }
 
-  return createDouyinBookingError(13, '其他异常', message || 'Unknown douyin booking error')
+  return createDouyinBusinessError(DOUYIN_COMMON_ERROR.OTHER_EXCEPTION, message || 'Unknown douyin booking error')
 }
 
 /**

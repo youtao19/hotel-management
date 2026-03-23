@@ -91,4 +91,25 @@ describe('receiveSpiCallback', () => {
       },
     })
   })
+
+  test('未知异常时应返回默认错误结构', async () => {
+    handleDouyinHotelBooking.mockRejectedValue(new Error('unknown error'))
+
+    const req = {
+      body: {
+        order_id: 'DY_003',
+      },
+    }
+    const res = createMockResponse()
+
+    await receiveSpiCallback(req, res)
+
+    expect(res.json).toHaveBeenCalledWith({
+      data: {
+        error_code: 13,
+        description: '其他异常',
+        order_id: 'DY_003',
+      },
+    })
+  })
 })

@@ -1,4 +1,7 @@
 const { handleDouyinCancelOrder } = require('../services/cancelOrder.service')
+const { DOUYIN_SUCCESS_RESULT } = require('../constants/errorCodes')
+const { DOUYIN_CANCEL_MODE } = require('../constants/enums')
+const { resolveDouyinBusinessError } = require('../utils/douyinError')
 
 /**
  * 从取消通知请求体中提取抖音订单号。
@@ -21,8 +24,8 @@ function resolveDouyinOrderId(payload = {}) {
  */
 function buildDouyinCancelSuccessResponse({ cancelMode, cancelResult, reason }) {
   const data = {
-    error_code: 0,
-    description: 'success',
+    error_code: DOUYIN_SUCCESS_RESULT.code,
+    description: DOUYIN_SUCCESS_RESULT.description,
     cancel_mode: cancelMode,
   }
 
@@ -50,7 +53,7 @@ function buildDouyinCancelErrorResponse({ errorCode, description }) {
     data: {
       error_code: errorCode,
       description,
-      cancel_mode: 2,
+      cancel_mode: DOUYIN_CANCEL_MODE.ASYNC,
     },
   }
 }
@@ -74,8 +77,7 @@ async function receiveCancelCallback(req, res) {
       reason: result.reason,
     }))
   } catch (error) {
-    const errorCode = Number.isInteger(error?.douyinErrorCode) ? error.douyinErrorCode : 13
-    const description = error?.douyinDescription || '其他异常'
+    const { errorCode, description } = resolveDouyinBusinessError(error)
 
     console.error('[receiveCancelCallback] failed:', otaOrderId, error.message)
 

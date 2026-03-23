@@ -26,11 +26,7 @@ const tables = [
 function shouldSkipGlobalBootstrap() {
   const testPath = expect.getState().testPath || '';
 
-  return [
-    'backend/modules/douyin/services/__tests__/cancelOrder.service.test.js',
-    'backend/modules/douyin/services/__tests__/cancelAuditResult.service.test.js',
-    'backend/modules/douyin/controllers/__tests__/cancelOrder.controller.test.js',
-  ].some((filePath) => testPath.endsWith(filePath));
+  return testPath.includes('/backend/modules/douyin/') && testPath.includes('/__tests__/');
 }
 
 // 全局测试设置

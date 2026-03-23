@@ -74,4 +74,25 @@ describe('receiveCancelCallback', () => {
       },
     })
   })
+
+  test('未知异常时应返回默认取消错误结构', async () => {
+    handleDouyinCancelOrder.mockRejectedValue(new Error('unknown error'))
+
+    const req = {
+      body: {
+        order_id: 'DY_500',
+      },
+    }
+    const res = createMockResponse()
+
+    await receiveCancelCallback(req, res)
+
+    expect(res.json).toHaveBeenCalledWith({
+      data: {
+        error_code: 13,
+        description: '其他异常',
+        cancel_mode: 2,
+      },
+    })
+  })
 })
