@@ -102,6 +102,22 @@ function mapDouyinBookingPayload(payload = {}) {
     'data.currency',
   ], 'CNY')
 
+  const roomId = pick(payload, [
+    'room_id',
+    'data.room_id',
+    'room.room_id',
+    'physical_room_id',
+    'data.physical_room_id',
+  ])
+
+  const roomName = pick(payload, [
+    'room_name',
+    'data.room_name',
+    'room.cn_name',
+    'physical_room_name',
+    'data.physical_room_name',
+  ])
+
   return {
     otaOrderId,
     accountId,
@@ -113,6 +129,8 @@ function mapDouyinBookingPayload(payload = {}) {
     roomCount,
     amount,
     currency,
+    roomId,
+    roomName,
     rawPayload: payload,
   }
 }

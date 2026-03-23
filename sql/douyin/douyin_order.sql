@@ -46,3 +46,17 @@ ADD COLUMN confirmed_at TIMESTAMP;
 COMMENT ON COLUMN douyin_orders.confirm_status IS '确认状态：pending/confirmed/failed';
 COMMENT ON COLUMN douyin_orders.confirm_number IS '传给抖音的确认号';
 COMMENT ON COLUMN douyin_orders.confirmed_at IS '订单确认时间';
+
+ALTER TABLE douyin_orders
+ADD COLUMN room_id VARCHAR(64),
+ADD COLUMN room_name VARCHAR(255);
+
+COMMENT ON COLUMN douyin_orders.room_id IS '房间ID';
+COMMENT ON COLUMN douyin_orders.room_name IS '房间名称';
+
+
+ALTER TABLE douyin_orders
+ALTER COLUMN system_order_id TYPE VARCHAR(64)
+USING system_order_id::VARCHAR;
+
+COMMENT ON COLUMN douyin_orders.system_order_id IS '系统订单号(order_id)';

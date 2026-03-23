@@ -3,8 +3,16 @@ const { requestDouyinOpenApi } = require('../clients/douyinOpenApi.client')
 const { handleDouyinHotelBooking } = require('../services/hotelBooking.service')
 const { syncDouyinOrderToSystem } = require('../services/orderSync.service')
 const { autoConfirmDouyinOrder } = require('../services/autoConfirm.service')
+const { douyinConfig } = require('../../../appSettings/douyin.config')
 
-
+/**
+ * 手动刷新抖音开放平台 client_token。
+ *
+ * @param {import('express').Request} req Express 请求对象。
+ * @param {import('express').Response} res Express 响应对象。
+ * @returns {Promise<import('express').Response>} 刷新结果响应。
+ * @throws {Error} token 刷新异常时由控制器统一返回 500。
+ */
 async function refreshClientToken(req, res) {
   try {
     const token = await forceRefreshClientToken()
@@ -24,6 +32,14 @@ async function refreshClientToken(req, res) {
   }
 }
 
+/**
+ * 调试调用抖音 OpenAPI。
+ *
+ * @param {import('express').Request} req Express 请求对象。
+ * @param {import('express').Response} res Express 响应对象。
+ * @returns {Promise<import('express').Response>} 调试请求结果。
+ * @throws {Error} 调用异常时由控制器统一返回 500。
+ */
 async function testOpenApi(req, res) {
   try {
     const {
@@ -70,6 +86,14 @@ async function testOpenApi(req, res) {
   }
 }
 
+/**
+ * 接收抖音 SPI 回调并完成落库、同步和自动确认。
+ *
+ * @param {import('express').Request} req Express 请求对象。
+ * @param {import('express').Response} res Express 响应对象。
+ * @returns {Promise<import('express').Response>} 回调处理结果。
+ * @throws {Error} 任一处理步骤失败时由控制器统一返回 500。
+ */
 async function receiveSpiCallback(req, res) {
   try {
     const result = await handleDouyinHotelBooking(req.body || {})

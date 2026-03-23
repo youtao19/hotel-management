@@ -228,9 +228,12 @@ GET /api/ota/v1/inventory?startDate=2026-03-10&endDate=2026-03-12&roomType=asu_x
 - `OTA_SIGN_SKEW_SECONDS`: 时间戳允许偏差秒数
 - `OTA_NONCE_TTL_SECONDS`: nonce 防重放缓存秒数
 
-## 8. 插件接单接口（动态签名）
+## 8. 抖音回调文档
+- 抖音回调联调、幂等规则与成功响应说明已单独整理，请查看 [抖音回调联调文档](/Users/peach/develop/hotel-management/docs/抖音回调联调文档.md)。
 
-### 8.1 请求
+## 9. 插件接单接口（动态签名）
+
+### 9.1 请求
 - Method: `POST`
 - Path: `/api/plugin/orders`
 - 鉴权请求头：
@@ -260,7 +263,7 @@ SHA256(rawBody)
 signature = HMAC_SHA256(PLUGIN_API_SECRET, signPayload)
 ```
 
-### 8.2 典型鉴权错误码
+### 9.2 典型鉴权错误码
 - `PLUGIN_AUTH_NOT_CONFIGURED`：服务端未配置 key/secret
 - `PLUGIN_AUTH_MISSING_HEADERS`：缺少签名请求头
 - `PLUGIN_AUTH_INVALID_KEY`：`x-plugin-key` 不匹配
@@ -270,7 +273,7 @@ signature = HMAC_SHA256(PLUGIN_API_SECRET, signPayload)
 - `PLUGIN_AUTH_NONCE_REPLAYED`：nonce 重放
 - `PLUGIN_AUTH_INVALID_SIGNATURE`：签名不匹配
 
-### 8.3 关系表快照落库字段
+### 9.3 关系表快照落库字段
 - `platform` <- `platform`
 - `ota_order_id` <- `otaOrderId`
 - `local_order_id` <- 本地创建的 `orderId`
@@ -282,7 +285,7 @@ signature = HMAC_SHA256(PLUGIN_API_SECRET, signPayload)
 - `ota_order_status` <- `otaOrderStatus`
 - `latest_payload` <- 请求快照（含签名上下文，不含 secret）
 
-### 8.4 创建处理规则
+### 9.4 创建处理规则
 - 服务端创建插件订单时，会先按 `(platform, otaOrderId)` 检查 `ota_order_relation`
 - 如果该 OTA 订单已经存在，则直接返回 `PLUGIN_ORDER_ALREADY_EXISTS`
 - 重复订单判断优先级高于房型校验和排房逻辑，避免“已创建订单再次推送”被误判为“无可用房间”
@@ -298,15 +301,15 @@ signature = HMAC_SHA256(PLUGIN_API_SECRET, signPayload)
 }
 ```
 
-### 8.5 插件鉴权环境变量
+### 9.5 插件鉴权环境变量
 - `PLUGIN_API_KEY`: 插件调用方标识
 - `PLUGIN_API_SECRET`: 插件签名密钥
 - `PLUGIN_SIGN_SKEW_SECONDS`: 时间戳允许偏差秒数（默认 `300`）
 - `PLUGIN_NONCE_TTL_SECONDS`: nonce 防重放缓存秒数（默认 `600`）
 
-## 9. 插件房型映射接口
+## 10. 插件房型映射接口
 
-### 9.1 鉴权方式
+### 10.1 鉴权方式
 房型映射接口当前使用 Bearer Token 鉴权，请求头如下：
 
 ```http

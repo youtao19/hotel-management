@@ -24,12 +24,14 @@ async function createDouyinOrder(order) {
       room_count,
       amount,
       currency,
+      room_id,
+      room_name,
       raw_payload,
       mapped_payload
     ) VALUES (
       $1, $2, $3, $4, $5,
       $6, $7, $8, $9, $10,
-      $11, $12
+      $11, $12, $13, $14
     )
     RETURNING *
   `
@@ -45,6 +47,8 @@ async function createDouyinOrder(order) {
     order.roomCount,
     order.amount,
     order.currency,
+    order.roomId,
+    order.roomName,
     JSON.stringify(order.rawPayload || {}),
     JSON.stringify(order.mappedPayload || {}),
   ]
@@ -66,8 +70,10 @@ async function updateDouyinOrderByOtaOrderId(otaOrderId, order) {
       room_count = $8,
       amount = $9,
       currency = $10,
-      raw_payload = $11,
-      mapped_payload = $12,
+      room_id = $11,
+      room_name = $12,
+      raw_payload = $13,
+      mapped_payload = $14,
       updated_at = NOW()
     WHERE ota_order_id = $1
     RETURNING *
@@ -84,6 +90,8 @@ async function updateDouyinOrderByOtaOrderId(otaOrderId, order) {
     order.roomCount,
     order.amount,
     order.currency,
+    order.roomId,
+    order.roomName,
     JSON.stringify(order.rawPayload || {}),
     JSON.stringify(order.mappedPayload || {}),
   ]

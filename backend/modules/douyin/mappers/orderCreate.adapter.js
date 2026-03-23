@@ -1,33 +1,49 @@
 const {
   generateOrderNumber,
-  randomRoomNumber
+  randomRoomNumber,
 } = require('../../tools')
 
-function buildCreateOrderDataFromDouyin(douyinOrder) {
+const {
+  findLocalRoomTypeByDouyinRoomId,
+} = require('../repositories/roomTypeMapping.repository')
 
-  const oderId = generateOrderNumber()
+async function buildCreateOrderDataFromDouyin(douyinOrder) {
+  const orderId = generateOrderNumber()
 
-  const roomNum = randomRoomNumber(
-    douyinOrder.room_type,
+  const localRoomType =
+    await findLocalRoomTypeByDouyinRoomId(douyinOrder.room_id)
+
+  if (!localRoomType) {
+    throw new Error(`Douyin room type is not mapped: room_id=${douyinOrder.room_id}`)
+  }
+
+  const roomNum = await randomRoomNumber(
+    localRoomType,
     douyinOrder.check_in_date,
     douyinOrder.check_out_date
   )
 
+  if (!roomNum) {
+    throw new Error(
+      `No available room for roomType=${localRoomType}, checkIn=${douyinOrder.check_in_date}, checkOut=${douyinOrder.check_out_date}`
+    )
+  }
+
   return {
-    orderId: douyinOrder.ota_order_id,   // 用抖音订单号
+    orderId,
     sourceNumber: douyinOrder.ota_order_id,
     orderSource: 'douyin',
 
     guestName: douyinOrder.guest_name,
     phone: douyinOrder.guest_mobile,
 
-    roomType: null,     // 后面可以做映射
-    roomNumber: roomNum,   // OTA 不给
+    roomType: localRoomType,
+    roomNumber: roomNum,
 
     checkInDate: douyinOrder.check_in_date,
     checkOutDate: douyinOrder.check_out_date,
 
-    status: 'pending',  // 或你定义的“待确认”
+    status: 'pending',
 
     paymentMethod: '平台',
 
@@ -41,10 +57,10 @@ function buildCreateOrderDataFromDouyin(douyinOrder) {
 
     createTime: new Date(),
 
-    remarks: '来自抖音OTA',
+    remarks: `来自抖音OTA，抖音订单号: ${douyinOrder.ota_order_id}`,
 
     isPrepaid: false,
-    prepaidAmount: null,
+    prepaidAmount: 0,
 
     stayType: '客房',
   }
@@ -65,7 +81,6 @@ function buildDailyPrice(checkIn, checkOut, totalAmount) {
   )
 
   const avg = Number(totalAmount || 0) / days
-
   const result = {}
 
   for (let i = 0; i < days; i++) {

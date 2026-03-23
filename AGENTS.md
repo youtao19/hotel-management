@@ -71,4 +71,4 @@ DATE 字段在 Node.js 中应:
 Always use Context7 MCP when I need library/API documentation, code generation, setup or configuration steps without me having to explicitly ask.
 
 ## 修改代码
-你要修改代码的时候，先将你要修改的思路告诉我，等我同意后再修改代码。
+你要修改代码的时候，先将你要修改的详细内容发给我（例如：修改哪个文件，哪个函数，修改的内容是什么），等我确认后，你再进行修改。
