@@ -248,6 +248,36 @@ async function initializePostgreDB() {
     // 如果表不存在或字段不可变更，保留原错误信息用于排查；正常情况下不会触发。
     console.warn('[initializePostgreDB] bills.room_number 字段升级跳过:', err.message);
   }
+  // 抖音回写的是业务订单号 orders.order_id，历史上误建为 bigint 会导致同步状态回写失败。
+  try {
+    await pool.query(`
+      ALTER TABLE douyin_orders
+      ALTER COLUMN system_order_id TYPE VARCHAR(64)
+      USING system_order_id::VARCHAR;
+    `);
+  } catch (err) {
+    // 老库未创建 douyin_orders 或字段已正确时都允许跳过。
+    console.warn('[initializePostgreDB] douyin_orders.system_order_id 字段升级跳过:', err.message);
+  }
+  // 抖音创单链路逐步对齐官方字段，老库需要幂等补齐关键列。
+  try {
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS source_order_id VARCHAR(64);`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS hotel_id VARCHAR(64);`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS contact_name VARCHAR(128);`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS contact_mobile VARCHAR(128);`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS number_of_guests INTEGER;`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS amount_before_tax DECIMAL(12, 2);`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS rate_plan_id VARCHAR(64);`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS biz_type INTEGER;`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS remark_from_douyin TEXT;`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS remark_from_guest TEXT;`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS daily_rates JSONB;`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS occupancies JSONB;`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS member_info JSONB;`);
+  } catch (err) {
+    // 老库未创建 douyin_orders 时允许跳过。
+    console.warn('[initializePostgreDB] douyin_orders 创单字段升级跳过:', err.message);
+  }
   await optimizeOtaTables();
   await createIndex();
   await createComments();

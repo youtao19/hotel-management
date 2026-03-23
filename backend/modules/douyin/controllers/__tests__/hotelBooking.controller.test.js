@@ -1,0 +1,94 @@
+const { handleDouyinHotelBooking } = require('../../services/hotelBooking.service')
+const { syncDouyinOrderToSystem } = require('../../services/orderSync.service')
+const { autoConfirmDouyinOrder } = require('../../services/autoConfirm.service')
+const { receiveSpiCallback } = require('../hotelBooking.controller')
+
+jest.mock('../../services/hotelBooking.service', () => ({
+  handleDouyinHotelBooking: jest.fn(),
+}))
+
+jest.mock('../../services/orderSync.service', () => ({
+  syncDouyinOrderToSystem: jest.fn(),
+}))
+
+jest.mock('../../services/autoConfirm.service', () => ({
+  autoConfirmDouyinOrder: jest.fn(),
+}))
+
+/**
+ * 创建最小可用的 Express 响应对象 mock。
+ *
+ * @returns {{json: jest.Mock}} 响应对象。
+ */
+function createMockResponse() {
+  return {
+    json: jest.fn(function json(body) {
+      return body
+    }),
+  }
+}
+
+describe('receiveSpiCallback', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  test('成功时应返回官方创单响应结构', async () => {
+    handleDouyinHotelBooking.mockResolvedValue({
+      action: 'created',
+      order: {
+        ota_order_id: 'DY_001',
+      },
+    })
+    syncDouyinOrderToSystem.mockResolvedValue({
+      action: 'created',
+      systemOrderId: 'O202603240001',
+    })
+    autoConfirmDouyinOrder.mockResolvedValue({})
+
+    const req = {
+      body: {
+        order_id: 'DY_001',
+      },
+    }
+    const res = createMockResponse()
+
+    await receiveSpiCallback(req, res)
+
+    expect(res.json).toHaveBeenCalledWith({
+      data: {
+        error_code: 0,
+        description: 'success',
+        order_id: 'DY_001',
+        order_out_id: 'O202603240001',
+        confirm_info: {
+          confirm_mode: 2,
+        },
+      },
+    })
+  })
+
+  test('失败时应返回官方错误结构', async () => {
+    const error = new Error('room type invalid')
+    error.douyinErrorCode = 1
+    error.douyinDescription = '房型不存在/失效'
+    handleDouyinHotelBooking.mockRejectedValue(error)
+
+    const req = {
+      body: {
+        order_id: 'DY_002',
+      },
+    }
+    const res = createMockResponse()
+
+    await receiveSpiCallback(req, res)
+
+    expect(res.json).toHaveBeenCalledWith({
+      data: {
+        error_code: 1,
+        description: '房型不存在/失效',
+        order_id: 'DY_002',
+      },
+    })
+  })
+})

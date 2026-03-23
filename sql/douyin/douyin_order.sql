@@ -54,6 +54,35 @@ ADD COLUMN room_name VARCHAR(255);
 COMMENT ON COLUMN douyin_orders.room_id IS '房间ID';
 COMMENT ON COLUMN douyin_orders.room_name IS '房间名称';
 
+ALTER TABLE douyin_orders
+ADD COLUMN IF NOT EXISTS source_order_id VARCHAR(64),
+ADD COLUMN IF NOT EXISTS hotel_id VARCHAR(64),
+ADD COLUMN IF NOT EXISTS contact_name VARCHAR(128),
+ADD COLUMN IF NOT EXISTS contact_mobile VARCHAR(128),
+ADD COLUMN IF NOT EXISTS number_of_guests INTEGER,
+ADD COLUMN IF NOT EXISTS amount_before_tax DECIMAL(12, 2),
+ADD COLUMN IF NOT EXISTS rate_plan_id VARCHAR(64),
+ADD COLUMN IF NOT EXISTS biz_type INTEGER,
+ADD COLUMN IF NOT EXISTS remark_from_douyin TEXT,
+ADD COLUMN IF NOT EXISTS remark_from_guest TEXT,
+ADD COLUMN IF NOT EXISTS daily_rates JSONB,
+ADD COLUMN IF NOT EXISTS occupancies JSONB,
+ADD COLUMN IF NOT EXISTS member_info JSONB;
+
+COMMENT ON COLUMN douyin_orders.source_order_id IS '预售来源订单号';
+COMMENT ON COLUMN douyin_orders.hotel_id IS '抖音酒店ID';
+COMMENT ON COLUMN douyin_orders.contact_name IS '联系人姓名';
+COMMENT ON COLUMN douyin_orders.contact_mobile IS '联系人手机号/加密串';
+COMMENT ON COLUMN douyin_orders.number_of_guests IS '入住人数';
+COMMENT ON COLUMN douyin_orders.amount_before_tax IS '税前金额';
+COMMENT ON COLUMN douyin_orders.rate_plan_id IS '抖音售卖房型ID';
+COMMENT ON COLUMN douyin_orders.biz_type IS '业务类型';
+COMMENT ON COLUMN douyin_orders.remark_from_douyin IS '抖音备注';
+COMMENT ON COLUMN douyin_orders.remark_from_guest IS '客人备注';
+COMMENT ON COLUMN douyin_orders.daily_rates IS '抖音分日价格明细';
+COMMENT ON COLUMN douyin_orders.occupancies IS '入住人明细';
+COMMENT ON COLUMN douyin_orders.member_info IS '会员信息';
+
 
 ALTER TABLE douyin_orders
 ALTER COLUMN system_order_id TYPE VARCHAR(64)
