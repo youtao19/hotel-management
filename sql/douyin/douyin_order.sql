@@ -36,4 +36,13 @@ ADD COLUMN synced BOOLEAN DEFAULT FALSE,
 ADD COLUMN system_order_id BIGINT;
 
 COMMENT ON COLUMN douyin_orders.synced IS '是否已同步到系统订单';
-COMMENT ON COLUMN douyin_orders.system_order_id IS '系统订单ID
+COMMENT ON COLUMN douyin_orders.system_order_id IS '系统订单ID';
+
+ALTER TABLE douyin_orders
+ADD COLUMN confirm_status VARCHAR(32),
+ADD COLUMN confirm_number VARCHAR(64),
+ADD COLUMN confirmed_at TIMESTAMP;
+
+COMMENT ON COLUMN douyin_orders.confirm_status IS '确认状态：pending/confirmed/failed';
+COMMENT ON COLUMN douyin_orders.confirm_number IS '传给抖音的确认号';
+COMMENT ON COLUMN douyin_orders.confirmed_at IS '订单确认时间';

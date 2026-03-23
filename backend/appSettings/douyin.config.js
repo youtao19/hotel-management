@@ -4,6 +4,7 @@ const douyinConfig = {
   accountId: process.env.DOUYIN_ACCOUNT_ID || '',
   openApiBaseUrl: process.env.DOUYIN_OPENAPI_BASE_URL || 'https://open.douyin.com',
   tokenPath: '/oauth/client_token/',
+  autoConfirmEnabled: process.env.DOUYIN_AUTO_CONFIRM_ENABLED === 'true',
 }
 
 function validateDouyinConfig() {
@@ -20,4 +21,5 @@ function validateDouyinConfig() {
 module.exports = {
   douyinConfig,
   validateDouyinConfig,
+
 }

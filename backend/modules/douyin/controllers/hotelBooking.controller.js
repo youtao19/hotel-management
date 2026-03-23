@@ -77,18 +77,30 @@ async function receiveSpiCallback(req, res) {
     const otaOrderId = result.order?.ota_order_id
 
     let syncResult = null
+    let autoConfirmResult = null
+    let autoConfirmError = null
 
     if (otaOrderId) {
       syncResult = await syncDouyinOrderToSystem(otaOrderId)
     }
 
-    await autoConfirmDouyinOrder(result.order)
+    if (
+      douyinConfig.autoConfirmEnabled &&
+      result.action === 'created' && result.order && syncResult?.action === 'created') {
+      try {
+        autoConfirmResult = await autoConfirmDouyinOrder(result.order)
+      } catch (error) {
+        autoConfirmError = error.message
+      }
+    }
 
     return res.json({
       success: true,
       message: 'Douyin callback processed successfully',
       result,
       syncResult,
+      autoConfirmResult,
+      autoConfirmError,
     })
   } catch (error) {
     return res.status(500).json({

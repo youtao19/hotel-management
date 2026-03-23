@@ -1,5 +1,4 @@
 const { requestDouyinOpenApi } = require('../clients/douyinOpenApi.client')
-const {  }
 
 async function confirmDouyinOrder({
   otaOrderId,
