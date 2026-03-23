@@ -15,8 +15,31 @@ const tables = [
   'dashboard_memos'
 ];
 
+/**
+ * 判断当前测试文件是否属于纯 mock 的抖音单元测试。
+ * 说明：
+ * 1. 这类测试不会访问真实数据库、Redis 或 Express 应用；
+ * 2. 跳过全局初始化后，可以避免测试环境建表逻辑干扰单元测试断言。
+ *
+ * @returns {boolean} 当前测试是否应跳过全局初始化。
+ */
+function shouldSkipGlobalBootstrap() {
+  const testPath = expect.getState().testPath || '';
+
+  return [
+    'backend/modules/douyin/services/__tests__/cancelOrder.service.test.js',
+    'backend/modules/douyin/services/__tests__/cancelAuditResult.service.test.js',
+    'backend/modules/douyin/controllers/__tests__/cancelOrder.controller.test.js',
+  ].some((filePath) => testPath.endsWith(filePath));
+}
+
 // 全局测试设置
 beforeAll(async () => {
+  if (shouldSkipGlobalBootstrap()) {
+    console.log('⏭️ 跳过抖音单元测试的全局初始化');
+    return;
+  }
+
   // 初始化数据库结构
   await db.initializePostgreDB();
 
@@ -27,6 +50,11 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  if (shouldSkipGlobalBootstrap()) {
+    console.log('⏭️ 跳过抖音单元测试的全局清理');
+    return;
+  }
+
   try {
     // 先禁用外键约束
     await db.query('SET session_replication_role = replica;');

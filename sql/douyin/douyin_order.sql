@@ -80,7 +80,13 @@ ADD COLUMN IF NOT EXISTS cancel_reason TEXT,
 ADD COLUMN IF NOT EXISTS cancel_order_time VARCHAR(19),
 ADD COLUMN IF NOT EXISTS refund_order_detail JSONB,
 ADD COLUMN IF NOT EXISTS cancel_status VARCHAR(32),
-ADD COLUMN IF NOT EXISTS cancel_audit_deadline VARCHAR(19);
+ADD COLUMN IF NOT EXISTS cancel_audit_deadline VARCHAR(19),
+ADD COLUMN IF NOT EXISTS cancel_audit_result INTEGER,
+ADD COLUMN IF NOT EXISTS cancel_audit_reason TEXT,
+ADD COLUMN IF NOT EXISTS cancel_audit_status VARCHAR(32),
+ADD COLUMN IF NOT EXISTS cancel_audit_response JSONB,
+ADD COLUMN IF NOT EXISTS cancel_audit_sent_at TIMESTAMP,
+ADD COLUMN IF NOT EXISTS cancel_audit_retry_count INTEGER DEFAULT 0;
 
 COMMENT ON COLUMN douyin_orders.source_order_id IS '预售来源订单号';
 COMMENT ON COLUMN douyin_orders.hotel_id IS '抖音酒店ID';
@@ -108,6 +114,12 @@ COMMENT ON COLUMN douyin_orders.cancel_order_time IS '取消时间';
 COMMENT ON COLUMN douyin_orders.refund_order_detail IS '售后间夜明细';
 COMMENT ON COLUMN douyin_orders.cancel_status IS '取消处理状态';
 COMMENT ON COLUMN douyin_orders.cancel_audit_deadline IS '审核截止时间';
+COMMENT ON COLUMN douyin_orders.cancel_audit_result IS '审核回传结果(1同意/2拒绝)';
+COMMENT ON COLUMN douyin_orders.cancel_audit_reason IS '审核回传原因';
+COMMENT ON COLUMN douyin_orders.cancel_audit_status IS '审核回传状态';
+COMMENT ON COLUMN douyin_orders.cancel_audit_response IS '审核回传原始响应';
+COMMENT ON COLUMN douyin_orders.cancel_audit_sent_at IS '审核回传时间';
+COMMENT ON COLUMN douyin_orders.cancel_audit_retry_count IS '审核回传重试次数';
 
 
 ALTER TABLE douyin_orders

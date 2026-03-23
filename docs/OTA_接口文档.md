@@ -235,6 +235,7 @@ GET /api/ota/v1/inventory?startDate=2026-03-10&endDate=2026-03-12&roomType=asu_x
   - `POST /api/douyin/callback/spi/mock`
   - `POST /api/douyin/callback/cancel`
   - `POST /api/douyin/callback/cancel/mock`
+- 当取消通知带 `need_audit=true` 时，系统会自动调用抖音“售后审核结果返回”接口回传同意/拒绝结果。
 
 ## 9. 插件接单接口（动态签名）
 
