@@ -8,7 +8,7 @@ function generateOrderNumber() {
     const day = String(now.getDate()).padStart(2, '0')
     const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0')
     return `O${year}${month}${day}${random}`
-  }
+}
 
 /**
  * 根据房型和入住区间随机分配一个可用房号。

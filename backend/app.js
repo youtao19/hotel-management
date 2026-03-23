@@ -52,6 +52,9 @@ app.use(express.text({
   verify: captureRawBody
 }));
 
+
+
+
 // 初始化 session 和 Redis store 的函数
 async function initializeSession() {
     const redisClient = await RedisDb.initialize();
@@ -124,6 +127,9 @@ async function initializeSession() {
 
     const pluginRoomTypeMappingRoute = require("./routes/plugin/room-map/room-map.routes");
     app.use("/api/plugin/room-type-mapping", pluginRoomTypeMappingRoute);
+
+    const douyinRoutes = require('./routes/douyin/douyinApi');
+    app.use('/api/douyin', douyinRoutes);
 
     app.get("/api/hup", (req, res) => res.status(200).json({ ok: true }));
 

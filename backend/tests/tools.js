@@ -193,23 +193,35 @@ const ORDERS = [
   },
 ]
 
+/**
+ * 批量写入测试房型数据。
+ * @param {Array<{type_code: string, type_name: string, base_price: number, description: string|null, is_closed: boolean}>} roomTypes 房型数据列表
+ * @returns {Promise<void>} 写入完成后返回 Promise
+ * @throws {Error} 数据库写入失败时抛出异常
+ */
 async function addRoomType(roomTypes) {
-  // Implementation for adding a room type
   for (const type of roomTypes) {
     await db.query(
       `INSERT INTO room_types (type_code, type_name, base_price, description, is_closed)
-       VALUES ($1, $2, $3, $4, $5)`,
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (type_code) DO NOTHING`,
       [type.type_code, type.type_name, type.base_price, type.description, type.is_closed]
     );
   }
 }
 
+/**
+ * 批量写入测试房间数据。
+ * @param {Array<{room_number: string, type_code: string, status: string, price: number, is_closed: boolean}>} rooms 房间数据列表
+ * @returns {Promise<void>} 写入完成后返回 Promise
+ * @throws {Error} 数据库写入失败时抛出异常
+ */
 async function addRoom(rooms) {
-  // Implementation for adding a room
   for (const room of rooms) {
     await db.query(
       `INSERT INTO rooms (room_number, type_code, status, price, is_closed)
-        VALUES ($1, $2, $3, $4, $5)`,
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (room_number) DO NOTHING`,
       [room.room_number, room.type_code, room.status, room.price, room.is_closed]
     );
   }

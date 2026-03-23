@@ -5,7 +5,8 @@ module.exports = {
   // 匹配你的测试文件
   testMatch: [
     "**/tests/**/*.test.js",
-    "**/tests/**/*.integration.test.js"
+    "**/tests/**/*.integration.test.js",
+    "**/__tests__/**/*.test.js"
   ],
 
   // 自动执行数据库初始化脚本

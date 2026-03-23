@@ -297,7 +297,9 @@ async function createOrder(orderData, client) {
         await runner.query('COMMIT');
         console.log(`✅ [createOrder] 插入成功 order_id=${orderId}, 共 ${stayDates.length} 条记录`);
       }
-      return;
+      return {
+        orderId,
+      };
     } catch (txnError) {
       if (manageTx) {
         await runner.query('ROLLBACK');

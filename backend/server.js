@@ -1,4 +1,13 @@
 // server.js
+const path = require('path')
+
+const envFile =
+  process.env.NODE_ENV === 'test'
+    ? path.resolve(__dirname, '../.env.test')
+    : path.resolve(__dirname, '../dev.env')
+
+require('dotenv').config({ path: envFile })
+
 const http = require("http");
 const app = require("./app");
 const setup = require("./appSettings/setup");

@@ -3,10 +3,10 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "dotenv -e ../dev.env -- cross-env NODE_ENV=dev nodemon server.js",
-    "dev:test": "dotenv --overload -e ../.env.test -- cross-env NODE_ENV=test node server.js",
-    "start": "dotenv -e ../dev.env -- node server.js",
-    "start:test": "dotenv --overload -e ../.env.test -- node server.js",
+    "dev": "cross-env NODE_ENV=dev nodemon server.js",
+    "dev:test": "cross-env NODE_ENV=test node server.js",
+    "start": "node server.js",
+    "start:test": "cross-env NODE_ENV=test node server.js",
     "test": "dotenv --overload -e ../.env.test -- cross-env NODE_ENV=test jest --runInBand --rootDir=.",
     "test:watch": "dotenv --overload -e ../.env.test -- cross-env NODE_ENV=test jest --watch --runInBand",
     "test:coverage": "dotenv --overload -e ../.env.test -- cross-env NODE_ENV=test jest --coverage --runInBand",
@@ -33,7 +33,6 @@
     "node-cron": "^3.0.3",
     "nodemailer": "^7.0.3",
     "pg": "^8.16.0",
-    "postgres-mcp": "^1.0.4",
     "rate-limiter-flexible": "^7.1.0",
     "redis": "^5.8.3"
   },
