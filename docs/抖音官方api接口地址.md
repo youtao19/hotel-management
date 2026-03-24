@@ -90,6 +90,11 @@
 - 用途：用于三方向抖音回传逆向售后审核结果、同意/拒绝取消等处理结果。
 - 当前代码关联：当前未实现，需与“酒店取消订单SPI”配套接入。
 
+### 4.3 通知退款结果
+- 链接：[通知退款结果](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/calendar-trading-reverse/refund-result-api)
+- 用途：用于接收或回传退款结果，是退款逆向闭环的重要一环。
+- 当前代码关联：`backend/modules/douyin/controllers/refundResult.controller.js`、`backend/modules/douyin/services/refundResult.service.js`
+
 ## 5. 房型与静态信息
 
 ### 5.1 售卖房型静态信息接口

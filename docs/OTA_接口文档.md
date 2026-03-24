@@ -263,6 +263,14 @@ GET /api/ota/v1/inventory?startDate=2026-03-10&endDate=2026-03-12&roomType=asu_x
   - `POST /api/douyin/callback/ari-pull/mock`
   - 当前返回 `data.error_code`、`data.description`、`data.stock_and_amount`
   - 当前基础口径复用本地 ARI 组装能力，按 `rate_plan_id + 日期范围` 返回价格、房量、房态
+- 当前还提供退款结果通知回调入口：
+  - `POST /api/douyin/callback/refund-result`
+  - `POST /api/douyin/callback/refund-result/mock`
+  - 当前用于承接抖音退款结果通知，并把结果回写到 `douyin_orders`
+- 当前还提供一个“未支付超时取消”的手动调试接口：
+  - `POST /api/douyin/order/timeout-cancel`
+  - 请求体支持 `otaOrderId`，可选 `reason`
+  - 当前会把 `douyin_orders.cancel_status` 更新为 `timeout_cancelled`
 - 当前还提供一个手动物理房型创建接口，便于验收阶段先把本地房型推到抖音侧：
   - `POST /api/douyin/physical-room/create`
   - 请求体支持 `localRoomType`、`poiId`，可选 `accountId`

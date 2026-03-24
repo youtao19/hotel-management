@@ -98,6 +98,10 @@ const DOUYIN_CANCEL_ERROR = Object.freeze({
     code: 13,
     description: '退款类型不合法',
   },
+  INVALID_REFUND_STATUS: {
+    code: 13,
+    description: '退款状态不合法',
+  },
 })
 
 /**
