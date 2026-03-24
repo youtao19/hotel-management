@@ -296,6 +296,10 @@ async function initializePostgreDB() {
     await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS cancel_audit_response JSONB;`);
     await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS cancel_audit_sent_at TIMESTAMP;`);
     await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS cancel_audit_retry_count INTEGER DEFAULT 0;`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS fulfillment_status VARCHAR(32);`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS fulfillment_action VARCHAR(32);`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS fulfillment_response JSONB;`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS fulfillment_sent_at TIMESTAMP;`);
   } catch (err) {
     // 老库未创建 douyin_orders 时允许跳过。
     console.warn('[initializePostgreDB] douyin_orders 创单字段升级跳过:', err.message);

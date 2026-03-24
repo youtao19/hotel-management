@@ -112,7 +112,7 @@
 ### 6.1 入住/离店状态同步能力
 - 链接：[入住/离店状态同步能力](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/check-in-out-sync/order-check-in-audit)
 - 用途：定义订单入住、离店、核销等履约状态向抖音同步的接口能力与字段要求。
-- 当前代码关联：当前未实现，后续订单 `checked-in/checked-out` 状态同步需优先对照此文档。
+- 当前代码关联：`backend/modules/douyin/services/fulfillmentSync.service.js`、`backend/modules/douyin/controllers/fulfillmentSync.controller.js`
 
 ## 6.2 房价/房态/房量更新
 

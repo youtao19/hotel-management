@@ -26,6 +26,10 @@ const {
   pushDouyinPriceController,
   pushDouyinStockController,
 } = require('../../modules/douyin/controllers/ari.controller')
+const {
+  pushDouyinCheckInController,
+  pushDouyinCheckOutController,
+} = require('../../modules/douyin/controllers/fulfillmentSync.controller')
 
 const {
   verifyDouyinSignMiddleware,
@@ -42,6 +46,8 @@ router.post('/callback/presale', verifyDouyinSignMiddleware, receivePresaleSpiCa
 router.post('/callback/bookable', verifyDouyinSignMiddleware, receiveBookableCheckCallback)
 router.post('/callback/cancel', verifyDouyinSignMiddleware, receiveCancelCallback)
 router.post('/order/confirm', confirmOrder)
+router.post('/order/check-in', pushDouyinCheckInController)
+router.post('/order/check-out', pushDouyinCheckOutController)
 router.post('/ari/preview', previewDouyinAriController)
 router.post('/ari/stock/push', pushDouyinStockController)
 router.post('/ari/price/push', pushDouyinPriceController)
