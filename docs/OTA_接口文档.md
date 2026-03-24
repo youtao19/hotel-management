@@ -267,6 +267,11 @@ GET /api/ota/v1/inventory?startDate=2026-03-10&endDate=2026-03-12&roomType=asu_x
   - 请求体支持 `localRoomType`、`poiId`、`roomId`，可选 `accountId`、`mode`
   - `mode` 当前支持 `meal`、`cancel`、`stay`、`booking`
   - 当前为基础版创建，先走最小字段；仅 `meal` 模式会额外补一个简单餐食字段
+- 当前还提供一个手动更新日历房商品上下架状态接口：
+  - `POST /api/douyin/rate-plan/status`
+  - 请求体支持 `roomId`、`ratePlanId`、`active`，可选 `accountId`
+  - `active=true` 表示上架；`active=false` 表示下架
+  - 当前通过 `rateplan/save` 做基础版状态更新，并同步回写本地 `rate_plan_list.active`
 - 当前还提供一组履约同步调试接口，便于验收阶段手动推送入住和离店：
   - `POST /api/douyin/order/check-in`
   - `POST /api/douyin/order/check-out`

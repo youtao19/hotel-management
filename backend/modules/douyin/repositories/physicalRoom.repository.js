@@ -145,6 +145,38 @@ async function findPhysicalRoomByRoomId(roomId) {
   return result.rows[0] || null
 }
 
+/**
+ * 回写物理房型中的售卖房型列表。
+ *
+ * @param {Object} params 参数对象。
+ * @param {string} params.roomId 抖音物理房型 ID。
+ * @param {Object[]} params.ratePlanList 最新售卖房型列表。
+ * @param {Object} params.rawPayload 最新原始载荷。
+ * @returns {Promise<Object|null>} 更新后的物理房型记录。
+ */
+async function updatePhysicalRoomRatePlanList({
+  roomId,
+  ratePlanList,
+  rawPayload,
+}) {
+  const sql = `
+    UPDATE douyin_physical_rooms
+    SET rate_plan_list = $2,
+        raw_payload = $3,
+        updated_at = NOW()
+    WHERE room_id = $1
+    RETURNING *
+  `
+
+  const result = await postgreDB.query(sql, [
+    roomId,
+    JSON.stringify(ratePlanList || []),
+    JSON.stringify(rawPayload || {}),
+  ])
+
+  return result.rows[0] || null
+}
+
 module.exports = {
   upsertPhysicalRoom,
   findAllPhysicalRooms,
@@ -152,4 +184,5 @@ module.exports = {
   findPhysicalRoomsByRatePlanIds,
   findPhysicalRoomByLocalRoomType,
   findPhysicalRoomByRoomId,
+  updatePhysicalRoomRatePlanList,
 }

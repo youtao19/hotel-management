@@ -95,7 +95,7 @@
 ### 5.1 售卖房型静态信息接口
 - 链接：[售卖房型静态信息接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/house-type-update/static-room-info-api)
 - 用途：定义售卖房型的静态信息创建、更新或匹配所需字段。
-- 当前代码关联：`backend/modules/douyin/services/ratePlanCreate.service.js`、`backend/modules/douyin/controllers/ratePlanCreate.controller.js`
+- 当前代码关联：`backend/modules/douyin/services/ratePlanCreate.service.js`、`backend/modules/douyin/controllers/ratePlanCreate.controller.js`、`backend/modules/douyin/services/ratePlanStatus.service.js`
 
 ### 5.2 物理房型静态信息接口
 - 链接：[物理房型静态信息接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/room-info-ops/room-static-info-api)

@@ -186,9 +186,17 @@ const DOUYIN_RATE_PLAN_ERROR = Object.freeze({
     code: 13,
     description: '抖音物理房型不存在',
   },
+  RATE_PLAN_NOT_FOUND: {
+    code: 13,
+    description: '抖音售卖房型不存在',
+  },
   DUPLICATE_RATE_PLAN: {
     code: 13,
     description: '本地房型已存在抖音售卖房型映射',
+  },
+  INVALID_ACTIVE: {
+    code: 13,
+    description: '商品上下架状态不合法',
   },
   RATE_PLAN_ID_MISSING: {
     code: 13,

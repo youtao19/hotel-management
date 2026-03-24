@@ -36,6 +36,9 @@ const {
 const {
   createDouyinRatePlanController,
 } = require('../../modules/douyin/controllers/ratePlanCreate.controller')
+const {
+  updateDouyinRatePlanStatusController,
+} = require('../../modules/douyin/controllers/ratePlanStatus.controller')
 
 const {
   verifyDouyinSignMiddleware,
@@ -56,6 +59,7 @@ router.post('/order/check-in', pushDouyinCheckInController)
 router.post('/order/check-out', pushDouyinCheckOutController)
 router.post('/physical-room/create', createDouyinPhysicalRoomController)
 router.post('/rate-plan/create', createDouyinRatePlanController)
+router.post('/rate-plan/status', updateDouyinRatePlanStatusController)
 router.post('/ari/preview', previewDouyinAriController)
 router.post('/ari/stock/push', pushDouyinStockController)
 router.post('/ari/price/push', pushDouyinPriceController)
