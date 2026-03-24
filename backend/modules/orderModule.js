@@ -2,6 +2,11 @@ const { query, getClient } = require('../database/postgreDB/pg');
 const billModule = require('./billModule');
 const setup = require('../appSettings/setup');
 const { formatDate, toDecimal, toAmountNumber } = require('./tools');
+const {
+  isDouyinSystemOrder,
+  pushDouyinCheckInBySystemOrder,
+  pushDouyinCheckOutBySystemOrder,
+} = require('./douyin/services/fulfillmentSync.service');
 
 const tableName = "orders";
 
@@ -210,6 +215,36 @@ function getRoomFeeSummaryPaymentMethod(roomFeeSplitsByDay, fallbackMethod) {
   if (methods.size > 1) return '混合支付';
   if (methods.size === 1) return [...methods][0];
   return normalizePayWay(fallbackMethod);
+}
+
+async function triggerDouyinCheckInSyncIfNeeded(orderId) {
+  try {
+    const isDouyinOrder = await isDouyinSystemOrder(orderId);
+    if (!isDouyinOrder) {
+      return { action: 'skip', reason: 'not_douyin_order' };
+    }
+
+    await pushDouyinCheckInBySystemOrder(orderId);
+    return { action: 'sent' };
+  } catch (error) {
+    console.error(`❌ [triggerDouyinCheckInSyncIfNeeded] 自动同步入住失败:`, error.message);
+    return { action: 'failed', error: error.message };
+  }
+}
+
+async function triggerDouyinCheckOutSyncIfNeeded(orderId) {
+  try {
+    const isDouyinOrder = await isDouyinSystemOrder(orderId);
+    if (!isDouyinOrder) {
+      return { action: 'skip', reason: 'not_douyin_order' };
+    }
+
+    await pushDouyinCheckOutBySystemOrder(orderId);
+    return { action: 'sent' };
+  } catch (error) {
+    console.error(`❌ [triggerDouyinCheckOutSyncIfNeeded] 自动同步离店失败:`, error.message);
+    return { action: 'failed', error: error.message };
+  }
 }
 
 
@@ -1544,6 +1579,7 @@ async function checkIn(orderId, depositAmount, client, paymentSplitPayload = {})
     if (manageTx) {
       await runner.query('COMMIT');
       console.log('✅ [check-in] 事务提交成功');
+      await triggerDouyinCheckInSyncIfNeeded(orderId);
     }
 
     return createdBills;
@@ -1607,6 +1643,7 @@ async function fastCheckIn(orderData, createdBy = 'system') {
       });
 
       await client.query('COMMIT');
+      await triggerDouyinCheckInSyncIfNeeded(normalized.orderId);
 
       const aggregatedOrder = await getOrderById(normalized.orderId);
       const { rows: createdBills } = await query(
@@ -1677,6 +1714,7 @@ async function checkOut(orderId, client) {
       // commit transaction
       if (manageTx) {
         await runner.query('COMMIT');
+        await triggerDouyinCheckOutSyncIfNeeded(orderId);
       }
 
       return await getOrderById(orderId);
@@ -2065,6 +2103,8 @@ const table = {
   isRestRoom,
   earlyCheckout,
   getEarlyCheckoutRecommendation,
+  triggerDouyinCheckInSyncIfNeeded,
+  triggerDouyinCheckOutSyncIfNeeded,
   updateOrderWithBills,
   checkIn,
   fastCheckIn,

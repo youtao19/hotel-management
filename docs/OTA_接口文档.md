@@ -308,6 +308,9 @@ GET /api/ota/v1/inventory?startDate=2026-03-10&endDate=2026-03-12&roomType=asu_x
   - `POST /api/douyin/order/check-in`
   - `POST /api/douyin/order/check-out`
   - 请求体统一支持 `orderId`
+  - 当前真实业务动作也已接入自动触发：
+    - 本地办理入住成功后，会自动尝试同步抖音入住状态
+    - 本地办理退房成功后，会自动尝试同步抖音离店状态
 
 ## 9. 插件接单接口（动态签名）
 

@@ -36,6 +36,17 @@ async function findDouyinOrderBySystemOrderId(orderId) {
 }
 
 /**
+ * 判断本地系统订单是否存在抖音映射。
+ *
+ * @param {string} orderId 本地系统订单号。
+ * @returns {Promise<boolean>} 是否为抖音订单。
+ */
+async function isDouyinSystemOrder(orderId) {
+  const douyinOrder = await findDouyinOrderBySystemOrderId(orderId)
+  return Boolean(douyinOrder)
+}
+
+/**
  * 构建抖音履约同步请求体。
  *
  * @param {Object} douyinOrder 抖音落地订单。
@@ -169,11 +180,34 @@ async function pushDouyinCheckOut({ orderId }) {
   })
 }
 
+/**
+ * 按本地系统订单号推送入住状态。
+ *
+ * @param {string} orderId 本地系统订单号。
+ * @returns {Promise<Object>} 推送结果。
+ */
+async function pushDouyinCheckInBySystemOrder(orderId) {
+  return pushDouyinCheckIn({ orderId })
+}
+
+/**
+ * 按本地系统订单号推送离店状态。
+ *
+ * @param {string} orderId 本地系统订单号。
+ * @returns {Promise<Object>} 推送结果。
+ */
+async function pushDouyinCheckOutBySystemOrder(orderId) {
+  return pushDouyinCheckOut({ orderId })
+}
+
 module.exports = {
   DOUYIN_ACCOMMODATION_STATUS,
   DOUYIN_FULFILLMENT_ACTION,
   buildDouyinFulfillmentPayload,
   findDouyinOrderBySystemOrderId,
+  isDouyinSystemOrder,
   pushDouyinCheckIn,
+  pushDouyinCheckInBySystemOrder,
   pushDouyinCheckOut,
+  pushDouyinCheckOutBySystemOrder,
 }

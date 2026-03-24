@@ -5,8 +5,11 @@ const {
   DOUYIN_FULFILLMENT_ACTION,
   buildDouyinFulfillmentPayload,
   findDouyinOrderBySystemOrderId,
+  isDouyinSystemOrder,
   pushDouyinCheckIn,
+  pushDouyinCheckInBySystemOrder,
   pushDouyinCheckOut,
+  pushDouyinCheckOutBySystemOrder,
 } = require('../fulfillmentSync.service')
 
 jest.mock('../../../../database/postgreDB/pg', () => ({
@@ -38,6 +41,16 @@ describe('fulfillmentSync.service', () => {
     expect(result).toEqual({
       system_order_id: 'O202603240001',
     })
+  })
+
+  test('存在抖音映射时应识别为抖音订单', async () => {
+    postgreDB.query.mockResolvedValue({
+      rows: [{
+        system_order_id: 'O202603240001',
+      }],
+    })
+
+    await expect(isDouyinSystemOrder('O202603240001')).resolves.toBe(true)
   })
 
   test('应构建入住同步请求体', () => {
@@ -165,5 +178,47 @@ describe('fulfillmentSync.service', () => {
       douyinErrorCode: 9,
       douyinDescription: '订单不存在或状态异常',
     })
+  })
+
+  test('应支持按系统订单号复用入住推送', async () => {
+    postgreDB.query
+      .mockResolvedValueOnce({
+        rows: [{
+          ota_order_id: 'DY_006',
+          system_order_id: 'O202603240006',
+        }],
+      })
+      .mockResolvedValueOnce({ rows: [] })
+    requestDouyinOpenApi.mockResolvedValue({
+      data: {
+        error_code: 0,
+      },
+    })
+
+    const result = await pushDouyinCheckInBySystemOrder('O202603240006')
+
+    expect(result.action).toBe('check_in')
+    expect(result.status).toBe('sent')
+  })
+
+  test('应支持按系统订单号复用离店推送', async () => {
+    postgreDB.query
+      .mockResolvedValueOnce({
+        rows: [{
+          ota_order_id: 'DY_007',
+          system_order_id: 'O202603240007',
+        }],
+      })
+      .mockResolvedValueOnce({ rows: [] })
+    requestDouyinOpenApi.mockResolvedValue({
+      data: {
+        error_code: 0,
+      },
+    })
+
+    const result = await pushDouyinCheckOutBySystemOrder('O202603240007')
+
+    expect(result.action).toBe('check_out')
+    expect(result.status).toBe('sent')
   })
 })
