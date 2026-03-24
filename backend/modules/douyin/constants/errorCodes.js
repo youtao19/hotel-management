@@ -144,9 +144,17 @@ const DOUYIN_PHYSICAL_ROOM_ERROR = Object.freeze({
     code: 13,
     description: '缺少抖音商家账号ID',
   },
+  MISSING_ROOM_ID: {
+    code: 13,
+    description: '缺少抖音物理房型ID',
+  },
   MISSING_POI_ID: {
     code: 13,
     description: '缺少抖音酒店ID',
+  },
+  PHYSICAL_ROOM_NOT_FOUND: {
+    code: 13,
+    description: '抖音物理房型不存在',
   },
   LOCAL_ROOM_TYPE_NOT_FOUND: {
     code: 13,
@@ -159,6 +167,10 @@ const DOUYIN_PHYSICAL_ROOM_ERROR = Object.freeze({
   DUPLICATE_MAPPING: {
     code: 13,
     description: '本地房型已存在抖音物理房型映射',
+  },
+  INVALID_ACTIVE: {
+    code: 13,
+    description: '物理房型上下架状态不合法',
   },
 })
 

@@ -100,7 +100,7 @@
 ### 5.2 物理房型静态信息接口
 - 链接：[物理房型静态信息接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/room-info-ops/room-static-info-api)
 - 用途：用于创建或更新抖音物理房型静态信息，是“创建物理房型”验收项的核心 OpenAPI。
-- 当前代码关联：`backend/modules/douyin/services/physicalRoomCreate.service.js`、`backend/modules/douyin/controllers/physicalRoomCreate.controller.js`
+- 当前代码关联：`backend/modules/douyin/services/physicalRoomCreate.service.js`、`backend/modules/douyin/controllers/physicalRoomCreate.controller.js`、`backend/modules/douyin/services/physicalRoomStatus.service.js`
 
 ### 5.3 物理房型静态信息查询
 - 链接：[物理房型静态信息查询](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/room-info-access/room-static-info-query)

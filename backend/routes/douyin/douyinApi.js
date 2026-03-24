@@ -34,6 +34,9 @@ const {
   createDouyinPhysicalRoomController,
 } = require('../../modules/douyin/controllers/physicalRoomCreate.controller')
 const {
+  updateDouyinPhysicalRoomStatusController,
+} = require('../../modules/douyin/controllers/physicalRoomStatus.controller')
+const {
   createDouyinRatePlanController,
 } = require('../../modules/douyin/controllers/ratePlanCreate.controller')
 const {
@@ -58,6 +61,7 @@ router.post('/order/confirm', confirmOrder)
 router.post('/order/check-in', pushDouyinCheckInController)
 router.post('/order/check-out', pushDouyinCheckOutController)
 router.post('/physical-room/create', createDouyinPhysicalRoomController)
+router.post('/physical-room/status', updateDouyinPhysicalRoomStatusController)
 router.post('/rate-plan/create', createDouyinRatePlanController)
 router.post('/rate-plan/status', updateDouyinRatePlanStatusController)
 router.post('/ari/preview', previewDouyinAriController)

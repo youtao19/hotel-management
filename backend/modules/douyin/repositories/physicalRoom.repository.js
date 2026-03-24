@@ -177,6 +177,38 @@ async function updatePhysicalRoomRatePlanList({
   return result.rows[0] || null
 }
 
+/**
+ * 回写物理房型状态与原始载荷。
+ *
+ * @param {Object} params 参数对象。
+ * @param {string} params.roomId 抖音物理房型 ID。
+ * @param {number|null} params.status 最新状态。
+ * @param {Object} params.rawPayload 最新原始载荷。
+ * @returns {Promise<Object|null>} 更新后的物理房型记录。
+ */
+async function updatePhysicalRoomStatus({
+  roomId,
+  status,
+  rawPayload,
+}) {
+  const sql = `
+    UPDATE douyin_physical_rooms
+    SET status = $2,
+        raw_payload = $3,
+        updated_at = NOW()
+    WHERE room_id = $1
+    RETURNING *
+  `
+
+  const result = await postgreDB.query(sql, [
+    roomId,
+    status,
+    JSON.stringify(rawPayload || {}),
+  ])
+
+  return result.rows[0] || null
+}
+
 module.exports = {
   upsertPhysicalRoom,
   findAllPhysicalRooms,
@@ -185,4 +217,5 @@ module.exports = {
   findPhysicalRoomByLocalRoomType,
   findPhysicalRoomByRoomId,
   updatePhysicalRoomRatePlanList,
+  updatePhysicalRoomStatus,
 }

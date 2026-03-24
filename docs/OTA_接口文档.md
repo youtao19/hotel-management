@@ -262,6 +262,11 @@ GET /api/ota/v1/inventory?startDate=2026-03-10&endDate=2026-03-12&roomType=asu_x
   - `POST /api/douyin/physical-room/create`
   - 请求体支持 `localRoomType`、`poiId`，可选 `accountId`
   - 当未传 `accountId` 时，后端会回退使用环境变量 `DOUYIN_ACCOUNT_ID`
+- 当前还提供一个手动物理房型上下架接口：
+  - `POST /api/douyin/physical-room/status`
+  - 请求体支持 `roomId`、`active`，可选 `accountId`
+  - `active=true` 表示上架；`active=false` 表示下架
+  - 当前通过 `physical_room/save` 做基础版状态更新，并同步回写本地 `raw_payload.active`
 - 当前还提供一个手动创建日历房商品接口，便于验收阶段先把基础商品建到抖音侧：
   - `POST /api/douyin/rate-plan/create`
   - 请求体支持 `localRoomType`、`poiId`、`roomId`，可选 `accountId`、`mode`
