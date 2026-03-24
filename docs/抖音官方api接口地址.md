@@ -95,7 +95,7 @@
 ### 5.1 售卖房型静态信息接口
 - 链接：[售卖房型静态信息接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/house-type-update/static-room-info-api)
 - 用途：定义售卖房型的静态信息创建、更新或匹配所需字段。
-- 当前代码关联：当前本地已有 `roomTypeMapping`，后续售卖房型正式接入需参考此文档补全。
+- 当前代码关联：`backend/modules/douyin/services/ratePlanCreate.service.js`、`backend/modules/douyin/controllers/ratePlanCreate.controller.js`
 
 ### 5.2 物理房型静态信息接口
 - 链接：[物理房型静态信息接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/room-info-ops/room-static-info-api)
@@ -242,6 +242,7 @@
 - `酒店创建订单`
 - `确认接单接口`
 - `物理房型静态信息接口`
+- `售卖房型静态信息接口`
 - `物理房型静态信息查询`
 - `创建预售订单 SPI`
 - `正向交易流程`

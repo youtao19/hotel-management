@@ -127,10 +127,29 @@ async function findPhysicalRoomByLocalRoomType(localRoomType) {
   return result.rows[0] || null
 }
 
+/**
+ * 根据抖音物理房型 ID 查询本地已同步记录。
+ *
+ * @param {string} roomId 抖音物理房型 ID。
+ * @returns {Promise<Object|null>} 物理房型记录。
+ */
+async function findPhysicalRoomByRoomId(roomId) {
+  const sql = `
+    SELECT *
+    FROM douyin_physical_rooms
+    WHERE room_id = $1
+    LIMIT 1
+  `
+
+  const result = await postgreDB.query(sql, [roomId])
+  return result.rows[0] || null
+}
+
 module.exports = {
   upsertPhysicalRoom,
   findAllPhysicalRooms,
   findPhysicalRoomByRatePlanId,
   findPhysicalRoomsByRatePlanIds,
   findPhysicalRoomByLocalRoomType,
+  findPhysicalRoomByRoomId,
 }

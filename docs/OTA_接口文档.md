@@ -262,6 +262,11 @@ GET /api/ota/v1/inventory?startDate=2026-03-10&endDate=2026-03-12&roomType=asu_x
   - `POST /api/douyin/physical-room/create`
   - 请求体支持 `localRoomType`、`poiId`，可选 `accountId`
   - 当未传 `accountId` 时，后端会回退使用环境变量 `DOUYIN_ACCOUNT_ID`
+- 当前还提供一个手动创建日历房商品接口，便于验收阶段先把基础商品建到抖音侧：
+  - `POST /api/douyin/rate-plan/create`
+  - 请求体支持 `localRoomType`、`poiId`、`roomId`，可选 `accountId`、`mode`
+  - `mode` 当前支持 `meal`、`cancel`、`stay`、`booking`
+  - 当前为基础版创建，先走最小字段；仅 `meal` 模式会额外补一个简单餐食字段
 - 当前还提供一组履约同步调试接口，便于验收阶段手动推送入住和离店：
   - `POST /api/douyin/order/check-in`
   - `POST /api/douyin/order/check-out`

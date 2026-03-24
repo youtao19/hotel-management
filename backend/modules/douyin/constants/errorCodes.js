@@ -162,6 +162,40 @@ const DOUYIN_PHYSICAL_ROOM_ERROR = Object.freeze({
   },
 })
 
+/**
+ * 抖音售卖房型场景错误定义。
+ */
+const DOUYIN_RATE_PLAN_ERROR = Object.freeze({
+  MISSING_ACCOUNT_ID: {
+    code: 13,
+    description: '缺少抖音商家账号ID',
+  },
+  MISSING_POI_ID: {
+    code: 13,
+    description: '缺少抖音酒店ID',
+  },
+  MISSING_ROOM_ID: {
+    code: 13,
+    description: '缺少抖音物理房型ID',
+  },
+  LOCAL_ROOM_TYPE_NOT_FOUND: {
+    code: 13,
+    description: '本地房型不存在',
+  },
+  PHYSICAL_ROOM_NOT_FOUND: {
+    code: 13,
+    description: '抖音物理房型不存在',
+  },
+  DUPLICATE_RATE_PLAN: {
+    code: 13,
+    description: '本地房型已存在抖音售卖房型映射',
+  },
+  RATE_PLAN_ID_MISSING: {
+    code: 13,
+    description: '抖音返回的售卖房型ID缺失',
+  },
+})
+
 module.exports = {
   DOUYIN_SUCCESS_RESULT,
   DOUYIN_COMMON_ERROR,
@@ -170,4 +204,5 @@ module.exports = {
   DOUYIN_PRESALE_ERROR,
   DOUYIN_BOOKABLE_ERROR,
   DOUYIN_PHYSICAL_ROOM_ERROR,
+  DOUYIN_RATE_PLAN_ERROR,
 }
