@@ -30,6 +30,9 @@ const {
   pushDouyinCheckInController,
   pushDouyinCheckOutController,
 } = require('../../modules/douyin/controllers/fulfillmentSync.controller')
+const {
+  createDouyinPhysicalRoomController,
+} = require('../../modules/douyin/controllers/physicalRoomCreate.controller')
 
 const {
   verifyDouyinSignMiddleware,
@@ -48,6 +51,7 @@ router.post('/callback/cancel', verifyDouyinSignMiddleware, receiveCancelCallbac
 router.post('/order/confirm', confirmOrder)
 router.post('/order/check-in', pushDouyinCheckInController)
 router.post('/order/check-out', pushDouyinCheckOutController)
+router.post('/physical-room/create', createDouyinPhysicalRoomController)
 router.post('/ari/preview', previewDouyinAriController)
 router.post('/ari/stock/push', pushDouyinStockController)
 router.post('/ari/price/push', pushDouyinPriceController)

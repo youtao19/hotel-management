@@ -136,6 +136,32 @@ const DOUYIN_BOOKABLE_ERROR = Object.freeze({
   },
 })
 
+/**
+ * 抖音物理房型场景错误定义。
+ */
+const DOUYIN_PHYSICAL_ROOM_ERROR = Object.freeze({
+  MISSING_ACCOUNT_ID: {
+    code: 13,
+    description: '缺少抖音商家账号ID',
+  },
+  MISSING_POI_ID: {
+    code: 13,
+    description: '缺少抖音酒店ID',
+  },
+  LOCAL_ROOM_TYPE_NOT_FOUND: {
+    code: 13,
+    description: '本地房型不存在',
+  },
+  NO_LOCAL_ROOMS: {
+    code: 13,
+    description: '本地房型下没有可创建的物理房间',
+  },
+  DUPLICATE_MAPPING: {
+    code: 13,
+    description: '本地房型已存在抖音物理房型映射',
+  },
+})
+
 module.exports = {
   DOUYIN_SUCCESS_RESULT,
   DOUYIN_COMMON_ERROR,
@@ -143,4 +169,5 @@ module.exports = {
   DOUYIN_CANCEL_ERROR,
   DOUYIN_PRESALE_ERROR,
   DOUYIN_BOOKABLE_ERROR,
+  DOUYIN_PHYSICAL_ROOM_ERROR,
 }

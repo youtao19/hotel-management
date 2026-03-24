@@ -1,6 +1,6 @@
 # 抖音 OTA 官方文档索引
 
-> 更新时间：2026-03-23
+> 更新时间：2026-03-24
 > 
 > 说明：
 > - 本文件用于沉淀用户已提供的抖音 OTA 官方文档链接，后续开发优先从这里查阅；
@@ -97,12 +97,17 @@
 - 用途：定义售卖房型的静态信息创建、更新或匹配所需字段。
 - 当前代码关联：当前本地已有 `roomTypeMapping`，后续售卖房型正式接入需参考此文档补全。
 
-### 5.2 物理房型静态信息查询
+### 5.2 物理房型静态信息接口
+- 链接：[物理房型静态信息接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/room-info-ops/room-static-info-api)
+- 用途：用于创建或更新抖音物理房型静态信息，是“创建物理房型”验收项的核心 OpenAPI。
+- 当前代码关联：`backend/modules/douyin/services/physicalRoomCreate.service.js`、`backend/modules/douyin/controllers/physicalRoomCreate.controller.js`
+
+### 5.3 物理房型静态信息查询
 - 链接：[物理房型静态信息查询](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/room-info-access/room-static-info-query)
 - 用途：查询抖音侧物理房型静态信息，是物理房型同步和匹配的基础接口。
 - 当前代码关联：`backend/modules/douyin/services/physicalRoom.service.js`、`backend/modules/douyin/repositories/physicalRoom.repository.js`
 
-### 5.3 自助匹配物理房型信息查询接口
+### 5.4 自助匹配物理房型信息查询接口
 - 链接：[自助匹配物理房型信息查询接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/room-info-access/room-info-query-api)
 - 用途：用于查询或拉取可自助匹配的物理房型信息，辅助本地房型与抖音房型建立映射。
 - 当前代码关联：`backend/modules/douyin/repositories/roomTypeMapping.repository.js`
@@ -236,6 +241,7 @@
 - `SPI签名规则`
 - `酒店创建订单`
 - `确认接单接口`
+- `物理房型静态信息接口`
 - `物理房型静态信息查询`
 - `创建预售订单 SPI`
 - `正向交易流程`

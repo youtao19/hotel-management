@@ -258,6 +258,10 @@ GET /api/ota/v1/inventory?startDate=2026-03-10&endDate=2026-03-12&roomType=asu_x
   - `POST /api/douyin/ari/price/push`
   - `POST /api/douyin/ari/notify`
   - 请求体统一支持 `ratePlanIds`、`startDate`、`endDate`
+- 当前还提供一个手动物理房型创建接口，便于验收阶段先把本地房型推到抖音侧：
+  - `POST /api/douyin/physical-room/create`
+  - 请求体支持 `localRoomType`、`poiId`，可选 `accountId`
+  - 当未传 `accountId` 时，后端会回退使用环境变量 `DOUYIN_ACCOUNT_ID`
 - 当前还提供一组履约同步调试接口，便于验收阶段手动推送入住和离店：
   - `POST /api/douyin/order/check-in`
   - `POST /api/douyin/order/check-out`
