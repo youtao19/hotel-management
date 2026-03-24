@@ -1,6 +1,7 @@
 const postgreDB = require('../../../database/postgreDB/pg')
 const { DOUYIN_CANCEL_ERROR, DOUYIN_SUCCESS_RESULT } = require('../constants/errorCodes')
 const { createDouyinBusinessError } = require('../utils/douyinError')
+const { applyRefundCaseToLocalOrder } = require('./refundCase.service')
 
 /**
  * 将分转换为元。
@@ -158,6 +159,18 @@ async function handleDouyinRefundResult(payload = {}, options = {}) {
     cancelFinishTime: mapped.cancelFinishTime,
     payload: mapped.rawPayload,
   })
+
+  if (mapped.refundStatus === 'success' && douyinOrder.system_order_id) {
+    await applyRefundCaseToLocalOrder({
+      localOrder: {
+        order_id: douyinOrder.system_order_id,
+        status: douyinOrder.order_status || '',
+      },
+      refundCaseType: douyinOrder.refund_case_type || 'refund_result',
+      refundCaseStatus: 'completed',
+      reason: '抖音退款结果通知成功',
+    })
+  }
 
   return {
     errorCode: DOUYIN_SUCCESS_RESULT.code,

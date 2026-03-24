@@ -93,7 +93,7 @@
 ### 4.3 通知退款结果
 - 链接：[通知退款结果](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/calendar-trading-reverse/refund-result-api)
 - 用途：用于接收或回传退款结果，是退款逆向闭环的重要一环。
-- 当前代码关联：`backend/modules/douyin/controllers/refundResult.controller.js`、`backend/modules/douyin/services/refundResult.service.js`
+- 当前代码关联：`backend/modules/douyin/controllers/refundResult.controller.js`、`backend/modules/douyin/services/refundResult.service.js`、`backend/modules/douyin/services/refundCase.service.js`
 
 ## 5. 房型与静态信息
 

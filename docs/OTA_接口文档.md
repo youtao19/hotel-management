@@ -268,6 +268,10 @@ GET /api/ota/v1/inventory?startDate=2026-03-10&endDate=2026-03-12&roomType=asu_x
   - `POST /api/douyin/callback/refund-result`
   - `POST /api/douyin/callback/refund-result/mock`
   - 当前用于承接抖音退款结果通知，并把结果回写到 `douyin_orders`
+- 当前还提供退款逆向 case 回调入口：
+  - `POST /api/douyin/callback/refund-case`
+  - `POST /api/douyin/callback/refund-case/mock`
+  - 当前用于承接“客服强退 / 协商退款 / 日历房退款 case”基础闭环，并回写退款 case 状态与建议退款金额
 - 当前还提供一个“未支付超时取消”的手动调试接口：
   - `POST /api/douyin/order/timeout-cancel`
   - 请求体支持 `otaOrderId`，可选 `reason`

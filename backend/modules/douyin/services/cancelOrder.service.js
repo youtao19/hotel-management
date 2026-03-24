@@ -453,5 +453,7 @@ async function handleDouyinCancelOrder(payload = {}) {
 }
 
 module.exports = {
+  formatUnixSeconds,
   handleDouyinCancelOrder,
+  toAmountNumber,
 }

@@ -1,4 +1,5 @@
 const postgreDB = require('../../../../database/postgreDB/pg')
+const { applyRefundCaseToLocalOrder } = require('../refundCase.service')
 const {
   findDouyinOrderByRefundContext,
   handleDouyinRefundResult,
@@ -6,6 +7,10 @@ const {
 
 jest.mock('../../../../database/postgreDB/pg', () => ({
   query: jest.fn(),
+}))
+
+jest.mock('../refundCase.service', () => ({
+  applyRefundCaseToLocalOrder: jest.fn(),
 }))
 
 describe('refundResult.service', () => {
@@ -36,6 +41,9 @@ describe('refundResult.service', () => {
       .mockResolvedValueOnce({
         rows: [{
           ota_order_id: 'DY_002',
+          system_order_id: 'O202603240002',
+          order_status: 'reserved',
+          refund_case_type: 'calendar_refund',
         }],
       })
       .mockResolvedValueOnce({
@@ -76,6 +84,15 @@ describe('refundResult.service', () => {
       refundStatus: 'success',
       otaOrderId: 'DY_002',
       douyinLogId: 'LOGID_REFUND_001',
+    })
+    expect(applyRefundCaseToLocalOrder).toHaveBeenCalledWith({
+      localOrder: {
+        order_id: 'O202603240002',
+        status: 'reserved',
+      },
+      refundCaseType: 'calendar_refund',
+      refundCaseStatus: 'completed',
+      reason: '抖音退款结果通知成功',
     })
   })
 
