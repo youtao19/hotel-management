@@ -131,10 +131,13 @@ describe('handleDouyinHotelBooking', () => {
       occupancies: [{ name: '王五', phone: '13700000000' }],
       remark_from_douyin: '抖音备注',
       remark_from_guest: '客人备注',
+    }, {
+      douyinLogId: 'LOGID_001',
     })
 
     expect(createDouyinOrder).toHaveBeenCalledWith(expect.objectContaining({
       otaOrderId: 'DY_001',
+      douyinLogId: 'LOGID_001',
       sourceOrderId: 'PRE_001',
       hotelId: 'HOTEL_001',
       roomId: 'ROOM_001',
@@ -184,12 +187,15 @@ describe('handleDouyinHotelBooking', () => {
         },
       ],
       contact_info: { name: '王五', phone: '13700000000' },
+    }, {
+      douyinLogId: 'LOGID_002',
     })
 
     expect(updateDouyinOrderByOtaOrderId).toHaveBeenCalledWith(
       'DY_001',
       expect.objectContaining({
         otaOrderId: 'DY_001',
+        douyinLogId: 'LOGID_002',
       })
     )
     expect(result.action).toBe('updated')

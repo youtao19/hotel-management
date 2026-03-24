@@ -61,6 +61,17 @@ const LOCAL_ORDER_STATUS = Object.freeze({
   CHECKED_OUT: 'checked-out',
 })
 
+/**
+ * 抖音预售券订单阶段枚举。
+ */
+const DOUYIN_PRESALE_ORDER_STAGE = Object.freeze({
+  PRESALE_CREATED: 'presale_created',
+  PRESALE_PAID: 'presale_paid',
+  BOOKING_CREATED: 'booking_created',
+  CANCELLED: 'cancelled',
+  REFUND_PROCESSING: 'refund_processing',
+})
+
 module.exports = {
   DOUYIN_CONFIRM_MODE,
   DOUYIN_CANCEL_MODE,
@@ -69,4 +80,5 @@ module.exports = {
   DOUYIN_CANCEL_STATUS,
   DOUYIN_CANCEL_AUDIT_STATUS,
   LOCAL_ORDER_STATUS,
+  DOUYIN_PRESALE_ORDER_STAGE,
 }

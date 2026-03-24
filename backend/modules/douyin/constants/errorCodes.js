@@ -100,9 +100,28 @@ const DOUYIN_CANCEL_ERROR = Object.freeze({
   },
 })
 
+/**
+ * 抖音预售券创单场景错误定义。
+ */
+const DOUYIN_PRESALE_ERROR = Object.freeze({
+  INVALID_BIZ_TYPE: {
+    code: 13,
+    description: '预售业务类型不合法',
+  },
+  MISSING_PRE_SALE_COUPON_ID: {
+    code: 13,
+    description: '缺少预售券ID',
+  },
+  INVALID_VOUCHER_COUNT: {
+    code: 13,
+    description: '预售券数量不合法',
+  },
+})
+
 module.exports = {
   DOUYIN_SUCCESS_RESULT,
   DOUYIN_COMMON_ERROR,
   DOUYIN_BOOKING_ERROR,
   DOUYIN_CANCEL_ERROR,
+  DOUYIN_PRESALE_ERROR,
 }

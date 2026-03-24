@@ -24,6 +24,25 @@ function resolveDouyinOrderId(payload = {}) {
 }
 
 /**
+ * 从请求头中提取抖音请求 logid。
+ *
+ * @param {import('express').Request} req Express 请求对象。
+ * @returns {string} 抖音请求 logid；不存在时返回空字符串。
+ */
+function resolveDouyinRequestLogId(req) {
+  /** @type {Record<string, string|string[]|undefined>} 请求头对象。 */
+  const headers = req?.headers || {}
+  /** @type {string|string[]|undefined} 抖音请求头中的 logid。 */
+  const rawLogId = headers['x-bytedance-logid']
+
+  if (Array.isArray(rawLogId)) {
+    return String(rawLogId[0] || '').trim()
+  }
+
+  return String(rawLogId || '').trim()
+}
+
+/**
  * 构建抖音创单成功响应。
  *
  * @param {Object} params 成功响应参数。
@@ -158,9 +177,18 @@ async function testOpenApi(req, res) {
  */
 async function receiveSpiCallback(req, res) {
   const otaOrderId = resolveDouyinOrderId(req.body || {})
+  /** @type {string} 当前抖音请求的链路 logid。 */
+  const requestLogId = resolveDouyinRequestLogId(req)
 
   try {
-    const result = await handleDouyinHotelBooking(req.body || {})
+    console.info('[receiveSpiCallback] incoming request:', {
+      otaOrderId,
+      requestLogId,
+    })
+
+    const result = await handleDouyinHotelBooking(req.body || {}, {
+      douyinLogId: requestLogId,
+    })
 
     /** @type {string} 实际落地抖音订单号。 */
     const finalOtaOrderId = result.order?.ota_order_id || otaOrderId
@@ -192,7 +220,11 @@ async function receiveSpiCallback(req, res) {
     /** @type {{errorCode:number, description:string}} 抖音业务错误码与描述。 */
     const { errorCode, description } = resolveDouyinBusinessError(error)
 
-    console.error('[receiveSpiCallback] failed:', error.message)
+    console.error('[receiveSpiCallback] failed:', {
+      otaOrderId,
+      requestLogId,
+      message: error.message,
+    })
 
     return res.json(buildDouyinErrorResponse({
       otaOrderId,

@@ -105,11 +105,15 @@ function normalizeDouyinBookingError(error) {
  * 处理抖音“酒店创建订单”回调落库。
  *
  * @param {Object} payload 抖音原始回调请求体。
+ * @param {Object} [options={}] 附加处理参数。
+ * @param {string} [options.douyinLogId=''] 抖音请求链路 logid。
  * @returns {Promise<{action:string, order:Object}>} 落库结果。
  * @throws {Error} 参数错误或业务处理失败时抛出带错误码的异常。
  */
-async function handleDouyinHotelBooking(payload = {}) {
+async function handleDouyinHotelBooking(payload = {}, options = {}) {
   try {
+    /** @type {string} 抖音请求链路 logid。 */
+    const douyinLogId = String(options.douyinLogId || '').trim()
     const mapped = mapDouyinBookingPayload(payload)
 
     validateDouyinBookingPayload(mapped)
@@ -118,7 +122,11 @@ async function handleDouyinHotelBooking(payload = {}) {
 
     const orderToSave = {
       ...mapped,
-      mappedPayload: mapped,
+      douyinLogId,
+      mappedPayload: {
+        ...mapped,
+        douyinLogId,
+      },
     }
 
     if (!existingOrder) {

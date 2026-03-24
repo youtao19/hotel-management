@@ -68,6 +68,7 @@ ADD COLUMN IF NOT EXISTS remark_from_guest TEXT,
 ADD COLUMN IF NOT EXISTS daily_rates JSONB,
 ADD COLUMN IF NOT EXISTS occupancies JSONB,
 ADD COLUMN IF NOT EXISTS member_info JSONB,
+ADD COLUMN IF NOT EXISTS douyin_log_id VARCHAR(128),
 ADD COLUMN IF NOT EXISTS cancel_id VARCHAR(64),
 ADD COLUMN IF NOT EXISTS cancel_type INTEGER,
 ADD COLUMN IF NOT EXISTS need_audit BOOLEAN,
@@ -101,6 +102,7 @@ COMMENT ON COLUMN douyin_orders.remark_from_guest IS '客人备注';
 COMMENT ON COLUMN douyin_orders.daily_rates IS '抖音分日价格明细';
 COMMENT ON COLUMN douyin_orders.occupancies IS '入住人明细';
 COMMENT ON COLUMN douyin_orders.member_info IS '会员信息';
+COMMENT ON COLUMN douyin_orders.douyin_log_id IS '抖音请求头 x-bytedance-logid';
 COMMENT ON COLUMN douyin_orders.cancel_id IS '取消单唯一标识';
 COMMENT ON COLUMN douyin_orders.cancel_type IS '取消类型';
 COMMENT ON COLUMN douyin_orders.need_audit IS '是否需要审核';

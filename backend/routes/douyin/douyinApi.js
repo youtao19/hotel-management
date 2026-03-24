@@ -14,6 +14,9 @@ const {
 const {
   receiveCancelCallback,
 } = require('../../modules/douyin/controllers/cancelOrder.controller')
+const {
+  receivePresaleSpiCallback,
+} = require('../../modules/douyin/controllers/presaleBooking.controller')
 
 const {
   verifyDouyinSignMiddleware,
@@ -26,10 +29,12 @@ const {
 router.post('/token/refresh', refreshClientToken)
 router.post('/openapi/test', testOpenApi)
 router.post('/callback/spi', verifyDouyinSignMiddleware, receiveSpiCallback)
+router.post('/callback/presale', verifyDouyinSignMiddleware, receivePresaleSpiCallback)
 router.post('/callback/cancel', verifyDouyinSignMiddleware, receiveCancelCallback)
 router.post('/order/confirm', confirmOrder)
 
 router.post('/callback/spi/mock',receiveSpiCallback)
+router.post('/callback/presale/mock', receivePresaleSpiCallback)
 router.post('/callback/cancel/mock', receiveCancelCallback)
 
 router.post('/physical-rooms/sync', async (req, res) => {

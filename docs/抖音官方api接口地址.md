@@ -131,20 +131,80 @@
 - 用途：接收酒店静态信息处理结果的异步推送，适合替代或补充状态轮询。
 - 当前代码关联：当前未实现，后续如采用异步通知模式需配套接入。
 
-## 8. 当前最值得优先深读的文档
+## 8. 住宿预售券交易
 
-### 8.1 已经直接影响现有代码的文档
+### 8.1 预售券交易正向
+
+#### 8.1.1 正向交易流程
+- 链接：[正向交易流程](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/accommodation-voucher-trade/hoteltradedesc)
+- 用途：说明酒店住宿预售券从可订检查、支付、创单、预约到接单的整体流程，是预售券建模和链路拆分的总纲。
+- 当前代码关联：预售券创单 SPI、后续预约单与支付通知能力均应参考本页流程。
+
+#### 8.1.2 可订检查 SPI
+- 链接：[可订检查 SPI](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/accommodation-voucher-trade/bookable-check)
+- 用途：在预售券场景下由抖音向三方发起可订检查，确认当前商品是否可售。
+- 当前代码关联：当前未实现，后续验收“提单页可订检查”时需要接入。
+
+#### 8.1.3 支付结果通知 SPI
+- 链接：[支付结果通知 spi](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/accommodation-voucher-trade/paynotice)
+- 用途：用于预售券支付成功后的异步通知，文档中区分一步创单和两步创单模式。
+- 当前代码关联：当前未实现，后续预售券支付状态同步和自动履约需要接入。
+
+#### 8.1.4 确认接单接口
+- 链接：[确认接单接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/accommodation-voucher-trade/order-confirmation-api)
+- 用途：用于预售券场景下回传接单结果。
+- 当前代码关联：当前未实现，后续预售券接单结果回传需要接入。
+
+#### 8.1.5 创建预售订单 SPI
+- 链接：[创建预售订单 SPI](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/accommodation-voucher-trade/create-pre-sale-order)
+- 用途：定义抖音向三方创建住宿预售券订单时的回调字段和成功响应。
+- 当前代码关联：`backend/modules/douyin/controllers/presaleBooking.controller.js`、`backend/modules/douyin/services/presaleBooking.service.js`
+
+#### 8.1.6 创建预约
+- 链接：[创建预约](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/accommodation-voucher-trade/create-booking-order)
+- 用途：用于将预售券订单进一步落实为预约单，是 `biz_type=2012` 的核心接口。
+- 当前代码关联：当前未实现，后续应作为预售券落地到实际入住订单的桥梁。
+
+#### 8.1.7 酒店预约修改订单
+- 链接：[酒店预约修改订单](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/accommodation-voucher-trade/hotel-modify-order)
+- 用途：用于修改预售券对应的预约单信息。
+- 当前代码关联：当前未实现，后续预约单变更时接入。
+
+### 8.2 预售券交易逆向
+
+#### 8.2.1 售后审核结果返回
+- 链接：[售后审核结果返回](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/reverse-hotel-voucher/callback-cancellation)
+- 用途：用于向抖音回传预售券逆向退款审核结果。
+- 当前代码关联：当前未实现，后续预售券逆向链路需接入。
+
+#### 8.2.2 订单取消退款通知 SPI
+- 链接：[订单取消退款通知SPI](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/reverse-hotel-voucher/refund-notification)
+- 用途：承接预售券退款通知和售后退款信息。
+- 当前代码关联：当前未实现，后续预售券退款链路需接入。
+
+#### 8.2.3 酒店取消订单 SPI
+- 链接：[酒店取消订单SPI](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/reverse-hotel-voucher/cancel-hotel-order)
+- 用途：承接预售券订单取消通知，包含支付前取消、支付后取消、创单失败取消等场景。
+- 当前代码关联：当前未实现，后续预售券取消逻辑需接入。
+
+## 9. 当前最值得优先深读的文档
+
+### 9.1 已经直接影响现有代码的文档
 - `生成 client-token`
 - `SPI 接入`
 - `SPI签名规则`
 - `酒店创建订单`
 - `确认接单接口`
 - `物理房型静态信息查询`
+- `创建预售订单 SPI`
+- `正向交易流程`
 
-### 8.2 下一阶段最可能马上用到的文档
+### 9.2 下一阶段最可能马上用到的文档
 - `酒店取消订单SPI`
 - `售后审核结果返回`
 - `入住/离店状态同步能力`
 - `售卖房型静态信息接口`
 - `酒店通用错误码`
 - `酒店日历房常见枚举列表`
+- `创建预约`
+- `支付结果通知 spi`

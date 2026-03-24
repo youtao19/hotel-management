@@ -136,6 +136,7 @@ const dashboard_memo = require("./tables/dashboard_memo");
 const ota_order_relation = require("./tables/ota_order_relation");
 const ota_roomType_relation = require("./tables/ota_roomType_relation");
 const plugin_room_type_mapping = require("./tables/plugin_room_type_mapping");
+const douyin_presale_order = require("./tables/douyin_presale_order");
 
 //table order here is important
 //since we have foreign key reference other table
@@ -146,6 +147,7 @@ tables.push(bill);
 tables.push(ota_order_relation);
 tables.push(ota_roomType_relation);
 tables.push(plugin_room_type_mapping);
+tables.push(douyin_presale_order);
 tables.push(handover);
 tables.push(dashboard_memo);
 tables.push(review_invitation);
@@ -274,6 +276,7 @@ async function initializePostgreDB() {
     await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS daily_rates JSONB;`);
     await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS occupancies JSONB;`);
     await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS member_info JSONB;`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS douyin_log_id VARCHAR(128);`);
     await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS cancel_id VARCHAR(64);`);
     await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS cancel_type INTEGER;`);
     await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS need_audit BOOLEAN;`);

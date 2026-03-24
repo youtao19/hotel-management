@@ -55,6 +55,11 @@ describe('receiveSpiCallback', () => {
 
     await receiveSpiCallback(req, res)
 
+    expect(handleDouyinHotelBooking).toHaveBeenCalledWith({
+      order_id: 'DY_001',
+    }, {
+      douyinLogId: '',
+    })
     expect(res.json).toHaveBeenCalledWith({
       data: {
         error_code: 0,
@@ -78,11 +83,19 @@ describe('receiveSpiCallback', () => {
       body: {
         order_id: 'DY_002',
       },
+      headers: {
+        'x-bytedance-logid': 'LOGID_500',
+      },
     }
     const res = createMockResponse()
 
     await receiveSpiCallback(req, res)
 
+    expect(handleDouyinHotelBooking).toHaveBeenCalledWith({
+      order_id: 'DY_002',
+    }, {
+      douyinLogId: 'LOGID_500',
+    })
     expect(res.json).toHaveBeenCalledWith({
       data: {
         error_code: 1,
@@ -99,17 +112,56 @@ describe('receiveSpiCallback', () => {
       body: {
         order_id: 'DY_003',
       },
+      headers: {
+        'x-bytedance-logid': 'LOGID_003',
+      },
     }
     const res = createMockResponse()
 
     await receiveSpiCallback(req, res)
 
+    expect(handleDouyinHotelBooking).toHaveBeenCalledWith({
+      order_id: 'DY_003',
+    }, {
+      douyinLogId: 'LOGID_003',
+    })
     expect(res.json).toHaveBeenCalledWith({
       data: {
         error_code: 13,
         description: '其他异常',
         order_id: 'DY_003',
       },
+    })
+  })
+
+  test('成功时应提取请求头 logid 传给创单服务', async () => {
+    handleDouyinHotelBooking.mockResolvedValue({
+      action: 'updated',
+      order: {
+        ota_order_id: 'DY_004',
+      },
+    })
+    syncDouyinOrderToSystem.mockResolvedValue({
+      action: 'recovered',
+      systemOrderId: 'O202603240004',
+    })
+
+    const req = {
+      body: {
+        order_id: 'DY_004',
+      },
+      headers: {
+        'x-bytedance-logid': 'LOGID_004',
+      },
+    }
+    const res = createMockResponse()
+
+    await receiveSpiCallback(req, res)
+
+    expect(handleDouyinHotelBooking).toHaveBeenCalledWith({
+      order_id: 'DY_004',
+    }, {
+      douyinLogId: 'LOGID_004',
     })
   })
 })
