@@ -1,5 +1,8 @@
 const postgreDB = require('../../../database/postgreDB/pg')
 const { requestDouyinOpenApi } = require('../clients/douyinOpenApi.client')
+const { DOUYIN_CONFIRM_MODE } = require('../constants/enums')
+const { DOUYIN_CONFIRM_ERROR } = require('../constants/errorCodes')
+const { createDouyinBusinessError } = require('../utils/douyinError')
 
 const DOUYIN_CONFIRM_RESULT_ACCEPT = 1
 const DOUYIN_CONFIRM_RESULT_REJECT = 2
@@ -100,6 +103,21 @@ async function confirmDouyinOrder({
     confirmResult,
     confirmNumber,
   })
+
+  const localOrderResult = await postgreDB.query(
+    `
+    SELECT confirm_mode
+    FROM douyin_orders
+    WHERE ota_order_id = $1
+    LIMIT 1
+    `,
+    [otaOrderId]
+  )
+  const localOrder = localOrderResult.rows[0] || null
+
+  if (Number(localOrder?.confirm_mode) === DOUYIN_CONFIRM_MODE.SYNC) {
+    throw createDouyinBusinessError(DOUYIN_CONFIRM_ERROR.SYNC_ORDER_NOT_CONFIRMABLE)
+  }
 
   const result = await requestDouyinOpenApi({
     method: 'POST',

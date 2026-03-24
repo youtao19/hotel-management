@@ -38,16 +38,17 @@ async function findExistingSystemOrderIdByOtaOrderId(otaOrderId, queryRunner = p
  * @returns {Promise<void>} 回写完成后返回。
  * @throws {Error} 数据库更新失败时抛出异常。
  */
-async function markDouyinOrderSynced(otaOrderId, systemOrderId, queryRunner = postgreDB) {
+async function markDouyinOrderSynced(otaOrderId, systemOrderId, confirmMode, queryRunner = postgreDB) {
   const updateDouyinOrderSql = `
     UPDATE douyin_orders
     SET synced = TRUE,
         system_order_id = $2,
+        confirm_mode = COALESCE($3, confirm_mode),
         updated_at = NOW()
     WHERE ota_order_id = $1
   `
 
-  await queryRunner.query(updateDouyinOrderSql, [otaOrderId, systemOrderId])
+  await queryRunner.query(updateDouyinOrderSql, [otaOrderId, systemOrderId, confirmMode ?? null])
 }
 
 /**
@@ -74,7 +75,7 @@ function isDuplicateSourceConstraintError(error) {
  * @returns {Promise<{action:string, systemOrderId:string|null}>} 同步结果。
  * @throws {Error} 抖音订单不存在或数据库异常时抛出异常。
  */
-async function syncDouyinOrderToSystem(otaOrderId) {
+async function syncDouyinOrderToSystem(otaOrderId, options = {}) {
   /** @type {Object|null} 数据库事务连接。 */
   let client = null
 
@@ -94,12 +95,15 @@ async function syncDouyinOrderToSystem(otaOrderId) {
       throw new Error('Douyin order not found')
     }
 
+    /** @type {number|null} 本次创单接单模式。 */
+    const confirmMode = options.confirmMode ?? douyinOrder?.confirm_mode ?? null
     // 已经同步过则直接返回，避免重复写本地订单。
     if (douyinOrder.synced) {
       await client.query('COMMIT')
       return {
         action: 'skip',
         systemOrderId: douyinOrder.system_order_id,
+        confirmMode: douyinOrder.confirm_mode ?? confirmMode,
       }
     }
 
@@ -107,11 +111,12 @@ async function syncDouyinOrderToSystem(otaOrderId) {
     const recoveredSystemOrderId = await findExistingSystemOrderIdByOtaOrderId(otaOrderId, client)
 
     if (recoveredSystemOrderId) {
-      await markDouyinOrderSynced(otaOrderId, recoveredSystemOrderId, client)
+      await markDouyinOrderSynced(otaOrderId, recoveredSystemOrderId, confirmMode, client)
       await client.query('COMMIT')
       return {
         action: 'recovered',
         systemOrderId: recoveredSystemOrderId,
+        confirmMode,
       }
     }
 
@@ -121,12 +126,13 @@ async function syncDouyinOrderToSystem(otaOrderId) {
       const insertRes = await createOrder(orderData, client)
       const systemOrderId = insertRes?.orderId || null
 
-      await markDouyinOrderSynced(otaOrderId, systemOrderId, client)
+      await markDouyinOrderSynced(otaOrderId, systemOrderId, confirmMode, client)
       await client.query('COMMIT')
 
       return {
         action: 'created',
         systemOrderId,
+        confirmMode,
       }
     } catch (error) {
       // 并发回调可能导致另一事务已创建成功，此时按已存在订单恢复即可。
@@ -134,11 +140,12 @@ async function syncDouyinOrderToSystem(otaOrderId) {
         const conflictSystemOrderId = await findExistingSystemOrderIdByOtaOrderId(otaOrderId, client)
 
         if (conflictSystemOrderId) {
-          await markDouyinOrderSynced(otaOrderId, conflictSystemOrderId, client)
+          await markDouyinOrderSynced(otaOrderId, conflictSystemOrderId, confirmMode, client)
           await client.query('COMMIT')
           return {
             action: 'recovered',
             systemOrderId: conflictSystemOrderId,
+            confirmMode,
           }
         }
       }

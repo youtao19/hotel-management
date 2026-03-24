@@ -21,6 +21,11 @@ describe('confirmDouyinOrder', () => {
   })
 
   test('接单时应按官方结构发送 confirm_number', async () => {
+    postgreDB.query.mockResolvedValueOnce({
+      rows: [{
+        confirm_mode: 2,
+      }],
+    })
     requestDouyinOpenApi.mockResolvedValue({
       data: {
         error_code: 0,
@@ -48,6 +53,11 @@ describe('confirmDouyinOrder', () => {
   })
 
   test('拒单时应按官方结构发送 reject_code 和 reject_reason', async () => {
+    postgreDB.query.mockResolvedValueOnce({
+      rows: [{
+        confirm_mode: 2,
+      }],
+    })
     requestDouyinOpenApi.mockResolvedValue({
       data: {
         error_code: 0,
@@ -81,6 +91,25 @@ describe('confirmDouyinOrder', () => {
       otaOrderId: 'DY_CONFIRM_003',
       confirmResult: DOUYIN_CONFIRM_RESULT_ACCEPT,
     })).rejects.toThrow('confirmNumber is required when confirmResult is 1')
+  })
+
+  test('同步接单订单不允许再次异步确认', async () => {
+    postgreDB.query.mockResolvedValueOnce({
+      rows: [{
+        confirm_mode: 1,
+      }],
+    })
+
+    await expect(confirmDouyinOrder({
+      otaOrderId: 'DY_CONFIRM_SYNC_001',
+      confirmResult: DOUYIN_CONFIRM_RESULT_ACCEPT,
+      confirmNumber: 'CN_SYNC_001',
+    })).rejects.toMatchObject({
+      douyinErrorCode: 13,
+      douyinDescription: '同步接单订单不允许再次异步确认',
+    })
+
+    expect(requestDouyinOpenApi).not.toHaveBeenCalled()
   })
 })
 

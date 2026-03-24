@@ -54,13 +54,14 @@ async function createDouyinOrder(order) {
       occupancies,
       member_info,
       douyin_log_id,
+      confirm_mode,
       raw_payload,
       mapped_payload
     ) VALUES (
       $1, $2, $3, $4, $5, $6, $7, $8, $9,
       $10, $11, $12, $13, $14, $15, $16, $17,
       $18, $19, $20, $21, $22, $23, $24, $25,
-      $26, $27, $28
+      $26, $27, $28, $29
     )
     RETURNING *
   `
@@ -92,6 +93,7 @@ async function createDouyinOrder(order) {
     JSON.stringify(order.occupancies || []),
     JSON.stringify(order.memberInfo || null),
     order.douyinLogId || null,
+    order.confirmMode || null,
     JSON.stringify(order.rawPayload || {}),
     JSON.stringify(order.mappedPayload || {}),
   ]
@@ -137,8 +139,9 @@ async function updateDouyinOrderByOtaOrderId(otaOrderId, order) {
       occupancies = $24,
       member_info = $25,
       douyin_log_id = $26,
-      raw_payload = $27,
-      mapped_payload = $28,
+      confirm_mode = $27,
+      raw_payload = $28,
+      mapped_payload = $29,
       updated_at = NOW()
     WHERE ota_order_id = $1
     RETURNING *
@@ -171,6 +174,7 @@ async function updateDouyinOrderByOtaOrderId(otaOrderId, order) {
     JSON.stringify(order.occupancies || []),
     JSON.stringify(order.memberInfo || null),
     order.douyinLogId || null,
+    order.confirmMode || null,
     JSON.stringify(order.rawPayload || {}),
     JSON.stringify(order.mappedPayload || {}),
   ]

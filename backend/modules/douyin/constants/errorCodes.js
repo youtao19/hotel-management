@@ -64,6 +64,10 @@ const DOUYIN_BOOKING_ERROR = Object.freeze({
     code: 13,
     description: '订单金额不合法',
   },
+  INVALID_CONFIRM_MODE: {
+    code: 13,
+    description: '接单模式不合法',
+  },
 })
 
 /**
@@ -258,6 +262,16 @@ const DOUYIN_RATE_PLAN_ERROR = Object.freeze({
   },
 })
 
+/**
+ * 抖音接单确认场景错误定义。
+ */
+const DOUYIN_CONFIRM_ERROR = Object.freeze({
+  SYNC_ORDER_NOT_CONFIRMABLE: {
+    code: 13,
+    description: '同步接单订单不允许再次异步确认',
+  },
+})
+
 module.exports = {
   DOUYIN_SUCCESS_RESULT,
   DOUYIN_COMMON_ERROR,
@@ -268,4 +282,5 @@ module.exports = {
   DOUYIN_ARI_PULL_ERROR,
   DOUYIN_PHYSICAL_ROOM_ERROR,
   DOUYIN_RATE_PLAN_ERROR,
+  DOUYIN_CONFIRM_ERROR,
 }

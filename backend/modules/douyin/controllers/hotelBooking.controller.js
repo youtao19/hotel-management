@@ -3,9 +3,15 @@ const { requestDouyinOpenApi } = require('../clients/douyinOpenApi.client')
 const { handleDouyinHotelBooking } = require('../services/hotelBooking.service')
 const { syncDouyinOrderToSystem } = require('../services/orderSync.service')
 const { autoConfirmDouyinOrder } = require('../services/autoConfirm.service')
-const { DOUYIN_SUCCESS_RESULT } = require('../constants/errorCodes')
+const {
+  DOUYIN_SUCCESS_RESULT,
+  DOUYIN_BOOKING_ERROR,
+} = require('../constants/errorCodes')
 const { DOUYIN_CONFIRM_MODE } = require('../constants/enums')
-const { resolveDouyinBusinessError } = require('../utils/douyinError')
+const {
+  createDouyinBusinessError,
+  resolveDouyinBusinessError,
+} = require('../utils/douyinError')
 const { douyinConfig } = require('../../../appSettings/douyin.config')
 
 /**
@@ -50,7 +56,7 @@ function resolveDouyinRequestLogId(req) {
  * @param {string|null} params.systemOrderId 本地系统订单号。
  * @returns {{data: Object}} 符合官方文档的成功响应体。
  */
-function buildDouyinSuccessResponse({ otaOrderId, systemOrderId }) {
+function buildDouyinSuccessResponse({ otaOrderId, systemOrderId, confirmMode }) {
   return {
     data: {
       error_code: DOUYIN_SUCCESS_RESULT.code,
@@ -58,10 +64,48 @@ function buildDouyinSuccessResponse({ otaOrderId, systemOrderId }) {
       order_id: otaOrderId,
       order_out_id: systemOrderId || '',
       confirm_info: {
-        confirm_mode: DOUYIN_CONFIRM_MODE.ASYNC,
+        confirm_mode: confirmMode,
       },
     },
   }
+}
+
+/**
+ * 解析本次创单应返回的接单模式。
+ * 说明：
+ * 1. 允许从请求体里显式传 confirm_mode，便于验收联调；
+ * 2. 未传时回退读取环境变量 DOUYIN_CONFIRM_MODE；
+ * 3. 默认仍保持异步接单，避免影响现有链路。
+ *
+ * @param {Object} payload 抖音创单请求体。
+ * @returns {number} 接单模式。
+ */
+function resolveConfirmMode(payload = {}) {
+  const payloadConfirmMode = payload?.confirm_mode ?? payload?.confirm_info?.confirm_mode
+  const rawConfirmMode = payloadConfirmMode ?? process.env.DOUYIN_CONFIRM_MODE ?? ''
+  const normalizedValue = String(rawConfirmMode || '').trim().toLowerCase()
+
+  if (!normalizedValue) {
+    return DOUYIN_CONFIRM_MODE.ASYNC
+  }
+
+  if (
+    normalizedValue === '1' ||
+    normalizedValue === 'sync' ||
+    normalizedValue === 'synchronous'
+  ) {
+    return DOUYIN_CONFIRM_MODE.SYNC
+  }
+
+  if (
+    normalizedValue === '2' ||
+    normalizedValue === 'async' ||
+    normalizedValue === 'asynchronous'
+  ) {
+    return DOUYIN_CONFIRM_MODE.ASYNC
+  }
+
+  throw createDouyinBusinessError(DOUYIN_BOOKING_ERROR.INVALID_CONFIRM_MODE)
 }
 
 /**
@@ -168,8 +212,8 @@ async function testOpenApi(req, res) {
  * 接收抖音 SPI 回调并完成落库、同步和自动确认。
  * 说明：
  * 1. 响应体按抖音“酒店创建订单”官方文档输出；
- * 2. 订单创建成功后统一走异步确认模式 confirm_mode=2；
- * 3. 自动确认仅作为内部补充动作，不影响创单接口返回结构。
+ * 2. 默认走异步确认模式 confirm_mode=2，可通过参数或环境变量切同步；
+ * 3. 自动确认仅在异步模式下作为内部补充动作，不影响创单接口返回结构。
  *
  * @param {import('express').Request} req Express 请求对象。
  * @param {import('express').Response} res Express 响应对象。
@@ -186,8 +230,11 @@ async function receiveSpiCallback(req, res) {
       requestLogId,
     })
 
+    /** @type {number} 本次创单接单模式。 */
+    const confirmMode = resolveConfirmMode(req.body || {})
     const result = await handleDouyinHotelBooking(req.body || {}, {
       douyinLogId: requestLogId,
+      confirmMode,
     })
 
     /** @type {string} 实际落地抖音订单号。 */
@@ -196,10 +243,13 @@ async function receiveSpiCallback(req, res) {
     let syncResult = null
 
     if (finalOtaOrderId) {
-      syncResult = await syncDouyinOrderToSystem(finalOtaOrderId)
+      syncResult = await syncDouyinOrderToSystem(finalOtaOrderId, {
+        confirmMode,
+      })
     }
 
     if (
+      confirmMode === DOUYIN_CONFIRM_MODE.ASYNC &&
       douyinConfig.autoConfirmEnabled &&
       result.action === 'created' &&
       result.order &&
@@ -215,6 +265,7 @@ async function receiveSpiCallback(req, res) {
     return res.json(buildDouyinSuccessResponse({
       otaOrderId: finalOtaOrderId,
       systemOrderId: syncResult?.systemOrderId || result.order?.system_order_id || '',
+      confirmMode: syncResult?.confirmMode || result.order?.confirm_mode || confirmMode,
     }))
   } catch (error) {
     /** @type {{errorCode:number, description:string}} 抖音业务错误码与描述。 */
@@ -235,7 +286,9 @@ async function receiveSpiCallback(req, res) {
 }
 
 module.exports = {
+  buildDouyinSuccessResponse,
   refreshClientToken,
+  resolveConfirmMode,
   testOpenApi,
   receiveSpiCallback,
 }

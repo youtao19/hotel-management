@@ -114,6 +114,8 @@ async function handleDouyinHotelBooking(payload = {}, options = {}) {
   try {
     /** @type {string} 抖音请求链路 logid。 */
     const douyinLogId = String(options.douyinLogId || '').trim()
+    /** @type {number|null} 本次创单使用的接单模式。 */
+    const confirmMode = options.confirmMode ?? null
     const mapped = mapDouyinBookingPayload(payload)
 
     validateDouyinBookingPayload(mapped)
@@ -126,7 +128,9 @@ async function handleDouyinHotelBooking(payload = {}, options = {}) {
       mappedPayload: {
         ...mapped,
         douyinLogId,
+        confirmMode,
       },
+      confirmMode,
     }
 
     if (!existingOrder) {

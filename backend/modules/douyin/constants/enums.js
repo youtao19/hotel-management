@@ -2,6 +2,7 @@
  * 抖音创单确认模式枚举。
  */
 const DOUYIN_CONFIRM_MODE = Object.freeze({
+  SYNC: 1,
   ASYNC: 2,
 })
 

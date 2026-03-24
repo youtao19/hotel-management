@@ -77,6 +77,7 @@ describe('syncDouyinOrderToSystem', () => {
     expect(result).toEqual({
       action: 'skip',
       systemOrderId: 'O202603230001',
+      confirmMode: null,
     })
     expect(buildCreateOrderDataFromDouyin).not.toHaveBeenCalled()
     expect(createOrder).not.toHaveBeenCalled()
@@ -106,12 +107,13 @@ describe('syncDouyinOrderToSystem', () => {
     expect(result).toEqual({
       action: 'recovered',
       systemOrderId: 'O202603230001',
+      confirmMode: null,
     })
     expect(buildCreateOrderDataFromDouyin).not.toHaveBeenCalled()
     expect(createOrder).not.toHaveBeenCalled()
     expect(mockClient.query).toHaveBeenCalledWith(
       expect.stringContaining('UPDATE douyin_orders'),
-      ['DY_001', 'O202603230001']
+      ['DY_001', 'O202603230001', null]
     )
     expect(mockClient.release).toHaveBeenCalledTimes(1)
   })
@@ -153,11 +155,12 @@ describe('syncDouyinOrderToSystem', () => {
     expect(createOrder).toHaveBeenCalledWith(adaptedOrderData, mockClient)
     expect(mockClient.query).toHaveBeenCalledWith(
       expect.stringContaining('UPDATE douyin_orders'),
-      ['DY_001', 'O202603230001']
+      ['DY_001', 'O202603230001', null]
     )
     expect(result).toEqual({
       action: 'created',
       systemOrderId: 'O202603230001',
+      confirmMode: null,
     })
     expect(mockClient.release).toHaveBeenCalledTimes(1)
   })
@@ -191,12 +194,46 @@ describe('syncDouyinOrderToSystem', () => {
     expect(result).toEqual({
       action: 'recovered',
       systemOrderId: 'O202603230001',
+      confirmMode: null,
     })
     expect(mockClient.query).toHaveBeenCalledWith(
       expect.stringContaining('UPDATE douyin_orders'),
-      ['DY_001', 'O202603230001']
+      ['DY_001', 'O202603230001', null]
     )
     expect(mockClient.query).toHaveBeenNthCalledWith(6, 'COMMIT')
     expect(mockClient.release).toHaveBeenCalledTimes(1)
+  })
+
+  test('传入同步接单模式时应回写 confirm_mode', async () => {
+    const mockClient = createMockClient()
+    postgreDB.getClient.mockResolvedValue(mockClient)
+
+    mockClient.query
+      .mockResolvedValueOnce()
+      .mockResolvedValueOnce({ rows: [{ ota_order_id: 'DY_010', synced: false, confirm_mode: null }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce()
+      .mockResolvedValueOnce()
+
+    buildCreateOrderDataFromDouyin.mockResolvedValue({
+      orderId: 'O202603240010',
+      sourceNumber: 'DY_010',
+      orderSource: 'douyin',
+    })
+    createOrder.mockResolvedValue({ orderId: 'O202603240010' })
+
+    const result = await syncDouyinOrderToSystem('DY_010', {
+      confirmMode: 1,
+    })
+
+    expect(mockClient.query).toHaveBeenCalledWith(
+      expect.stringContaining('confirm_mode = COALESCE($3, confirm_mode)'),
+      ['DY_010', 'O202603240010', 1]
+    )
+    expect(result).toEqual({
+      action: 'created',
+      systemOrderId: 'O202603240010',
+      confirmMode: 1,
+    })
   })
 })

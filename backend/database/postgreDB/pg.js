@@ -304,6 +304,7 @@ async function initializePostgreDB() {
     await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS refund_result_response JSONB;`);
     await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS refund_result_received_at TIMESTAMP;`);
     await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS cancel_finish_time VARCHAR(19);`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS confirm_mode INTEGER;`);
   } catch (err) {
     // 老库未创建 douyin_orders 时允许跳过。
     console.warn('[initializePostgreDB] douyin_orders 创单字段升级跳过:', err.message);
