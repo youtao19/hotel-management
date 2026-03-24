@@ -252,6 +252,12 @@ GET /api/ota/v1/inventory?startDate=2026-03-10&endDate=2026-03-12&roomType=asu_x
   - `POST /api/douyin/order/confirm`
   - 请求体支持 `otaOrderId`、`confirmResult`、`confirmNumber`、`rejectCode`、`rejectReason`
   - 当 `confirmResult=1` 表示接单；当 `confirmResult=2` 表示拒单
+- 当前还提供一组价量态调试接口，便于验收阶段手动预览和推送：
+  - `POST /api/douyin/ari/preview`
+  - `POST /api/douyin/ari/stock/push`
+  - `POST /api/douyin/ari/price/push`
+  - `POST /api/douyin/ari/notify`
+  - 请求体统一支持 `ratePlanIds`、`startDate`、`endDate`
 
 ## 9. 插件接单接口（动态签名）
 

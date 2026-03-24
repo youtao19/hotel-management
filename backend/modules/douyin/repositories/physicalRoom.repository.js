@@ -71,8 +71,44 @@ async function findPhysicalRoomByRatePlanId(ratePlanId) {
   return result.rows[0] || null
 }
 
+/**
+ * 批量根据抖音售卖房型 ID 查询对应物理房型。
+ *
+ * @param {string[]} ratePlanIds 抖音售卖房型 ID 列表。
+ * @returns {Promise<Object[]>} 物理房型列表。
+ */
+async function findPhysicalRoomsByRatePlanIds(ratePlanIds = []) {
+  const normalizedRatePlanIds = Array.from(
+    new Set(
+      ratePlanIds
+        .map((item) => String(item || '').trim())
+        .filter(Boolean)
+    )
+  )
+
+  if (!normalizedRatePlanIds.length) {
+    return []
+  }
+
+  const sql = `
+    SELECT DISTINCT ON (item->>'rate_plan_id', item->>'id')
+      room.*,
+      item->>'rate_plan_id' AS matched_rate_plan_id,
+      item->>'id' AS matched_rate_plan_id_fallback
+    FROM douyin_physical_rooms AS room
+    CROSS JOIN LATERAL jsonb_array_elements(COALESCE(room.rate_plan_list, '[]'::jsonb)) AS item
+    WHERE item->>'rate_plan_id' = ANY($1::text[])
+       OR item->>'id' = ANY($1::text[])
+    ORDER BY item->>'rate_plan_id', item->>'id', room.updated_at DESC, room.id DESC
+  `
+
+  const result = await postgreDB.query(sql, [normalizedRatePlanIds])
+  return result.rows
+}
+
 module.exports = {
   upsertPhysicalRoom,
   findAllPhysicalRooms,
   findPhysicalRoomByRatePlanId,
+  findPhysicalRoomsByRatePlanIds,
 }

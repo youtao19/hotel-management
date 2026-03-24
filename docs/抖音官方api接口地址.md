@@ -114,6 +114,23 @@
 - 用途：定义订单入住、离店、核销等履约状态向抖音同步的接口能力与字段要求。
 - 当前代码关联：当前未实现，后续订单 `checked-in/checked-out` 状态同步需优先对照此文档。
 
+## 6.2 房价/房态/房量更新
+
+### 6.2.1 日历房价库变更增量通知接口
+- 链接：[日历房价库变更增量通知接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/housing-updates/price-change-notification)
+- 用途：当酒店侧价格或库存变化时，通知抖音触发价量态拉取。
+- 当前代码关联：`backend/modules/douyin/services/ari.service.js`、`backend/modules/douyin/controllers/ari.controller.js`
+
+### 6.2.2 房量房态推送接口
+- 链接：[房量房态推送接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/housing-update/room-status-push-api)
+- 用途：主动向抖音推送指定售卖房型和日期的房量与房态。
+- 当前代码关联：`backend/modules/douyin/services/ari.service.js`、`backend/modules/douyin/controllers/ari.controller.js`
+
+### 6.2.3 房价推送接口
+- 链接：[房价推送接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/housing-updates/house-price-interface)
+- 用途：主动向抖音推送指定售卖房型和日期的房价。
+- 当前代码关联：`backend/modules/douyin/services/ari.service.js`、`backend/modules/douyin/controllers/ari.controller.js`
+
 ## 7. 酒店静态信息匹配/创建/更新能力
 
 ### 7.1 酒店静态信息接口

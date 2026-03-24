@@ -36,8 +36,6 @@
 ## 要求
 + 前端尽量不做逻辑判断（除非 不做逻辑判断就无法完成这个任务），将逻辑都放在后端的 API 中。
 + 你在任何时候都不能修改这个文件 `AGENTS.md` 文件，除非我让你修改
-+ 在执行修改时，你需要先查看`业务说明.md`文件，确认业务逻辑。
-+ 在任何时候，你都不能修改`业务说明.md`文件，除非我让你修改
 + 你写的任何代码都需要有关键注释
 + commit message 需要用中文书写
 + 代码逻辑要求简单高效。
@@ -60,6 +58,8 @@ DATE 字段在 Node.js 中应:
 - 不强制设置 timezone = 'UTC'
 - 依赖数据库 + 会话时区自动转换
 
+## 完善业务说明文档
++ 你需要根据我提供的需求和你对项目的理解，来完善 `业务说明.md` 文件，来让它更清晰和完整。
 当你了解了我的需求后，你也可以逐渐完善我的 `业务说明.md` 文件，来让它更清晰和完整。
 
 Always use Context7 MCP when I need library/API documentation, code generation, setup or configuration steps without me having to explicitly ask.
