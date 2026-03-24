@@ -137,6 +137,24 @@ const DOUYIN_BOOKABLE_ERROR = Object.freeze({
 })
 
 /**
+ * 抖音主动拉取价量态场景错误定义。
+ */
+const DOUYIN_ARI_PULL_ERROR = Object.freeze({
+  INVALID_BIZ_TYPE: {
+    code: 13,
+    description: '拉取价量态业务类型不合法',
+  },
+  MISSING_RATE_PLAN_ID: {
+    code: 13,
+    description: '缺少售卖房型ID',
+  },
+  MISSING_DATE_RANGE: {
+    code: 13,
+    description: '缺少拉取日期范围',
+  },
+})
+
+/**
  * 抖音物理房型场景错误定义。
  */
 const DOUYIN_PHYSICAL_ROOM_ERROR = Object.freeze({
@@ -223,6 +241,7 @@ module.exports = {
   DOUYIN_CANCEL_ERROR,
   DOUYIN_PRESALE_ERROR,
   DOUYIN_BOOKABLE_ERROR,
+  DOUYIN_ARI_PULL_ERROR,
   DOUYIN_PHYSICAL_ROOM_ERROR,
   DOUYIN_RATE_PLAN_ERROR,
 }

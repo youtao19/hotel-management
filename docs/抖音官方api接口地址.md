@@ -231,7 +231,7 @@
 ### 9.1 价量态拉取接口
 - 链接：[价量态拉取接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/pull-price-volume/price-volume-interface)
 - 用途：由抖音主动调用三方接口，定时拉取指定酒店、售卖房型和日期范围内的价格、房量、房态数据，是预售券价量态保鲜的重要能力。
-- 当前代码关联：当前未实现，后续接入主动拉取价量态回调、签名校验和本地价量态组装时使用。
+- 当前代码关联：`backend/modules/douyin/controllers/ariPull.controller.js`、`backend/modules/douyin/services/ariPull.service.js`、`backend/modules/douyin/mappers/ariPull.mapper.js`
 
 ## 10. 当前最值得优先深读的文档
 
@@ -246,6 +246,7 @@
 - `物理房型静态信息查询`
 - `创建预售订单 SPI`
 - `正向交易流程`
+- `价量态拉取接口`
 
 ### 10.2 下一阶段最可能马上用到的文档
 - `创建/更新预定商品`

@@ -21,6 +21,9 @@ const {
   receiveBookableCheckCallback,
 } = require('../../modules/douyin/controllers/bookableCheck.controller')
 const {
+  receiveDouyinAriPullCallback,
+} = require('../../modules/douyin/controllers/ariPull.controller')
+const {
   notifyDouyinAriController,
   previewDouyinAriController,
   pushDouyinPriceController,
@@ -56,6 +59,7 @@ router.post('/openapi/test', testOpenApi)
 router.post('/callback/spi', verifyDouyinSignMiddleware, receiveSpiCallback)
 router.post('/callback/presale', verifyDouyinSignMiddleware, receivePresaleSpiCallback)
 router.post('/callback/bookable', verifyDouyinSignMiddleware, receiveBookableCheckCallback)
+router.post('/callback/ari-pull', verifyDouyinSignMiddleware, receiveDouyinAriPullCallback)
 router.post('/callback/cancel', verifyDouyinSignMiddleware, receiveCancelCallback)
 router.post('/order/confirm', confirmOrder)
 router.post('/order/check-in', pushDouyinCheckInController)
@@ -72,6 +76,7 @@ router.post('/ari/notify', notifyDouyinAriController)
 router.post('/callback/spi/mock',receiveSpiCallback)
 router.post('/callback/presale/mock', receivePresaleSpiCallback)
 router.post('/callback/bookable/mock', receiveBookableCheckCallback)
+router.post('/callback/ari-pull/mock', receiveDouyinAriPullCallback)
 router.post('/callback/cancel/mock', receiveCancelCallback)
 
 router.post('/physical-rooms/sync', async (req, res) => {
