@@ -309,6 +309,10 @@ async function initializePostgreDB() {
     await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS refund_case_status VARCHAR(32);`);
     await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS suggested_refund_amount DECIMAL(12,2);`);
     await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS refund_case_response JSONB;`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS booking_stage VARCHAR(32);`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS booking_error_code INTEGER;`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS booking_error_description TEXT;`);
+    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS booking_failure_response JSONB;`);
   } catch (err) {
     // 老库未创建 douyin_orders 时允许跳过。
     console.warn('[initializePostgreDB] douyin_orders 创单字段升级跳过:', err.message);

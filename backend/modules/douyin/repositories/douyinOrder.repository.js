@@ -183,8 +183,92 @@ async function updateDouyinOrderByOtaOrderId(otaOrderId, order) {
   return result.rows[0] || null
 }
 
+/**
+ * 按抖音订单号写入或更新创单失败记录。
+ *
+ * @param {Object} order 失败订单对象。
+ * @returns {Promise<Object|null>} 写入后的失败记录。
+ */
+async function upsertDouyinBookingFailure(order) {
+  const otaOrderId = String(order?.otaOrderId || '').trim()
+  if (!otaOrderId) {
+    return null
+  }
+
+  const sql = `
+    INSERT INTO douyin_orders (
+      ota_order_id,
+      source_order_id,
+      hotel_id,
+      account_id,
+      order_status,
+      check_in_date,
+      check_out_date,
+      room_id,
+      room_name,
+      rate_plan_id,
+      biz_type,
+      douyin_log_id,
+      booking_stage,
+      booking_error_code,
+      booking_error_description,
+      booking_failure_response,
+      raw_payload,
+      mapped_payload
+    ) VALUES (
+      $1, $2, $3, $4, $5, $6, $7, $8, $9,
+      $10, $11, $12, $13, $14, $15, $16, $17, $18
+    )
+    ON CONFLICT (ota_order_id) DO UPDATE
+    SET source_order_id = EXCLUDED.source_order_id,
+        hotel_id = EXCLUDED.hotel_id,
+        account_id = EXCLUDED.account_id,
+        order_status = EXCLUDED.order_status,
+        check_in_date = EXCLUDED.check_in_date,
+        check_out_date = EXCLUDED.check_out_date,
+        room_id = EXCLUDED.room_id,
+        room_name = EXCLUDED.room_name,
+        rate_plan_id = EXCLUDED.rate_plan_id,
+        biz_type = EXCLUDED.biz_type,
+        douyin_log_id = EXCLUDED.douyin_log_id,
+        booking_stage = EXCLUDED.booking_stage,
+        booking_error_code = EXCLUDED.booking_error_code,
+        booking_error_description = EXCLUDED.booking_error_description,
+        booking_failure_response = EXCLUDED.booking_failure_response,
+        raw_payload = EXCLUDED.raw_payload,
+        mapped_payload = EXCLUDED.mapped_payload,
+        updated_at = NOW()
+    RETURNING *
+  `
+
+  const values = [
+    otaOrderId,
+    order.sourceOrderId || null,
+    order.hotelId || null,
+    order.accountId || null,
+    order.orderStatus || 'failed',
+    order.checkInDate || null,
+    order.checkOutDate || null,
+    order.roomId || null,
+    order.roomName || null,
+    order.ratePlanId || null,
+    order.bizType ?? null,
+    order.douyinLogId || null,
+    order.bookingStage || null,
+    order.bookingErrorCode ?? null,
+    order.bookingErrorDescription || null,
+    JSON.stringify(order.bookingFailureResponse || {}),
+    JSON.stringify(order.rawPayload || {}),
+    JSON.stringify(order.mappedPayload || {}),
+  ]
+
+  const result = await postgreDB.query(sql, values)
+  return result.rows[0] || null
+}
+
 module.exports = {
   findByOtaOrderId,
   createDouyinOrder,
+  upsertDouyinBookingFailure,
   updateDouyinOrderByOtaOrderId,
 }

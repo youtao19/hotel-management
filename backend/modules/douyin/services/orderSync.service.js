@@ -52,6 +52,35 @@ async function markDouyinOrderSynced(otaOrderId, systemOrderId, confirmMode, que
 }
 
 /**
+ * 回写抖音订单同步失败信息。
+ *
+ * @param {string} otaOrderId 抖音 OTA 订单号。
+ * @param {Error} error 原始异常。
+ * @param {Object} queryRunner 数据库执行器。
+ * @returns {Promise<void>} 回写完成。
+ */
+async function markDouyinOrderSyncFailed(otaOrderId, error, queryRunner = postgreDB) {
+  await queryRunner.query(
+    `
+    UPDATE douyin_orders
+    SET booking_stage = 'system_create_failed',
+        booking_error_description = $2,
+        booking_failure_response = $3,
+        updated_at = NOW()
+    WHERE ota_order_id = $1
+    `,
+    [
+      otaOrderId,
+      String(error?.message || 'Create local order failed'),
+      JSON.stringify({
+        message: String(error?.message || 'Create local order failed'),
+        code: error?.code || null,
+      }),
+    ]
+  )
+}
+
+/**
  * 判断是否命中本地订单来源单号唯一约束。
  *
  * @param {Error} error 数据库异常对象。
@@ -78,6 +107,10 @@ function isDuplicateSourceConstraintError(error) {
 async function syncDouyinOrderToSystem(otaOrderId, options = {}) {
   /** @type {Object|null} 数据库事务连接。 */
   let client = null
+  /** @type {boolean} 是否需要在事务外补记同步失败。 */
+  let shouldMarkSyncFailed = false
+  /** @type {Error|null} 需要补记的同步异常。 */
+  let syncFailureError = null
 
   try {
     client = await postgreDB.getClient()
@@ -150,11 +183,21 @@ async function syncDouyinOrderToSystem(otaOrderId, options = {}) {
         }
       }
 
+      shouldMarkSyncFailed = true
+      syncFailureError = error
       throw error
     }
   } catch (error) {
     if (client) {
       await client.query('ROLLBACK')
+    }
+
+    if (shouldMarkSyncFailed && otaOrderId) {
+      try {
+        await markDouyinOrderSyncFailed(otaOrderId, syncFailureError || error)
+      } catch (persistError) {
+        console.error('[syncDouyinOrderToSystem] save sync failure failed:', persistError.message)
+      }
     }
     throw error
   } finally {
@@ -165,5 +208,6 @@ async function syncDouyinOrderToSystem(otaOrderId, options = {}) {
 }
 
 module.exports = {
+  markDouyinOrderSyncFailed,
   syncDouyinOrderToSystem,
 }

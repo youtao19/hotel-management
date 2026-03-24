@@ -5,6 +5,7 @@ const { syncDouyinOrderToSystem } = require('../orderSync.service')
 
 jest.mock('../../../../database/postgreDB/pg', () => ({
   getClient: jest.fn(),
+  query: jest.fn(),
 }))
 
 jest.mock('../../mappers/orderCreate.adapter', () => ({
@@ -30,6 +31,7 @@ function createMockClient() {
 describe('syncDouyinOrderToSystem', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    postgreDB.query.mockResolvedValue({ rows: [] })
   })
 
   test('找不到抖音订单时抛错', async () => {
@@ -235,5 +237,39 @@ describe('syncDouyinOrderToSystem', () => {
       systemOrderId: 'O202603240010',
       confirmMode: 1,
     })
+  })
+
+  test('本地创建订单失败时应补记 system_create_failed', async () => {
+    const mockClient = createMockClient()
+    postgreDB.getClient.mockResolvedValue(mockClient)
+
+    const createError = new Error('create local order failed')
+
+    mockClient.query
+      .mockResolvedValueOnce() // BEGIN
+      .mockResolvedValueOnce({ rows: [{ ota_order_id: 'DY_FAIL_001', synced: false }] }) // 查 douyin_orders
+      .mockResolvedValueOnce({ rows: [] }) // 查本地已存在订单
+      .mockResolvedValueOnce() // ROLLBACK
+
+    buildCreateOrderDataFromDouyin.mockResolvedValue({
+      orderId: 'O202603240099',
+      sourceNumber: 'DY_FAIL_001',
+      orderSource: 'douyin',
+    })
+    createOrder.mockRejectedValue(createError)
+
+    await expect(syncDouyinOrderToSystem('DY_FAIL_001')).rejects.toThrow('create local order failed')
+
+    expect(postgreDB.query).toHaveBeenCalledWith(
+      expect.stringContaining("booking_stage = 'system_create_failed'"),
+      [
+        'DY_FAIL_001',
+        'create local order failed',
+        JSON.stringify({
+          message: 'create local order failed',
+          code: null,
+        }),
+      ]
+    )
   })
 })
