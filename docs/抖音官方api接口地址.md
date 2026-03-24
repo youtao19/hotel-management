@@ -170,26 +170,50 @@
 - 用途：用于修改预售券对应的预约单信息。
 - 当前代码关联：当前未实现，后续预约单变更时接入。
 
-### 8.2 预售券交易逆向
+### 8.2 住宿预售券创建和更新
 
-#### 8.2.1 售后审核结果返回
+#### 8.2.1 创建/更新预定商品
+- 链接：[创建/更新预定商品](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/hotel-voucher-mgmt/create-update-products)
+- 用途：用于创建或更新住宿预售券关联的预定商品，是预售券商品化配置的基础能力。
+- 当前代码关联：当前未实现，后续接入预售商品创建、更新和商品资料同步时使用。
+
+#### 8.2.2 创建/更新预售券
+- 链接：[创建/更新预售券](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/hotel-voucher-mgmt/create-update-coupon)
+- 用途：用于创建或更新住宿预售券主体信息，通常与预定商品、售卖规则和有效期配置配套使用。
+- 当前代码关联：当前未实现，后续接入预售券主数据创建与更新时使用。
+
+#### 8.2.3 预售券审核结果通知
+- 链接：[预售券审核结果通知](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/hotel-voucher-mgmt/presale-ticket-review)
+- 用途：用于接收抖音推送的预售券审核结果通知，可根据 `Msg-Id` 做消息去重，并根据审核结果更新本地预售券状态。
+- 当前代码关联：当前未实现，后续接入预售券审核状态回调时使用。
+
+### 8.3 预售券交易逆向
+
+#### 8.3.1 售后审核结果返回
 - 链接：[售后审核结果返回](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/reverse-hotel-voucher/callback-cancellation)
 - 用途：用于向抖音回传预售券逆向退款审核结果。
 - 当前代码关联：当前未实现，后续预售券逆向链路需接入。
 
-#### 8.2.2 订单取消退款通知 SPI
+#### 8.3.2 订单取消退款通知 SPI
 - 链接：[订单取消退款通知SPI](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/reverse-hotel-voucher/refund-notification)
 - 用途：承接预售券退款通知和售后退款信息。
 - 当前代码关联：当前未实现，后续预售券退款链路需接入。
 
-#### 8.2.3 酒店取消订单 SPI
+#### 8.3.3 酒店取消订单 SPI
 - 链接：[酒店取消订单SPI](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/reverse-hotel-voucher/cancel-hotel-order)
 - 用途：承接预售券订单取消通知，包含支付前取消、支付后取消、创单失败取消等场景。
 - 当前代码关联：当前未实现，后续预售券取消逻辑需接入。
 
-## 9. 当前最值得优先深读的文档
+## 9. 主动拉取价量态
 
-### 9.1 已经直接影响现有代码的文档
+### 9.1 价量态拉取接口
+- 链接：[价量态拉取接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/pull-price-volume/price-volume-interface)
+- 用途：由抖音主动调用三方接口，定时拉取指定酒店、售卖房型和日期范围内的价格、房量、房态数据，是预售券价量态保鲜的重要能力。
+- 当前代码关联：当前未实现，后续接入主动拉取价量态回调、签名校验和本地价量态组装时使用。
+
+## 10. 当前最值得优先深读的文档
+
+### 10.1 已经直接影响现有代码的文档
 - `生成 client-token`
 - `SPI 接入`
 - `SPI签名规则`
@@ -199,7 +223,11 @@
 - `创建预售订单 SPI`
 - `正向交易流程`
 
-### 9.2 下一阶段最可能马上用到的文档
+### 10.2 下一阶段最可能马上用到的文档
+- `创建/更新预定商品`
+- `创建/更新预售券`
+- `预售券审核结果通知`
+- `价量态拉取接口`
 - `酒店取消订单SPI`
 - `售后审核结果返回`
 - `入住/离店状态同步能力`

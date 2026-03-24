@@ -47,7 +47,32 @@ async function findAllPhysicalRooms() {
   return result.rows
 }
 
+/**
+ * 根据抖音售卖房型 ID 查询对应物理房型。
+ *
+ * @param {string} ratePlanId 抖音售卖房型 ID。
+ * @returns {Promise<Object|null>} 查询到的物理房型；不存在时返回 null。
+ */
+async function findPhysicalRoomByRatePlanId(ratePlanId) {
+  const sql = `
+    SELECT *
+    FROM douyin_physical_rooms
+    WHERE EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(COALESCE(rate_plan_list, '[]'::jsonb)) AS item
+      WHERE item->>'rate_plan_id' = $1
+         OR item->>'id' = $1
+    )
+    ORDER BY updated_at DESC, id DESC
+    LIMIT 1
+  `
+
+  const result = await postgreDB.query(sql, [ratePlanId])
+  return result.rows[0] || null
+}
+
 module.exports = {
   upsertPhysicalRoom,
   findAllPhysicalRooms,
+  findPhysicalRoomByRatePlanId,
 }

@@ -118,10 +118,29 @@ const DOUYIN_PRESALE_ERROR = Object.freeze({
   },
 })
 
+/**
+ * 抖音可订检查场景错误定义。
+ */
+const DOUYIN_BOOKABLE_ERROR = Object.freeze({
+  INVALID_BIZ_TYPE: {
+    code: 13,
+    description: '可订检查业务类型不合法',
+  },
+  PRICE_MISMATCH: {
+    code: 8,
+    description: '价格与酒店实际价格不一致',
+  },
+  ROOM_STATUS_CLOSED: {
+    code: 18,
+    description: '日历房态关闭',
+  },
+})
+
 module.exports = {
   DOUYIN_SUCCESS_RESULT,
   DOUYIN_COMMON_ERROR,
   DOUYIN_BOOKING_ERROR,
   DOUYIN_CANCEL_ERROR,
   DOUYIN_PRESALE_ERROR,
+  DOUYIN_BOOKABLE_ERROR,
 }

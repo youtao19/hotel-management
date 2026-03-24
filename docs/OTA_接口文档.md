@@ -233,14 +233,21 @@ GET /api/ota/v1/inventory?startDate=2026-03-10&endDate=2026-03-12&roomType=asu_x
 - 当前已支持抖音创建订单回调与取消订单回调两条联调链路：
   - `POST /api/douyin/callback/spi`
   - `POST /api/douyin/callback/presale`
+  - `POST /api/douyin/callback/bookable`
   - `POST /api/douyin/callback/spi/mock`
   - `POST /api/douyin/callback/presale/mock`
+  - `POST /api/douyin/callback/bookable/mock`
   - `POST /api/douyin/callback/cancel`
   - `POST /api/douyin/callback/cancel/mock`
 - 当取消通知带 `need_audit=true` 时，系统会自动调用抖音“售后审核结果返回”接口回传同意/拒绝结果。
 - 抖音模块内部已统一错误码与状态枚举，联调时请以 [抖音回调联调文档](/Users/peach/develop/hotel-management/docs/抖音回调联调文档.md) 中的“错误码与状态枚举”章节为准。
 - 住宿预售券场景已新增独立创单回调：
   - `action:hotel_spot.order.create_presale_order` -> `POST /api/douyin/callback/presale`
+- 住宿预售券场景已新增可订检查回调：
+  - `可订检查 SPI` -> `POST /api/douyin/callback/bookable`
+- 已补充新的抖音官方文档索引，包含“创建/更新预定商品”“创建/更新预售券”“预售券审核结果通知”“价量态拉取接口”。
+- 当前仓库对上述 4 项能力仅完成文档沉淀，相关 OpenAPI / Webhook / 主动拉取接口暂未接入代码。
+- 最新抖音文档索引请查看 [抖音官方api接口地址](/Users/peach/develop/hotel-management/docs/抖音官方api接口地址.md)。
 
 ## 9. 插件接单接口（动态签名）
 
