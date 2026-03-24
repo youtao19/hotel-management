@@ -1,13 +1,14 @@
-const postgreDB = require('../../../../database/postgreDB/pg')
 const { autoConfirmDouyinOrder } = require('../autoConfirm.service')
-const { confirmDouyinOrder } = require('../confirmOrder.service')
-
-jest.mock('../../../../database/postgreDB/pg', () => ({
-  query: jest.fn(),
-}))
+const {
+  DOUYIN_CONFIRM_RESULT_ACCEPT,
+  confirmDouyinOrder,
+  saveConfirmResultToLocalOrder,
+} = require('../confirmOrder.service')
 
 jest.mock('../confirmOrder.service', () => ({
+  DOUYIN_CONFIRM_RESULT_ACCEPT: 1,
   confirmDouyinOrder: jest.fn(),
+  saveConfirmResultToLocalOrder: jest.fn(),
 }))
 
 describe('autoConfirmDouyinOrder', () => {
@@ -33,7 +34,7 @@ describe('autoConfirmDouyinOrder', () => {
     const result = await autoConfirmDouyinOrder(douyinOrder)
 
     expect(confirmDouyinOrder).not.toHaveBeenCalled()
-    expect(postgreDB.query).not.toHaveBeenCalled()
+    expect(saveConfirmResultToLocalOrder).not.toHaveBeenCalled()
 
     expect(result).toEqual({
       action: 'skip',
@@ -50,8 +51,9 @@ describe('autoConfirmDouyinOrder', () => {
         description: 'success',
       },
     })
-
-    postgreDB.query.mockResolvedValue({ rows: [] })
+    saveConfirmResultToLocalOrder.mockResolvedValue({
+      action: 'confirmed',
+    })
 
     const douyinOrder = {
       ota_order_id: 'DY_TEST_002',
@@ -64,13 +66,24 @@ describe('autoConfirmDouyinOrder', () => {
     expect(confirmDouyinOrder).toHaveBeenCalledWith(
       expect.objectContaining({
         otaOrderId: 'DY_TEST_002',
+        confirmResult: DOUYIN_CONFIRM_RESULT_ACCEPT,
         confirmNumber: expect.stringMatching(/^AUTO_/),
       })
     )
 
-    expect(postgreDB.query).toHaveBeenCalledWith(
-      expect.stringContaining('UPDATE douyin_orders'),
-      ['DY_TEST_002', expect.stringMatching(/^AUTO_/)]
+    expect(saveConfirmResultToLocalOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        otaOrderId: 'DY_TEST_002',
+        confirmResult: DOUYIN_CONFIRM_RESULT_ACCEPT,
+        confirmNumber: expect.stringMatching(/^AUTO_/),
+        result: {
+          success: true,
+          data: {
+            error_code: 0,
+            description: 'success',
+          },
+        },
+      })
     )
 
     expect(result.action).toBe('confirmed')
@@ -92,8 +105,9 @@ describe('autoConfirmDouyinOrder', () => {
         description: '系统繁忙，请稍候再试',
       },
     })
-
-    postgreDB.query.mockResolvedValue({ rows: [] })
+    saveConfirmResultToLocalOrder.mockResolvedValue({
+      action: 'failed',
+    })
 
     const douyinOrder = {
       ota_order_id: 'DY_TEST_003',
@@ -103,10 +117,12 @@ describe('autoConfirmDouyinOrder', () => {
     const result = await autoConfirmDouyinOrder(douyinOrder)
 
     expect(confirmDouyinOrder).toHaveBeenCalledTimes(1)
-
-    expect(postgreDB.query).toHaveBeenCalledWith(
-      expect.stringContaining("SET confirm_status = 'failed'"),
-      ['DY_TEST_003']
+    expect(saveConfirmResultToLocalOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        otaOrderId: 'DY_TEST_003',
+        confirmResult: DOUYIN_CONFIRM_RESULT_ACCEPT,
+        confirmNumber: expect.stringMatching(/^AUTO_/),
+      })
     )
 
     expect(result.action).toBe('failed')

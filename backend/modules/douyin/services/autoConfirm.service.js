@@ -1,5 +1,8 @@
-const postgreDB = require('../../../database/postgreDB/pg')
-const { confirmDouyinOrder } = require('./confirmOrder.service')
+const {
+  DOUYIN_CONFIRM_RESULT_ACCEPT,
+  confirmDouyinOrder,
+  saveConfirmResultToLocalOrder,
+} = require('./confirmOrder.service')
 
 async function autoConfirmDouyinOrder(douyinOrder) {
   if (!douyinOrder || !douyinOrder.ota_order_id) {
@@ -18,49 +21,27 @@ async function autoConfirmDouyinOrder(douyinOrder) {
   const confirmNumber = `AUTO_${Date.now()}`
   const result = await confirmDouyinOrder({
     otaOrderId: douyinOrder.ota_order_id,
+    confirmResult: DOUYIN_CONFIRM_RESULT_ACCEPT,
     confirmNumber,
   })
 
   const logId = result?.extra?.logid
   console.log('[autoConfirm] logId:', logId)
+  const localResult = await saveConfirmResultToLocalOrder({
+    otaOrderId: douyinOrder.ota_order_id,
+    confirmResult: DOUYIN_CONFIRM_RESULT_ACCEPT,
+    confirmNumber,
+    result,
+  })
 
-  const errorCode = result?.data?.error_code ?? result?.extra?.error_code ?? null
-
-  if (errorCode === 0 || errorCode === null) {
-    await postgreDB.query(
-      `
-      UPDATE douyin_orders
-      SET confirm_status = 'confirmed',
-          confirm_number = $2,
-          confirmed_at = NOW(),
-          updated_at = NOW()
-      WHERE ota_order_id = $1
-      `,
-      [douyinOrder.ota_order_id, confirmNumber]
-    )
-
+  if (localResult.action === 'confirmed') {
     console.log('[autoConfirm] success:', douyinOrder.ota_order_id, confirmNumber, logId)
-
-    return {
-      action: 'confirmed',
-      confirmNumber,
-      result,
-    }
+  } else {
+    console.error('[autoConfirm] failed:', douyinOrder.ota_order_id, confirmNumber, logId, result)
   }
 
-  await postgreDB.query(
-    `
-    UPDATE douyin_orders
-    SET confirm_status = 'failed',
-        updated_at = NOW()
-    WHERE ota_order_id = $1
-    `,
-    [douyinOrder.ota_order_id]
-  )
-  console.error('[autoConfirm] failed:', douyinOrder.ota_order_id, confirmNumber, logId, result)
-
   return {
-    action: 'failed',
+    action: localResult.action,
     confirmNumber,
     result,
   }
