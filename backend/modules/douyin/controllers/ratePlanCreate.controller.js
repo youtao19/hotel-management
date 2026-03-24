@@ -6,7 +6,7 @@ const { createDouyinRatePlan } = require('../services/ratePlanCreate.service')
  * 提取商品创建请求参数。
  *
  * @param {Object} body 请求体。
- * @returns {{localRoomType:string, poiId:string, roomId:string, accountId:string, mode:string}} 参数对象。
+ * @returns {{localRoomType:string, poiId:string, roomId:string, accountId:string, mode:string, modeConfig:Object}} 参数对象。
  */
 function resolveRatePlanCreateBody(body = {}) {
   return {
@@ -15,6 +15,12 @@ function resolveRatePlanCreateBody(body = {}) {
     roomId: String(body.roomId || '').trim(),
     accountId: String(body.accountId || douyinConfig.accountId || '').trim(),
     mode: String(body.mode || 'meal').trim().toLowerCase(),
+    // modeConfig 只做透传，复杂规则放到服务层统一校验。
+    modeConfig: body.modeConfig && typeof body.modeConfig === 'object' && !Array.isArray(body.modeConfig)
+      ? body.modeConfig
+      : body.modeConfig === undefined
+        ? {}
+        : body.modeConfig,
   }
 }
 

@@ -37,12 +37,18 @@ describe('ratePlanCreate.controller', () => {
       roomId: 'ROOM_001',
       accountId: 'ACC_001',
       mode: 'meal',
+      modeConfig: {
+        mealCount: 2,
+      },
     })).toEqual({
       localRoomType: 'LOCAL_ROOM_001',
       poiId: 'HOTEL_001',
       roomId: 'ROOM_001',
       accountId: 'ACC_001',
       mode: 'meal',
+      modeConfig: {
+        mealCount: 2,
+      },
     })
   })
 
@@ -73,6 +79,9 @@ describe('ratePlanCreate.controller', () => {
         roomId: 'ROOM_001',
         accountId: 'ACC_001',
         mode: 'meal',
+        modeConfig: {
+          mealCount: 2,
+        },
       },
     }
     const res = createMockResponse()
@@ -85,6 +94,9 @@ describe('ratePlanCreate.controller', () => {
       roomId: 'ROOM_001',
       accountId: 'ACC_001',
       mode: 'meal',
+      modeConfig: {
+        mealCount: 2,
+      },
     })
     expect(res.json).toHaveBeenCalledWith({
       success: true,
@@ -139,6 +151,9 @@ describe('ratePlanCreate.controller', () => {
         roomId: 'ROOM_404',
         accountId: 'ACC_001',
         mode: 'cancel',
+        modeConfig: {
+          freeCancelHoursBeforeCheckIn: 24,
+        },
       },
     }
     const res = createMockResponse()
@@ -150,6 +165,34 @@ describe('ratePlanCreate.controller', () => {
       success: false,
       errorCode: 13,
       message: '抖音物理房型不存在',
+    })
+  })
+
+  test('非法 modeConfig 时应交给服务层返回业务错误', async () => {
+    const error = new Error('invalid config')
+    error.douyinErrorCode = 13
+    error.douyinDescription = '商品模式配置不合法'
+    createDouyinRatePlan.mockRejectedValue(error)
+
+    const req = {
+      body: {
+        localRoomType: 'LOCAL_ROOM_004',
+        poiId: 'HOTEL_004',
+        roomId: 'ROOM_004',
+        accountId: 'ACC_001',
+        mode: 'stay',
+        modeConfig: [],
+      },
+    }
+    const res = createMockResponse()
+
+    await createDouyinRatePlanController(req, res)
+
+    expect(res.status).toHaveBeenCalledWith(400)
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      errorCode: 13,
+      message: '商品模式配置不合法',
     })
   })
 })

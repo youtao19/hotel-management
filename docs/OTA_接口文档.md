@@ -282,9 +282,13 @@ GET /api/ota/v1/inventory?startDate=2026-03-10&endDate=2026-03-12&roomType=asu_x
   - 当前通过 `physical_room/save` 做基础版状态更新，并同步回写本地 `raw_payload.active`
 - 当前还提供一个手动创建日历房商品接口，便于验收阶段先把基础商品建到抖音侧：
   - `POST /api/douyin/rate-plan/create`
-  - 请求体支持 `localRoomType`、`poiId`、`roomId`，可选 `accountId`、`mode`
+  - 请求体支持 `localRoomType`、`poiId`、`roomId`，可选 `accountId`、`mode`、`modeConfig`
   - `mode` 当前支持 `meal`、`cancel`、`stay`、`booking`
-  - 当前为基础版创建，先走最小字段；仅 `meal` 模式会额外补一个简单餐食字段
+  - 当前已补第一阶段复杂规则字段：
+    - `meal` 支持 `modeConfig.mealCount`
+    - `cancel` 支持 `modeConfig.freeCancelHoursBeforeCheckIn`
+    - `stay` 支持 `modeConfig.minStayNights`、`modeConfig.maxStayNights`
+    - `booking` 支持 `modeConfig.advanceBookingDaysMin`、`modeConfig.advanceBookingDaysMax`
 - 当前还提供一个手动更新日历房商品上下架状态接口：
   - `POST /api/douyin/rate-plan/status`
   - 请求体支持 `roomId`、`ratePlanId`、`active`，可选 `accountId`

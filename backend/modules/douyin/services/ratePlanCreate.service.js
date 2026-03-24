@@ -78,6 +78,189 @@ function hasRatePlanMapping(physicalRoom, outRatePlanId) {
 }
 
 /**
+ * 将商品模式配置中的整数值转成正整数。
+ *
+ * @param {unknown} value 原始值。
+ * @returns {number|null} 转换后的整数或 null。
+ */
+function normalizeInteger(value) {
+  if (value === '' || value === null || value === undefined) {
+    return null
+  }
+
+  const normalizedValue = Number(value)
+  if (!Number.isInteger(normalizedValue)) {
+    return null
+  }
+
+  return normalizedValue
+}
+
+/**
+ * 构建餐食信息模式配置。
+ *
+ * @param {Object} localRoomTypeInfo 本地房型信息。
+ * @param {Object} extraConfig 模式附加配置。
+ * @returns {Object} 模式配置。
+ */
+function buildMealModeConfig(localRoomTypeInfo, extraConfig = {}) {
+  const normalizedMealCount = normalizeInteger(extraConfig.mealCount)
+  const mealCount = normalizedMealCount === null ? 1 : normalizedMealCount
+
+  if (mealCount < 1 || mealCount > 10) {
+    throw createDouyinBusinessError(DOUYIN_RATE_PLAN_ERROR.INVALID_MEAL_COUNT)
+  }
+
+  return {
+    meals: [{
+      type: 1,
+      num: mealCount,
+    }],
+  }
+}
+
+/**
+ * 构建取消政策模式配置。
+ *
+ * @param {Object} localRoomTypeInfo 本地房型信息。
+ * @param {Object} extraConfig 模式附加配置。
+ * @returns {Object} 模式配置。
+ */
+function buildCancelModeConfig(localRoomTypeInfo, extraConfig = {}) {
+  const freeCancelHours = normalizeInteger(extraConfig.freeCancelHoursBeforeCheckIn)
+
+  if (freeCancelHours === null) {
+    return {
+      cancel_rules: [{
+        cancel_type: 1,
+      }],
+    }
+  }
+
+  if (freeCancelHours < 0 || freeCancelHours > 365 * 24) {
+    throw createDouyinBusinessError(DOUYIN_RATE_PLAN_ERROR.INVALID_CANCEL_HOURS)
+  }
+
+  return {
+    cancel_rules: [{
+      cancel_type: 2,
+      cancel_time_type: 2,
+      cancel_offset_time: {
+        day: Math.floor(freeCancelHours / 24),
+        hour: freeCancelHours % 24,
+      },
+      cut_type: 1,
+      cut_value: 0,
+    }],
+  }
+}
+
+/**
+ * 构建连住模式配置。
+ *
+ * @param {Object} localRoomTypeInfo 本地房型信息。
+ * @param {Object} extraConfig 模式附加配置。
+ * @returns {Object} 模式配置。
+ */
+function buildStayModeConfig(localRoomTypeInfo, extraConfig = {}) {
+  const normalizedMinStayNights = normalizeInteger(extraConfig.minStayNights)
+  const normalizedMaxStayNights = normalizeInteger(extraConfig.maxStayNights)
+  const minStayNights = normalizedMinStayNights === null ? 2 : normalizedMinStayNights
+  const maxStayNights = normalizedMaxStayNights === null ? minStayNights : normalizedMaxStayNights
+
+  if (minStayNights < 1 || maxStayNights < minStayNights || maxStayNights > 30) {
+    throw createDouyinBusinessError(DOUYIN_RATE_PLAN_ERROR.INVALID_STAY_RANGE)
+  }
+
+  return {
+    stay_rules: {
+      min_los: minStayNights,
+      max_los: maxStayNights,
+    },
+  }
+}
+
+/**
+ * 构建预定限制模式配置。
+ *
+ * @param {Object} localRoomTypeInfo 本地房型信息。
+ * @param {Object} extraConfig 模式附加配置。
+ * @returns {Object} 模式配置。
+ */
+function buildBookingModeConfig(localRoomTypeInfo, extraConfig = {}) {
+  const normalizedMinAdvanceDays = normalizeInteger(extraConfig.advanceBookingDaysMin)
+  const normalizedMaxAdvanceDays = normalizeInteger(extraConfig.advanceBookingDaysMax)
+  const minAdvanceDays = normalizedMinAdvanceDays === null ? 1 : normalizedMinAdvanceDays
+  const maxAdvanceDays = normalizedMaxAdvanceDays === null ? 30 : normalizedMaxAdvanceDays
+
+  if (
+    minAdvanceDays < 0 ||
+    maxAdvanceDays < minAdvanceDays ||
+    maxAdvanceDays > 365
+  ) {
+    throw createDouyinBusinessError(DOUYIN_RATE_PLAN_ERROR.INVALID_BOOKING_RANGE)
+  }
+
+  return {
+    book_rules: {
+      min_advance_time: {
+        day: minAdvanceDays,
+      },
+      max_advance_time: {
+        day: maxAdvanceDays,
+      },
+    },
+  }
+}
+
+/**
+ * 根据商品模式构建附加配置。
+ *
+ * @param {Object} params 参数对象。
+ * @param {string} params.mode 商品模式。
+ * @param {Object} params.localRoomTypeInfo 本地房型信息。
+ * @param {Object} params.extraConfig 模式附加配置。
+ * @returns {Object} 模式配置。
+ */
+function buildRatePlanModeConfig({
+  mode,
+  localRoomTypeInfo,
+  extraConfig,
+}) {
+  if (extraConfig !== undefined && (typeof extraConfig !== 'object' || Array.isArray(extraConfig))) {
+    throw createDouyinBusinessError(DOUYIN_RATE_PLAN_ERROR.INVALID_MODE_CONFIG)
+  }
+
+  const normalizedConfig = extraConfig || {}
+
+  switch (resolveModeSuffix(mode)) {
+    case RATE_PLAN_MODE.CANCEL:
+      return buildCancelModeConfig(localRoomTypeInfo, normalizedConfig)
+    case RATE_PLAN_MODE.STAY:
+      return buildStayModeConfig(localRoomTypeInfo, normalizedConfig)
+    case RATE_PLAN_MODE.BOOKING:
+      return buildBookingModeConfig(localRoomTypeInfo, normalizedConfig)
+    case RATE_PLAN_MODE.MEAL:
+    default:
+      return buildMealModeConfig(localRoomTypeInfo, normalizedConfig)
+  }
+}
+
+/**
+ * 合并商品基础字段与模式字段。
+ *
+ * @param {Object} ratePlan 商品基础字段。
+ * @param {Object} modeConfig 模式字段。
+ * @returns {Object} 合并后的商品数据。
+ */
+function mergeRatePlanConfig(ratePlan, modeConfig) {
+  return {
+    ...ratePlan,
+    ...modeConfig,
+  }
+}
+
+/**
  * 构建售卖房型基础项。
  *
  * @param {Object} params 参数对象。
@@ -90,6 +273,7 @@ function buildBaseRatePlanItem({
   localRoomTypeInfo,
   localRoomType,
   mode,
+  modeConfig,
 }) {
   const modeSuffix = resolveModeSuffix(mode)
   const modeLabel = resolveModeLabel(mode)
@@ -104,16 +288,13 @@ function buildBaseRatePlanItem({
     sales_type: 1,
     settle_type: 1,
   }
+  const resolvedModeConfig = buildRatePlanModeConfig({
+    mode: modeSuffix,
+    localRoomTypeInfo,
+    extraConfig: modeConfig,
+  })
 
-  // 基础版先只给 meal 模式补一个简单餐食字段，其他模式仍走最小通用创建。
-  if (modeSuffix === RATE_PLAN_MODE.MEAL) {
-    ratePlan.meals = [{
-      type: 1,
-      num: 1,
-    }]
-  }
-
-  return ratePlan
+  return mergeRatePlanConfig(ratePlan, resolvedModeConfig)
 }
 
 /**
@@ -133,6 +314,7 @@ async function buildDouyinRatePlanPayload({
   roomId,
   accountId,
   mode,
+  modeConfig,
 }) {
   const normalizedLocalRoomType = String(localRoomType || '').trim()
   const normalizedPoiId = String(poiId || '').trim()
@@ -166,6 +348,7 @@ async function buildDouyinRatePlanPayload({
     localRoomTypeInfo,
     localRoomType: normalizedLocalRoomType,
     mode: normalizedMode,
+    modeConfig,
   })
 
   if (hasRatePlanMapping(physicalRoom, ratePlanItem.out_rate_plan_id)) {
@@ -296,11 +479,18 @@ async function createDouyinRatePlan(params) {
 
 module.exports = {
   RATE_PLAN_MODE,
+  buildBookingModeConfig,
   buildBaseRatePlanItem,
+  buildCancelModeConfig,
   buildDouyinRatePlanPayload,
+  buildMealModeConfig,
+  buildRatePlanModeConfig,
+  buildStayModeConfig,
   createDouyinRatePlan,
   hasRatePlanMapping,
+  mergeRatePlanConfig,
   mergeRatePlanList,
+  normalizeInteger,
   resolveModeLabel,
   resolveModeSuffix,
   resolveRatePlanMapItem,

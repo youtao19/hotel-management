@@ -236,6 +236,26 @@ const DOUYIN_RATE_PLAN_ERROR = Object.freeze({
     code: 13,
     description: '抖音返回的售卖房型ID缺失',
   },
+  INVALID_MODE_CONFIG: {
+    code: 13,
+    description: '商品模式配置不合法',
+  },
+  INVALID_MEAL_COUNT: {
+    code: 13,
+    description: '餐食数量不合法',
+  },
+  INVALID_CANCEL_HOURS: {
+    code: 13,
+    description: '取消时长不合法',
+  },
+  INVALID_STAY_RANGE: {
+    code: 13,
+    description: '连住天数范围不合法',
+  },
+  INVALID_BOOKING_RANGE: {
+    code: 13,
+    description: '预定提前天数范围不合法',
+  },
 })
 
 module.exports = {

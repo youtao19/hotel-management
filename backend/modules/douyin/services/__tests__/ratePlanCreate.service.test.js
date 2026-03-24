@@ -14,8 +14,13 @@ const {
 } = require('../physicalRoomCreate.service')
 const {
   RATE_PLAN_MODE,
+  buildBookingModeConfig,
   buildBaseRatePlanItem,
+  buildCancelModeConfig,
   buildDouyinRatePlanPayload,
+  buildMealModeConfig,
+  buildRatePlanModeConfig,
+  buildStayModeConfig,
   createDouyinRatePlan,
   resolveRatePlanMapItem,
 } = require('../ratePlanCreate.service')
@@ -47,6 +52,9 @@ describe('ratePlanCreate.service', () => {
       },
       localRoomType: 'LOCAL_ROOM_001',
       mode: RATE_PLAN_MODE.MEAL,
+      modeConfig: {
+        mealCount: 2,
+      },
     })
 
     expect(result).toEqual({
@@ -59,9 +67,68 @@ describe('ratePlanCreate.service', () => {
       settle_type: 1,
       meals: [{
         type: 1,
-        num: 1,
+        num: 2,
       }],
     })
+  })
+
+  test('应构建取消政策模式字段', () => {
+    expect(buildCancelModeConfig({}, {
+      freeCancelHoursBeforeCheckIn: 30,
+    })).toEqual({
+      cancel_rules: [{
+        cancel_type: 2,
+        cancel_time_type: 2,
+        cancel_offset_time: {
+          day: 1,
+          hour: 6,
+        },
+        cut_type: 1,
+        cut_value: 0,
+      }],
+    })
+  })
+
+  test('应构建连住模式字段', () => {
+    expect(buildStayModeConfig({}, {
+      minStayNights: 2,
+      maxStayNights: 4,
+    })).toEqual({
+      stay_rules: {
+        min_los: 2,
+        max_los: 4,
+      },
+    })
+  })
+
+  test('应构建预定限制模式字段', () => {
+    expect(buildBookingModeConfig({}, {
+      advanceBookingDaysMin: 1,
+      advanceBookingDaysMax: 20,
+    })).toEqual({
+      book_rules: {
+        min_advance_time: {
+          day: 1,
+        },
+        max_advance_time: {
+          day: 20,
+        },
+      },
+    })
+  })
+
+  test('模式配置不合法时应返回业务错误', () => {
+    expect(() => buildRatePlanModeConfig({
+      mode: RATE_PLAN_MODE.MEAL,
+      localRoomTypeInfo: {},
+      extraConfig: 'invalid',
+    })).toThrow('商品模式配置不合法')
+  })
+
+  test('餐食数量不合法时应返回业务错误', () => {
+    expect(() => buildMealModeConfig({}, {
+      mealCount: 0,
+    })).toThrow('餐食数量不合法')
   })
 
   test('应组装商品创建请求体', async () => {
@@ -80,6 +147,10 @@ describe('ratePlanCreate.service', () => {
       poiId: 'HOTEL_002',
       roomId: 'ROOM_002',
       mode: 'stay',
+      modeConfig: {
+        minStayNights: 2,
+        maxStayNights: 5,
+      },
     })
 
     expect(result.payload).toEqual({
@@ -96,6 +167,10 @@ describe('ratePlanCreate.service', () => {
             confirm_immediately: false,
             sales_type: 1,
             settle_type: 1,
+            stay_rules: {
+              min_los: 2,
+              max_los: 5,
+            },
           }],
         }],
       },
@@ -115,6 +190,7 @@ describe('ratePlanCreate.service', () => {
       poiId: 'HOTEL_003',
       roomId: 'ROOM_404',
       mode: 'meal',
+      modeConfig: {},
     })).rejects.toMatchObject({
       douyinErrorCode: 13,
       douyinDescription: '抖音物理房型不存在',
@@ -171,6 +247,10 @@ describe('ratePlanCreate.service', () => {
       poiId: 'HOTEL_005',
       roomId: 'ROOM_005',
       mode: 'booking',
+      modeConfig: {
+        advanceBookingDaysMin: 1,
+        advanceBookingDaysMax: 30,
+      },
     })
 
     expect(requestDouyinOpenApi).toHaveBeenCalledWith({
@@ -191,6 +271,14 @@ describe('ratePlanCreate.service', () => {
               confirm_immediately: false,
               sales_type: 1,
               settle_type: 1,
+              book_rules: {
+                min_advance_time: {
+                  day: 1,
+                },
+                max_advance_time: {
+                  day: 30,
+                },
+              },
             }],
           }],
         },
