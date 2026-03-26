@@ -143,10 +143,17 @@
 
 ## 7. 酒店静态信息匹配/创建/更新能力
 
+### 7.0 自助匹配酒店信息查询接口（模式二）
+- 链接：[自助匹配酒店信息查询接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/hotel-info-fetch/hotel-info-query)
+- 用途：模式二核心接口。由合作方主动查询可匹配酒店信息，用于本地建立酒店与房型 mapping。
+- 当前代码关联：`backend/modules/douyin/services/hotelInfoFetch.service.js`、`backend/modules/douyin/controllers/hotelInfoFetch.controller.js`、`backend/routes/douyin/douyinApi.js`，对应本地接口：
+  - `POST /api/douyin/hotel-info/query`
+  - `POST /api/douyin/hotel-info/sync`
+
 ### 7.1 酒店静态信息接口
 - 链接：[酒店静态信息接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/hotel-info-mgmt/hotel-info-api)
 - 用途：用于酒店基础静态信息的提交、匹配、创建和更新。
-- 当前代码关联：当前未实现，后续酒店主体接入时使用。
+- 当前代码关联：当前主链路采用模式二（自助匹配），本接口暂未接入。
 
 ### 7.2 酒店静态信息处理状态查询
 - 链接：[酒店静态信息处理状态查询](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/hotel-info-mgmt/hotel-info-status)
@@ -156,7 +163,7 @@
 ### 7.3 酒店静态信息处理结果推送Webhook
 - 链接：[酒店静态信息处理结果推送Webhook](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/hotel-info-mgmt/hotel-info-push)
 - 用途：接收酒店静态信息处理结果的异步推送，适合替代或补充状态轮询。
-- 当前代码关联：`backend/modules/douyin/controllers/hotelInfoWebhook.controller.js`、`backend/modules/douyin/services/hotelInfoWebhook.service.js`、`backend/modules/douyin/middlewares/verifyDouyinWebhook.middleware.js`、`backend/routes/douyin/douyinApi.js`；当前为第一阶段基础接入（Webhook验签、challenge校验、Msg-Id去重、回执success）。
+- 当前代码关联：`backend/modules/douyin/controllers/hotelInfoWebhook.controller.js`、`backend/modules/douyin/services/hotelInfoWebhook.service.js`、`backend/modules/douyin/middlewares/verifyDouyinWebhook.middleware.js`、`backend/routes/douyin/douyinApi.js`；当前作为模式二的补充能力保留（Webhook验签、challenge校验、Msg-Id去重、回执success）。
 
 ## 8. 住宿预售券交易
 

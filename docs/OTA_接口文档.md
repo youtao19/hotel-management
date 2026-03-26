@@ -248,13 +248,15 @@ GET /api/ota/v1/inventory?startDate=2026-03-10&endDate=2026-03-12&roomType=asu_x
 - 酒店静态信息处理结果已新增回调入口：
   - `酒店静态信息处理结果推送Webhook` -> `POST /api/douyin/callback/hotel-info`
   - 本地免签联调入口：`POST /api/douyin/callback/hotel-info/mock`
+- 当前酒店静态信息主链路采用模式二（自助匹配），官方文档：
+  - `自助匹配酒店信息查询接口` -> `https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/hotel-info-fetch/hotel-info-query`
 - 创单失败场景现在会尽量把失败信息落到 `douyin_orders`，便于联调排查：
   - `booking_stage`
   - `booking_error_code`
   - `booking_error_description`
   - `booking_failure_response`
 - 已补充新的抖音官方文档索引，包含“创建/更新预定商品”“创建/更新预售券”“预售券审核结果通知”“价量态拉取接口”。
-- 当前仓库对上述 4 项能力仅完成部分接入：酒店静态信息处理结果 Webhook 已接入；其余 OpenAPI 与主动拉取接口仍待后续补齐。
+- 当前仓库在酒店静态信息侧已切换模式二主链路：支持主动查询/批量同步酒店静态信息，并支持房型映射管理；Webhook 作为补充能力保留。
 - 最新抖音文档索引请查看 [抖音官方api接口地址](/Users/peach/develop/hotel-management/docs/抖音官方api接口地址.md)。
 - 当前还提供一个手动确认接单结果接口，便于验收阶段回传接单或拒单：
   - `POST /api/douyin/order/confirm`
@@ -283,7 +285,18 @@ GET /api/ota/v1/inventory?startDate=2026-03-10&endDate=2026-03-12&roomType=asu_x
 - 当前还提供酒店静态信息处理结果回调入口：
   - `POST /api/douyin/callback/hotel-info`
   - `POST /api/douyin/callback/hotel-info/mock`
-  - 当前第一阶段用于承接推送并回执 success，后续再补落库与状态联动
+  - 当前用于补充接收异步结果并回执 success（模式二主链路不依赖该回调）
+- 当前还提供一组酒店静态信息自助匹配接口（模式二主链路）：
+  - `POST /api/douyin/hotel-info/query`
+  - `POST /api/douyin/hotel-info/sync`
+  - 请求体支持 `accountId`，并支持分页参数：
+    - `hotel-info/query`：`pageIndex`、`pageSize`
+    - `hotel-info/sync`：`startPageIndex`、`pageSize`、`maxPages`
+- 当前还提供一组抖音房型映射管理接口（服务端落库到 `douyin_room_type_mapping`）：
+  - `GET /api/douyin/room-type-mapping`
+  - `POST /api/douyin/room-type-mapping`
+  - `POST` 请求体字段：
+    - `mappings`：支持数组或对象格式，最终统一为 `douyinRoomId + douyinRoomName + localRoomType`
 - 当前还提供一个“未支付超时取消”的手动调试接口：
   - `POST /api/douyin/order/timeout-cancel`
   - 请求体支持 `otaOrderId`，可选 `reason`
@@ -542,3 +555,149 @@ curl -X GET 'http://localhost:3000/api/plugin/room-type-mapping?platform=meituan
 - `local_room_type_name`: 本地房型名称（查询/保存响应通过关联 `room_types.type_name` 返回）
 - `created_at`: 创建时间
 - `updated_at`: 更新时间
+
+## 11. 抖音模式二（自助匹配）接口
+
+### 11.1 查询酒店静态信息（单页）
+- Method: `POST`
+- Path: `/api/douyin/hotel-info/query`
+- 说明：
+  - 对接抖音官方“自助匹配酒店信息查询接口”
+  - 请求参数由后端统一校验，前端只需提交必要字段
+
+请求体示例：
+
+```json
+{
+  "accountId": "ACC_001",
+  "pageIndex": 1,
+  "pageSize": 20
+}
+```
+
+成功响应示例：
+
+```json
+{
+  "success": true,
+  "summary": {
+    "fetchedHotels": 1,
+    "pageIndex": 1,
+    "pageSize": 20,
+    "hasMore": false
+  },
+  "pagination": {
+    "page_index": 1,
+    "page_size": 20,
+    "page_count": 1,
+    "total_count": 1,
+    "has_more": false
+  },
+  "data": [
+    {
+      "hotel_id": "7311111111111111111",
+      "hotel_name": "阿苏晓筑",
+      "account_id": "ACC_001"
+    }
+  ]
+}
+```
+
+### 11.2 批量同步酒店静态信息
+- Method: `POST`
+- Path: `/api/douyin/hotel-info/sync`
+- 说明：
+  - 按页循环调用抖音酒店查询接口
+  - 用于一次性拉取多页酒店信息，便于线下 mapping
+
+请求体示例：
+
+```json
+{
+  "accountId": "ACC_001",
+  "startPageIndex": 1,
+  "pageSize": 50,
+  "maxPages": 20
+}
+```
+
+成功响应示例：
+
+```json
+{
+  "success": true,
+  "summary": {
+    "fetchedPages": 2,
+    "fetchedHotels": 60,
+    "startPageIndex": 1,
+    "endPageIndex": 2,
+    "hasMore": false
+  },
+  "pages": [
+    {
+      "pageIndex": 1,
+      "pageSize": 50,
+      "hasMore": true,
+      "count": 50
+    },
+    {
+      "pageIndex": 2,
+      "pageSize": 50,
+      "hasMore": false,
+      "count": 10
+    }
+  ],
+  "data": []
+}
+```
+
+### 11.3 查询抖音房型映射列表
+- Method: `GET`
+- Path: `/api/douyin/room-type-mapping`
+- 说明：
+  - 返回 `douyin_room_type_mapping` 当前映射
+  - 附带本地房型名称与抖音物理房型状态，便于运营排查
+
+### 11.4 批量保存抖音房型映射
+- Method: `POST`
+- Path: `/api/douyin/room-type-mapping`
+- 请求体字段：
+  - `mappings`: 必填，支持两种格式
+    - 数组：`[{douyinRoomId, douyinRoomName, localRoomType}]`
+    - 对象：`{ "douyinRoomId": { "value": "localRoomType", "label": "douyinRoomName" } }`
+
+对象格式请求示例：
+
+```json
+{
+  "mappings": {
+    "ROOM_001": {
+      "value": "asu_xiao_zhu",
+      "label": "阿苏晓筑大床房"
+    },
+    "ROOM_002": {
+      "value": "xing_yun_ge",
+      "label": "行云阁双床房"
+    }
+  }
+}
+```
+
+成功响应示例：
+
+```json
+{
+  "success": true,
+  "code": "DOUYIN_ROOM_TYPE_MAPPING_SAVED",
+  "data": [
+    {
+      "id": 1,
+      "douyin_room_id": "ROOM_001",
+      "douyin_room_name": "阿苏晓筑大床房",
+      "local_room_type": "asu_xiao_zhu",
+      "local_room_type_name": "阿苏晓筑"
+    }
+  ],
+  "message": "抖音房型映射保存成功"
+}
+```

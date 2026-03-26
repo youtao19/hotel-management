@@ -57,6 +57,14 @@ const {
 const {
   cancelUnpaidDouyinOrderController,
 } = require('../../modules/douyin/controllers/orderTimeoutCancel.controller')
+const {
+  queryDouyinHotelInfoController,
+  syncDouyinHotelInfoController,
+} = require('../../modules/douyin/controllers/hotelInfoFetch.controller')
+const {
+  listDouyinRoomTypeMappingsController,
+  saveDouyinRoomTypeMappingsController,
+} = require('../../modules/douyin/controllers/roomTypeMappingManage.controller')
 
 const {
   verifyDouyinSignMiddleware,
@@ -87,6 +95,10 @@ router.post('/physical-room/create', createDouyinPhysicalRoomController)
 router.post('/physical-room/status', updateDouyinPhysicalRoomStatusController)
 router.post('/rate-plan/create', createDouyinRatePlanController)
 router.post('/rate-plan/status', updateDouyinRatePlanStatusController)
+router.post('/hotel-info/query', queryDouyinHotelInfoController)
+router.post('/hotel-info/sync', syncDouyinHotelInfoController)
+router.get('/room-type-mapping', listDouyinRoomTypeMappingsController)
+router.post('/room-type-mapping', saveDouyinRoomTypeMappingsController)
 router.post('/ari/preview', previewDouyinAriController)
 router.post('/ari/stock/push', pushDouyinStockController)
 router.post('/ari/price/push', pushDouyinPriceController)
