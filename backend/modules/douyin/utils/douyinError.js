@@ -5,12 +5,13 @@ const { DOUYIN_COMMON_ERROR } = require('../constants/errorCodes')
  *
  * @param {{code:number, description:string}} definition 错误定义。
  * @param {string} [message] 内部错误信息。
+ * @param {string} [descriptionOverride] 返回给上层的错误描述覆盖值。
  * @returns {Error} 挂载抖音错误码和描述的异常对象。
  */
-function createDouyinBusinessError(definition, message) {
+function createDouyinBusinessError(definition, message, descriptionOverride) {
   const error = new Error(message || definition.description)
   error.douyinErrorCode = definition.code
-  error.douyinDescription = definition.description
+  error.douyinDescription = descriptionOverride || definition.description
   return error
 }
 

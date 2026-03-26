@@ -245,13 +245,16 @@ GET /api/ota/v1/inventory?startDate=2026-03-10&endDate=2026-03-12&roomType=asu_x
   - `action:hotel_spot.order.create_presale_order` -> `POST /api/douyin/callback/presale`
 - 住宿预售券场景已新增可订检查回调：
   - `可订检查 SPI` -> `POST /api/douyin/callback/bookable`
+- 酒店静态信息处理结果已新增回调入口：
+  - `酒店静态信息处理结果推送Webhook` -> `POST /api/douyin/callback/hotel-info`
+  - 本地免签联调入口：`POST /api/douyin/callback/hotel-info/mock`
 - 创单失败场景现在会尽量把失败信息落到 `douyin_orders`，便于联调排查：
   - `booking_stage`
   - `booking_error_code`
   - `booking_error_description`
   - `booking_failure_response`
 - 已补充新的抖音官方文档索引，包含“创建/更新预定商品”“创建/更新预售券”“预售券审核结果通知”“价量态拉取接口”。
-- 当前仓库对上述 4 项能力仅完成文档沉淀，相关 OpenAPI / Webhook / 主动拉取接口暂未接入代码。
+- 当前仓库对上述 4 项能力仅完成部分接入：酒店静态信息处理结果 Webhook 已接入；其余 OpenAPI 与主动拉取接口仍待后续补齐。
 - 最新抖音文档索引请查看 [抖音官方api接口地址](/Users/peach/develop/hotel-management/docs/抖音官方api接口地址.md)。
 - 当前还提供一个手动确认接单结果接口，便于验收阶段回传接单或拒单：
   - `POST /api/douyin/order/confirm`
@@ -277,13 +280,17 @@ GET /api/ota/v1/inventory?startDate=2026-03-10&endDate=2026-03-12&roomType=asu_x
   - `POST /api/douyin/callback/refund-case`
   - `POST /api/douyin/callback/refund-case/mock`
   - 当前用于承接“客服强退 / 协商退款 / 日历房退款 case”基础闭环，并回写退款 case 状态与建议退款金额
+- 当前还提供酒店静态信息处理结果回调入口：
+  - `POST /api/douyin/callback/hotel-info`
+  - `POST /api/douyin/callback/hotel-info/mock`
+  - 当前第一阶段用于承接推送并回执 success，后续再补落库与状态联动
 - 当前还提供一个“未支付超时取消”的手动调试接口：
   - `POST /api/douyin/order/timeout-cancel`
   - 请求体支持 `otaOrderId`，可选 `reason`
   - 当前会把 `douyin_orders.cancel_status` 更新为 `timeout_cancelled`
 - 当前还提供一个手动物理房型创建接口，便于验收阶段先把本地房型推到抖音侧：
   - `POST /api/douyin/physical-room/create`
-  - 请求体支持 `localRoomType`、`poiId`，可选 `accountId`
+  - 请求体支持 `localRoomType`、`poiId`、`categoryId`、`images`，可选 `accountId`
   - 当未传 `accountId` 时，后端会回退使用环境变量 `DOUYIN_ACCOUNT_ID`
 - 当前还提供一个手动物理房型上下架接口：
   - `POST /api/douyin/physical-room/status`

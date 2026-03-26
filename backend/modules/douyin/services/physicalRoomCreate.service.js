@@ -83,16 +83,21 @@ function buildDescriptions(description) {
  * @param {string} params.localRoomType 本地房型编码。
  * @param {string} [params.accountId] 抖音商家账号 ID。
  * @param {string} params.poiId 抖音酒店 ID。
+ * @param {string} params.categoryId 抖音类目 ID。
+ * @param {Array} params.images 房型图片列表。
  * @returns {Promise<Object>} 请求体。
  */
 async function buildDouyinPhysicalRoomPayload({
   localRoomType,
   accountId,
   poiId,
+  categoryId,
+  images,
 }) {
   const normalizedLocalRoomType = String(localRoomType || '').trim()
   const normalizedPoiId = String(poiId || '').trim()
   const normalizedAccountId = resolveAccountId(accountId)
+  const normalizedCategoryId = String(categoryId || '').trim()
 
   if (!normalizedAccountId) {
     throw createDouyinBusinessError(DOUYIN_PHYSICAL_ROOM_ERROR.MISSING_ACCOUNT_ID, 'Missing Douyin account_id')
@@ -101,6 +106,12 @@ async function buildDouyinPhysicalRoomPayload({
   if (!normalizedPoiId) {
     throw createDouyinBusinessError(DOUYIN_PHYSICAL_ROOM_ERROR.MISSING_POI_ID, 'Missing Douyin poi_id')
   }
+
+  if (!normalizedCategoryId) {
+    throw createDouyinBusinessError(DOUYIN_PHYSICAL_ROOM_ERROR.MISSING_CATEGORY_ID, 'Missing Douyin category_id')
+  }
+
+  const normalizedImages = buildPhysicalRoomImages(images)
 
   const localRoomTypeInfo = await findLocalRoomTypeInfo(normalizedLocalRoomType)
   if (!localRoomTypeInfo) {
@@ -116,6 +127,8 @@ async function buildDouyinPhysicalRoomPayload({
   const roomInfo = {
     out_room_id: normalizedLocalRoomType,
     cn_name: String(localRoomTypeInfo.type_name || normalizedLocalRoomType).trim(),
+    category_id: normalizedCategoryId,
+    images: normalizedImages,
     max_occupancy: DEFAULT_MAX_OCCUPANCY,
     room_num: localRoomCount,
     active: localRoomTypeInfo.is_closed !== true,
@@ -130,6 +143,76 @@ async function buildDouyinPhysicalRoomPayload({
     poi_id: normalizedPoiId,
     room_info: roomInfo,
   }
+}
+
+/**
+ * 组装抖音物理房型图片列表。
+ *
+ * @param {Array} images 原始图片参数。
+ * @returns {Array<{image_url:string}>} 标准化后的图片列表。
+ */
+function buildPhysicalRoomImages(images) {
+  if (!Array.isArray(images) || images.length === 0) {
+    throw createDouyinBusinessError(DOUYIN_PHYSICAL_ROOM_ERROR.MISSING_IMAGES, 'Missing physical room images')
+  }
+
+  const normalizedImages = images
+    .map((item) => {
+      const imageUrl = String(
+        item?.imageUrl ||
+        item?.image_url ||
+        ''
+      ).trim()
+
+      if (!imageUrl) {
+        return null
+      }
+
+      return {
+        image_url: imageUrl,
+      }
+    })
+    .filter(Boolean)
+
+  if (!normalizedImages.length) {
+    throw createDouyinBusinessError(DOUYIN_PHYSICAL_ROOM_ERROR.INVALID_IMAGES, 'Invalid physical room images')
+  }
+
+  return normalizedImages
+}
+
+/**
+ * 校验物理房型保存接口结果，优先透出抖音原始错误描述。
+ *
+ * @param {Object} saveResult 保存接口响应。
+ * @returns {void}
+ */
+function assertPhysicalRoomSaveResult(saveResult = {}) {
+  const errorCode = Number(
+    saveResult?.data?.error_code ??
+    saveResult?.extra?.error_code ??
+    0
+  )
+
+  if (!errorCode) {
+    return
+  }
+
+  const description = String(
+    saveResult?.extra?.description ||
+    saveResult?.data?.description ||
+    DOUYIN_COMMON_ERROR.OTHER_EXCEPTION.description
+  ).trim()
+  const subDescription = String(saveResult?.extra?.sub_description || '').trim()
+  const finalDescription = subDescription
+    ? `${description}: ${subDescription}`
+    : description
+
+  throw createDouyinBusinessError(
+    DOUYIN_COMMON_ERROR.OTHER_EXCEPTION,
+    finalDescription,
+    finalDescription
+  )
 }
 
 /**
@@ -175,12 +258,16 @@ function resolvePhysicalRoomDetail(detailResult = {}, roomId) {
  * @param {string} params.localRoomType 本地房型编码。
  * @param {string} [params.accountId] 抖音商家账号 ID。
  * @param {string} params.poiId 抖音酒店 ID。
+ * @param {string} params.categoryId 抖音类目 ID。
+ * @param {Array} params.images 房型图片列表。
  * @returns {Promise<Object>} 创建结果。
  */
 async function createDouyinPhysicalRoom({
   localRoomType,
   accountId,
   poiId,
+  categoryId,
+  images,
 }) {
   const normalizedLocalRoomType = String(localRoomType || '').trim()
   const existingPhysicalRoom = await findPhysicalRoomByLocalRoomType(normalizedLocalRoomType)
@@ -193,6 +280,8 @@ async function createDouyinPhysicalRoom({
     localRoomType: normalizedLocalRoomType,
     accountId,
     poiId,
+    categoryId,
+    images,
   })
 
   const saveResult = await requestDouyinOpenApi({
@@ -202,6 +291,7 @@ async function createDouyinPhysicalRoom({
     data: payload,
   })
 
+  assertPhysicalRoomSaveResult(saveResult)
   const roomId = resolveSavedRoomId(saveResult)
   const detailResult = await queryDouyinPhysicalRoomDetail({
     accountId: payload.account_id,
@@ -248,7 +338,9 @@ async function createDouyinPhysicalRoom({
 
 module.exports = {
   DEFAULT_MAX_OCCUPANCY,
+  assertPhysicalRoomSaveResult,
   buildDescriptions,
+  buildPhysicalRoomImages,
   buildDouyinPhysicalRoomPayload,
   countLocalRoomsByType,
   createDouyinPhysicalRoom,

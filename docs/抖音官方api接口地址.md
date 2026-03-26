@@ -156,7 +156,7 @@
 ### 7.3 酒店静态信息处理结果推送Webhook
 - 链接：[酒店静态信息处理结果推送Webhook](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/hotel-info-mgmt/hotel-info-push)
 - 用途：接收酒店静态信息处理结果的异步推送，适合替代或补充状态轮询。
-- 当前代码关联：当前未实现，后续如采用异步通知模式需配套接入。
+- 当前代码关联：`backend/modules/douyin/controllers/hotelInfoWebhook.controller.js`、`backend/modules/douyin/services/hotelInfoWebhook.service.js`、`backend/modules/douyin/middlewares/verifyDouyinWebhook.middleware.js`、`backend/routes/douyin/douyinApi.js`；当前为第一阶段基础接入（Webhook验签、challenge校验、Msg-Id去重、回执success）。
 
 ## 8. 住宿预售券交易
 

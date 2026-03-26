@@ -182,6 +182,18 @@ const DOUYIN_PHYSICAL_ROOM_ERROR = Object.freeze({
     code: 13,
     description: '缺少抖音酒店ID',
   },
+  MISSING_CATEGORY_ID: {
+    code: 13,
+    description: '缺少抖音类目ID',
+  },
+  MISSING_IMAGES: {
+    code: 13,
+    description: '缺少物理房型图片',
+  },
+  INVALID_IMAGES: {
+    code: 13,
+    description: '物理房型图片参数不合法',
+  },
   PHYSICAL_ROOM_NOT_FOUND: {
     code: 13,
     description: '抖音物理房型不存在',

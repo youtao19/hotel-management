@@ -35,10 +35,14 @@ describe('physicalRoomCreate.controller', () => {
       localRoomType: 'LOCAL_ROOM_001',
       accountId: 'ACC_001',
       poiId: 'HOTEL_001',
+      categoryId: '8001001',
+      images: [{ imageUrl: 'https://img.example.com/room-1.jpg' }],
     })).toEqual({
       localRoomType: 'LOCAL_ROOM_001',
       accountId: 'ACC_001',
       poiId: 'HOTEL_001',
+      categoryId: '8001001',
+      images: [{ imageUrl: 'https://img.example.com/room-1.jpg' }],
     })
   })
 
@@ -72,6 +76,8 @@ describe('physicalRoomCreate.controller', () => {
         localRoomType: 'LOCAL_ROOM_001',
         accountId: 'ACC_001',
         poiId: 'HOTEL_001',
+        categoryId: '8001001',
+        images: [{ imageUrl: 'https://img.example.com/room-1.jpg' }],
       },
     }
     const res = createMockResponse()
@@ -82,6 +88,8 @@ describe('physicalRoomCreate.controller', () => {
       localRoomType: 'LOCAL_ROOM_001',
       accountId: 'ACC_001',
       poiId: 'HOTEL_001',
+      categoryId: '8001001',
+      images: [{ imageUrl: 'https://img.example.com/room-1.jpg' }],
     })
     expect(res.json).toHaveBeenCalledWith({
       success: true,
@@ -145,6 +153,46 @@ describe('physicalRoomCreate.controller', () => {
     })
   })
 
+  test('缺少 categoryId 时应返回 400', async () => {
+    const req = {
+      body: {
+        localRoomType: 'LOCAL_ROOM_002',
+        poiId: 'HOTEL_001',
+      },
+    }
+    const res = createMockResponse()
+
+    await createDouyinPhysicalRoomController(req, res)
+
+    expect(createDouyinPhysicalRoom).not.toHaveBeenCalled()
+    expect(res.status).toHaveBeenCalledWith(400)
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      message: 'categoryId is required',
+    })
+  })
+
+  test('缺少 images 时应返回 400', async () => {
+    const req = {
+      body: {
+        localRoomType: 'LOCAL_ROOM_002',
+        poiId: 'HOTEL_001',
+        categoryId: '8001001',
+        accountId: 'ACC_001',
+      },
+    }
+    const res = createMockResponse()
+
+    await createDouyinPhysicalRoomController(req, res)
+
+    expect(createDouyinPhysicalRoom).not.toHaveBeenCalled()
+    expect(res.status).toHaveBeenCalledWith(400)
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      message: 'images is required',
+    })
+  })
+
   test('业务错误时应返回 400', async () => {
     const error = new Error('duplicate')
     error.douyinErrorCode = 13
@@ -156,6 +204,8 @@ describe('physicalRoomCreate.controller', () => {
         localRoomType: 'LOCAL_ROOM_003',
         accountId: 'ACC_001',
         poiId: 'HOTEL_003',
+        categoryId: '8001001',
+        images: [{ imageUrl: 'https://img.example.com/room-3.jpg' }],
       },
     }
     const res = createMockResponse()

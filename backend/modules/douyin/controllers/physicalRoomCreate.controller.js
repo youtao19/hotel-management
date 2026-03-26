@@ -6,13 +6,15 @@ const { createDouyinPhysicalRoom } = require('../services/physicalRoomCreate.ser
  * 提取创建物理房型所需参数。
  *
  * @param {Object} body 请求体。
- * @returns {{localRoomType:string, accountId:string, poiId:string}} 参数对象。
+ * @returns {{localRoomType:string, accountId:string, poiId:string, categoryId:string, images:unknown[]}} 参数对象。
  */
 function resolvePhysicalRoomCreateBody(body = {}) {
   return {
     localRoomType: String(body.localRoomType || '').trim(),
     accountId: String(body.accountId || douyinConfig.accountId || '').trim(),
     poiId: String(body.poiId || '').trim(),
+    categoryId: String(body.categoryId || '').trim(),
+    images: Array.isArray(body.images) ? body.images : body.images === undefined ? [] : body.images,
   }
 }
 
@@ -40,10 +42,24 @@ async function createDouyinPhysicalRoomController(req, res) {
     })
   }
 
+  if (!payload.categoryId) {
+    return res.status(400).json({
+      success: false,
+      message: 'categoryId is required',
+    })
+  }
+
   if (!payload.accountId) {
     return res.status(400).json({
       success: false,
       message: 'accountId is required',
+    })
+  }
+
+  if (!Array.isArray(payload.images) || payload.images.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'images is required',
     })
   }
 

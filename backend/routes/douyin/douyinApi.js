@@ -21,6 +21,9 @@ const {
   receiveDouyinRefundCaseCallback,
 } = require('../../modules/douyin/controllers/refundCase.controller')
 const {
+  receiveDouyinHotelInfoWebhookCallback,
+} = require('../../modules/douyin/controllers/hotelInfoWebhook.controller')
+const {
   receivePresaleSpiCallback,
 } = require('../../modules/douyin/controllers/presaleBooking.controller')
 const {
@@ -58,6 +61,9 @@ const {
 const {
   verifyDouyinSignMiddleware,
 } = require('../../modules/douyin/middlewares/verifyDouyinSign.middleware')
+const {
+  verifyDouyinWebhookMiddleware,
+} = require('../../modules/douyin/middlewares/verifyDouyinWebhook.middleware')
 
 const {
   syncDouyinPhysicalRooms,
@@ -72,6 +78,7 @@ router.post('/callback/ari-pull', verifyDouyinSignMiddleware, receiveDouyinAriPu
 router.post('/callback/cancel', verifyDouyinSignMiddleware, receiveCancelCallback)
 router.post('/callback/refund-result', verifyDouyinSignMiddleware, receiveDouyinRefundResultCallback)
 router.post('/callback/refund-case', verifyDouyinSignMiddleware, receiveDouyinRefundCaseCallback)
+router.post('/callback/hotel-info', verifyDouyinWebhookMiddleware, receiveDouyinHotelInfoWebhookCallback)
 router.post('/order/confirm', confirmOrder)
 router.post('/order/timeout-cancel', cancelUnpaidDouyinOrderController)
 router.post('/order/check-in', pushDouyinCheckInController)
@@ -92,6 +99,7 @@ router.post('/callback/ari-pull/mock', receiveDouyinAriPullCallback)
 router.post('/callback/cancel/mock', receiveCancelCallback)
 router.post('/callback/refund-result/mock', receiveDouyinRefundResultCallback)
 router.post('/callback/refund-case/mock', receiveDouyinRefundCaseCallback)
+router.post('/callback/hotel-info/mock', receiveDouyinHotelInfoWebhookCallback)
 
 router.post('/physical-rooms/sync', async (req, res) => {
   try {

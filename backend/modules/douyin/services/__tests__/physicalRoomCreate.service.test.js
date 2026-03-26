@@ -14,7 +14,9 @@ const { upsertRoomTypeMapping } = require('../../repositories/roomTypeMapping.re
 const { queryDouyinPhysicalRoomDetail } = require('../physicalRoom.service')
 const {
   DEFAULT_MAX_OCCUPANCY,
+  assertPhysicalRoomSaveResult,
   buildDescriptions,
+  buildPhysicalRoomImages,
   buildDouyinPhysicalRoomPayload,
   createDouyinPhysicalRoom,
 } = require('../physicalRoomCreate.service')
@@ -53,6 +55,16 @@ describe('physicalRoomCreate.service', () => {
     ])
   })
 
+  test('buildPhysicalRoomImages 应提取 imageUrl 并转换字段名', () => {
+    expect(buildPhysicalRoomImages([
+      { imageUrl: 'https://img.example.com/room-1.jpg' },
+      { image_url: 'https://img.example.com/room-2.jpg' },
+    ])).toEqual([
+      { image_url: 'https://img.example.com/room-1.jpg' },
+      { image_url: 'https://img.example.com/room-2.jpg' },
+    ])
+  })
+
   test('应组装最小物理房型创建请求体', async () => {
     postgreDB.query
       .mockResolvedValueOnce({
@@ -72,6 +84,10 @@ describe('physicalRoomCreate.service', () => {
     const result = await buildDouyinPhysicalRoomPayload({
       localRoomType: 'LOCAL_ROOM_001',
       poiId: 'HOTEL_001',
+      categoryId: '8001001',
+      images: [
+        { imageUrl: 'https://img.example.com/room-1.jpg' },
+      ],
     })
 
     expect(result).toEqual({
@@ -80,12 +96,57 @@ describe('physicalRoomCreate.service', () => {
       room_info: {
         out_room_id: 'LOCAL_ROOM_001',
         cn_name: '山景大床房',
+        category_id: '8001001',
+        images: [{
+          image_url: 'https://img.example.com/room-1.jpg',
+        }],
         max_occupancy: DEFAULT_MAX_OCCUPANCY,
         room_num: 3,
         active: true,
         descriptions: ['带早餐', '高楼层'],
       },
     })
+  })
+
+  test('缺少 categoryId 时应返回业务错误', async () => {
+    await expect(buildDouyinPhysicalRoomPayload({
+      localRoomType: 'LOCAL_ROOM_001',
+      poiId: 'HOTEL_001',
+    })).rejects.toMatchObject({
+      douyinErrorCode: 13,
+      douyinDescription: '缺少抖音类目ID',
+    })
+  })
+
+  test('缺少 images 时应返回业务错误', async () => {
+    await expect(buildDouyinPhysicalRoomPayload({
+      localRoomType: 'LOCAL_ROOM_001',
+      poiId: 'HOTEL_001',
+      categoryId: '8001001',
+    })).rejects.toMatchObject({
+      douyinErrorCode: 13,
+      douyinDescription: '缺少物理房型图片',
+    })
+  })
+
+  test('images 参数不合法时应返回业务错误', () => {
+    expect(() => buildPhysicalRoomImages([
+      { imageUrl: '' },
+    ])).toThrow('Invalid physical room images')
+  })
+
+  test('抖音返回参数错误时应透出更具体描述', () => {
+    expect(() => assertPhysicalRoomSaveResult({
+      data: {
+        error_code: 2100005,
+        description: '参数不合法',
+      },
+      extra: {
+        error_code: 2100005,
+        description: '参数不合法',
+        sub_description: 'category_id must have a value',
+      },
+    })).toThrow('参数不合法: category_id must have a value')
   })
 
   test('本地已存在映射时应拒绝重复创建', async () => {
@@ -96,6 +157,8 @@ describe('physicalRoomCreate.service', () => {
     await expect(createDouyinPhysicalRoom({
       localRoomType: 'LOCAL_ROOM_001',
       poiId: 'HOTEL_001',
+      categoryId: '8001001',
+      images: [{ imageUrl: 'https://img.example.com/room-1.jpg' }],
     })).rejects.toMatchObject({
       douyinErrorCode: 13,
       douyinDescription: '本地房型已存在抖音物理房型映射',
@@ -111,6 +174,8 @@ describe('physicalRoomCreate.service', () => {
     await expect(createDouyinPhysicalRoom({
       localRoomType: 'LOCAL_ROOM_002',
       poiId: 'HOTEL_001',
+      categoryId: '8001001',
+      images: [{ imageUrl: 'https://img.example.com/room-1.jpg' }],
     })).rejects.toMatchObject({
       douyinErrorCode: 13,
       douyinDescription: '本地房型不存在',
@@ -165,6 +230,8 @@ describe('physicalRoomCreate.service', () => {
     const result = await createDouyinPhysicalRoom({
       localRoomType: 'LOCAL_ROOM_003',
       poiId: 'HOTEL_003',
+      categoryId: '8001001',
+      images: [{ imageUrl: 'https://img.example.com/room-3.jpg' }],
     })
 
     expect(requestDouyinOpenApi).toHaveBeenCalledWith({
@@ -177,6 +244,10 @@ describe('physicalRoomCreate.service', () => {
         room_info: {
           out_room_id: 'LOCAL_ROOM_003',
           cn_name: '行政双床房',
+          category_id: '8001001',
+          images: [{
+            image_url: 'https://img.example.com/room-3.jpg',
+          }],
           max_occupancy: 2,
           room_num: 2,
           active: true,
