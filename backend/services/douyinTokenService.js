@@ -1,95 +1,172 @@
+const { randomUUID } = require('crypto');
+const redis = require('../database/redis/redis'); // 使用实际存在的 Redis 模块
+const { douyinConfig, validateDouyinConfig } = require('../appSettings/douyin.config');
 
-/**
- * 抖音 Token 管理服务 (单例模式)
- */
 class DouyinTokenService {
-  constructor() {
-    // 强烈建议从环境变量 process.env 中读取这些敏感信息
-    this.clientKey = process.env.DOUYIN_CLIENT_KEY;
-    this.clientSecret = process.env.DOUYIN_CLIENT_SECRET;
-    this.tokenUrl = 'https://open.douyin.com/oauth/client_token/';
+    constructor() {
+        this.clientKey = douyinConfig.clientKey || process.env.DOUYIN_CLIENT_KEY;
+        this.clientSecret = douyinConfig.clientSecret || process.env.DOUYIN_CLIENT_SECRET;
+        this.tokenUrl = 'https://open.douyin.com/oauth/client_token/';
 
-    this.accessToken = null;
-    this.expiresAt = 0; // 记录过期时间戳 (毫秒)
-
-    // 用于防并发刷新的 Promise 锁
-    this.refreshPromise = null;
-  }
-
-  /**
-   * 获取可用 Token。如果即将过期，则自动刷新。
-   * @returns {Promise<string>} access_token
-   */
-  async getToken() {
-    const currentTime = Date.now();
-    // 缓冲时间：提前 10 分钟 (600,000 毫秒) 触发刷新
-    const bufferTime = 10 * 60 * 1000;
-
-    // 1. 如果内存中有 Token，且离过期时间大于 10 分钟，直接秒回缓存
-    if (this.accessToken && (this.expiresAt - currentTime > bufferTime)) {
-      return this.accessToken;
+        // 增加专属前缀，防止把系统现有的 Session 缓存覆盖掉
+        this.TOKEN_KEY = 'douyin:api:access_token';
+        this.LOCK_KEY = 'douyin:api:token_lock';
+        this.LOCK_EXPIRE_SECONDS = 10;
+        this.LOCK_RENEW_INTERVAL_MS = 3000;
     }
 
-    // 2. 如果当前已经有其他请求触发了刷新，正在等待抖音响应
-    // 那么直接返回那个正在进行中的 Promise，避免重复发请求（防缓存击穿的核心）
-    if (this.refreshPromise) {
-      return this.refreshPromise;
+    async getToken() {
+        const redisClient = await redis.initialize();
+
+        let token = await redisClient.get(this.TOKEN_KEY);
+        if (token) {
+            return token;
+        }
+
+        // Node-Redis v4 语法的分布式锁
+        // EX: 10 秒超时，防止执行刷新期间当前进程意外挂掉导致死锁
+        // NX: true 保证同一瞬间只有第一个执行的请求能设置成功
+        // 每次生成唯一锁值，避免误删其他请求后续拿到的新锁
+        const lockValue = this.createLockValue();
+        const lock = await redisClient.set(this.LOCK_KEY, lockValue, {
+            EX: this.LOCK_EXPIRE_SECONDS,
+            NX: true
+        });
+
+        if (lock === 'OK') {
+            const renewalTask = this.startLockRenewal(redisClient, lockValue);
+            try {
+                // 抢到锁后二次检查，防止排队期间被别的实例刷好了
+                token = await redisClient.get(this.TOKEN_KEY);
+                if (token) {
+                    return token;
+                }
+
+                token = await this.refreshTokenFromDouyin();
+                return token;
+            } finally {
+                this.stopLockRenewal(renewalTask);
+                // 只删除属于当前请求自己的锁，避免误删其他请求的新锁
+                await this.releaseLock(redisClient, lockValue);
+            }
+        } else {
+            // 未抢到锁，等待 500ms 后重新进入拿 Token 的流程
+            await this.delay(500);
+            return await this.getToken();
+        }
     }
 
-    // 3. 否则，发起新的刷新请求，并将这个 Promise 挂载到实例上
-    this.refreshPromise = this._refreshTokenFromDouyin().finally(() => {
-      // 无论刷新成功还是失败，最后都要把这个锁清空，让后续请求可以重新触发
-      this.refreshPromise = null;
-    });
+    async refreshTokenFromDouyin() {
+        // 直接复用现有配置校验，缺少密钥时尽早抛出明确错误
+        validateDouyinConfig();
 
-    return this.refreshPromise;
-  }
+        const response = await fetch(this.tokenUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                client_key: this.clientKey,
+                client_secret: this.clientSecret,
+                grant_type: 'client_credential'
+            })
+        });
 
-  /**
-   * 真实的 HTTP 请求，去抖音拉取新 Token (内部方法，不建议外部直接调用)
-   */
-  async _refreshTokenFromDouyin() {
-    try {
-      const response = await fetch(this.tokenUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          client_key: this.clientKey,
-          client_secret: this.clientSecret,
-          grant_type: 'client_credential'
-        })
-      });
+        const data = await response.json();
 
-      const data = await response.json();
+        if (data.message === 'success' && data.data && data.data.access_token) {
+            const accessToken = data.data.access_token;
+            const expiresIn = Number(data.data.expires_in);
 
-      if (data.message === 'success') {
-        const tokenInfo = data.data;
-        this.accessToken = tokenInfo.access_token;
+            // 强行扣减 600 秒（10分钟），避免业务刚拿到 Token 就在传输途中过期
+            // 如果上游返回异常值，至少保留 60 秒，避免 Redis 因非法 EX 报错
+            const safeExpiresIn = Number.isFinite(expiresIn) && expiresIn > 0
+                ? Math.max(60, Math.floor(expiresIn) - 600)
+                : 60;
 
-        // 抖音返回的 expires_in 是秒，转成毫秒存起来
-        const expiresInMs = tokenInfo.expires_in * 1000;
-        this.expiresAt = Date.now() + expiresInMs;
+            const redisClient = await redis.initialize();
+            await redisClient.set(this.TOKEN_KEY, accessToken, {
+                EX: safeExpiresIn
+            });
 
-        console.log(`[DouyinTokenService] Token 刷新成功, ${tokenInfo.expires_in} 秒后过期。`);
-        return this.accessToken;
-      } else {
-        throw new Error(`获取抖音 Token 失败: ${JSON.stringify(data)}`);
-      }
-    } catch (error) {
-      console.error('[DouyinTokenService] 刷新 Token 异常:', error.message);
-
-      // 容灾设计：如果网络抖动刷新失败了，但旧 Token 实际上还没到真正的 0 秒死期
-      // 那就把旧的先拿出去顶着用，防止整个业务直接挂掉
-      if (this.accessToken && this.expiresAt > Date.now()) {
-        console.warn('[DouyinTokenService] 刷新失败，使用即将过期的旧 Token 兜底');
-        return this.accessToken;
-      }
-
-      throw error; // 真正过期且刷新失败，只能往外抛错让业务层面处理了
+            return accessToken;
+        } else {
+            throw new Error(`Douyin Token Request Failed: ${JSON.stringify(data)}`);
+        }
     }
-  }
+
+    createLockValue() {
+        return `douyin-token-lock:${process.pid}:${Date.now()}:${randomUUID()}`;
+    }
+
+    startLockRenewal(redisClient, lockValue) {
+        let isRenewing = false;
+
+        const timer = setInterval(async () => {
+            if (isRenewing) {
+                return;
+            }
+
+            isRenewing = true;
+
+            try {
+                const renewResult = await this.renewLock(redisClient, lockValue);
+
+                // 锁已不属于当前请求时，立即停止续期，避免无意义轮询
+                if (renewResult !== 1) {
+                    this.stopLockRenewal(timer);
+                }
+            } catch (error) {
+                console.error('[DouyinTokenService] Renew lock failed:', error);
+                this.stopLockRenewal(timer);
+            } finally {
+                isRenewing = false;
+            }
+        }, this.LOCK_RENEW_INTERVAL_MS);
+
+        if (typeof timer.unref === 'function') {
+            timer.unref();
+        }
+
+        return timer;
+    }
+
+    stopLockRenewal(timer) {
+        if (timer) {
+            clearInterval(timer);
+        }
+    }
+
+    async renewLock(redisClient, lockValue) {
+        return Number(await redisClient.eval(
+            `if redis.call("GET", KEYS[1]) == ARGV[1] then
+                return redis.call("EXPIRE", KEYS[1], ARGV[2])
+            end
+            return 0`,
+            {
+                keys: [this.LOCK_KEY],
+                arguments: [lockValue, String(this.LOCK_EXPIRE_SECONDS)]
+            }
+        ));
+    }
+
+    async releaseLock(redisClient, lockValue) {
+        return Number(await redisClient.eval(
+            `if redis.call("GET", KEYS[1]) == ARGV[1] then
+                return redis.call("DEL", KEYS[1])
+            end
+            return 0`,
+            {
+                keys: [this.LOCK_KEY],
+                arguments: [lockValue]
+            }
+        ));
+    }
+
+    // 辅助延时函数，替代嵌套的 setTimeout
+    delay(ms) {
+        return new Promise(function(resolve) {
+            setTimeout(resolve, ms);
+        });
+    }
 }
 
-// 导出单例实例：Node.js 的 require 机制会缓存这个实例
-// 这样你在任何文件里引入的都是同一个 tokenService 对象
 module.exports = new DouyinTokenService();

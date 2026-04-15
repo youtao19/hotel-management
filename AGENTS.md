@@ -34,35 +34,35 @@
 
 
 ## 要求
-+ 前端尽量不做逻辑判断（除非 不做逻辑判断就无法完成这个任务），将逻辑都放在后端的 API 中。
++ 前端不承载核心业务规则，业务校验、权限判断、状态流转、数据一致性等逻辑放在后端 API 中；表单交互、按钮禁用、空态展示、加载状态等界面状态逻辑可以保留在前端。
 + 你在任何时候都不能修改这个文件 `AGENTS.md` 文件，除非我让你修改
-+ 你写的任何代码都需要有关键注释
++ 代码注释要求写“为什么这样做”和“需要注意什么”，不要重复代码表面含义。注释应优先说明业务意图、边界条件、兼容性处理、异常原因、时间/金额/权限等容易误解的规则；简单直接、从代码本身即可看懂的内容不写注释。禁止添加“给变量赋值”“遍历数组”“调用接口”这类无信息量注释。注释要简短、准确，并且修改代码时必须同步更新注释，避免注释过期。
 + commit message 需要用中文书写
 + 代码逻辑要求简单高效。
 + 修改了接口后，需要同步修改接口文档。
-+ 我给了你文档或链接后，你需要将其保存下来，并且在需要的时候使用它来帮助你完成任务。
-+ 你写的 ts 代码不要使用 any/unknown 类型，必须使用严格的类型约束。
++ 我给了你文档或链接后，你需要按任务上下文保存到仓库约定位置或当前任务记录中，并在需要的时候使用它来帮助你完成任务；如果保存位置不明确，需要先说明你准备保存到哪里。
++ 你写的 ts 代码不要使用 any 类型；可以使用 unknown 类型，但必须立即做明确的类型收窄，保持严格的类型约束。
 + ts 代码遵守`ts 开发规范.md`中的技术栈要求、项目目标和目录结构要求。
 
   
 
-## Node.js 事件处理规范（必须遵守）
-1. 禁止对Date字段使用:
-- new Date(date)
-- toISOString()
-DATE 字段在 Node.js 中应:
-- 作为字符串直接使用
-- 或仅用于格式化展示(如 dayjs(date).format('YYYY-MM-DD'))
-2. 对timestamptz字段：
-- 不做手动市区换算
-- 不加減8小时
-- 不使用 toISOString() 直接返回给前端
-3. PostgreSQL 驱动(pg / ORM):
-- 不强制设置 timezone = 'UTC'
-- 依赖数据库 + 会话时区自动转换
+## Node.js 日期时间处理规范（必须遵守）
+1. 对 DATE 字段：
+- 不把 DATE 当作 UTC 时间处理。
+- 不直接使用 toISOString()。
+- 优先将 DATE 作为字符串直接使用，例如 `YYYY-MM-DD`。
+- 仅在展示时做格式化，例如 `dayjs(dateString).format('YYYY-MM-DD')`。
+2. 对 timestamptz 字段：
+- 不做手动时区换算。
+- 不手动加减小时，例如加减 8 小时。
+- 不使用 toISOString() 直接返回给前端。
+- 依赖数据库、驱动和会话时区自动转换。
+3. PostgreSQL 驱动（pg / ORM）：
+- 不强制设置 `timezone = 'UTC'`。
+- 保持数据库和会话时区配置一致，由数据库和驱动负责转换。
 
-Always use Context7 MCP when I need library/API documentation, code generation, setup or configuration steps without me having to explicitly ask.
+Always use Context7 MCP when I need third-party library/API documentation, code generation, setup or configuration steps without me having to explicitly ask. If the task depends on project-local code, private interfaces, or existing local documents, prefer the repository context first.
 
 ## 修改代码
-+ 你要修改代码的时候，先将你要修改的详细内容发给我（例如：修改哪个文件，哪个函数，修改的内容是什么），等我确认后，你再进行修改。
-+ 你写的代码要简单，适合初学者，并且要有关键注释。
++ 你要修改代码的时候，如果是跨模块改动、接口改动、数据结构改动或业务逻辑改动，先将你要修改的详细内容发给我（例如：修改哪个文件、哪个函数、修改的内容是什么），等我确认后，你再进行修改；如果只是小范围、不影响接口和业务规则的局部修复，可以直接修改，但仍要先说明你改了什么。
++ 你写的代码要简单，适合初学者，并且要有必要的关键注释。
