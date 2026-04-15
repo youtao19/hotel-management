@@ -54,6 +54,12 @@
 - 用途：整理抖音开放平台接口的通用请求参数、公共字段和头部要求。
 - 当前代码关联：`backend/modules/douyin/clients/douyinOpenApi.client.js`
 
+### 1.10 OpenAPI SDK 总览
+- 链接：[OpenAPI SDK 总览](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/sdk-overview)
+- 用途：官方统一 SDK 说明，包含 Java / NodeJS / Go 三种语言的包引入与调用示例。
+- 当前代码关联：当前项目为 Node.js 后端，可作为后续 SDK 化改造参考；现有统一请求封装见 `backend/modules/douyin/clients/douyinOpenApi.client.js`。
+- 项目内沉淀文档：`docs/抖音OpenAPI_SDK接入文档.md`
+
 ## 2. API接口
 
 ### 2.1 酒店通用错误码

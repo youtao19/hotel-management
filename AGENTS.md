@@ -41,6 +41,8 @@
 + 代码逻辑要求简单高效。
 + 修改了接口后，需要同步修改接口文档。
 + 我给了你文档或链接后，你需要将其保存下来，并且在需要的时候使用它来帮助你完成任务。
++ 你写的 ts 代码不要使用 any/unknown 类型，必须使用严格的类型约束。
++ ts 代码遵守`ts 开发规范.md`中的技术栈要求、项目目标和目录结构要求。
 
   
 
@@ -58,10 +60,6 @@ DATE 字段在 Node.js 中应:
 3. PostgreSQL 驱动(pg / ORM):
 - 不强制设置 timezone = 'UTC'
 - 依赖数据库 + 会话时区自动转换
-
-## 完善业务说明文档
-+ 你需要根据我提供的需求和你对项目的理解，来完善 `业务说明.md` 文件，来让它更清晰和完整。
-当你了解了我的需求后，你也可以逐渐完善我的 `业务说明.md` 文件，来让它更清晰和完整。
 
 Always use Context7 MCP when I need library/API documentation, code generation, setup or configuration steps without me having to explicitly ask.
 

@@ -12,6 +12,9 @@
     "build": "npm --workspace frontend run build",
     "test": "npm --workspace backend run test",
     "test:watch": "npm --workspace backend run test:watch",
+    "douyin:phy-room-type": "npm --workspace backend exec -- dotenv -e ../dev.env -- node modules/douyin/sdk/phyRoomTypeStaticInfoInquiry.js",
+    "douyin:match-hotel-info": "npm --workspace backend exec -- dotenv -e ../dev.env -- node modules/douyin/sdk/matchHotelInfo.js",
+    "douyin:create-preorder": "npm --workspace backend exec -- dotenv -e ../dev.env -- node modules/douyin/sdk/createPreOrder.js",
     "export-schema": "npm --workspace backend run export-schema",
     "export-structure": "npm --workspace backend run export-structure",
     "export-all": "npm --workspace backend run export-all",
@@ -24,8 +27,10 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.57.0",
-    "@types/node": "^25.0.3",
-    "concurrently": "^8.2.0"
+    "@types/node": "^25.5.2",
+    "concurrently": "^8.2.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2"
   },
   "workspaces": [
     "frontend",
@@ -36,6 +41,8 @@
     "npm": ">= 6.13.4"
   },
   "dependencies": {
+    "@open-dy/open_api_credential": "^1.0.0",
+    "@open-dy/open_api_sdk": "^1.1.3",
     "dotenv": "^17.3.1"
   }
 }
