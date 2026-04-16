@@ -40,8 +40,8 @@ const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
   douyin_log_id VARCHAR(128),
   raw_payload JSONB NOT NULL,
   mapped_payload JSONB,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 )`;
 
 /**
@@ -57,6 +57,12 @@ const createIndexQueryStrings = [
   `CREATE INDEX IF NOT EXISTS idx_douyin_presale_orders_source_order_id ON ${tableName}(source_order_id)`,
   `CREATE INDEX IF NOT EXISTS idx_douyin_presale_orders_order_stage ON ${tableName}(order_stage)`,
   `CREATE INDEX IF NOT EXISTS idx_douyin_presale_orders_created_at ON ${tableName}(created_at DESC)`,
+];
+
+const schemaUpdateQueryStrings = [
+  // 预售订单创建/更新时间是业务事件发生点，不能使用无时区 TIMESTAMP。
+  `ALTER TABLE ${tableName} ALTER COLUMN created_at TYPE TIMESTAMPTZ;`,
+  `ALTER TABLE ${tableName} ALTER COLUMN updated_at TYPE TIMESTAMPTZ;`
 ];
 
 /**
@@ -84,5 +90,6 @@ module.exports = {
   createQuery,
   dropQuery,
   createIndexQueryStrings,
+  schemaUpdateQueryStrings,
   createCommentQueryStrings,
 };

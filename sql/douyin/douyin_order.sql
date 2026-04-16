@@ -13,8 +13,8 @@ CREATE TABLE IF NOT EXISTS douyin_orders (
   currency VARCHAR(16),
   raw_payload JSONB NOT NULL,
   mapped_payload JSONB,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 COMMENT ON TABLE douyin_orders IS '抖音OTA订单落地表';
@@ -41,7 +41,7 @@ COMMENT ON COLUMN douyin_orders.system_order_id IS '系统订单ID';
 ALTER TABLE douyin_orders
 ADD COLUMN confirm_status VARCHAR(32),
 ADD COLUMN confirm_number VARCHAR(64),
-ADD COLUMN confirmed_at TIMESTAMP;
+ADD COLUMN confirmed_at TIMESTAMPTZ;
 
 COMMENT ON COLUMN douyin_orders.confirm_status IS '确认状态：pending/confirmed/failed';
 COMMENT ON COLUMN douyin_orders.confirm_number IS '传给抖音的确认号';
@@ -86,7 +86,7 @@ ADD COLUMN IF NOT EXISTS cancel_audit_result INTEGER,
 ADD COLUMN IF NOT EXISTS cancel_audit_reason TEXT,
 ADD COLUMN IF NOT EXISTS cancel_audit_status VARCHAR(32),
 ADD COLUMN IF NOT EXISTS cancel_audit_response JSONB,
-ADD COLUMN IF NOT EXISTS cancel_audit_sent_at TIMESTAMP,
+ADD COLUMN IF NOT EXISTS cancel_audit_sent_at TIMESTAMPTZ,
 ADD COLUMN IF NOT EXISTS cancel_audit_retry_count INTEGER DEFAULT 0;
 
 COMMENT ON COLUMN douyin_orders.source_order_id IS '预售来源订单号';
@@ -127,5 +127,11 @@ COMMENT ON COLUMN douyin_orders.cancel_audit_retry_count IS '审核回传重试�
 ALTER TABLE douyin_orders
 ALTER COLUMN system_order_id TYPE VARCHAR(64)
 USING system_order_id::VARCHAR;
+
+ALTER TABLE douyin_orders
+ALTER COLUMN created_at TYPE TIMESTAMPTZ,
+ALTER COLUMN updated_at TYPE TIMESTAMPTZ,
+ALTER COLUMN confirmed_at TYPE TIMESTAMPTZ,
+ALTER COLUMN cancel_audit_sent_at TYPE TIMESTAMPTZ;
 
 COMMENT ON COLUMN douyin_orders.system_order_id IS '系统订单号(order_id)';

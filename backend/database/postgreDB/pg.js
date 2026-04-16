@@ -136,17 +136,23 @@ const dashboard_memo = require("./tables/dashboard_memo");
 const ota_order_relation = require("./tables/ota_order_relation");
 const ota_roomType_relation = require("./tables/ota_roomType_relation");
 const plugin_room_type_mapping = require("./tables/plugin_room_type_mapping");
+const douyin_order = require("./tables/douyin_order");
 const douyin_presale_order = require("./tables/douyin_presale_order");
+const rate_plans = require("./tables/rate_plans");
+const ota_channel_mappings = require("./tables/ota_channel_mappings");
 
 //table order here is important
 //since we have foreign key reference other table
 tables.push(room_type);
 tables.push(room);
+tables.push(rate_plans);
+tables.push(ota_channel_mappings);
 tables.push(order);
 tables.push(bill);
 tables.push(ota_order_relation);
 tables.push(ota_roomType_relation);
 tables.push(plugin_room_type_mapping);
+tables.push(douyin_order);
 tables.push(douyin_presale_order);
 tables.push(handover);
 tables.push(dashboard_memo);
@@ -200,32 +206,18 @@ async function createComments() {
   }
 }
 
-async function optimizeOtaTables() {
-  try {
-    await pool.query(`DROP INDEX IF EXISTS uniq_ota_order_relation_platform_order;`);
-    await pool.query(`DROP INDEX IF EXISTS idx_ota_order_relation_local_order;`);
-    await pool.query(`DROP INDEX IF EXISTS idx_ota_order_relation_status;`);
-    await pool.query(`ALTER TABLE ota_order_relation ADD COLUMN IF NOT EXISTS ota_room_type VARCHAR(50);`);
-    await pool.query(`ALTER TABLE ota_order_relation ADD COLUMN IF NOT EXISTS ota_guest_name VARCHAR(100);`);
-    await pool.query(`ALTER TABLE ota_order_relation ADD COLUMN IF NOT EXISTS ota_check_in_date DATE;`);
-    await pool.query(`ALTER TABLE ota_order_relation ADD COLUMN IF NOT EXISTS ota_check_out_date DATE;`);
-    await pool.query(`ALTER TABLE ota_order_relation ADD COLUMN IF NOT EXISTS ota_total_price NUMERIC(10,2);`);
-    await pool.query(`ALTER TABLE ota_order_relation ADD COLUMN IF NOT EXISTS ota_order_status VARCHAR(30);`);
-    await pool.query(`ALTER TABLE ota_order_relation DROP COLUMN IF EXISTS latest_payload;`);
-      await pool.query(`
-      ALTER TABLE ota_order_relation
-      DROP COLUMN IF EXISTS channel_account_id,
-      DROP COLUMN IF EXISTS ota_sub_order_id,
-      DROP COLUMN IF EXISTS order_source,
-      DROP COLUMN IF EXISTS current_order_status,
-      DROP COLUMN IF EXISTS current_pay_status,
-      DROP COLUMN IF EXISTS current_cancel_status,
-      DROP COLUMN IF EXISTS first_request_at,
-      DROP COLUMN IF EXISTS last_request_at;
-    `);
-    await pool.query(`DROP INDEX IF EXISTS idx_ota_order_relation_status;`);
-  } catch (err) {
-    console.warn('[initializePostgreDB] ota_order_relation 精简跳过:', err.message);
+async function updateTableSchemas() {
+  for (let table of tables) {
+    if (table.schemaUpdateQueryStrings) {
+      for (let updateQuery of table.schemaUpdateQueryStrings) {
+        try {
+          await pool.query(updateQuery);
+        } catch (err) {
+          console.error(`升级表 ${table.tableName} 结构失败:`, err);
+          throw err;
+        }
+      }
+    }
   }
 }
 
@@ -242,82 +234,7 @@ async function initializePostgreDB() {
   // await dropTables();
   await enableExtensions();
   await createTables();
-  // schema 修复：历史上 bills.room_number 为 VARCHAR(10)，会导致测试用的 TEST_ROOM_101 写入失败。
-  // 这里做一次幂等升级，避免因为 CREATE TABLE IF NOT EXISTS 而保留旧字段长度。
-  try {
-    await pool.query(`ALTER TABLE bills ALTER COLUMN room_number TYPE VARCHAR(20);`);
-  } catch (err) {
-    // 如果表不存在或字段不可变更，保留原错误信息用于排查；正常情况下不会触发。
-    console.warn('[initializePostgreDB] bills.room_number 字段升级跳过:', err.message);
-  }
-  // 抖音回写的是业务订单号 orders.order_id，历史上误建为 bigint 会导致同步状态回写失败。
-  try {
-    await pool.query(`
-      ALTER TABLE douyin_orders
-      ALTER COLUMN system_order_id TYPE VARCHAR(64)
-      USING system_order_id::VARCHAR;
-    `);
-  } catch (err) {
-    // 老库未创建 douyin_orders 或字段已正确时都允许跳过。
-    console.warn('[initializePostgreDB] douyin_orders.system_order_id 字段升级跳过:', err.message);
-  }
-  // 抖音创单链路逐步对齐官方字段，老库需要幂等补齐关键列。
-  try {
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS source_order_id VARCHAR(64);`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS hotel_id VARCHAR(64);`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS contact_name VARCHAR(128);`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS contact_mobile VARCHAR(128);`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS number_of_guests INTEGER;`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS amount_before_tax DECIMAL(12, 2);`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS rate_plan_id VARCHAR(64);`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS biz_type INTEGER;`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS remark_from_douyin TEXT;`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS remark_from_guest TEXT;`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS daily_rates JSONB;`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS occupancies JSONB;`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS member_info JSONB;`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS douyin_log_id VARCHAR(128);`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS cancel_id VARCHAR(64);`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS cancel_type INTEGER;`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS need_audit BOOLEAN;`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS after_sale_type INTEGER;`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS refund_type INTEGER;`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS refund_amount DECIMAL(12, 2);`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS user_refund_amount DECIMAL(12, 2);`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS penalty_amount DECIMAL(12, 2);`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS cancel_reason TEXT;`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS cancel_order_time VARCHAR(19);`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS refund_order_detail JSONB;`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS cancel_status VARCHAR(32);`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS cancel_audit_deadline VARCHAR(19);`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS cancel_audit_result INTEGER;`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS cancel_audit_reason TEXT;`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS cancel_audit_status VARCHAR(32);`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS cancel_audit_response JSONB;`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS cancel_audit_sent_at TIMESTAMP;`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS cancel_audit_retry_count INTEGER DEFAULT 0;`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS fulfillment_status VARCHAR(32);`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS fulfillment_action VARCHAR(32);`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS fulfillment_response JSONB;`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS fulfillment_sent_at TIMESTAMP;`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS refund_status VARCHAR(32);`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS refund_result_response JSONB;`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS refund_result_received_at TIMESTAMP;`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS cancel_finish_time VARCHAR(19);`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS confirm_mode INTEGER;`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS refund_case_type VARCHAR(32);`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS refund_case_status VARCHAR(32);`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS suggested_refund_amount DECIMAL(12,2);`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS refund_case_response JSONB;`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS booking_stage VARCHAR(32);`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS booking_error_code INTEGER;`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS booking_error_description TEXT;`);
-    await pool.query(`ALTER TABLE douyin_orders ADD COLUMN IF NOT EXISTS booking_failure_response JSONB;`);
-  } catch (err) {
-    // 老库未创建 douyin_orders 时允许跳过。
-    console.warn('[initializePostgreDB] douyin_orders 创单字段升级跳过:', err.message);
-  }
-  await optimizeOtaTables();
+  await updateTableSchemas();
   await createIndex();
   await createComments();
 }

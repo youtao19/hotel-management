@@ -26,8 +26,8 @@ CREATE TABLE IF NOT EXISTS douyin_presale_orders (
   douyin_log_id VARCHAR(128),
   raw_payload JSONB NOT NULL,
   mapped_payload JSONB,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 COMMENT ON TABLE douyin_presale_orders IS '抖音酒店预售券本地订单主表';

@@ -30,6 +30,29 @@ const createIndexQueryStrings = [
   `CREATE INDEX IF NOT EXISTS idx_ota_order_relation_local_order ON ${tableName} (local_order_id)`
 ];
 
+const schemaUpdateQueryStrings = [
+  // 旧版宽表索引和字段已经不参与当前映射流程，初始化时统一收敛到精简结构。
+  `DROP INDEX IF EXISTS uniq_ota_order_relation_platform_order;`,
+  `DROP INDEX IF EXISTS idx_ota_order_relation_local_order;`,
+  `DROP INDEX IF EXISTS idx_ota_order_relation_status;`,
+  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS ota_room_type VARCHAR(50);`,
+  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS ota_guest_name VARCHAR(100);`,
+  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS ota_check_in_date DATE;`,
+  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS ota_check_out_date DATE;`,
+  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS ota_total_price NUMERIC(10, 2);`,
+  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS ota_order_status VARCHAR(30);`,
+  `ALTER TABLE ${tableName} DROP COLUMN IF EXISTS latest_payload;`,
+  `ALTER TABLE ${tableName}
+     DROP COLUMN IF EXISTS channel_account_id,
+     DROP COLUMN IF EXISTS ota_sub_order_id,
+     DROP COLUMN IF EXISTS order_source,
+     DROP COLUMN IF EXISTS current_order_status,
+     DROP COLUMN IF EXISTS current_pay_status,
+     DROP COLUMN IF EXISTS current_cancel_status,
+     DROP COLUMN IF EXISTS first_request_at,
+     DROP COLUMN IF EXISTS last_request_at;`
+];
+
 // 映射表注释 SQL 集合，统一为表和关键字段补充数据库注释，方便后续排查与维护。
 const createCommentQueryStrings = [
   `COMMENT ON TABLE ${tableName} IS 'OTA订单映射表：保存渠道订单与本地逻辑订单的一对一关系，以及插件侧关键业务字段';`,
@@ -53,5 +76,6 @@ module.exports = {
   createQuery,
   dropQuery,
   createIndexQueryStrings,
+  schemaUpdateQueryStrings,
   createCommentQueryStrings
 };

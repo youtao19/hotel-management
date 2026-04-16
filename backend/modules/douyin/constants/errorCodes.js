@@ -220,6 +220,14 @@ const DOUYIN_PHYSICAL_ROOM_ERROR = Object.freeze({
  * 抖音售卖房型场景错误定义。
  */
 const DOUYIN_RATE_PLAN_ERROR = Object.freeze({
+  MISSING_LOCAL_RATE_PLAN_ID: {
+    code: 13,
+    description: '缺少本地套餐ID',
+  },
+  LOCAL_RATE_PLAN_NOT_FOUND: {
+    code: 13,
+    description: '本地套餐不存在',
+  },
   MISSING_ACCOUNT_ID: {
     code: 13,
     description: '缺少抖音商家账号ID',
@@ -239,6 +247,10 @@ const DOUYIN_RATE_PLAN_ERROR = Object.freeze({
   PHYSICAL_ROOM_NOT_FOUND: {
     code: 13,
     description: '抖音物理房型不存在',
+  },
+  RATE_PLAN_ROOM_NOT_MAPPED: {
+    code: 13,
+    description: '本地套餐所属房型尚未绑定抖音物理房型',
   },
   RATE_PLAN_NOT_FOUND: {
     code: 13,

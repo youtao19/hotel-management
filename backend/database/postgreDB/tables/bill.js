@@ -23,11 +23,17 @@ const createIndexQueryStrings = [
     `CREATE INDEX IF NOT EXISTS idx_bills_order_id ON ${tableName}(order_id)`
 ];
 
+const schemaUpdateQueryStrings = [
+  // 老库曾使用 VARCHAR(10)，这里保持与 rooms.room_number 一致，避免测试房号和扩展房号写入失败。
+  `ALTER TABLE ${tableName} ALTER COLUMN room_number TYPE VARCHAR(20);`
+];
+
 const table = {
   tableName,
   createQuery,
   dropQuery,
-  createIndexQueryStrings
+  createIndexQueryStrings,
+  schemaUpdateQueryStrings
 }
 
 module.exports = table;

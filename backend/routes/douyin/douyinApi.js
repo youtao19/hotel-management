@@ -52,6 +52,9 @@ const {
   createDouyinRatePlanController,
 } = require('../../modules/douyin/controllers/ratePlanCreate.controller')
 const {
+  syncDouyinProductController,
+} = require('../../modules/douyin/controllers/douyinProduct.controller')
+const {
   updateDouyinRatePlanStatusController,
 } = require('../../modules/douyin/controllers/ratePlanStatus.controller')
 const {
@@ -93,6 +96,7 @@ router.post('/order/check-in', pushDouyinCheckInController)
 router.post('/order/check-out', pushDouyinCheckOutController)
 router.post('/physical-room/create', createDouyinPhysicalRoomController)
 router.post('/physical-room/status', updateDouyinPhysicalRoomStatusController)
+router.post('/rate-plan/sync', syncDouyinProductController)
 router.post('/rate-plan/create', createDouyinRatePlanController)
 router.post('/rate-plan/status', updateDouyinRatePlanStatusController)
 router.post('/hotel-info/query', queryDouyinHotelInfoController)

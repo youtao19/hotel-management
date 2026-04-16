@@ -319,6 +319,14 @@ GET /api/ota/v1/inventory?startDate=2026-03-10&endDate=2026-03-12&roomType=asu_x
     - `cancel` 支持 `modeConfig.freeCancelHoursBeforeCheckIn`
     - `stay` 支持 `modeConfig.minStayNights`、`modeConfig.maxStayNights`
     - `booking` 支持 `modeConfig.advanceBookingDaysMin`、`modeConfig.advanceBookingDaysMax`
+- 当前还提供一个按本地套餐同步抖音商品的接口：
+  - `POST /api/douyin/rate-plan/sync`
+  - 请求体支持 `localRatePlanId`，可选 `accountId`、`poiId`、`mode`、`modeConfig`
+  - 当前会从 `rate_plans -> rooms -> room_types -> douyin_room_type_mapping -> douyin_physical_rooms` 查询本地套餐与抖音物理房型绑定关系
+  - `out_rate_plan_id` 使用本地 `rate_plans.id` 字符串，方便抖音侧回查本地套餐
+  - 同步成功后会同时回写：
+    - `douyin_physical_rooms.rate_plan_list`，兼容现有上下架与价量态链路
+    - `ota_channel_mappings`，作为后续多渠道直连共用映射表
 - 当前还提供一个手动更新日历房商品上下架状态接口：
   - `POST /api/douyin/rate-plan/status`
   - 请求体支持 `roomId`、`ratePlanId`、`active`，可选 `accountId`
