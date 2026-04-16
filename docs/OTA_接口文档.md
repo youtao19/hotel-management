@@ -295,6 +295,7 @@ GET /api/ota/v1/inventory?startDate=2026-03-10&endDate=2026-03-12&roomType=asu_x
 - 当前还提供一组抖音房型映射管理接口（服务端落库到 `douyin_room_type_mapping`）：
   - `GET /api/douyin/room-type-mapping`
   - `POST /api/douyin/room-type-mapping`
+  - 映射口径固定为一对一：一个本地房型只能绑定一个抖音物理房型，一个抖音物理房型也只能绑定一个本地房型
   - `POST` 请求体字段：
     - `mappings`：支持数组或对象格式，最终统一为 `douyinRoomId + douyinRoomName + localRoomType`
 - 当前还提供一个“未支付超时取消”的手动调试接口：
@@ -320,7 +321,9 @@ GET /api/ota/v1/inventory?startDate=2026-03-10&endDate=2026-03-12&roomType=asu_x
     - `stay` 支持 `modeConfig.minStayNights`、`modeConfig.maxStayNights`
     - `booking` 支持 `modeConfig.advanceBookingDaysMin`、`modeConfig.advanceBookingDaysMax`
 - 当前还提供一个按本地套餐同步抖音商品的接口：
+  - `GET /api/douyin/rate-plans`
   - `POST /api/douyin/rate-plan/sync`
+  - `GET` 用于读取本地套餐、抖音房型绑定、抖音套餐同步状态和本地数据异常事实
   - 请求体支持 `localRatePlanId`，可选 `accountId`、`poiId`、`mode`、`modeConfig`
   - 当前会从 `rate_plans -> rooms -> room_types -> douyin_room_type_mapping -> douyin_physical_rooms` 查询本地套餐与抖音物理房型绑定关系
   - `out_rate_plan_id` 使用本地 `rate_plans.id` 字符串，方便抖音侧回查本地套餐
@@ -665,6 +668,7 @@ curl -X GET 'http://localhost:3000/api/plugin/room-type-mapping?platform=meituan
 - 说明：
   - 返回 `douyin_room_type_mapping` 当前映射
   - 附带本地房型名称与抖音物理房型状态，便于运营排查
+  - 映射关系按一对一保存；列表不会允许一个本地房型对应多个抖音物理房型
 
 ### 11.4 批量保存抖音房型映射
 - Method: `POST`
@@ -673,6 +677,10 @@ curl -X GET 'http://localhost:3000/api/plugin/room-type-mapping?platform=meituan
   - `mappings`: 必填，支持两种格式
     - 数组：`[{douyinRoomId, douyinRoomName, localRoomType}]`
     - 对象：`{ "douyinRoomId": { "value": "localRoomType", "label": "douyinRoomName" } }`
+- 保存规则：
+  - 同一个请求内 `douyinRoomId` 或 `localRoomType` 重复会被拒绝
+  - 已绑定其他抖音物理房型的本地房型不能再次绑定
+  - 数据库唯一约束兜底保证并发保存时仍是一对一
 
 对象格式请求示例：
 
@@ -707,5 +715,48 @@ curl -X GET 'http://localhost:3000/api/plugin/room-type-mapping?platform=meituan
     }
   ],
   "message": "抖音房型映射保存成功"
+}
+```
+
+### 11.5 查询本地套餐抖音同步列表
+- Method: `GET`
+- Path: `/api/douyin/rate-plans`
+- 说明：
+  - 主表为 `rate_plans`
+  - 左联 `rooms`、`room_types`、`douyin_room_type_mapping`、`douyin_physical_rooms`、`ota_channel_mappings`
+  - 不会把本地数据异常误判为“未绑定抖音房型”
+- 关键响应字段：
+  - `localRatePlanId`: 本地套餐 ID
+  - `ratePlanName`: 本地套餐名称
+  - `localRoomExists`: 套餐关联房间是否存在
+  - `localRoomTypeExists`: 套餐关联房型是否存在
+  - `localDataStatus`: `OK`、`ROOM_MISSING`、`ROOM_TYPE_MISSING`
+  - `douyinRoomId`: 已绑定的抖音物理房型 ID，未绑定时为 `null`
+  - `douyinRatePlanId`: 已同步的抖音售卖房型 ID，未同步时为 `null`
+  - `syncStatus`: 第一版只表示现有落库事实，成功为 `1`，未同步为 `null`
+
+响应示例：
+
+```json
+{
+  "success": true,
+  "code": "DOUYIN_RATE_PLAN_LIST",
+  "data": [
+    {
+      "localRatePlanId": 101,
+      "roomId": 1,
+      "ratePlanName": "阿苏晓筑-双早",
+      "localDataStatus": "OK",
+      "localRoomExists": true,
+      "localRoomTypeExists": true,
+      "douyinRoomId": "ROOM_001",
+      "douyinRoomName": "阿苏晓筑大床房",
+      "douyinRatePlanId": "RATE_001",
+      "syncStatus": 1,
+      "isDouyinRoomBound": true,
+      "isSynced": true
+    }
+  ],
+  "message": "抖音套餐同步列表获取成功"
 }
 ```

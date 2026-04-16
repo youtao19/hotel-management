@@ -7,6 +7,17 @@
         "@modelcontextprotocol/server-postgres",
         "postgresql://peach:1219@localhost:5432/hotel_db"
       ]
+    },
+    "qmd-hotel-management": {
+      "command": "/Users/peach/.nvm/versions/node/v22.20.0/bin/qmd",
+      "args": [
+        "--index",
+        "hotel-management",
+        "mcp"
+      ],
+      "env": {
+        "QMD_EDITOR_URI": "cursor://file/{path}:{line}:{col}"
+      }
     }
   }
 }

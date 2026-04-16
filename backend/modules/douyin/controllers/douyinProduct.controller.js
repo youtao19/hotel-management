@@ -53,6 +53,7 @@ async function syncDouyinProductController(req, res) {
       ratePlan: result.ratePlan,
       savedRoom: result.savedRoom,
       savedMapping: result.savedMapping,
+      douyinRatePlanId: result.ratePlan?.rate_plan_id || result.savedMapping?.channel_item_id || null,
     })
   } catch (error) {
     const { errorCode, description } = resolveDouyinBusinessError(error)

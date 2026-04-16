@@ -87,6 +87,7 @@ describe('douyinProduct.controller', () => {
       savedMapping: {
         channel_item_id: 'RATE_001',
       },
+      douyinRatePlanId: 'RATE_001',
     })
 
     const req = {
@@ -127,6 +128,7 @@ describe('douyinProduct.controller', () => {
       savedMapping: {
         channel_item_id: 'RATE_001',
       },
+      douyinRatePlanId: 'RATE_001',
     })
   })
 

@@ -63,6 +63,11 @@
 
 Always use Context7 MCP when I need third-party library/API documentation, code generation, setup or configuration steps without me having to explicitly ask. If the task depends on project-local code, private interfaces, or existing local documents, prefer the repository context first.
 
+## qmd 检索规则
+在本项目中，如果任务需要查找代码位置、理解跨模块逻辑、定位业务实现、寻找接口/文档/测试，请优先使用 qmd MCP 的 `qmd-hotel-management` 索引检索，再按检索结果读取相关文件。
+
+已知具体文件路径、只需要查看当前 diff、运行测试、格式化、安装依赖、执行 git 命令等任务，不需要使用 qmd。
+
 ## 修改代码
 + 你要修改代码的时候，如果是跨模块改动、接口改动、数据结构改动或业务逻辑改动，先将你要修改的详细内容发给我（例如：修改哪个文件、哪个函数、修改的内容是什么），等我确认后，你再进行修改；如果只是小范围、不影响接口和业务规则的局部修复，可以直接修改，但仍要先说明你改了什么。
 + 你写的代码要简单，适合初学者，并且要有必要的关键注释。

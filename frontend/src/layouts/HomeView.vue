@@ -30,6 +30,26 @@
             <q-route-tab to="/other-income" label="其他收入" icon="payments" />
           </q-tabs>
 
+          <q-btn-dropdown
+            flat
+            dense
+            no-caps
+            class="header-more"
+            icon="hub"
+            label="OTA"
+          >
+            <q-list dense style="min-width: 180px">
+              <q-item clickable v-close-popup to="/douyin-rate-plans">
+                <q-item-section avatar>
+                  <q-icon name="sync_alt" color="primary" />
+                </q-item-section>
+                <q-item-section>
+                  <q-item-label>抖音商品同步</q-item-label>
+                </q-item-section>
+              </q-item>
+            </q-list>
+          </q-btn-dropdown>
+
           <!-- 用户信息显示区域 -->
           <div class="header-user">
             <q-btn v-if="userStore.user.isLoggedIn" flat no-caps class="user-profile-btn">
@@ -272,6 +292,11 @@ function onLogoutSuccess() {
   padding: 0 14px;
 }
 
+.header-more {
+  flex-shrink: 0;
+  min-height: 40px;
+}
+
 /* 右侧用户区固定在工具栏末端 */
 .header-user {
   flex-shrink: 0;
@@ -394,6 +419,11 @@ function onLogoutSuccess() {
   .header-tabs {
     order: 3;
     width: 100%;
+  }
+
+  .header-more {
+    order: 2;
+    margin-left: auto;
   }
 
   .header-tabs :deep(.q-tab) {

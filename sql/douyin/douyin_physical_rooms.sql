@@ -7,8 +7,8 @@ CREATE TABLE IF NOT EXISTS douyin_physical_rooms (
   audit_message TEXT,
   rate_plan_list JSONB,
   raw_payload JSONB NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 COMMENT ON TABLE douyin_physical_rooms IS '抖音物理房型原始缓存表';
@@ -24,12 +24,12 @@ CREATE TABLE IF NOT EXISTS douyin_room_type_mapping (
   id BIGSERIAL PRIMARY KEY,
   douyin_room_id VARCHAR(64) NOT NULL UNIQUE,
   douyin_room_name VARCHAR(255),
-  local_room_type VARCHAR(255) NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+  local_room_type VARCHAR(255) NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 COMMENT ON TABLE douyin_room_type_mapping IS '抖音房型到本地房型映射表';
 COMMENT ON COLUMN douyin_room_type_mapping.douyin_room_id IS '抖音物理房型ID';
 COMMENT ON COLUMN douyin_room_type_mapping.douyin_room_name IS '抖音物理房型名称';
-COMMENT ON COLUMN douyin_room_type_mapping.local_room_type IS '本地系统房型名称';
+COMMENT ON COLUMN douyin_room_type_mapping.local_room_type IS '本地系统房型编码';

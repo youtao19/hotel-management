@@ -58,6 +58,9 @@ const {
   updateDouyinRatePlanStatusController,
 } = require('../../modules/douyin/controllers/ratePlanStatus.controller')
 const {
+  listDouyinRatePlansController,
+} = require('../../modules/douyin/controllers/ratePlanList.controller')
+const {
   cancelUnpaidDouyinOrderController,
 } = require('../../modules/douyin/controllers/orderTimeoutCancel.controller')
 const {
@@ -96,6 +99,7 @@ router.post('/order/check-in', pushDouyinCheckInController)
 router.post('/order/check-out', pushDouyinCheckOutController)
 router.post('/physical-room/create', createDouyinPhysicalRoomController)
 router.post('/physical-room/status', updateDouyinPhysicalRoomStatusController)
+router.get('/rate-plans', listDouyinRatePlansController)
 router.post('/rate-plan/sync', syncDouyinProductController)
 router.post('/rate-plan/create', createDouyinRatePlanController)
 router.post('/rate-plan/status', updateDouyinRatePlanStatusController)

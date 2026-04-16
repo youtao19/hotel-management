@@ -1,13 +1,5 @@
 <template>
   <q-page class="other-income-page">
-    <div class="q-pa-md other-income-header">
-      <!-- 页面标题 -->
-      <h1 class="text-h4 q-mb-xs">其他收入</h1>
-      <div class="text-caption text-grey-7">
-        录入租车或杂项收入
-      </div>
-    </div>
-
     <div class="other-income-container q-pa-md">
       <q-card class="other-income-card">
         <q-card-section class="q-pa-xl">

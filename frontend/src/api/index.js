@@ -390,4 +390,21 @@ export const shiftHandoverApi = {
 
 }
 
+export const douyinApi = {
+  getRatePlans: () => api.get('/douyin/rate-plans'),
+
+  syncRatePlan: async (payload) => {
+    const response = await api.post('/douyin/rate-plan/sync', payload)
+
+    return {
+      ...response,
+      douyinRatePlanId:
+        response?.douyinRatePlanId ||
+        response?.ratePlan?.rate_plan_id ||
+        response?.savedMapping?.channel_item_id ||
+        null
+    }
+  }
+}
+
 export default api;

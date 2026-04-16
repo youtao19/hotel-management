@@ -1,57 +1,77 @@
 <template>
-  <q-page class="room-management">
-    <div class="q-pa-md">
-      <div class="row items-center q-mb-lg">
-        <div class="col">
-          <h1 class="text-h4 q-mb-none">房间管理</h1>
-          <p class="text-subtitle1 text-grey-7 q-mb-none">管理酒店房间和房型信息</p>
-        </div>
-        <div class="col-auto">
-          <q-btn
-            color="primary"
-            icon="refresh"
-            label="刷新"
-            @click="refreshAll"
-            :loading="roomsLoading || typesLoading"
-            class="q-mr-sm"
-          />
-          <q-btn
-            color="positive"
-            icon="add"
-            label="添加房间"
-            @click="openRoomDialog()"
-          />
-        </div>
+  <q-page class="room-management q-pa-lg">
+    <q-card flat bordered class="room-content-card">
+      <div class="row items-center no-wrap bg-grey-1">
+        <q-tabs
+          v-model="activeTab"
+          dense
+          class="col text-grey-7"
+          active-color="primary"
+          indicator-color="primary"
+          align="left"
+          narrow-indicator
+        >
+          <q-tab name="rooms" label="客房列表" icon="hotel" />
+          <q-tab name="room-types" label="房型定义" icon="category" />
+        </q-tabs>
+        
+        <q-btn
+          flat
+          round
+          dense
+          color="primary"
+          icon="refresh"
+          class="q-mr-sm"
+          @click="refreshAll"
+          :loading="roomsLoading || typesLoading"
+        >
+          <q-tooltip>刷新数据</q-tooltip>
+        </q-btn>
       </div>
 
-      <q-tabs v-model="activeTab" dense class="text-grey" active-color="primary" indicator-color="primary" align="justify">
-        <q-tab name="rooms" label="房间管理" icon="hotel" />
-        <q-tab name="room-types" label="房型管理" icon="category" />
-      </q-tabs>
       <q-separator />
 
-      <q-tab-panels v-model="activeTab" animated>
-        <q-tab-panel name="rooms">
-          <RoomFilterBar
-            v-model:filters="filters"
-            :room-type-options="roomTypeOptions"
-            :status-options="statusOptions"
-            @apply="() => {}"
-          />
+      <q-tab-panels v-model="activeTab" animated class="bg-white">
+        <q-tab-panel name="rooms" class="q-pa-none">
+          <div class="q-pa-md border-bottom bg-grey-0">
+            <div class="row items-center justify-between q-mb-md">
+              <div class="text-h6 text-weight-medium">所有客房</div>
+              <q-btn
+                color="primary"
+                icon="add"
+                label="新增客房"
+                unelevated
+                @click="openRoomDialog()"
+              />
+            </div>
+            <RoomFilterBar
+              v-model:filters="filters"
+              :room-type-options="roomTypeOptions"
+              :status-options="statusOptions"
+              @apply="() => {}"
+            />
+          </div>
           <RoomTable
             :rows="filteredRooms"
             :loading="roomsLoading"
             @edit="openRoomDialog"
             @maintenance="handleSetMaintenance"
             @delete="handleDeleteRoom"
+            class="no-border-radius"
           />
         </q-tab-panel>
 
-        <q-tab-panel name="room-types">
-          <div class="row items-center q-mb-md">
-            <div class="col text-h6">房型列表</div>
-            <div class="col-auto">
-              <q-btn color="positive" icon="add" label="添加房型" @click="openRoomTypeDialog()" />
+        <q-tab-panel name="room-types" class="q-pa-none">
+          <div class="q-pa-md border-bottom bg-grey-0">
+            <div class="row items-center justify-between">
+              <div class="text-h6 text-weight-medium">房型配置</div>
+              <q-btn
+                color="secondary"
+                icon="add"
+                label="新增房型"
+                unelevated
+                @click="openRoomTypeDialog()"
+              />
             </div>
           </div>
           <RoomTypeTable
@@ -59,10 +79,11 @@
             :loading="typesLoading"
             @edit="openRoomTypeDialog"
             @delete="handleDeleteRoomType"
+            class="no-border-radius"
           />
         </q-tab-panel>
       </q-tab-panels>
-    </div>
+    </q-card>
 
     <RoomDialog
       v-model="showRoomDialog"
@@ -140,7 +161,7 @@ const roomTypeOptions = computed(() => {
 // 刷新所有数据
 const refreshAll = async () => {
   await Promise.all([fetchRooms(), fetchRoomTypes()])
-  $q.notify({ type: 'positive', message: '数据已刷新', timeout: 500 })
+  $q.notify({ type: 'positive', message: '数据已刷新', icon: 'check_circle', timeout: 500 })
 }
 
 onMounted(refreshAll)
@@ -148,7 +169,33 @@ onActivated(refreshAll)
 </script>
 
 <style scoped>
-.room-management { background-color: #f5f5f5; min-height: 100vh; }
+.room-management {
+  background-color: #f8f9fa;
+  min-height: 100vh;
+}
+
+.room-content-card {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05) !important;
+}
+
+.border-bottom {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.bg-grey-0 {
+  background-color: #fafafa;
+}
+
+.no-border-radius {
+  border-radius: 0 !important;
+}
+
+:deep(.q-table__container) {
+  box-shadow: none !important;
+  border: none !important;
+}
 
 /* 复用原文件中的删除弹窗样式，保留一致性 */
 :deep(.custom-delete-dialog) { border-radius: 16px !important; }

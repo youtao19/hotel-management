@@ -11,6 +11,34 @@ async function findLocalRoomTypeByDouyinRoomId(douyinRoomId) {
   return result.rows[0]?.local_room_type || null
 }
 
+async function findRoomTypeMappingsByLocalRoomTypes(localRoomTypes = [], client) {
+  const normalizedLocalRoomTypes = Array.from(
+    new Set(
+      localRoomTypes
+        .map((item) => String(item || '').trim())
+        .filter(Boolean)
+    )
+  )
+
+  if (!normalizedLocalRoomTypes.length) {
+    return []
+  }
+
+  const queryRunner = client || postgreDB
+  const sql = `
+    SELECT
+      id,
+      douyin_room_id,
+      douyin_room_name,
+      local_room_type
+    FROM douyin_room_type_mapping
+    WHERE local_room_type = ANY($1::text[])
+  `
+
+  const result = await queryRunner.query(sql, [normalizedLocalRoomTypes])
+  return result.rows
+}
+
 /**
  * 查询抖音房型映射列表，并附带本地房型名称。
  *
@@ -74,6 +102,7 @@ async function upsertRoomTypeMapping({
 
 module.exports = {
   findLocalRoomTypeByDouyinRoomId,
+  findRoomTypeMappingsByLocalRoomTypes,
   listRoomTypeMappings,
   upsertRoomTypeMapping,
 }

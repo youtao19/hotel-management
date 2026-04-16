@@ -140,6 +140,8 @@ const douyin_order = require("./tables/douyin_order");
 const douyin_presale_order = require("./tables/douyin_presale_order");
 const rate_plans = require("./tables/rate_plans");
 const ota_channel_mappings = require("./tables/ota_channel_mappings");
+const douyin_physical_rooms = require("./tables/douyin_physical_rooms");
+const douyin_room_type_mapping = require("./tables/douyin_room_type_mapping");
 
 //table order here is important
 //since we have foreign key reference other table
@@ -147,6 +149,8 @@ tables.push(room_type);
 tables.push(room);
 tables.push(rate_plans);
 tables.push(ota_channel_mappings);
+tables.push(douyin_physical_rooms);
+tables.push(douyin_room_type_mapping);
 tables.push(order);
 tables.push(bill);
 tables.push(ota_order_relation);
