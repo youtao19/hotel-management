@@ -24,7 +24,7 @@ jest.mock('../modules/douyin/services/fulfillmentSync.service', () => ({
   isDouyinSystemOrder: jest.fn(),
   pushDouyinCheckInBySystemOrder: jest.fn(),
   pushDouyinCheckOutBySystemOrder: jest.fn(),
-}))
+}), { virtual: true })
 
 const {
   triggerDouyinCheckInSyncIfNeeded,

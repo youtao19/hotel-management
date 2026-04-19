@@ -2,11 +2,28 @@ const { query, getClient } = require('../database/postgreDB/pg');
 const billModule = require('./billModule');
 const setup = require('../appSettings/setup');
 const { formatDate, toDecimal, toAmountNumber } = require('./tools');
+
+function loadDouyinFulfillmentSync() {
+  try {
+    return require('./douyin/services/fulfillmentSync.service');
+  } catch (error) {
+    if (error?.code !== 'MODULE_NOT_FOUND') {
+      throw error;
+    }
+    console.warn('[Douyin] 履约同步模块不存在，主系统将跳过抖音入住/退房同步');
+    return {
+      isDouyinSystemOrder: async () => false,
+      pushDouyinCheckInBySystemOrder: async () => ({ action: 'skip', reason: 'douyin_module_missing' }),
+      pushDouyinCheckOutBySystemOrder: async () => ({ action: 'skip', reason: 'douyin_module_missing' })
+    };
+  }
+}
+
 const {
   isDouyinSystemOrder,
   pushDouyinCheckInBySystemOrder,
   pushDouyinCheckOutBySystemOrder,
-} = require('./douyin/services/fulfillmentSync.service');
+} = loadDouyinFulfillmentSync();
 
 const tableName = "orders";
 

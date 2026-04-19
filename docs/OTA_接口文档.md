@@ -1,5 +1,8 @@
 # OTA 接口文档
 
+> 抖音直连后端路由 `/api/douyin/*` 已停用，原 `backend/routes/douyin/douyinApi.js` 已删除。
+> 本文中抖音相关章节仅作为历史联调资料保留；当前可用的本地套餐管理接口是 `/api/rate-plans`。
+
 ## 1. 文档范围
 本文档覆盖 OTA 一期入站接口：
 - `POST /api/ota/v1/orders`
@@ -229,6 +232,8 @@ GET /api/ota/v1/inventory?startDate=2026-03-10&endDate=2026-03-12&roomType=asu_x
 - `OTA_NONCE_TTL_SECONDS`: nonce 防重放缓存秒数
 
 ## 8. 抖音回调文档
+> 历史资料：当前系统不再注册 `/api/douyin/*` 路由，下列接口不可用。
+
 - 抖音回调联调、幂等规则与成功响应说明已单独整理，请查看 [抖音回调联调文档](/Users/peach/develop/hotel-management/docs/抖音回调联调文档.md)。
 - 当前已支持抖音创建订单回调与取消订单回调两条联调链路：
   - `POST /api/douyin/callback/spi`
@@ -568,6 +573,7 @@ curl -X GET 'http://localhost:3000/api/plugin/room-type-mapping?platform=meituan
 - `updated_at`: 更新时间
 
 ## 11. 抖音模式二（自助匹配）接口
+> 历史资料：当前系统不再注册 `/api/douyin/*` 路由，本节接口不可用。
 
 ### 11.1 查询酒店静态信息（单页）
 - Method: `POST`
@@ -722,6 +728,8 @@ curl -X GET 'http://localhost:3000/api/plugin/room-type-mapping?platform=meituan
 - Method: `GET`
 - Path: `/api/douyin/rate-plans`
 - 说明：
+  - 历史资料：当前 `/api/douyin/rate-plans` 已随抖音路由停用
+  - 本地套餐增删改查请使用 `/api/rate-plans`
   - 主表为 `rate_plans`
   - 左联 `rooms`、`room_types`、`douyin_room_type_mapping`、`douyin_physical_rooms`、`ota_channel_mappings`
   - 不会把本地数据异常误判为“未绑定抖音房型”
@@ -760,3 +768,91 @@ curl -X GET 'http://localhost:3000/api/plugin/room-type-mapping?platform=meituan
   "message": "抖音套餐同步列表获取成功"
 }
 ```
+
+### 11.6 本地售卖套餐 CRUD
+- 说明：
+  - 本地套餐管理接口为 `/api/rate-plans`
+  - 抖音同步路由 `/api/douyin/rate-plans` 已停用
+  - 套餐归属于本地房型 `room_types.type_code`
+  - 抖音 `rate_plan_id` 不存入 `rate_plans`，继续由 `ota_channel_mappings` 维护
+  - `rate_plans.id` 同步抖音时作为 `out_rate_plan_id`
+
+#### 查询列表
+- Method: `GET`
+- Path: `/api/rate-plans`
+- Query:
+  - `roomTypeCode` / `room_type_code`：选填，按本地房型过滤
+
+#### 查询单条
+- Method: `GET`
+- Path: `/api/rate-plans/:id`
+
+#### 创建套餐
+- Method: `POST`
+- Path: `/api/rate-plans`
+- 请求体字段：
+  - `room_type_code`：必填，本地房型编码，必须存在于 `room_types`
+  - `name`：必填，套餐名称，对应抖音 `rate_plan_name`
+  - `base_price`：必填，本地基础价，必须大于等于 0
+  - `status`：选填，`1` 启用，`0` 停用，可映射为抖音 `active`
+  - `sales_type`：选填，`1` 全日房，`2` 钟点房，`3` 凌晨房
+  - `currency`：选填，三位大写币种，默认 `CNY`
+  - `hourly_earliest_check_in`：钟点房最早入住时间，格式 `HH:mm`
+  - `hourly_latest_check_out`：钟点房最晚离店时间，格式 `HH:mm`
+  - `hourly_usage_duration`：钟点房使用时长，范围 `1-23`
+  - `midnight_latest_booking_time`：凌晨房最晚预定时间，范围 `1-6`
+  - `midnight_enabled`：是否启用凌晨房规则
+  - `douyin_config`：抖音扩展配置，只允许 JSON 对象
+- 业务校验：
+  - `sales_type=2` 时，必须同时提供完整钟点房字段
+  - 同一房型下不能创建同名套餐
+
+请求示例：
+
+```json
+{
+  "room_type_code": "asu_xiao_zhu",
+  "name": "阿苏晓筑-双早",
+  "base_price": 399,
+  "status": 1,
+  "sales_type": 1,
+  "currency": "CNY",
+  "douyin_config": {
+    "remark": "预售券基础套餐"
+  }
+}
+```
+
+成功响应示例：
+
+```json
+{
+  "data": {
+    "id": 101,
+    "room_id": null,
+    "room_type_code": "asu_xiao_zhu",
+    "room_type_name": "阿苏晓筑",
+    "name": "阿苏晓筑-双早",
+    "base_price": 399,
+    "status": 1,
+    "sales_type": 1,
+    "currency": "CNY",
+    "douyin_rate_plan_id": null,
+    "is_synced": false
+  },
+  "message": "售卖套餐创建成功"
+}
+```
+
+#### 更新套餐
+- Method: `PATCH`
+- Path: `/api/rate-plans/:id`
+- 请求体支持创建接口中的任意字段，至少传一个字段
+- 若更新后的 `sales_type=2`，仍必须满足完整钟点房字段
+
+#### 删除套餐
+- Method: `DELETE`
+- Path: `/api/rate-plans/:id`
+- 删除规则：
+  - 未同步到渠道的套餐允许删除
+  - 如果存在 `ota_channel_mappings.local_target_type='RATE_PLAN'` 的映射，返回 `400`

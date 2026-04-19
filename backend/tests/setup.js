@@ -4,6 +4,8 @@ const app = require('../app');
 
 // 所有测试表，统一管理
 const tables = [
+  'ota_channel_mappings',
+  'rate_plans',
   'room_types',
   'rooms',
   'orders',
@@ -29,6 +31,12 @@ function shouldSkipGlobalBootstrap() {
   return testPath.includes('/backend/modules/douyin/') && testPath.includes('/__tests__/');
 }
 
+function shouldSkipAppBootstrap() {
+  const testPath = expect.getState().testPath || '';
+
+  return testPath.endsWith('/backend/tests/rate_plan.test.js');
+}
+
 // 全局测试设置
 beforeAll(async () => {
   if (shouldSkipGlobalBootstrap()) {
@@ -38,6 +46,11 @@ beforeAll(async () => {
 
   // 初始化数据库结构
   await db.initializePostgreDB();
+
+  if (shouldSkipAppBootstrap()) {
+    console.log('⏭️ 当前用例使用独立 Express App，跳过全量路由初始化');
+    return;
+  }
 
   // ✅ 初始化 app 的 session 和路由（重要！）
   await app.initializeSession();

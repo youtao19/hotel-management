@@ -6,6 +6,7 @@
 > - 本文件用于沉淀用户已提供的抖音 OTA 官方文档链接，后续开发优先从这里查阅；
 > - “当前代码关联”基于当前仓库实现状态整理，后续接入更多能力时可继续补充；
 > - 所有链接均来自抖音开放平台官方文档。
+> - 当前后端 `/api/douyin/*` 路由已停用，原 `backend/routes/douyin/douyinApi.js` 已删除；下方 `backend/modules/douyin/*` 关联多为历史规划资料。
 
 ## 1. 接入前准备
 
@@ -27,7 +28,7 @@
 ### 1.4 SPI 接入
 - 链接：[SPI 接入](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/preparation/spi)
 - 用途：说明 SPI 接口的整体接入模式、回调处理要求和平台调用约束。
-- 当前代码关联：`backend/routes/douyin/douyinApi.js`、`backend/modules/douyin/controllers/hotelBooking.controller.js`
+- 当前代码关联：历史资料，`/api/douyin/*` 路由已停用；后续重建时可参考原 `backend/modules/douyin/controllers/hotelBooking.controller.js` 规划。
 
 ### 1.5 WebHooks接入
 - 链接：[WebHooks接入](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/preparation/webhooks)
@@ -152,9 +153,7 @@
 ### 7.0 自助匹配酒店信息查询接口（模式二）
 - 链接：[自助匹配酒店信息查询接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/hotel-info-fetch/hotel-info-query)
 - 用途：模式二核心接口。由合作方主动查询可匹配酒店信息，用于本地建立酒店与房型 mapping。
-- 当前代码关联：`backend/modules/douyin/services/hotelInfoFetch.service.js`、`backend/modules/douyin/controllers/hotelInfoFetch.controller.js`、`backend/routes/douyin/douyinApi.js`，对应本地接口：
-  - `POST /api/douyin/hotel-info/query`
-  - `POST /api/douyin/hotel-info/sync`
+- 当前代码关联：历史资料，`/api/douyin/*` 路由已停用；原计划接口 `POST /api/douyin/hotel-info/query`、`POST /api/douyin/hotel-info/sync` 当前不可用。
 
 ### 7.1 酒店静态信息接口
 - 链接：[酒店静态信息接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/hotel-info-mgmt/hotel-info-api)
@@ -169,7 +168,7 @@
 ### 7.3 酒店静态信息处理结果推送Webhook
 - 链接：[酒店静态信息处理结果推送Webhook](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/hotel-info-mgmt/hotel-info-push)
 - 用途：接收酒店静态信息处理结果的异步推送，适合替代或补充状态轮询。
-- 当前代码关联：`backend/modules/douyin/controllers/hotelInfoWebhook.controller.js`、`backend/modules/douyin/services/hotelInfoWebhook.service.js`、`backend/modules/douyin/middlewares/verifyDouyinWebhook.middleware.js`、`backend/routes/douyin/douyinApi.js`；当前作为模式二的补充能力保留（Webhook验签、challenge校验、Msg-Id去重、回执success）。
+- 当前代码关联：历史资料，`/api/douyin/*` 路由已停用；后续重建 Webhook 时可参考本节接口语义。
 
 ## 8. 住宿预售券交易
 
@@ -215,7 +214,14 @@
 #### 8.2.1 创建/更新预定商品
 - 链接：[创建/更新预定商品](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/hotel-voucher-mgmt/create-update-products)
 - 用途：用于创建或更新住宿预售券关联的预定商品，是预售券商品化配置的基础能力。
-- 当前代码关联：当前未实现，后续接入预售商品创建、更新和商品资料同步时使用。
+- 当前代码关联：`backend/database/postgreDB/tables/rate_plans.js`、`backend/routes/ratePlanRoute.js`、`docs/OTA_接口文档.md`
+- 字段映射：
+  - `rate_plans.name` -> 抖音 `rate_plan_name`
+  - `rate_plans.id` -> 抖音 `out_rate_plan_id`
+  - `rate_plans.status` -> 抖音 `active`
+  - `rate_plans.sales_type` -> 抖音 `sales_type`
+  - `rate_plans.hourly_*` -> 抖音 `hourly_room_detail`
+  - 抖音返回的 `rate_plan_id` 继续写入 `ota_channel_mappings.channel_item_id`
 
 #### 8.2.2 创建/更新预售券
 - 链接：[创建/更新预售券](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/hotel-voucher-mgmt/create-update-coupon)

@@ -101,6 +101,9 @@ async function initializeSession() {
     const roomTypeRoute = require("./routes/roomTypeRoute");
     app.use("/api/room-types", roomTypeRoute);
 
+    const ratePlanRoute = require("./routes/ratePlanRoute");
+    app.use("/api/rate-plans", ratePlanRoute);
+
     const billRoute = require("./routes/billRoute");
     app.use("/api/bills", billRoute);
 
@@ -128,8 +131,8 @@ async function initializeSession() {
     const pluginRoomTypeMappingRoute = require("./routes/plugin/room-map/room-map.routes");
     app.use("/api/plugin/room-type-mapping", pluginRoomTypeMappingRoute);
 
-    const douyinRoutes = require('./routes/douyin/douyinApi');
-    app.use('/api/douyin', douyinRoutes);
+    // 抖音直连模块文件当前不完整，继续注册会导致主系统启动失败。
+    // 本地售卖套餐 CRUD 已迁移到 /api/rate-plans，不依赖 /api/douyin。
 
     app.get("/api/hup", (req, res) => res.status(200).json({ ok: true }));
 

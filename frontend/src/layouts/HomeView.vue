@@ -30,26 +30,6 @@
             <q-route-tab to="/other-income" label="其他收入" icon="payments" />
           </q-tabs>
 
-          <q-btn-dropdown
-            flat
-            dense
-            no-caps
-            class="header-more"
-            icon="hub"
-            label="OTA"
-          >
-            <q-list dense style="min-width: 180px">
-              <q-item clickable v-close-popup to="/douyin-rate-plans">
-                <q-item-section avatar>
-                  <q-icon name="sync_alt" color="primary" />
-                </q-item-section>
-                <q-item-section>
-                  <q-item-label>抖音商品同步</q-item-label>
-                </q-item-section>
-              </q-item>
-            </q-list>
-          </q-btn-dropdown>
-
           <!-- 用户信息显示区域 -->
           <div class="header-user">
             <q-btn v-if="userStore.user.isLoggedIn" flat no-caps class="user-profile-btn">

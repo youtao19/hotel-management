@@ -27,8 +27,7 @@ const routes = [
       { path: 'review-management', component: () => import('pages/ReviewManagement/index.vue') },
       { path: 'revenue-statistics', component: () => import('pages/Revenue/index.vue') },
       { path: 'handover', component: () => import('pages/Handover/index.vue') },
-      { path: 'other-income', component: () => import('pages/OtherIncome.vue') },
-      { path: 'douyin-rate-plans', component: () => import('pages/DouyinRatePlanSync/index.vue') }
+      { path: 'other-income', component: () => import('pages/OtherIncome.vue') }
     ]
   },
 

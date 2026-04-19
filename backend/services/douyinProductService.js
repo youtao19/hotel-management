@@ -6,7 +6,7 @@ class DouyinProductService {
     constructor() {
         this.apiUrl = 'https://open.douyin.com/goodlife/v1/trip/hotel/presale/rateplan/save/';
         // 抖音分配给商家的 account_id
-        this.accountId = setup.douyinConfig.DOUYIN_ACCOUNT_ID;
+        this.accountId = setup.douyinConfig.accountId;
     }
 
     /**
