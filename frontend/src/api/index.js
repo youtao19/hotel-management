@@ -152,6 +152,19 @@ export const roomApi = {
   changePendingRoom: (data) => api.post(`/rooms/change-room`, data),
 }
 
+// 售卖套餐相关接口
+export const ratePlanApi = {
+  getRatePlans: (params = {}) => api.get('/rate-plans', { params }),
+
+  getRatePlan: (id) => api.get(`/rate-plans/${id}`),
+
+  createRatePlan: (payload) => api.post('/rate-plans', payload),
+
+  updateRatePlan: (id, payload) => api.patch(`/rate-plans/${id}`, payload),
+
+  deleteRatePlan: (id) => api.delete(`/rate-plans/${id}`)
+}
+
 // 订单相关接口
 export const orderApi = {
   // 获取所有订单
