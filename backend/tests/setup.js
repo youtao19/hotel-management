@@ -4,17 +4,24 @@ const app = require('../app');
 
 // 所有测试表，统一管理
 const tables = [
+  'bills',
+  'order_changes',
+  'orders',
+  'ota_order_relation',
+  'ota_room_type_relation',
+  'plugin_room_type_mapping',
+  'douyin_orders',
+  'douyin_presale_orders',
   'ota_channel_mappings',
   'rate_plans',
-  'room_types',
   'rooms',
-  'orders',
-  'bills',
-  'ota_order_relation',
+  'douyin_room_type_mapping',
+  'douyin_physical_rooms',
+  'room_types',
   'review_invitations',
-  'order_changes',
   'handover',
-  'dashboard_memos'
+  'dashboard_memos',
+  'account'
 ];
 
 /**

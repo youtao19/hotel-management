@@ -856,3 +856,58 @@ curl -X GET 'http://localhost:3000/api/plugin/room-type-mapping?platform=meituan
 - 删除规则：
   - 未同步到渠道的套餐允许删除
   - 如果存在 `ota_channel_mappings.local_target_type='RATE_PLAN'` 的映射，返回 `400`
+
+#### 同步抖音预售券预定商品
+- Method: `POST`
+- Path: `/api/rate-plans/:id/douyin/sync`
+- 说明：
+  - 调用抖音官方“创建/更新预定商品”接口：`/goodlife/v1/trip/hotel/presale/rateplan/save/`
+  - 本地套餐必须先通过 `douyin_room_type_mapping` 绑定抖音物理房型
+  - `rate_plans.id` 会作为抖音 `out_rate_plan_id`
+  - 已同步过的套餐会把本地 `ota_channel_mappings.channel_item_id` 作为抖音 `rate_plan_id` 继续更新
+  - 同步成功后会写入 `ota_channel_mappings`，并更新 `douyin_physical_rooms.rate_plan_list`
+  - 当前不支持 `sales_type=3` 凌晨房同步到抖音预售券预定商品
+- 请求体字段：
+  - `accountId`：选填，抖音商家账号 ID；未传时优先使用物理房型缓存账号，再回退环境变量 `DOUYIN_ACCOUNT_ID`
+  - `poiId`：选填，抖音酒店 ID；未传时优先使用物理房型缓存中的酒店 ID，再回退环境变量 `DOUYIN_POI_ID`
+
+请求示例：
+
+```json
+{
+  "accountId": "DY_ACCOUNT_001",
+  "poiId": "DY_HOTEL_001"
+}
+```
+
+成功响应示例：
+
+```json
+{
+  "data": {
+    "rate_plan": {
+      "id": 101,
+      "room_type_code": "asu_xiao_zhu",
+      "name": "阿苏晓筑-双早",
+      "douyin_rate_plan_id": "DY_RATE_PLAN_001",
+      "douyin_sync_status": 1,
+      "is_synced": true
+    },
+    "douyin": {
+      "success": true,
+      "douyinId": "DY_RATE_PLAN_001",
+      "outRatePlanId": "101",
+      "roomId": "DY_ROOM_001",
+      "hotelId": "DY_HOTEL_001"
+    }
+  },
+  "message": "售卖套餐同步抖音成功"
+}
+```
+
+典型错误：
+- `400 套餐所属房型尚未绑定抖音物理房型，无法同步`
+- `400 缺少抖音商家 account_id，请传 accountId 或配置 DOUYIN_ACCOUNT_ID`
+- `400 缺少抖音酒店 ID，请传 poiId 或配置 DOUYIN_POI_ID`
+- `400 抖音预售券预定商品暂不支持凌晨房套餐同步`
+- `502 同步售卖套餐到抖音失败`：抖音接口 HTTP 或业务错误，响应 `error` 字段会带上抖音返回的错误描述

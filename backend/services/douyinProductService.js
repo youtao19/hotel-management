@@ -1,70 +1,55 @@
-const douyinTokenService = require('./douyinTokenService'); // 你的 Token 服务
-const setup = require('../appSettings/douyin.config');
-const db = require('../database/postgreDB/pg'); // 假设这是你的 PostgreSQL 连接工具
+const douyinTokenService = require('./douyinTokenService');
+const { douyinConfig } = require('../appSettings/douyin.config');
+const db = require('../database/postgreDB/pg');
+
+function createServiceError(message, statusCode = 500) {
+    const error = new Error(message);
+    error.statusCode = statusCode;
+    return error;
+}
 
 class DouyinProductService {
     constructor() {
-        this.apiUrl = 'https://open.douyin.com/goodlife/v1/trip/hotel/presale/rateplan/save/';
-        // 抖音分配给商家的 account_id
-        this.accountId = setup.douyinConfig.accountId;
+        this.apiUrl = `${douyinConfig.openApiBaseUrl}/goodlife/v1/trip/hotel/presale/rateplan/save/`;
+        this.accountId = douyinConfig.accountId;
+        this.poiId = douyinConfig.poiId;
     }
 
     /**
-     * 核心方法：将本地套餐同步到抖音
+     * 将本地套餐同步到抖音预售券预定商品。
      * @param {number} localRatePlanId 本地 rate_plans 表的自增 ID
+     * @param {object} options 同步时允许覆盖的抖音账号和酒店 ID
+     * @param {string} [options.accountId] 抖音商家账号 ID
+     * @param {string} [options.poiId] 抖音酒店 ID
+     * @returns {Promise<object>} 同步结果
      */
-    async syncProductToDouyin(localRatePlanId) {
+    async syncProductToDouyin(localRatePlanId, options = {}) {
         try {
-            // ==========================================
-            // 1. 准备数据：联表查询本地基础信息和已有的抖音映射 ID
-            // ==========================================
-            /* * SQL 逻辑：
-             * SELECT
-             * rp.name, rp.breakfast_type, rp.cancel_policy,
-             * r.douyin_room_id,
-             * h.douyin_poi_id
-             * FROM rate_plans rp
-             * JOIN rooms r ON rp.room_id = r.id
-             * JOIN hotels h ON r.hotel_id = h.id  -- (假设你房间表连了酒店表)
-             * WHERE rp.id = 101;
-             */
             const localProduct = await this._getLocalProductDetails(localRatePlanId);
             if (!localProduct) {
-                throw new Error(`本地套餐 ${localRatePlanId} 不存在或数据不完整`);
-            }
-            if (!localProduct.douyin_room_id || !localProduct.douyin_poi_id) {
-                throw new Error('酒店或物理房型尚未绑定抖音侧的 ID，无法推送套餐！');
+                throw createServiceError(`本地套餐 ${localRatePlanId} 不存在`, 404);
             }
 
-            // ==========================================
-            // 2. 组装数据：严格按照抖音文档的数据格式
-            // ==========================================
-            const payload = {
-                account_id: this.accountId,
-                rate_plan: {
-                    hotel_id: localProduct.douyin_poi_id,
-                    rooms: [
-                        {
-                            room_id: localProduct.douyin_room_id,
-                            rate_plans: [
-                                {
-                                    // 核心：把你们自己的 ID 传过去
-                                    out_rate_plan_id: String(localRatePlanId),
-                                    rate_plan_name: localProduct.name,
-                                    sales_type: 1, // 假设 1 代表普通售卖
-                                    // 根据本地字典转换：比如 0 是无早，抖音文档里对应的是 0 或其他枚举
-                                    breakfast: localProduct.breakfast_type,
-                                    // ... 其他业务必填字段 (退款政策、预定时间等)
-                                }
-                            ]
-                        }
-                    ]
-                }
-            };
+            if (!localProduct.douyin_room_id) {
+                throw createServiceError('套餐所属房型尚未绑定抖音物理房型，无法同步', 400);
+            }
 
-            // ==========================================
-            // 3. 发送网络请求：极其丝滑地获取 Token 并发请求
-            // ==========================================
+            const accountId = this._resolveAccountId(localProduct, options);
+            const hotelId = this._resolveHotelId(localProduct, options);
+
+            if (!accountId) {
+                throw createServiceError('缺少抖音商家 account_id，请传 accountId 或配置 DOUYIN_ACCOUNT_ID', 400);
+            }
+
+            if (!hotelId) {
+                throw createServiceError('缺少抖音酒店 ID，请传 poiId 或配置 DOUYIN_POI_ID', 400);
+            }
+
+            const payload = this._buildRatePlanPayload(localProduct, {
+                accountId,
+                hotelId
+            });
+
             const token = await douyinTokenService.getToken();
 
             console.log(`[Douyin Sync] 开始同步本地套餐: ${localRatePlanId}`);
@@ -79,61 +64,201 @@ class DouyinProductService {
 
             const result = await response.json();
 
-            // ==========================================
-            // 4. 处理结果与落库映射
-            // ==========================================
-            if (result.data && result.data.error_code === 0) {
-                // 抖音成功创建/更新后，返回了它的商品 ID
-                const douyinRatePlanId = result.data.rate_plan_map[0].rate_plan_id;
-
-                // 执行超级映射表的插入或更新 (UPSERT)
-                await this._saveChannelMapping(localRatePlanId, douyinRatePlanId);
-
-                console.log(`[Douyin Sync] 同步成功！抖音商品ID: ${douyinRatePlanId}`);
-                return { success: true, douyinId: douyinRatePlanId };
-            } else {
-                console.error('[Douyin Sync] 抖音返回业务报错:', result);
-                throw new Error(result.data?.description || '抖音接口未知错误');
+            if (!response.ok) {
+                throw createServiceError(`抖音接口 HTTP ${response.status}: ${JSON.stringify(result)}`, 502);
             }
 
+            this._assertDouyinSuccess(result);
+            const ratePlanMap = this._getSyncedRatePlanMap(result, localRatePlanId);
+            const douyinRatePlanId = ratePlanMap.rate_plan_id;
+
+            await this._saveChannelMapping(localProduct, {
+                accountId,
+                hotelId,
+                douyinRatePlanId,
+                logId: result.extra?.logid || null
+            });
+            await this._savePhysicalRoomRatePlan(localProduct, {
+                douyinRatePlanId,
+                hotelId
+            });
+
+            console.log(`[Douyin Sync] 同步成功！抖音商品ID: ${douyinRatePlanId}`);
+            return {
+                success: true,
+                douyinId: douyinRatePlanId,
+                outRatePlanId: String(localRatePlanId),
+                roomId: localProduct.douyin_room_id,
+                hotelId
+            };
+
         } catch (error) {
-            console.error('[Douyin Sync] 同步执行异常:', error.message);
-            throw error; // 继续向上抛给 Controller
+            const statusCode = Number(error?.statusCode || error?.status || 500);
+            const log = statusCode >= 500 ? console.error : console.warn;
+            log('[Douyin Sync] 同步执行异常:', error.message);
+            throw error;
         }
     }
 
-    /**
-     * 内部辅助：模拟查询数据库获取本地数据
-     */
     async _getLocalProductDetails(id) {
-        // 这里用假数据代替你真实的 DB 查询
+        const result = await db.query(
+            `
+                SELECT
+                    rp.*,
+                    rt.type_name AS room_type_name,
+                    drm.douyin_room_id,
+                    drm.douyin_room_name,
+                    dpr.account_id AS douyin_account_id,
+                    dpr.raw_payload AS douyin_room_payload,
+                    dpr.rate_plan_list AS douyin_rate_plan_list,
+                    ocm.channel_item_id AS douyin_rate_plan_id
+                FROM rate_plans rp
+                LEFT JOIN room_types rt ON rp.room_type_code = rt.type_code
+                LEFT JOIN douyin_room_type_mapping drm ON drm.local_room_type = rp.room_type_code
+                LEFT JOIN douyin_physical_rooms dpr ON dpr.room_id = drm.douyin_room_id
+                LEFT JOIN ota_channel_mappings ocm
+                    ON ocm.local_target_type = 'RATE_PLAN'
+                    AND ocm.local_target_id = rp.id
+                    AND ocm.channel_code = 'DOUYIN'
+                WHERE rp.id = $1
+            `,
+            [id]
+        );
+
+        return result.rows[0] || null;
+    }
+
+    _resolveAccountId(localProduct, options) {
+        return options.accountId || localProduct.douyin_account_id || this.accountId || '';
+    }
+
+    _resolveHotelId(localProduct, options) {
+        const rawPayload = localProduct.douyin_room_payload || {};
+        return options.poiId
+            || rawPayload.hotel_id
+            || rawPayload.hotelId
+            || rawPayload.poi_id
+            || rawPayload.poiId
+            || rawPayload.hotel?.hotel_id
+            || this.poiId
+            || '';
+    }
+
+    _buildRatePlanPayload(localProduct, context) {
+        const salesType = Number(localProduct.sales_type || 1);
+        if (salesType === 3) {
+            throw createServiceError('抖音预售券预定商品暂不支持凌晨房套餐同步', 400);
+        }
+
+        const ratePlan = {
+            currency: localProduct.currency || 'CNY',
+            active: Number(localProduct.status) === 1,
+            sales_type: salesType,
+            rate_plan_name: localProduct.name,
+            out_rate_plan_id: String(localProduct.id)
+        };
+
+        if (localProduct.douyin_rate_plan_id) {
+            ratePlan.rate_plan_id = localProduct.douyin_rate_plan_id;
+        }
+
+        if (salesType === 2) {
+            ratePlan.hourly_room_detail = {
+                earliest_check_in: localProduct.hourly_earliest_check_in,
+                latest_check_out: localProduct.hourly_latest_check_out,
+                usage_duration: Number(localProduct.hourly_usage_duration)
+            };
+        }
+
         return {
-            name: "豪华大床房-双早特惠",
-            breakfast_type: 2,
-            douyin_room_id: "ROOM_XYZ999", // 之前人工填写的抖音物理房型 ID
-            douyin_poi_id: "POI_123456"    // 之前人工填写的抖音门店 ID
+            account_id: context.accountId,
+            rate_plan: {
+                hotel_id: context.hotelId,
+                rooms: [
+                    {
+                        room_id: localProduct.douyin_room_id,
+                        rate_plans: [ratePlan]
+                    }
+                ]
+            }
         };
     }
 
-    /**
-     * 内部辅助：更新渠道映射表 (PostgreSQL 特有的 UPSERT 语法)
-     */
-    async _saveChannelMapping(localId, douyinId) {
-        // 这是一段典型的 PostgreSQL 语法：如果发现这条记录已经存在，就更新它；如果不存在，就插入它。
+    _assertDouyinSuccess(result) {
+        if (result.extra && Number(result.extra.error_code || 0) !== 0) {
+            throw createServiceError(result.extra.sub_description || result.extra.description || '抖音接口调用失败', 502);
+        }
+
+        if (!result.data || Number(result.data.error_code || 0) !== 0) {
+            throw createServiceError(result.data?.description || '抖音商品同步失败', 502);
+        }
+    }
+
+    _getSyncedRatePlanMap(result, localRatePlanId) {
+        const outRatePlanId = String(localRatePlanId);
+        const ratePlanMap = Array.isArray(result.data?.rate_plan_map) ? result.data.rate_plan_map : [];
+        const matched = ratePlanMap.find((item) => String(item.out_rate_plan_id) === outRatePlanId) || ratePlanMap[0];
+
+        if (!matched || !matched.rate_plan_id) {
+            throw createServiceError('抖音同步成功但未返回 rate_plan_id', 502);
+        }
+
+        return matched;
+    }
+
+    async _saveChannelMapping(localProduct, syncResult) {
+        const channelConfig = {
+            out_rate_plan_id: String(localProduct.id),
+            room_id: localProduct.douyin_room_id,
+            hotel_id: syncResult.hotelId,
+            account_id: syncResult.accountId,
+            log_id: syncResult.logId
+        };
+
         const sql = `
             INSERT INTO ota_channel_mappings
-            (local_target_type, local_target_id, channel_code, channel_item_id, sync_status)
-            VALUES ('RATE_PLAN', $1, 'DOUYIN', $2, 1)
+            (local_target_type, local_target_id, channel_code, channel_item_id, channel_config, sync_status)
+            VALUES ('RATE_PLAN', $1, 'DOUYIN', $2, $3, 1)
             ON CONFLICT (local_target_type, local_target_id, channel_code)
             DO UPDATE SET
                 channel_item_id = EXCLUDED.channel_item_id,
+                channel_config = EXCLUDED.channel_config,
                 sync_status = EXCLUDED.sync_status,
                 updated_at = CURRENT_TIMESTAMP;
         `;
 
-        // 执行真实的 DB 操作
-        // await db.query(sql, [localId, douyinId]);
-        console.log(`[DB Mock] 记录映射关系: 本地套餐 ${localId} -> 抖音 ${douyinId}`);
+        await db.query(sql, [localProduct.id, syncResult.douyinRatePlanId, JSON.stringify(channelConfig)]);
+    }
+
+    async _savePhysicalRoomRatePlan(localProduct, syncResult) {
+        const currentList = Array.isArray(localProduct.douyin_rate_plan_list)
+            ? localProduct.douyin_rate_plan_list
+            : [];
+        const outRatePlanId = String(localProduct.id);
+        const nextItem = {
+            rate_plan_id: syncResult.douyinRatePlanId,
+            out_rate_plan_id: outRatePlanId,
+            rate_plan_name: localProduct.name,
+            active: Number(localProduct.status) === 1,
+            sales_type: Number(localProduct.sales_type || 1),
+            currency: localProduct.currency || 'CNY',
+            hotel_id: syncResult.hotelId
+        };
+        const nextList = currentList.filter((item) => {
+            return String(item.out_rate_plan_id) !== outRatePlanId
+                && String(item.rate_plan_id) !== String(syncResult.douyinRatePlanId);
+        });
+        nextList.push(nextItem);
+
+        await db.query(
+            `
+                UPDATE douyin_physical_rooms
+                SET rate_plan_list = $1,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE room_id = $2
+            `,
+            [JSON.stringify(nextList), localProduct.douyin_room_id]
+        );
     }
 }
 

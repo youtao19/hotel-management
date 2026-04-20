@@ -1,7 +1,15 @@
 const express = require('express');
 const request = require('supertest');
+
+jest.mock('../services/douyinTokenService', () => ({
+  getToken: jest.fn()
+}));
+
 const { query } = require('../database/postgreDB/pg');
+const douyinTokenService = require('../services/douyinTokenService');
 const ratePlanRoute = require('../routes/ratePlanRoute');
+
+const originalFetch = global.fetch;
 
 function buildTestApp() {
   const app = express();
@@ -44,9 +52,17 @@ describe('售卖套餐本地 CRUD', () => {
 
   beforeEach(async () => {
     await query("DELETE FROM ota_channel_mappings WHERE local_target_type = 'RATE_PLAN'");
+    await query('DELETE FROM douyin_room_type_mapping');
+    await query('DELETE FROM douyin_physical_rooms');
     await query('DELETE FROM rate_plans');
     await query("DELETE FROM room_types WHERE type_code LIKE 'RP_TEST%'");
     await createRoomType();
+    douyinTokenService.getToken.mockReset();
+    global.fetch = jest.fn();
+  });
+
+  afterAll(() => {
+    global.fetch = originalFetch;
   });
 
   test('创建、查询、更新、删除售卖套餐', async () => {
@@ -143,5 +159,180 @@ describe('售卖套餐本地 CRUD', () => {
 
     expect(deleteResponse.statusCode).toBe(400);
     expect(deleteResponse.body.message).toBe('套餐已同步到渠道，不能直接删除');
+  });
+
+  test('同步抖音预定商品成功后写入渠道映射', async () => {
+    const createResponse = await request(app)
+      .post('/api/rate-plans')
+      .send(buildPayload());
+    const id = createResponse.body.data.id;
+
+    await query(
+      `
+        INSERT INTO douyin_room_type_mapping
+          (douyin_room_id, douyin_room_name, local_room_type)
+        VALUES ($1, $2, $3)
+      `,
+      ['DY_ROOM_001', '抖音测试房型', 'RP_TEST']
+    );
+    await query(
+      `
+        INSERT INTO douyin_physical_rooms
+          (account_id, room_id, room_name, raw_payload, rate_plan_list)
+        VALUES ($1, $2, $3, $4, $5)
+      `,
+      [
+        'DY_ACCOUNT_001',
+        'DY_ROOM_001',
+        '抖音测试房型',
+        { hotel_id: 'DY_HOTEL_001' },
+        []
+      ]
+    );
+
+    douyinTokenService.getToken.mockResolvedValue('TOKEN_001');
+    global.fetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        data: {
+          rate_plan_map: [
+            {
+              rate_plan_id: 'DY_RATE_PLAN_001',
+              out_rate_plan_id: String(id)
+            }
+          ],
+          error_code: 0,
+          description: ''
+        },
+        extra: {
+          error_code: 0,
+          description: '',
+          logid: 'DY_LOG_001'
+        }
+      })
+    });
+
+    const response = await request(app)
+      .post(`/api/rate-plans/${id}/douyin/sync`)
+      .send({
+        accountId: 'DY_ACCOUNT_OVERRIDE',
+        poiId: 'DY_HOTEL_OVERRIDE'
+      });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.data.rate_plan.douyin_rate_plan_id).toBe('DY_RATE_PLAN_001');
+    expect(response.body.data.rate_plan.is_synced).toBe(true);
+    expect(response.body.data.douyin.douyinId).toBe('DY_RATE_PLAN_001');
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://open.douyin.com/goodlife/v1/trip/hotel/presale/rateplan/save/',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'access-token': 'TOKEN_001'
+        })
+      })
+    );
+
+    const requestBody = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(requestBody).toMatchObject({
+      account_id: 'DY_ACCOUNT_OVERRIDE',
+      rate_plan: {
+        hotel_id: 'DY_HOTEL_OVERRIDE',
+        rooms: [
+          {
+            room_id: 'DY_ROOM_001',
+            rate_plans: [
+              {
+                out_rate_plan_id: String(id),
+                rate_plan_name: '双早套餐',
+                sales_type: 1,
+                currency: 'CNY',
+                active: true
+              }
+            ]
+          }
+        ]
+      }
+    });
+
+    const mappingResult = await query(
+      `
+        SELECT channel_item_id, channel_config, sync_status
+        FROM ota_channel_mappings
+        WHERE local_target_type = $1
+          AND local_target_id = $2
+          AND channel_code = $3
+      `,
+      ['RATE_PLAN', id, 'DOUYIN']
+    );
+    expect(mappingResult.rows).toHaveLength(1);
+    expect(mappingResult.rows[0].channel_item_id).toBe('DY_RATE_PLAN_001');
+    expect(mappingResult.rows[0].sync_status).toBe(1);
+    expect(mappingResult.rows[0].channel_config).toMatchObject({
+      out_rate_plan_id: String(id),
+      room_id: 'DY_ROOM_001',
+      hotel_id: 'DY_HOTEL_OVERRIDE',
+      account_id: 'DY_ACCOUNT_OVERRIDE',
+      log_id: 'DY_LOG_001'
+    });
+
+    const physicalRoomResult = await query(
+      'SELECT rate_plan_list FROM douyin_physical_rooms WHERE room_id = $1',
+      ['DY_ROOM_001']
+    );
+    expect(physicalRoomResult.rows[0].rate_plan_list).toEqual([
+      expect.objectContaining({
+        rate_plan_id: 'DY_RATE_PLAN_001',
+        out_rate_plan_id: String(id),
+        rate_plan_name: '双早套餐',
+        active: true,
+        sales_type: 1,
+        currency: 'CNY',
+        hotel_id: 'DY_HOTEL_OVERRIDE'
+      })
+    ]);
+  });
+
+  test('同步抖音时未绑定物理房型返回 400', async () => {
+    const createResponse = await request(app)
+      .post('/api/rate-plans')
+      .send(buildPayload());
+    const id = createResponse.body.data.id;
+
+    const response = await request(app)
+      .post(`/api/rate-plans/${id}/douyin/sync`)
+      .send({
+        accountId: 'DY_ACCOUNT_001',
+        poiId: 'DY_HOTEL_001'
+      });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.body.message).toBe('套餐所属房型尚未绑定抖音物理房型，无法同步');
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  test('凌晨房套餐同步抖音返回 400', async () => {
+    const createResponse = await request(app)
+      .post('/api/rate-plans')
+      .send(buildPayload({
+        name: '凌晨房套餐',
+        sales_type: 3,
+        midnight_enabled: true,
+        midnight_latest_booking_time: 3
+      }));
+    const id = createResponse.body.data.id;
+
+    const response = await request(app)
+      .post(`/api/rate-plans/${id}/douyin/sync`)
+      .send({
+        accountId: 'DY_ACCOUNT_001',
+        poiId: 'DY_HOTEL_001'
+      });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.body.message).toBe('抖音预售券预定商品暂不支持凌晨房套餐同步');
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 });

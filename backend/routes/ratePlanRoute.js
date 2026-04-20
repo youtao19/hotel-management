@@ -2,6 +2,7 @@ const express = require('express');
 const Ajv = require('ajv');
 const addFormats = require('ajv-formats');
 const { query } = require('../database/postgreDB/pg');
+const douyinProductService = require('../services/douyinProductService');
 
 const router = express.Router();
 const ajv = new Ajv({ allErrors: true });
@@ -39,8 +40,18 @@ const updateRatePlanSchema = {
   additionalProperties: false
 };
 
+const syncDouyinRatePlanSchema = {
+  type: 'object',
+  properties: {
+    accountId: { type: 'string', minLength: 1, maxLength: 64 },
+    poiId: { type: 'string', minLength: 1, maxLength: 64 }
+  },
+  additionalProperties: false
+};
+
 const validateCreateRatePlan = ajv.compile(createRatePlanSchema);
 const validateUpdateRatePlan = ajv.compile(updateRatePlanSchema);
+const validateSyncDouyinRatePlan = ajv.compile(syncDouyinRatePlanSchema);
 
 function getValidationMessage(errors) {
   return (errors || [])
@@ -68,6 +79,13 @@ function normalizePayload(payload) {
     currency: normalizeString(payload.currency),
     hourly_earliest_check_in: normalizeString(payload.hourly_earliest_check_in),
     hourly_latest_check_out: normalizeString(payload.hourly_latest_check_out)
+  };
+}
+
+function normalizeSyncPayload(payload) {
+  return {
+    accountId: normalizeString(payload.accountId),
+    poiId: normalizeString(payload.poiId)
   };
 }
 
@@ -179,6 +197,15 @@ function toRatePlanResponse(row) {
   };
 }
 
+function getErrorStatusCode(error) {
+  const statusCode = Number(error?.statusCode || error?.status);
+  if (Number.isInteger(statusCode) && statusCode >= 400 && statusCode < 600) {
+    return statusCode;
+  }
+
+  return 500;
+}
+
 router.get('/', async (req, res) => {
   try {
     const roomTypeCode = normalizeString(req.query.roomTypeCode || req.query.room_type_code || '');
@@ -240,6 +267,57 @@ router.get('/:id', async (req, res) => {
   } catch (err) {
     console.error('获取售卖套餐失败:', err);
     res.status(500).json({ message: '服务器错误', error: err.message });
+  }
+});
+
+router.post('/:id/douyin/sync', async (req, res) => {
+  try {
+    const id = parseId(req.params.id);
+    if (!id) {
+      return res.status(400).json({ message: '套餐ID格式错误' });
+    }
+
+    const payload = normalizeSyncPayload(req.body || {});
+    const valid = validateSyncDouyinRatePlan(payload);
+
+    if (!valid) {
+      return res.status(400).json({
+        message: '请求数据格式错误',
+        errors: validateSyncDouyinRatePlan.errors,
+        detail: getValidationMessage(validateSyncDouyinRatePlan.errors)
+      });
+    }
+
+    const existing = await findRatePlanById(id);
+    if (!existing) {
+      return res.status(404).json({ message: '售卖套餐不存在' });
+    }
+
+    if (existing.sales_type === 3) {
+      return res.status(400).json({ message: '抖音预售券预定商品暂不支持凌晨房套餐同步' });
+    }
+
+    const douyinResult = await douyinProductService.syncProductToDouyin(id, {
+      accountId: payload.accountId,
+      poiId: payload.poiId
+    });
+    const updated = await findRatePlanById(id);
+
+    res.status(200).json({
+      data: {
+        rate_plan: toRatePlanResponse(updated),
+        douyin: douyinResult
+      },
+      message: '售卖套餐同步抖音成功'
+    });
+  } catch (err) {
+    const statusCode = getErrorStatusCode(err);
+    const log = statusCode >= 500 ? console.error : console.warn;
+    log('同步售卖套餐到抖音失败:', err.message);
+    res.status(statusCode).json({
+      message: statusCode >= 500 ? '同步售卖套餐到抖音失败' : err.message,
+      error: err.message
+    });
   }
 });
 
