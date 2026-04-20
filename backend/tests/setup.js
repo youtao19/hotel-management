@@ -41,7 +41,8 @@ function shouldSkipGlobalBootstrap() {
 function shouldSkipAppBootstrap() {
   const testPath = expect.getState().testPath || '';
 
-  return testPath.endsWith('/backend/tests/rate_plan.test.js');
+  return testPath.endsWith('/backend/tests/rate_plan.test.js')
+    || testPath.endsWith('/backend/tests/douyin_room_type_mapping.test.js');
 }
 
 // 全局测试设置

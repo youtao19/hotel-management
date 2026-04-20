@@ -216,8 +216,8 @@ describe('售卖套餐本地 CRUD', () => {
     const response = await request(app)
       .post(`/api/rate-plans/${id}/douyin/sync`)
       .send({
-        accountId: 'DY_ACCOUNT_OVERRIDE',
-        poiId: 'DY_HOTEL_OVERRIDE'
+        accountId: 'DY_ACCOUNT_001',
+        poiId: 'DY_HOTEL_001'
       });
 
     expect(response.statusCode).toBe(200);
@@ -238,9 +238,9 @@ describe('售卖套餐本地 CRUD', () => {
 
     const requestBody = JSON.parse(global.fetch.mock.calls[0][1].body);
     expect(requestBody).toMatchObject({
-      account_id: 'DY_ACCOUNT_OVERRIDE',
+      account_id: 'DY_ACCOUNT_001',
       rate_plan: {
-        hotel_id: 'DY_HOTEL_OVERRIDE',
+        hotel_id: 'DY_HOTEL_001',
         rooms: [
           {
             room_id: 'DY_ROOM_001',
@@ -274,8 +274,8 @@ describe('售卖套餐本地 CRUD', () => {
     expect(mappingResult.rows[0].channel_config).toMatchObject({
       out_rate_plan_id: String(id),
       room_id: 'DY_ROOM_001',
-      hotel_id: 'DY_HOTEL_OVERRIDE',
-      account_id: 'DY_ACCOUNT_OVERRIDE',
+      hotel_id: 'DY_HOTEL_001',
+      account_id: 'DY_ACCOUNT_001',
       log_id: 'DY_LOG_001'
     });
 
@@ -291,7 +291,7 @@ describe('售卖套餐本地 CRUD', () => {
         active: true,
         sales_type: 1,
         currency: 'CNY',
-        hotel_id: 'DY_HOTEL_OVERRIDE'
+        hotel_id: 'DY_HOTEL_001'
       })
     ]);
   });
@@ -369,6 +369,33 @@ describe('售卖套餐本地 CRUD', () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.body.message).toBe('套餐所属房型尚未绑定抖音物理房型，无法同步');
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  test('同步抖音时物理房型缓存缺失返回 400', async () => {
+    const createResponse = await request(app)
+      .post('/api/rate-plans')
+      .send(buildPayload());
+    const id = createResponse.body.data.id;
+
+    await query(
+      `
+        INSERT INTO douyin_room_type_mapping
+          (douyin_room_id, douyin_room_name, local_room_type)
+        VALUES ($1, $2, $3)
+      `,
+      ['DY_ROOM_MISSING', '缺失缓存房型', 'RP_TEST']
+    );
+
+    const response = await request(app)
+      .post(`/api/rate-plans/${id}/douyin/sync`)
+      .send({
+        accountId: 'DY_ACCOUNT_001',
+        poiId: 'DY_HOTEL_001'
+      });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.body.message).toBe('抖音物理房型缓存缺失，请先刷新抖音房型后再同步套餐');
     expect(global.fetch).not.toHaveBeenCalled();
   });
 

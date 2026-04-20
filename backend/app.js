@@ -104,6 +104,9 @@ async function initializeSession() {
     const ratePlanRoute = require("./routes/ratePlanRoute");
     app.use("/api/rate-plans", ratePlanRoute);
 
+    const douyinRoomTypeMappingRoute = require("./routes/douyinRoomTypeMappingRoute");
+    app.use("/api/douyin/room-type-mapping", douyinRoomTypeMappingRoute);
+
     const billRoute = require("./routes/billRoute");
     app.use("/api/bills", billRoute);
 

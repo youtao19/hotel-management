@@ -46,6 +46,11 @@ class DouyinProductService {
                 throw createServiceError('缺少抖音酒店 ID，请传 poiId 或配置 DOUYIN_POI_ID', 400);
             }
 
+            this._validatePhysicalRoomCache(localProduct, {
+                accountId,
+                hotelId
+            });
+
             const payload = this._buildRatePlanPayload(localProduct, {
                 accountId,
                 hotelId
@@ -119,6 +124,7 @@ class DouyinProductService {
                     rt.type_name AS room_type_name,
                     drm.douyin_room_id,
                     drm.douyin_room_name,
+                    dpr.room_id AS douyin_cached_room_id,
                     dpr.account_id AS douyin_account_id,
                     dpr.raw_payload AS douyin_room_payload,
                     dpr.rate_plan_list AS douyin_rate_plan_list,
@@ -152,6 +158,35 @@ class DouyinProductService {
             || rawPayload.poiId
             || rawPayload.hotel?.hotel_id
             || this.poiId
+            || '';
+    }
+
+    _validatePhysicalRoomCache(localProduct, context) {
+        if (!localProduct.douyin_cached_room_id) {
+            throw createServiceError('抖音物理房型缓存缺失，请先刷新抖音房型后再同步套餐', 400);
+        }
+
+        if (localProduct.douyin_account_id
+            && String(localProduct.douyin_account_id) !== String(context.accountId)) {
+            throw createServiceError('抖音物理房型所属账号与当前同步账号不一致，请刷新并重新匹配房型', 400);
+        }
+
+        const cachedHotelId = this._getRoomHotelId(localProduct.douyin_room_payload || {});
+        if (!cachedHotelId) {
+            throw createServiceError('抖音物理房型缓存缺少酒店 ID，请先刷新抖音房型后再同步套餐', 400);
+        }
+
+        if (String(cachedHotelId) !== String(context.hotelId)) {
+            throw createServiceError('抖音物理房型所属酒店与当前同步酒店不一致，请刷新并重新匹配房型', 400);
+        }
+    }
+
+    _getRoomHotelId(rawPayload) {
+        return rawPayload.hotel_id
+            || rawPayload.hotelId
+            || rawPayload.poi_id
+            || rawPayload.poiId
+            || rawPayload.hotel?.hotel_id
             || '';
     }
 

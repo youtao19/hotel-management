@@ -672,59 +672,106 @@ curl -X GET 'http://localhost:3000/api/plugin/room-type-mapping?platform=meituan
 - Method: `GET`
 - Path: `/api/douyin/room-type-mapping`
 - 说明：
-  - 返回 `douyin_room_type_mapping` 当前映射
-  - 附带本地房型名称与抖音物理房型状态，便于运营排查
-  - 映射关系按一对一保存；列表不会允许一个本地房型对应多个抖音物理房型
-
-### 11.4 批量保存抖音房型映射
-- Method: `POST`
-- Path: `/api/douyin/room-type-mapping`
-- 请求体字段：
-  - `mappings`: 必填，支持两种格式
-    - 数组：`[{douyinRoomId, douyinRoomName, localRoomType}]`
-    - 对象：`{ "douyinRoomId": { "value": "localRoomType", "label": "douyinRoomName" } }`
-- 保存规则：
-  - 同一个请求内 `douyinRoomId` 或 `localRoomType` 重复会被拒绝
-  - 已绑定其他抖音物理房型的本地房型不能再次绑定
-  - 数据库唯一约束兜底保证并发保存时仍是一对一
-
-对象格式请求示例：
-
-```json
-{
-  "mappings": {
-    "ROOM_001": {
-      "value": "asu_xiao_zhu",
-      "label": "阿苏晓筑大床房"
-    },
-    "ROOM_002": {
-      "value": "xing_yun_ge",
-      "label": "行云阁双床房"
-    }
-  }
-}
-```
+  - 返回本地 `room_types`、抖音物理房型缓存 `douyin_physical_rooms` 与当前 `douyin_room_type_mapping`
+  - 前端“抖音房型匹配”页面使用该接口展示匹配状态
+  - `matchStatus` 取值：
+    - `UNMATCHED`：本地房型未匹配抖音房型
+    - `MATCHED`：已匹配且本地存在抖音物理房型缓存
+    - `MATCHED_BUT_ROOM_CACHE_MISSING`：存在映射但物理房型缓存缺失
+    - `DOUYIN_ROOM_INACTIVE`：抖音房型缓存显示为下架/停用状态
 
 成功响应示例：
 
 ```json
 {
-  "success": true,
-  "code": "DOUYIN_ROOM_TYPE_MAPPING_SAVED",
-  "data": [
-    {
-      "id": 1,
-      "douyin_room_id": "ROOM_001",
-      "douyin_room_name": "阿苏晓筑大床房",
-      "local_room_type": "asu_xiao_zhu",
-      "local_room_type_name": "阿苏晓筑"
-    }
-  ],
-  "message": "抖音房型映射保存成功"
+  "data": {
+    "summary": {
+      "localRoomTypeCount": 3,
+      "matchedCount": 1,
+      "unmatchedCount": 2,
+      "douyinRoomCount": 4
+    },
+    "items": [
+      {
+        "localRoomType": "asu_xiao_zhu",
+        "localRoomTypeName": "阿苏晓筑",
+        "douyinRoomId": "DY_ROOM_001",
+        "douyinRoomName": "阿苏晓筑大床房",
+        "matchStatus": "MATCHED",
+        "isMatched": true
+      }
+    ],
+    "douyinRooms": [
+      {
+        "roomId": "DY_ROOM_001",
+        "roomName": "阿苏晓筑大床房",
+        "status": 1,
+        "active": "true",
+        "accountId": "DY_ACCOUNT_001",
+        "hotelId": "DY_HOTEL_001",
+        "boundLocalRoomType": "asu_xiao_zhu"
+      }
+    ]
+  },
+  "message": "抖音房型匹配列表获取成功"
 }
 ```
 
-### 11.5 查询本地套餐抖音同步列表
+### 11.4 刷新抖音物理房型缓存
+- Method: `POST`
+- Path: `/api/douyin/room-type-mapping/refresh`
+- 说明：
+  - 调用抖音 `physical_room/search` 获取当前酒店真实物理房型
+  - 写入或更新 `douyin_physical_rooms`
+  - `raw_payload` 会补入当前 `hotel_id/poi_id`，供套餐同步校验使用
+  - 抖音返回的 `extra.logid` 会打印到后端日志，并在响应 `data.refresh.logId` 返回
+- 请求体字段：
+  - `accountId`：选填，未传时使用环境变量 `DOUYIN_ACCOUNT_ID`
+  - `poiId`：选填，未传时使用环境变量 `DOUYIN_POI_ID`
+
+请求示例：
+
+```json
+{
+  "accountId": "DY_ACCOUNT_001",
+  "poiId": "DY_HOTEL_001"
+}
+```
+
+### 11.5 批量保存抖音房型映射
+- Method: `POST`
+- Path: `/api/douyin/room-type-mapping`
+- 请求体字段：
+  - `mappings`: 必填数组，格式：`[{localRoomType, douyinRoomId}]`
+- 保存规则：
+  - 本地房型必须存在于 `room_types`
+  - 抖音房型必须存在于 `douyin_physical_rooms`
+  - 同一个请求内 `localRoomType` 或 `douyinRoomId` 重复会被拒绝
+  - 已绑定其他本地房型的抖音房型不能再次绑定
+  - 同一个本地房型可以改绑到另一个未占用抖音房型
+  - 数据库唯一约束兜底保证并发保存时仍是一对一
+
+请求示例：
+
+```json
+{
+  "mappings": [
+    {
+      "localRoomType": "asu_xiao_zhu",
+      "douyinRoomId": "DY_ROOM_001"
+    }
+  ]
+}
+```
+
+### 11.6 解除抖音房型映射
+- Method: `DELETE`
+- Path: `/api/douyin/room-type-mapping/:localRoomType`
+- 说明：
+  - 解除指定本地房型的抖音物理房型匹配
+  - 不删除 `douyin_physical_rooms` 中的抖音物理房型缓存
+
+### 11.7 查询本地套餐抖音同步列表
 - Method: `GET`
 - Path: `/api/douyin/rate-plans`
 - 说明：
@@ -863,6 +910,8 @@ curl -X GET 'http://localhost:3000/api/plugin/room-type-mapping?platform=meituan
 - 说明：
   - 调用抖音官方“创建/更新预定商品”接口：`/goodlife/v1/trip/hotel/presale/rateplan/save/`
   - 本地套餐必须先通过 `douyin_room_type_mapping` 绑定抖音物理房型
+  - 已绑定的抖音物理房型必须存在于 `douyin_physical_rooms`，否则需要先在“抖音房型匹配”页面刷新抖音房型
+  - 物理房型缓存中的账号和酒店 ID 必须与本次同步使用的账号和酒店 ID 一致
   - `rate_plans.id` 会作为抖音 `out_rate_plan_id`
   - 已同步过的套餐会把本地 `ota_channel_mappings.channel_item_id` 作为抖音 `rate_plan_id` 继续更新
   - 同步成功后会写入 `ota_channel_mappings`，并更新 `douyin_physical_rooms.rate_plan_list`
@@ -909,6 +958,9 @@ curl -X GET 'http://localhost:3000/api/plugin/room-type-mapping?platform=meituan
 
 典型错误：
 - `400 套餐所属房型尚未绑定抖音物理房型，无法同步`
+- `400 抖音物理房型缓存缺失，请先刷新抖音房型后再同步套餐`
+- `400 抖音物理房型所属账号与当前同步账号不一致，请刷新并重新匹配房型`
+- `400 抖音物理房型所属酒店与当前同步酒店不一致，请刷新并重新匹配房型`
 - `400 缺少抖音商家 account_id，请传 accountId 或配置 DOUYIN_ACCOUNT_ID`
 - `400 缺少抖音酒店 ID，请传 poiId 或配置 DOUYIN_POI_ID`
 - `400 抖音预售券预定商品暂不支持凌晨房套餐同步`

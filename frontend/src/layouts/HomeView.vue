@@ -24,6 +24,7 @@
             <q-route-tab to="/room-status" label="房间状态" icon="meeting_room" />
             <q-route-tab to="/room-management" label="房间管理" icon="home_work" />
             <q-route-tab to="/rate-plans" label="售卖套餐" icon="sell" />
+            <q-route-tab to="/douyin-room-matching" label="抖音房型匹配" icon="sync_alt" />
             <q-route-tab to="/ViewOrders" label="查看订单" icon="receipt_long" />
             <q-route-tab to="/review-management" label="好评管理" icon="sentiment_satisfied_alt" />
             <q-route-tab to="/revenue-statistics" label="收入统计" icon="bar_chart" />

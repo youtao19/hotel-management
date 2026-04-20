@@ -167,6 +167,17 @@ export const ratePlanApi = {
   deleteRatePlan: (id) => api.delete(`/rate-plans/${id}`)
 }
 
+// 抖音房型匹配相关接口
+export const douyinRoomMappingApi = {
+  getMappings: () => api.get('/douyin/room-type-mapping'),
+
+  refreshRooms: (payload = {}) => api.post('/douyin/room-type-mapping/refresh', payload),
+
+  saveMappings: (payload) => api.post('/douyin/room-type-mapping', payload),
+
+  deleteMapping: (localRoomType) => api.delete(`/douyin/room-type-mapping/${encodeURIComponent(localRoomType)}`)
+}
+
 // 订单相关接口
 export const orderApi = {
   // 获取所有订单
