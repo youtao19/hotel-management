@@ -224,6 +224,7 @@ describe('售卖套餐本地 CRUD', () => {
     expect(response.body.data.rate_plan.douyin_rate_plan_id).toBe('DY_RATE_PLAN_001');
     expect(response.body.data.rate_plan.is_synced).toBe(true);
     expect(response.body.data.douyin.douyinId).toBe('DY_RATE_PLAN_001');
+    expect(response.body.data.douyin.logId).toBe('DY_LOG_001');
 
     expect(global.fetch).toHaveBeenCalledWith(
       'https://open.douyin.com/goodlife/v1/trip/hotel/presale/rateplan/save/',
@@ -293,6 +294,64 @@ describe('售卖套餐本地 CRUD', () => {
         hotel_id: 'DY_HOTEL_OVERRIDE'
       })
     ]);
+  });
+
+  test('抖音业务失败时返回 logid 便于调试', async () => {
+    const createResponse = await request(app)
+      .post('/api/rate-plans')
+      .send(buildPayload());
+    const id = createResponse.body.data.id;
+
+    await query(
+      `
+        INSERT INTO douyin_room_type_mapping
+          (douyin_room_id, douyin_room_name, local_room_type)
+        VALUES ($1, $2, $3)
+      `,
+      ['DY_ROOM_001', '抖音测试房型', 'RP_TEST']
+    );
+    await query(
+      `
+        INSERT INTO douyin_physical_rooms
+          (account_id, room_id, room_name, raw_payload, rate_plan_list)
+        VALUES ($1, $2, $3, $4, $5)
+      `,
+      [
+        'DY_ACCOUNT_001',
+        'DY_ROOM_001',
+        '抖音测试房型',
+        { hotel_id: 'DY_HOTEL_001' },
+        []
+      ]
+    );
+
+    douyinTokenService.getToken.mockResolvedValue('TOKEN_001');
+    global.fetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        data: {
+          error_code: 3000001,
+          description: '抖音业务参数错误'
+        },
+        extra: {
+          error_code: 0,
+          description: '',
+          logid: 'DY_LOG_FAIL_001'
+        }
+      })
+    });
+
+    const response = await request(app)
+      .post(`/api/rate-plans/${id}/douyin/sync`)
+      .send({
+        accountId: 'DY_ACCOUNT_001',
+        poiId: 'DY_HOTEL_001'
+      });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.body.error).toBe('抖音业务参数错误');
+    expect(response.body.douyin_log_id).toBe('DY_LOG_FAIL_001');
   });
 
   test('同步抖音时未绑定物理房型返回 400', async () => {

@@ -2,9 +2,10 @@ const douyinTokenService = require('./douyinTokenService');
 const { douyinConfig } = require('../appSettings/douyin.config');
 const db = require('../database/postgreDB/pg');
 
-function createServiceError(message, statusCode = 500) {
+function createServiceError(message, statusCode = 500, details = {}) {
     const error = new Error(message);
     error.statusCode = statusCode;
+    error.douyinLogId = details.douyinLogId || null;
     return error;
 }
 
@@ -63,12 +64,18 @@ class DouyinProductService {
             });
 
             const result = await response.json();
-
-            if (!response.ok) {
-                throw createServiceError(`抖音接口 HTTP ${response.status}: ${JSON.stringify(result)}`, 502);
+            const logId = this._getDouyinLogId(result);
+            if (logId) {
+                console.log(`[Douyin Sync] 抖音 logid: ${logId}`);
             }
 
-            this._assertDouyinSuccess(result);
+            if (!response.ok) {
+                throw createServiceError(`抖音接口 HTTP ${response.status}: ${JSON.stringify(result)}`, 502, {
+                    douyinLogId: logId
+                });
+            }
+
+            this._assertDouyinSuccess(result, logId);
             const ratePlanMap = this._getSyncedRatePlanMap(result, localRatePlanId);
             const douyinRatePlanId = ratePlanMap.rate_plan_id;
 
@@ -76,7 +83,7 @@ class DouyinProductService {
                 accountId,
                 hotelId,
                 douyinRatePlanId,
-                logId: result.extra?.logid || null
+                logId
             });
             await this._savePhysicalRoomRatePlan(localProduct, {
                 douyinRatePlanId,
@@ -89,13 +96,17 @@ class DouyinProductService {
                 douyinId: douyinRatePlanId,
                 outRatePlanId: String(localRatePlanId),
                 roomId: localProduct.douyin_room_id,
-                hotelId
+                hotelId,
+                logId
             };
 
         } catch (error) {
             const statusCode = Number(error?.statusCode || error?.status || 500);
             const log = statusCode >= 500 ? console.error : console.warn;
             log('[Douyin Sync] 同步执行异常:', error.message);
+            if (error?.douyinLogId) {
+                log('[Douyin Sync] 抖音 logid:', error.douyinLogId);
+            }
             throw error;
         }
     }
@@ -184,13 +195,26 @@ class DouyinProductService {
         };
     }
 
-    _assertDouyinSuccess(result) {
+    _getDouyinLogId(result) {
+        return result?.extra?.logid
+            || result?.extra?.log_id
+            || result?.base_resp?.extra?.logid
+            || result?.base_resp?.extra?.log_id
+            || result?.BaseResp?.Extra?.logid
+            || null;
+    }
+
+    _assertDouyinSuccess(result, logId = null) {
         if (result.extra && Number(result.extra.error_code || 0) !== 0) {
-            throw createServiceError(result.extra.sub_description || result.extra.description || '抖音接口调用失败', 502);
+            throw createServiceError(result.extra.sub_description || result.extra.description || '抖音接口调用失败', 502, {
+                douyinLogId: logId
+            });
         }
 
         if (!result.data || Number(result.data.error_code || 0) !== 0) {
-            throw createServiceError(result.data?.description || '抖音商品同步失败', 502);
+            throw createServiceError(result.data?.description || '抖音商品同步失败', 502, {
+                douyinLogId: logId
+            });
         }
     }
 

@@ -211,6 +211,21 @@
             <q-btn
               flat
               round
+              :color="props.row.is_synced ? 'positive' : 'teal-8'"
+              icon="cloud_sync"
+              aria-label="同步到抖音"
+              class="table-action-btn"
+              :loading="isSyncingPlan(props.row.id)"
+              :disable="props.row.sales_type === 3 || isSyncingPlan(props.row.id)"
+              @click="confirmSyncDouyin(props.row)"
+            >
+              <q-tooltip>
+                {{ getSyncTooltip(props.row) }}
+              </q-tooltip>
+            </q-btn>
+            <q-btn
+              flat
+              round
               color="negative"
               icon="delete_outline"
               aria-label="删除售卖套餐"
@@ -436,6 +451,7 @@ const ratePlans = ref([])
 const roomTypes = ref([])
 const loading = ref(false)
 const saving = ref(false)
+const syncingPlanIds = ref([])
 const dialogOpen = ref(false)
 const editingPlan = ref(null)
 
@@ -594,6 +610,22 @@ function getErrorMessage(error, fallback) {
   return error?.response?.data?.message || error?.message || fallback
 }
 
+function isSyncingPlan(id) {
+  return syncingPlanIds.value.includes(Number(id))
+}
+
+function setSyncingPlan(id, syncing) {
+  const normalizedId = Number(id)
+  syncingPlanIds.value = syncing
+    ? Array.from(new Set([...syncingPlanIds.value, normalizedId]))
+    : syncingPlanIds.value.filter(planId => planId !== normalizedId)
+}
+
+function getSyncTooltip(plan) {
+  if (plan.sales_type === 3) return '凌晨房暂不支持同步抖音'
+  return plan.is_synced ? '更新抖音预定商品' : '同步到抖音'
+}
+
 async function fetchRatePlans() {
   const response = await ratePlanApi.getRatePlans()
   ratePlans.value = response.data || []
@@ -680,6 +712,43 @@ function confirmDelete(plan) {
       $q.notify({ type: 'negative', message: getErrorMessage(error, '删除售卖套餐失败') })
     }
   })
+}
+
+function confirmSyncDouyin(plan) {
+  if (plan.sales_type === 3 || isSyncingPlan(plan.id)) return
+
+  $q.dialog({
+    title: plan.is_synced ? '更新抖音商品' : '同步抖音商品',
+    message: `确认将「${plan.name}」同步到抖音预定商品？`,
+    cancel: { label: '取消', flat: true, color: 'grey-7' },
+    ok: { label: plan.is_synced ? '更新' : '同步', color: 'primary', icon: 'cloud_sync' },
+    persistent: true
+  }).onOk(async () => {
+    setSyncingPlan(plan.id, true)
+    try {
+      const response = await ratePlanApi.syncDouyinRatePlan(plan.id)
+      const douyinId = response?.data?.douyin?.douyinId || response?.data?.rate_plan?.douyin_rate_plan_id
+      $q.notify({
+        type: 'positive',
+        message: getSyncSuccessMessage(douyinId),
+        icon: 'cloud_done'
+      })
+      await refreshAll()
+    } catch (error) {
+      console.error('同步抖音商品失败:', error)
+      $q.notify({ type: 'negative', message: getSyncErrorMessage(error) })
+    } finally {
+      setSyncingPlan(plan.id, false)
+    }
+  })
+}
+
+function getSyncSuccessMessage(douyinId) {
+  return douyinId ? `抖音同步成功：${douyinId}` : '抖音同步成功'
+}
+
+function getSyncErrorMessage(error) {
+  return getErrorMessage(error, '同步抖音商品失败')
 }
 
 onMounted(refreshAll)

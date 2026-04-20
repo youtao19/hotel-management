@@ -314,9 +314,13 @@ router.post('/:id/douyin/sync', async (req, res) => {
     const statusCode = getErrorStatusCode(err);
     const log = statusCode >= 500 ? console.error : console.warn;
     log('同步售卖套餐到抖音失败:', err.message);
+    if (err.douyinLogId) {
+      log('抖音 logid:', err.douyinLogId);
+    }
     res.status(statusCode).json({
       message: statusCode >= 500 ? '同步售卖套餐到抖音失败' : err.message,
-      error: err.message
+      error: err.message,
+      douyin_log_id: err.douyinLogId || null
     });
   }
 });

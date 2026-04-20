@@ -162,6 +162,8 @@ export const ratePlanApi = {
 
   updateRatePlan: (id, payload) => api.patch(`/rate-plans/${id}`, payload),
 
+  syncDouyinRatePlan: (id, payload = {}) => api.post(`/rate-plans/${id}/douyin/sync`, payload),
+
   deleteRatePlan: (id) => api.delete(`/rate-plans/${id}`)
 }
 

@@ -866,6 +866,7 @@ curl -X GET 'http://localhost:3000/api/plugin/room-type-mapping?platform=meituan
   - `rate_plans.id` 会作为抖音 `out_rate_plan_id`
   - 已同步过的套餐会把本地 `ota_channel_mappings.channel_item_id` 作为抖音 `rate_plan_id` 继续更新
   - 同步成功后会写入 `ota_channel_mappings`，并更新 `douyin_physical_rooms.rate_plan_list`
+  - 抖音返回的 `extra.logid` 会打印到后端日志；成功时保存到 `ota_channel_mappings.channel_config.log_id`，并返回给前端
   - 当前不支持 `sales_type=3` 凌晨房同步到抖音预售券预定商品
 - 请求体字段：
   - `accountId`：选填，抖音商家账号 ID；未传时优先使用物理房型缓存账号，再回退环境变量 `DOUYIN_ACCOUNT_ID`
@@ -898,7 +899,8 @@ curl -X GET 'http://localhost:3000/api/plugin/room-type-mapping?platform=meituan
       "douyinId": "DY_RATE_PLAN_001",
       "outRatePlanId": "101",
       "roomId": "DY_ROOM_001",
-      "hotelId": "DY_HOTEL_001"
+      "hotelId": "DY_HOTEL_001",
+      "logId": "20260420120000ABCDEF"
     }
   },
   "message": "售卖套餐同步抖音成功"
@@ -910,4 +912,4 @@ curl -X GET 'http://localhost:3000/api/plugin/room-type-mapping?platform=meituan
 - `400 缺少抖音商家 account_id，请传 accountId 或配置 DOUYIN_ACCOUNT_ID`
 - `400 缺少抖音酒店 ID，请传 poiId 或配置 DOUYIN_POI_ID`
 - `400 抖音预售券预定商品暂不支持凌晨房套餐同步`
-- `502 同步售卖套餐到抖音失败`：抖音接口 HTTP 或业务错误，响应 `error` 字段会带上抖音返回的错误描述
+- `502 同步售卖套餐到抖音失败`：抖音接口 HTTP 或业务错误，响应 `error` 字段会带上抖音返回的错误描述，`douyin_log_id` 会带上抖音 `logid`
