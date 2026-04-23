@@ -1,12 +1,12 @@
 # 抖音 OTA 官方文档索引
 
-> 更新时间：2026-03-24
+> 更新时间：2026-04-23
 > 
 > 说明：
 > - 本文件用于沉淀用户已提供的抖音 OTA 官方文档链接，后续开发优先从这里查阅；
 > - “当前代码关联”基于当前仓库实现状态整理，后续接入更多能力时可继续补充；
 > - 所有链接均来自抖音开放平台官方文档。
-> - 当前后端 `/api/douyin/*` 路由已停用，原 `backend/routes/douyin/douyinApi.js` 已删除；下方 `backend/modules/douyin/*` 关联多为历史规划资料。
+> - 当前历史后端 `/api/douyin/*` 路由已停用，原 `backend/routes/douyin/douyinApi.js` 已删除；新的外部接收入口见 `POST /douyin/webhooks` 与 `POST /douyin/spi/price-volume`。
 
 ## 1. 接入前准备
 
@@ -33,12 +33,15 @@
 ### 1.5 WebHooks接入
 - 链接：[WebHooks接入](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/preparation/webhooks)
 - 用途：说明 Webhook 推送模式的接入流程、配置方式和验签处理思路。
-- 当前代码关联：当前未单独实现，可作为酒店静态信息处理结果推送等能力的参考。
+- 当前代码关联：`backend/routes/douyinExternalRoute.js`、`backend/services/douyinWebhookService.js`、`backend/services/douyinSignatureService.js`
+- 本地实现入口：`POST /douyin/webhooks`
+- 当前实现范围：Webhook 验签、`verify_webhook` challenge 回执、`Msg-Id` Redis TTL 去重、双层 `content` 解析和结构化日志；具体业务事件状态流转后续按事件补齐。
 
 ### 1.6 SPI签名规则
 - 链接：[SPI签名规则](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/preparation/spi-signature-rules)
 - 用途：定义 SPI 请求签名串拼接方式、签名校验规则和安全要求。
-- 当前代码关联：`backend/modules/douyin/crypto/signature.js`、`backend/modules/douyin/crypto/verifySign.js`、`backend/modules/douyin/middlewares/verifyDouyinSign.middleware.js`
+- 当前代码关联：`backend/services/douyinSignatureService.js`
+- 注意：Webhook 使用 `X-Douyin-Signature` + SHA1；SPI 使用 `x-life-sign` + SHA-256，两者不能混用。
 
 ### 1.7 平台返回状态码
 - 链接：[平台返回状态码](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/preparation/returns-a-status-code)
@@ -252,10 +255,17 @@
 
 ## 9. 主动拉取价量态
 
-### 9.1 价量态拉取接口
+### 9.1 酒店日历房价量态拉取接口
+- 链接：[酒店日历房价量态拉取接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/price-volume-pull/price-volume-interface)
+- 用途：由抖音主动调用三方接口，拉取指定酒店、售卖房型和日期范围内的价格、房量、房态数据。
+- 当前代码关联：`backend/routes/douyinExternalRoute.js`、`backend/services/douyinPriceVolumeService.js`、`backend/services/douyinSignatureService.js`
+- 本地实现入口：`POST /douyin/spi/price-volume`
+- 当前返回结构：按官方当前文档返回 `data.room_rates[].rate_avail_infos[]`，价格由本地“元”转换为抖音要求的“分”，日期保持 `YYYY-MM-DD` 字符串。
+
+### 9.2 预售券价量态拉取接口
 - 链接：[价量态拉取接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/pull-price-volume/price-volume-interface)
 - 用途：由抖音主动调用三方接口，定时拉取指定酒店、售卖房型和日期范围内的价格、房量、房态数据，是预售券价量态保鲜的重要能力。
-- 当前代码关联：`backend/modules/douyin/controllers/ariPull.controller.js`、`backend/modules/douyin/services/ariPull.service.js`、`backend/modules/douyin/mappers/ariPull.mapper.js`
+- 当前代码关联：历史规划资料；当前已实现的是酒店日历房入口 `POST /douyin/spi/price-volume`。
 
 ## 10. 当前最值得优先深读的文档
 
