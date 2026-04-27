@@ -164,6 +164,8 @@ export const ratePlanApi = {
 
   syncDouyinRatePlan: (id, payload = {}) => api.post(`/rate-plans/${id}/douyin/sync`, payload),
 
+  notifyDouyinAri: (payload) => api.post('/douyin/ari-notify', payload),
+
   deleteRatePlan: (id) => api.delete(`/rate-plans/${id}`)
 }
 

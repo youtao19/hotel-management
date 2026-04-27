@@ -28,6 +28,7 @@ function parseJsonObject(value, fieldName) {
 
 function parseWebhookPayload(body) {
   const outer = parseJsonObject(body, 'Webhook 请求体');
+  // 抖音 Webhook 的 content 有时是 JSON 字符串，有时已被框架解析成对象，入口处统一成对象。
   const content = typeof outer.content === 'string'
     ? parseJsonObject(outer.content, 'Webhook content')
     : (outer.content || {});
@@ -42,10 +43,12 @@ function parseWebhookPayload(body) {
 
 async function markMessageProcessed(redisClient, msgId) {
   if (!msgId) {
+    // 没有消息 ID 时无法做幂等判断，只能继续处理并依赖后续业务校验兜底。
     return { duplicate: false };
   }
 
   const key = `douyin:webhook:msg:${msgId}`;
+  // 使用 Redis NX 保证同一个 msgId 只有第一次进入业务处理，TTL 避免幂等键长期堆积。
   const result = await redisClient.set(key, '1', {
     NX: true,
     EX: IDEMPOTENCY_TTL_SECONDS

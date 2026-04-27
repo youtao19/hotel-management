@@ -139,7 +139,10 @@
 ### 6.2.1 日历房价库变更增量通知接口
 - 链接：[日历房价库变更增量通知接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/housing-updates/price-change-notification)
 - 用途：当酒店侧价格或库存变化时，通知抖音触发价量态拉取。
-- 当前代码关联：`backend/modules/douyin/services/ari.service.js`、`backend/modules/douyin/controllers/ari.controller.js`
+- 当前代码关联：`backend/services/douyinAriNotifyService.js`、`backend/routes/douyinAriNotifyRoute.js`
+- 本地实现入口：`POST /api/douyin/ari-notify`
+- 当前会一并发送 `hotel_ids`，优先取套餐渠道映射中的 `hotel_id/poi_id`，不足时回退到抖音物理房型缓存。
+- 当前默认会发送 `notify_scene: [1, 2, 3, 4]`，覆盖价格、库存、房态、日历属性四类变更场景。
 
 ### 6.2.2 房量房态推送接口
 - 链接：[房量房态推送接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/housing-update/room-status-push-api)
@@ -260,7 +263,7 @@
 - 用途：由抖音主动调用三方接口，拉取指定酒店、售卖房型和日期范围内的价格、房量、房态数据。
 - 当前代码关联：`backend/routes/douyinExternalRoute.js`、`backend/services/douyinPriceVolumeService.js`、`backend/services/douyinSignatureService.js`
 - 本地实现入口：`POST /douyin/spi/price-volume`
-- 当前返回结构：按官方当前文档返回 `data.room_rates[].rate_avail_infos[]`，价格由本地“元”转换为抖音要求的“分”，日期保持 `YYYY-MM-DD` 字符串。
+- 当前返回结构：`data.status` 与 `data.error_code` 同层，`data.room_rates[].rate_avail_infos[]` 按官方字段返回；价格由本地“元”转换为抖音要求的“分”，日期保持 `YYYY-MM-DD` 字符串。
 
 ### 9.2 预售券价量态拉取接口
 - 链接：[价量态拉取接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/pull-price-volume/price-volume-interface)

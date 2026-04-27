@@ -226,6 +226,21 @@
             <q-btn
               flat
               round
+              color="deep-orange-7"
+              icon="published_with_changes"
+              aria-label="通知抖音拉取价量态"
+              class="table-action-btn"
+              :loading="isNotifyingPlan(props.row.id)"
+              :disable="!props.row.is_synced || isNotifyingPlan(props.row.id)"
+              @click="openAriNotifyDialog(props.row)"
+            >
+              <q-tooltip>
+                {{ props.row.is_synced ? '通知抖音拉取价量态' : '套餐同步到抖音后才能通知拉取' }}
+              </q-tooltip>
+            </q-btn>
+            <q-btn
+              flat
+              round
               color="negative"
               icon="delete_outline"
               aria-label="删除售卖套餐"
@@ -413,6 +428,73 @@
         </q-form>
       </q-card>
     </q-dialog>
+
+    <q-dialog v-model="ariNotifyDialogOpen" persistent>
+      <q-card class="ari-notify-dialog">
+        <q-card-section class="dialog-heading">
+          <div>
+            <div class="text-h6">通知抖音拉取价量态</div>
+            <div class="text-caption text-grey-7">
+              当前套餐：{{ ariNotifyPlan?.name || '--' }}
+            </div>
+          </div>
+          <q-btn
+            flat
+            round
+            icon="close"
+            aria-label="关闭价量态通知弹窗"
+            @click="ariNotifyDialogOpen = false"
+          />
+        </q-card-section>
+
+        <q-separator />
+
+        <q-form ref="ariNotifyFormRef" @submit="submitAriNotify">
+          <q-card-section class="dialog-body">
+            <div class="row q-col-gutter-md">
+              <div class="col-12 col-md-6">
+                <q-input
+                  v-model="ariNotifyForm.startDate"
+                  label="开始日期"
+                  type="date"
+                  outlined
+                  :rules="[requiredRule('请选择开始日期')]"
+                />
+              </div>
+              <div class="col-12 col-md-6">
+                <q-input
+                  v-model="ariNotifyForm.endDate"
+                  label="结束日期"
+                  type="date"
+                  outlined
+                  :rules="[requiredRule('请选择结束日期'), endDateRule]"
+                />
+              </div>
+              <div class="col-12">
+                <q-input
+                  v-model.trim="ariNotifyForm.accountId"
+                  label="抖音 account_id（可选）"
+                  outlined
+                  hint="不填时使用后端配置的 DOUYIN_ACCOUNT_ID"
+                />
+              </div>
+            </div>
+          </q-card-section>
+
+          <q-card-actions align="right" class="dialog-actions">
+            <q-btn flat label="取消" color="grey-8" @click="ariNotifyDialogOpen = false" />
+            <q-btn
+              type="submit"
+              color="primary"
+              label="立即通知"
+              icon="send"
+              unelevated
+              :loading="ariNotifySubmitting"
+            />
+          </q-card-actions>
+        </q-form>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
@@ -447,13 +529,18 @@ const columns = [
 ]
 
 const formRef = ref(null)
+const ariNotifyFormRef = ref(null)
 const ratePlans = ref([])
 const roomTypes = ref([])
 const loading = ref(false)
 const saving = ref(false)
 const syncingPlanIds = ref([])
+const notifyingPlanIds = ref([])
 const dialogOpen = ref(false)
 const editingPlan = ref(null)
+const ariNotifyDialogOpen = ref(false)
+const ariNotifySubmitting = ref(false)
+const ariNotifyPlan = ref(null)
 
 const filters = ref({
   roomTypeCode: '',
@@ -463,6 +550,7 @@ const filters = ref({
 })
 
 const form = ref(createDefaultForm())
+const ariNotifyForm = ref(createDefaultAriNotifyForm())
 
 const roomTypeFilterOptions = computed(() => {
   return roomTypes.value.map(roomType => ({
@@ -517,6 +605,14 @@ function createDefaultForm() {
   }
 }
 
+function createDefaultAriNotifyForm() {
+  return {
+    startDate: '',
+    endDate: '',
+    accountId: ''
+  }
+}
+
 function getSalesTypeMeta(value) {
   return salesTypeOptions.find(option => option.value === value) || salesTypeOptions[0]
 }
@@ -549,6 +645,29 @@ function optionalRangeRule(min, max, message) {
     const numberValue = Number(value)
     return Number.isInteger(numberValue) && numberValue >= min && numberValue <= max || message
   }
+}
+
+function formatLocalDate(date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function getDefaultAriDateRange() {
+  const startDate = new Date()
+  const endDate = new Date()
+  endDate.setDate(endDate.getDate() + 1)
+
+  return {
+    startDate: formatLocalDate(startDate),
+    endDate: formatLocalDate(endDate)
+  }
+}
+
+function endDateRule(value) {
+  if (!value || !ariNotifyForm.value.startDate) return true
+  return value >= ariNotifyForm.value.startDate || '结束日期不能早于开始日期'
 }
 
 function parseJsonObject(text) {
@@ -614,11 +733,22 @@ function isSyncingPlan(id) {
   return syncingPlanIds.value.includes(Number(id))
 }
 
+function isNotifyingPlan(id) {
+  return notifyingPlanIds.value.includes(Number(id))
+}
+
 function setSyncingPlan(id, syncing) {
   const normalizedId = Number(id)
   syncingPlanIds.value = syncing
     ? Array.from(new Set([...syncingPlanIds.value, normalizedId]))
     : syncingPlanIds.value.filter(planId => planId !== normalizedId)
+}
+
+function setNotifyingPlan(id, notifying) {
+  const normalizedId = Number(id)
+  notifyingPlanIds.value = notifying
+    ? Array.from(new Set([...notifyingPlanIds.value, normalizedId]))
+    : notifyingPlanIds.value.filter(planId => planId !== normalizedId)
 }
 
 function getSyncTooltip(plan) {
@@ -668,6 +798,17 @@ function openDialog(plan = null) {
     : createDefaultForm()
 
   dialogOpen.value = true
+}
+
+function openAriNotifyDialog(plan) {
+  if (!plan?.is_synced || isNotifyingPlan(plan.id)) return
+
+  ariNotifyPlan.value = plan
+  ariNotifyForm.value = {
+    ...createDefaultAriNotifyForm(),
+    ...getDefaultAriDateRange()
+  }
+  ariNotifyDialogOpen.value = true
 }
 
 async function submitForm() {
@@ -749,6 +890,52 @@ function getSyncSuccessMessage(douyinId) {
 
 function getSyncErrorMessage(error) {
   return getErrorMessage(error, '同步抖音商品失败')
+}
+
+async function submitAriNotify() {
+  if (!ariNotifyPlan.value) return
+
+  ariNotifySubmitting.value = true
+  setNotifyingPlan(ariNotifyPlan.value.id, true)
+
+  try {
+    const valid = await ariNotifyFormRef.value.validate()
+    if (!valid) return
+
+    const payload = {
+      localRatePlanIds: [ariNotifyPlan.value.id],
+      startDate: ariNotifyForm.value.startDate,
+      endDate: ariNotifyForm.value.endDate
+    }
+
+    if (ariNotifyForm.value.accountId) {
+      payload.accountId = ariNotifyForm.value.accountId
+    }
+
+    const response = await ratePlanApi.notifyDouyinAri(payload)
+    const douyinLogId = response?.data?.data?.douyinLogId
+
+    $q.notify({
+      type: 'positive',
+      icon: 'task_alt',
+      message: douyinLogId ? `已通知抖音拉取价量态，logid：${douyinLogId}` : '已通知抖音拉取价量态'
+    })
+    ariNotifyDialogOpen.value = false
+  } catch (error) {
+    console.error('通知抖音拉取价量态失败:', error)
+    const douyinLogId = error?.response?.data?.douyin_log_id
+    $q.notify({
+      type: 'negative',
+      message: douyinLogId
+        ? `${getErrorMessage(error, '通知抖音拉取价量态失败')}，logid：${douyinLogId}`
+        : getErrorMessage(error, '通知抖音拉取价量态失败')
+    })
+  } finally {
+    ariNotifySubmitting.value = false
+    if (ariNotifyPlan.value) {
+      setNotifyingPlan(ariNotifyPlan.value.id, false)
+    }
+  }
 }
 
 onMounted(refreshAll)
@@ -958,6 +1145,11 @@ onActivated(refreshAll)
 .rate-plan-dialog {
   width: min(920px, calc(100vw - 32px));
   max-width: 920px;
+  border-radius: 8px;
+}
+
+.ari-notify-dialog {
+  width: min(560px, calc(100vw - 32px));
   border-radius: 8px;
 }
 

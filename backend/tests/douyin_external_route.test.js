@@ -1,5 +1,8 @@
 const crypto = require('crypto');
 const express = require('express');
+const fs = require('fs/promises');
+const os = require('os');
+const path = require('path');
 const request = require('supertest');
 const { URL } = require('url');
 
@@ -8,6 +11,22 @@ process.env.DOUYIN_CLIENT_SECRET = 'DY_SECRET_TEST';
 
 const { query } = require('../database/postgreDB/pg');
 const { createDouyinExternalRouter } = require('../routes/douyinExternalRoute');
+
+async function readJsonLines(filePath) {
+  try {
+    const content = await fs.readFile(filePath, 'utf8');
+    return content
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return [];
+    }
+    throw error;
+  }
+}
 
 function captureRawBody(req, _res, buf) {
   req.rawBody = buf && buf.length ? buf.toString('utf8') : '';
@@ -133,18 +152,26 @@ async function seedPriceVolumeData() {
 describe('抖音 Webhooks 与价量态 SPI', () => {
   let redisClient;
   let app;
+  let logFilePath;
 
   beforeEach(async () => {
+    logFilePath = path.join(os.tmpdir(), `douyin-callback-logid-${process.pid}-${Date.now()}.jsonl`);
+    process.env.DOUYIN_CALLBACK_LOG_FILE = logFilePath;
     redisClient = {
       set: jest.fn(async () => 'OK')
     };
     app = buildTestApp(redisClient);
     jest.spyOn(console, 'log').mockImplementation(() => {});
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
     jest.spyOn(console, 'error').mockImplementation(() => {});
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     jest.restoreAllMocks();
+    delete process.env.DOUYIN_CALLBACK_LOG_FILE;
+    if (logFilePath) {
+      await fs.rm(logFilePath, { force: true });
+    }
   });
 
   test('Webhook 验证请求验签成功后返回 challenge', async () => {
@@ -203,6 +230,17 @@ describe('抖音 Webhooks 与价量态 SPI', () => {
         })
       })
     );
+    const logRecords = await readJsonLines(logFilePath);
+    expect(logRecords).toEqual([
+      expect.objectContaining({
+        type: 'webhook',
+        stage: 'processed',
+        logId: 'DY_LOG_001',
+        event: 'life_trade_order_notify',
+        msgId: 'MSG_001',
+        contentAction: 'pay_success'
+      })
+    ]);
   });
 
   test('Webhook 重复 Msg-Id 直接返回成功', async () => {
@@ -272,10 +310,12 @@ describe('抖音 Webhooks 与价量态 SPI', () => {
       .set('Content-Type', 'application/json')
       .set('x-life-clientkey', 'DY_CLIENT_TEST')
       .set('x-life-sign', buildSpiSign(path, body))
+      .set('x-bytedance-logid', 'DY_SPI_LOG_001')
       .send(body);
 
     expect(response.statusCode).toBe(200);
     expect(response.body.data.error_code).toBe(0);
+    expect(response.body.data.status).toBe(true);
     expect(response.body.data.room_rates).toHaveLength(1);
     expect(response.body.data.room_rates[0]).toMatchObject({
       rate_plan_id: 'DY_RATE_PV_001',
@@ -292,6 +332,30 @@ describe('抖音 Webhooks 与价量态 SPI', () => {
       available: true,
       inventory: 1
     });
+    expect(console.log).toHaveBeenCalledWith(
+      '[Douyin SPI] 已处理价量态拉取:',
+      expect.objectContaining({
+        logId: 'DY_SPI_LOG_001',
+        ratePlanIds: ['DY_RATE_PV_001'],
+        errorCode: 0,
+        status: true,
+        roomRateCount: 1
+      })
+    );
+    const logRecords = await readJsonLines(logFilePath);
+    expect(logRecords).toEqual([
+      expect.objectContaining({
+        type: 'spi_price_volume',
+        stage: 'processed',
+        logId: 'DY_SPI_LOG_001',
+        ratePlanIds: ['DY_RATE_PV_001'],
+        response: expect.objectContaining({
+          errorCode: 0,
+          status: true,
+          roomRateCount: 1
+        })
+      })
+    ]);
   });
 
   test('SPI 签名错误返回 401', async () => {
@@ -308,9 +372,19 @@ describe('抖音 Webhooks 与价量态 SPI', () => {
       .set('Content-Type', 'application/json')
       .set('x-life-clientkey', 'DY_CLIENT_TEST')
       .set('x-life-sign', 'bad-sign')
+      .set('x-bytedance-logid', 'DY_SPI_BAD_SIGN_LOG_001')
       .send(body);
 
     expect(response.statusCode).toBe(401);
+    const logRecords = await readJsonLines(logFilePath);
+    expect(logRecords).toEqual([
+      expect.objectContaining({
+        type: 'spi_price_volume',
+        stage: 'signature_failed',
+        logId: 'DY_SPI_BAD_SIGN_LOG_001',
+        ratePlanIds: ['DY_RATE_PV_001']
+      })
+    ]);
   });
 
   test('SPI 未知 rate_plan_id 返回售卖计划级错误', async () => {
@@ -332,6 +406,7 @@ describe('抖音 Webhooks 与价量态 SPI', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.body.data.error_code).toBe(0);
+    expect(response.body.data.status).toBe(true);
     expect(response.body.data.room_rates[0]).toMatchObject({
       rate_plan_id: 'UNKNOWN_RATE_PLAN',
       status: false,

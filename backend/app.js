@@ -107,6 +107,9 @@ async function initializeSession() {
     const douyinRoomTypeMappingRoute = require("./routes/douyinRoomTypeMappingRoute");
     app.use("/api/douyin/room-type-mapping", douyinRoomTypeMappingRoute);
 
+    const douyinAriNotifyRoute = require("./routes/douyinAriNotifyRoute");
+    app.use("/api/douyin/ari-notify", douyinAriNotifyRoute);
+
     const douyinExternalRoute = require("./routes/douyinExternalRoute");
     app.use("/douyin", douyinExternalRoute);
 

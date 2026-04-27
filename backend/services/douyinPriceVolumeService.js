@@ -69,6 +69,7 @@ function buildDateList(startText, endText) {
   }
 
   const dates = [];
+  // 这里只生成 YYYY-MM-DD 字符串列表，后续 SQL 按 date 处理，避免把房晚日期当成时刻展示。
   const oneDay = 24 * 60 * 60 * 1000;
   for (let current = start.utcTime; current <= end.utcTime; current += oneDay) {
     dates.push(formatDateFromUtcTime(current));
@@ -82,6 +83,7 @@ function buildDateList(startText, endText) {
 
 function normalizeRequest(payload = {}) {
   const dateRange = payload.date_range || {};
+  // 抖音回调字段在文档和实际请求中存在多种命名，入口统一兼容后再进入业务查询。
   const startDate = normalizeString(
     dateRange.start
       || payload.start_date
@@ -115,6 +117,7 @@ function amountYuanToCents(value) {
 function getHotelIdSql() {
   return `
     COALESCE(
+      -- 历史缓存中的酒店字段来源不完全一致，按常见抖音字段优先级取第一个可用值。
       dpr.raw_payload ->> 'hotel_id',
       dpr.raw_payload ->> 'poi_id',
       dpr.raw_payload ->> 'hotelId',
@@ -227,6 +230,7 @@ async function getInventoryMap(roomTypeCodes, dates) {
       LEFT JOIN orders o
         ON o.room_number = r.room_number
        AND o.stay_date = td.stay_date
+       -- 只有会占用房量的订单状态参与扣减，取消、退房等状态不影响可售库存。
        AND o.status = ANY($3)
       GROUP BY td.stay_date, tt.room_type_code
     `,
@@ -244,6 +248,7 @@ async function getInventoryMap(roomTypeCodes, dates) {
 }
 
 function buildUnknownRatePlan(ratePlanId) {
+  // 抖音要求未知售卖计划逐条返回子错误，不能因为一个无效 ID 让整批价量查询失败。
   return {
     rate_plan_id: ratePlanId,
     rate_avail_infos: [],
@@ -255,6 +260,7 @@ function buildUnknownRatePlan(ratePlanId) {
 
 function buildRatePlanResponse(row, dates, inventoryMap) {
   const amount = amountYuanToCents(row.base_price);
+  // 售卖套餐和房型任一侧关闭都不能继续对外售卖，但仍返回价格和库存便于抖音侧同步状态。
   const isRatePlanActive = Number(row.rate_plan_status) === 1 && !row.room_type_closed;
 
   return {
@@ -292,6 +298,7 @@ async function buildPriceVolumeResponse(payload = {}) {
     const orderedRows = request.ratePlanIds.length
       ? request.ratePlanIds.map((id) => rowMap.get(id)).filter(Boolean)
       : rows;
+    // 先批量计算库存，避免按套餐和日期循环查库导致抖音拉取时响应变慢。
     const inventoryMap = await getInventoryMap(
       orderedRows.map((row) => row.room_type_code),
       request.dates
@@ -308,6 +315,7 @@ async function buildPriceVolumeResponse(payload = {}) {
 
     return {
       error_code: 0,
+      status: true,
       description: 'success',
       room_rates: roomRates,
       timestamp: String(Math.floor(Date.now() / 1000))
@@ -315,6 +323,7 @@ async function buildPriceVolumeResponse(payload = {}) {
   } catch (error) {
     return {
       error_code: Number(error.douyinErrorCode || 13),
+      status: false,
       description: error.message || '价量态拉取失败',
       room_rates: [],
       timestamp: String(Math.floor(Date.now() / 1000))
