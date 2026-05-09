@@ -6,7 +6,7 @@
 > - 本文件用于沉淀用户已提供的抖音 OTA 官方文档链接，后续开发优先从这里查阅；
 > - “当前代码关联”基于当前仓库实现状态整理，后续接入更多能力时可继续补充；
 > - 所有链接均来自抖音开放平台官方文档。
-> - 当前历史后端 `/api/douyin/*` 路由已停用，原 `backend/routes/douyin/douyinApi.js` 已删除；新的外部接收入口见 `POST /douyin/webhooks` 与 `POST /douyin/spi/price-volume`。
+> - 当前历史后端 `/api/douyin/*` 路由已停用，原 `backend/routes/douyin/douyinApi.js` 已删除；新的外部接收入口见 `POST /douyin/webhooks`、`POST /douyin/spi/price-volume` 与 `POST /douyin/spi/bookable`。
 
 ## 1. 接入前准备
 
@@ -188,7 +188,10 @@
 #### 8.1.2 可订检查 SPI
 - 链接：[可订检查 SPI](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/accommodation-voucher-trade/bookable-check)
 - 用途：在预售券场景下由抖音向三方发起可订检查，确认当前商品是否可售。
-- 当前代码关联：当前未实现，后续验收“提单页可订检查”时需要接入。
+- 当前代码关联：`backend/routes/douyinExternalRoute.js`、`backend/services/douyinBookableCheckService.js`、`backend/services/douyinSignatureService.js`
+- 本地实现入口：`POST /douyin/spi/bookable`
+- 抖音后台配置 URL：`https://<你的公网域名>/douyin/spi/bookable`
+- 当前支持范围：预售券 `biz_type=2011`；失败时返回 `data.ari.stock_and_amount[]`，字段包含 `room_id`、`rate_plan_id`、`timerange`、`original_amount`、`available`、`inventory`。
 
 #### 8.1.3 支付结果通知 SPI
 - 链接：[支付结果通知 spi](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/accommodation-voucher-trade/paynotice)

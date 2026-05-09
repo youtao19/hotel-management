@@ -36,8 +36,6 @@
 ## 要求
 + 前端不承载核心业务规则，业务校验、权限判断、状态流转、数据一致性等逻辑放在后端 API 中；表单交互、按钮禁用、空态展示、加载状态等界面状态逻辑可以保留在前端。
 + 代码注释要求写“为什么这样做”和“需要注意什么”，不要重复代码表面含义。注释应优先说明业务意图、边界条件、兼容性处理、异常原因、时间/金额/权限等容易误解的规则；简单直接、从代码本身即可看懂的内容不写注释。禁止添加“给变量赋值”“遍历数组”“调用接口”这类无信息量注释。注释要简短、准确，并且修改代码时必须同步更新注释，避免注释过期。
-+ commit message 需要用中文书写
-+ 代码逻辑要求简单高效。
 + 修改了接口后，需要同步修改接口文档。
 + 我给了你文档或链接后，你需要按任务上下文保存到仓库约定位置或当前任务记录中，并在需要的时候使用它来帮助你完成任务；如果保存位置不明确，需要先说明你准备保存到哪里。
 
@@ -61,6 +59,56 @@
 
 Always use Context7 MCP when I need third-party library/API documentation, code generation, setup or configuration steps without me having to explicitly ask. If the task depends on project-local code, private interfaces, or existing local documents, prefer the repository context first.
 
-## 修改代码
-+ 你要修改代码的时候，如果是跨模块改动、接口改动、数据结构改动或业务逻辑改动，先将你要修改的详细内容发给我（例如：修改哪个文件、哪个函数、修改的内容是什么），等我确认后，你再进行修改；如果只是小范围、不影响接口和业务规则的局部修复，可以直接修改，但仍要先说明你改了什么。
-+ 你写的代码要简单，适合初学者，并且要有必要的关键注释。
+## The Four Principles in Detail
+1. Think Before Coding
+Don't assume. Don't hide confusion. Surface tradeoffs.
+
+LLMs often pick an interpretation silently and run with it. This principle forces explicit reasoning:
+
+State assumptions explicitly — If uncertain, ask rather than guess
+Present multiple interpretations — Don't pick silently when ambiguity exists
+Push back when warranted — If a simpler approach exists, say so
+Stop when confused — Name what's unclear and ask for clarification
+2. Simplicity First
+Minimum code that solves the problem. Nothing speculative.
+
+Combat the tendency toward overengineering:
+
+No features beyond what was asked
+No abstractions for single-use code
+No "flexibility" or "configurability" that wasn't requested
+No error handling for impossible scenarios
+If 200 lines could be 50, rewrite it
+The test: Would a senior engineer say this is overcomplicated? If yes, simplify.
+
+3. Surgical Changes
+Touch only what you must. Clean up only your own mess.
+
+When editing existing code:
+
+Don't "improve" adjacent code, comments, or formatting
+Don't refactor things that aren't broken
+Match existing style, even if you'd do it differently
+If you notice unrelated dead code, mention it — don't delete it
+When your changes create orphans:
+
+Remove imports/variables/functions that YOUR changes made unused
+Don't remove pre-existing dead code unless asked
+The test: Every changed line should trace directly to the user's request.
+
+4. Goal-Driven Execution
+Define success criteria. Loop until verified.
+
+Transform imperative tasks into verifiable goals:
+
+Instead of...	Transform to...
+"Add validation"	"Write tests for invalid inputs, then make them pass"
+"Fix the bug"	"Write a test that reproduces it, then make it pass"
+"Refactor X"	"Ensure tests pass before and after"
+For multi-step tasks, state a brief plan:
+
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+Strong success criteria let the LLM loop independently. Weak criteria ("make it work") require constant clarification.
+

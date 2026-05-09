@@ -5,6 +5,7 @@ const redisDb = require('../database/redis/redis');
 const signatureService = require('../services/douyinSignatureService');
 const webhookService = require('../services/douyinWebhookService');
 const priceVolumeService = require('../services/douyinPriceVolumeService');
+const bookableCheckService = require('../services/douyinBookableCheckService');
 const callbackLogService = require('../services/douyinCallbackLogService');
 
 function successResponse() {
@@ -30,6 +31,17 @@ function summarizePriceVolumeRequest(payload = {}) {
       start: dateRange.start || payload.start_date || payload.startDate || payload.check_in_date || payload.checkInDate || '',
       end: dateRange.end || payload.end_date || payload.endDate || payload.check_out_date || payload.checkOutDate || ''
     }
+  };
+}
+
+function summarizeBookableRequest(payload = {}) {
+  return {
+    ratePlanId: payload.rate_plan_id || payload.ratePlanId || '',
+    bizType: payload.biz_type || payload.bizType || '',
+    checkInDate: payload.check_in_date || payload.checkInDate || '',
+    checkOutDate: payload.check_out_date || payload.checkOutDate || '',
+    numberOfUnits: payload.number_of_units || payload.numberOfUnits || '',
+    totalAmount: payload.total_amount || payload.totalAmount || ''
   };
 }
 
@@ -199,6 +211,65 @@ function createDouyinExternalRouter(options = {}) {
           description: '服务器错误',
           room_rates: [],
           timestamp: String(Math.floor(Date.now() / 1000))
+        }
+      });
+    }
+  });
+
+  router.post('/spi/bookable', async (req, res) => {
+    const logId = getHeader(req, 'x-bytedance-logid');
+
+    try {
+      // 可订检查是 SPI，不是 Webhook；这里必须使用 x-life-sign，否则抖音验收会直接失败。
+      if (!signatureService.verifySpiSignature(req)) {
+        console.warn('[Douyin SPI] 可订检查签名校验失败:', { logId });
+        await saveCallbackLog({
+          type: 'spi_bookable',
+          stage: 'signature_failed',
+          logId,
+          ...summarizeBookableRequest(req.body || {})
+        });
+        return res.status(401).json({ message: '抖音 SPI 签名校验失败' });
+      }
+
+      const data = await bookableCheckService.buildBookableCheckResponse(req.body || {});
+      const requestSummary = summarizeBookableRequest(req.body || {});
+      // 记录 stock_and_amount 数量即可定位失败分支，避免把完整价量明细刷进运行日志。
+      console.log('[Douyin SPI] 已处理预售券可订检查:', {
+        logId,
+        ...requestSummary,
+        errorCode: data.error_code,
+        stockAndAmountCount: Array.isArray(data.ari?.stock_and_amount) ? data.ari.stock_and_amount.length : 0
+      });
+      await saveCallbackLog({
+        type: 'spi_bookable',
+        stage: 'processed',
+        logId,
+        ...requestSummary,
+        response: {
+          errorCode: data.error_code,
+          description: data.description,
+          stockAndAmountCount: Array.isArray(data.ari?.stock_and_amount) ? data.ari.stock_and_amount.length : 0
+        }
+      });
+
+      return res.status(200).json({ data });
+    } catch (error) {
+      console.error('[Douyin SPI] 预售券可订检查处理失败:', {
+        logId,
+        error
+      });
+      await saveCallbackLog({
+        type: 'spi_bookable',
+        stage: 'error',
+        logId,
+        ...summarizeBookableRequest(req.body || {}),
+        error: error.message
+      });
+      return res.status(500).json({
+        data: {
+          error_code: 13,
+          description: '服务器错误'
         }
       });
     }

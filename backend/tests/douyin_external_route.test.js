@@ -149,6 +149,74 @@ async function seedPriceVolumeData() {
   );
 }
 
+async function seedBookableData() {
+  await query("DELETE FROM orders WHERE room_type = 'BK_TEST'");
+  await query("DELETE FROM ota_channel_mappings WHERE channel_item_id LIKE 'DY_RATE_BK_%'");
+  await query("DELETE FROM rate_plans WHERE room_type_code = 'BK_TEST'");
+  await query("DELETE FROM douyin_room_type_mapping WHERE local_room_type = 'BK_TEST'");
+  await query("DELETE FROM douyin_physical_rooms WHERE room_id = 'DY_ROOM_BK_001'");
+  await query("DELETE FROM rooms WHERE type_code = 'BK_TEST'");
+  await query("DELETE FROM room_types WHERE type_code = 'BK_TEST'");
+
+  await query(
+    `
+      INSERT INTO room_types (type_code, type_name, base_price, description, is_closed)
+      VALUES ($1, $2, $3, $4, $5)
+    `,
+    ['BK_TEST', '可订检查测试房型', 399, '抖音可订检查测试', false]
+  );
+  await query(
+    `
+      INSERT INTO rooms (room_number, type_code, status, price, is_closed)
+      VALUES
+        ('BK101', 'BK_TEST', 'available', 399, false),
+        ('BK102', 'BK_TEST', 'available', 399, false),
+        ('BK103', 'BK_TEST', 'repair', 399, false)
+    `
+  );
+  const ratePlanResult = await query(
+    `
+      INSERT INTO rate_plans (room_type_code, name, base_price, status, sales_type, currency)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING id
+    `,
+    ['BK_TEST', '可订检查测试套餐', 399, 1, 1, 'CNY']
+  );
+  await query(
+    `
+      INSERT INTO ota_channel_mappings
+        (local_target_type, local_target_id, channel_code, channel_item_id, channel_config, sync_status)
+      VALUES ($1, $2, $3, $4, $5, $6)
+    `,
+    ['RATE_PLAN', ratePlanResult.rows[0].id, 'DOUYIN', 'DY_RATE_BK_001', { hotel_id: 'DY_HOTEL_BK_001' }, 1]
+  );
+  await query(
+    `
+      INSERT INTO douyin_physical_rooms
+        (account_id, room_id, room_name, status, raw_payload)
+      VALUES ($1, $2, $3, $4, $5)
+    `,
+    ['DY_ACCOUNT_BK_001', 'DY_ROOM_BK_001', '抖音可订检查房型', 1, { hotel_id: 'DY_HOTEL_BK_001' }]
+  );
+  await query(
+    `
+      INSERT INTO douyin_room_type_mapping (douyin_room_id, douyin_room_name, local_room_type)
+      VALUES ($1, $2, $3)
+    `,
+    ['DY_ROOM_BK_001', '抖音可订检查房型', 'BK_TEST']
+  );
+  await query(
+    `
+      INSERT INTO orders (
+        order_id, order_source, guest_name, room_type, room_number,
+        check_in_date, check_out_date, stay_date, status, total_price
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    `,
+    ['BK_ORDER_001', 'manual', '可订检查客人', 'BK_TEST', 'BK101', '2026-04-24', '2026-04-25', '2026-04-24', 'pending', 399]
+  );
+}
+
 describe('抖音 Webhooks 与价量态 SPI', () => {
   let redisClient;
   let app;
@@ -413,5 +481,142 @@ describe('抖音 Webhooks 与价量态 SPI', () => {
       sub_error: '售卖计划ID错误',
       sub_error_code: 60021
     });
+  });
+
+  test('预售券可订检查成功返回 error_code 0', async () => {
+    await seedBookableData();
+
+    const body = JSON.stringify({
+      rate_plan_id: 'DY_RATE_BK_001',
+      biz_type: 2011,
+      check_in_date: '2026-04-24',
+      check_out_date: '2026-04-25',
+      number_of_units: 1,
+      total_amount: 39900
+    });
+    const path = '/douyin/spi/bookable?client_key=DY_CLIENT_TEST&timestamp=1777000000000';
+
+    const response = await request(app)
+      .post(path)
+      .set('Content-Type', 'application/json')
+      .set('x-life-clientkey', 'DY_CLIENT_TEST')
+      .set('x-life-sign', buildSpiSign(path, body))
+      .set('x-bytedance-logid', 'DY_SPI_BOOKABLE_OK_LOG_001')
+      .send(body);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toEqual({
+      data: {
+        error_code: 0,
+        description: 'success'
+      }
+    });
+    expect(console.log).toHaveBeenCalledWith(
+      '[Douyin SPI] 已处理预售券可订检查:',
+      expect.objectContaining({
+        logId: 'DY_SPI_BOOKABLE_OK_LOG_001',
+        ratePlanId: 'DY_RATE_BK_001',
+        errorCode: 0,
+        stockAndAmountCount: 0
+      })
+    );
+  });
+
+  test('预售券可订检查库存不足返回 error_code 4 和 ari.stock_and_amount', async () => {
+    await seedBookableData();
+
+    const body = JSON.stringify({
+      rate_plan_id: 'DY_RATE_BK_001',
+      biz_type: 2011,
+      check_in_date: '2026-04-24',
+      check_out_date: '2026-04-25',
+      number_of_units: 2,
+      total_amount: 79800
+    });
+    const path = '/douyin/spi/bookable?client_key=DY_CLIENT_TEST&timestamp=1777000000000';
+
+    const response = await request(app)
+      .post(path)
+      .set('Content-Type', 'application/json')
+      .set('x-life-clientkey', 'DY_CLIENT_TEST')
+      .set('x-life-sign', buildSpiSign(path, body))
+      .send(body);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.data.error_code).toBe(4);
+    expect(response.body.data.ari.stock_and_amount).toHaveLength(1);
+    expect(response.body.data.ari.stock_and_amount[0]).toMatchObject({
+      room_id: 'DY_ROOM_BK_001',
+      rate_plan_id: 'DY_RATE_BK_001',
+      timerange: {
+        start: '2026-04-24',
+        end: '2026-04-25'
+      },
+      original_amount: 39900,
+      currency: 'CNY',
+      available: true,
+      inventory: 1
+    });
+  });
+
+  test('预售券可订检查价格不一致返回 error_code 8 和 ari.stock_and_amount', async () => {
+    await seedBookableData();
+
+    const body = JSON.stringify({
+      rate_plan_id: 'DY_RATE_BK_001',
+      biz_type: 2011,
+      check_in_date: '2026-04-24',
+      check_out_date: '2026-04-25',
+      number_of_units: 1,
+      total_amount: 39800
+    });
+    const path = '/douyin/spi/bookable?client_key=DY_CLIENT_TEST&timestamp=1777000000000';
+
+    const response = await request(app)
+      .post(path)
+      .set('Content-Type', 'application/json')
+      .set('x-life-clientkey', 'DY_CLIENT_TEST')
+      .set('x-life-sign', buildSpiSign(path, body))
+      .send(body);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.data.error_code).toBe(8);
+    expect(response.body.data.ari.stock_and_amount[0]).toMatchObject({
+      room_id: 'DY_ROOM_BK_001',
+      rate_plan_id: 'DY_RATE_BK_001',
+      original_amount: 39900,
+      available: true,
+      inventory: 1
+    });
+  });
+
+  test('预售券可订检查签名错误返回 401', async () => {
+    const body = JSON.stringify({
+      rate_plan_id: 'DY_RATE_BK_001',
+      biz_type: 2011,
+      check_in_date: '2026-04-24',
+      check_out_date: '2026-04-25',
+      number_of_units: 1,
+      total_amount: 39900
+    });
+
+    const response = await request(app)
+      .post('/douyin/spi/bookable?client_key=DY_CLIENT_TEST&timestamp=1777000000000')
+      .set('Content-Type', 'application/json')
+      .set('x-life-clientkey', 'DY_CLIENT_TEST')
+      .set('x-life-sign', 'bad-sign')
+      .set('x-bytedance-logid', 'DY_SPI_BOOKABLE_BAD_SIGN_LOG_001')
+      .send(body);
+
+    expect(response.statusCode).toBe(401);
+    const logRecords = await readJsonLines(logFilePath);
+    expect(logRecords).toEqual([
+      expect.objectContaining({
+        type: 'spi_bookable',
+        stage: 'signature_failed',
+        logId: 'DY_SPI_BOOKABLE_BAD_SIGN_LOG_001',
+        ratePlanId: 'DY_RATE_BK_001'
+      })
+    ]);
   });
 });
