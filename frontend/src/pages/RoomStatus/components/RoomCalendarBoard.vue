@@ -168,14 +168,17 @@ function getCellSubText(cell) {
 }
 
 .calendar-table-wrap {
-  overflow: auto;
+  overflow: visible;
   border: 1px solid rgba(214, 221, 230, 0.9);
-  border-radius: 20px;
-  background: #fff;
-  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.06);
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.08);
 }
 
 .calendar-table {
+  --calendar-date-header-height: 64px;
+  --calendar-sticky-top: 56px;
+
   width: 100%;
   min-width: 1200px;
   border-collapse: separate;
@@ -188,11 +191,20 @@ function getCellSubText(cell) {
   border-bottom: 1px solid rgba(226, 232, 240, 0.95);
 }
 
-.calendar-table thead th {
+.calendar-table thead tr:first-child th {
   position: sticky;
-  top: 0;
-  z-index: 3;
+  top: var(--calendar-sticky-top);
+  z-index: 5;
+  background: #ffffff;
+  box-shadow: inset 0 -1px 0 rgba(226, 232, 240, 0.95);
+}
+
+.calendar-table thead tr:nth-child(2) th {
+  position: sticky;
+  top: calc(var(--calendar-sticky-top) + var(--calendar-date-header-height));
+  z-index: 5;
   background: #f8fafc;
+  box-shadow: inset 0 -1px 0 rgba(226, 232, 240, 0.95), 0 8px 18px rgba(15, 23, 42, 0.06);
 }
 
 .sticky-room-col {
@@ -203,15 +215,21 @@ function getCellSubText(cell) {
   background: #ffffff;
 }
 
+.calendar-table thead .sticky-room-col {
+  z-index: 6;
+}
+
 .date-header {
+  height: var(--calendar-date-header-height);
   min-width: 98px;
   padding: 12px 8px 8px;
   text-align: center;
+  vertical-align: middle;
 }
 
 .date-header--today,
 .date-summary--today {
-  background: #eaf3ff;
+  background: #eef6ff !important;
   color: #1d4ed8;
 }
 
@@ -234,7 +252,7 @@ function getCellSubText(cell) {
 }
 
 .type-divider-row td {
-  background: linear-gradient(90deg, #eff6ff 0%, #ffffff 100%);
+  background: linear-gradient(90deg, #f1f5f9 0%, #ffffff 100%);
   padding: 10px 14px;
 }
 
@@ -247,7 +265,7 @@ function getCellSubText(cell) {
 .type-name {
   font-size: 14px;
   font-weight: 700;
-  color: #1e3a8a;
+  color: #0f172a;
 }
 
 .type-count {
@@ -276,16 +294,36 @@ function getCellSubText(cell) {
   height: 78px;
   padding: 10px 8px;
   cursor: pointer;
-  transition: background 0.18s ease, transform 0.18s ease;
+  transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.calendar-cell.bg-green-1 {
+  background: #f0f8f2 !important;
+}
+
+.calendar-cell.bg-blue-1 {
+  background: #eef5ff !important;
+}
+
+.calendar-cell.bg-red-1 {
+  background: #fff1f2 !important;
+}
+
+.calendar-cell.bg-orange-1 {
+  background: #fff7ed !important;
+}
+
+.calendar-cell.bg-grey-3 {
+  background: #f1f5f9 !important;
 }
 
 .calendar-cell:hover {
   transform: translateY(-1px);
-  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.25);
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.32), 0 8px 18px rgba(15, 23, 42, 0.08);
 }
 
 .calendar-cell--today {
-  box-shadow: inset 0 0 0 2px rgba(37, 99, 235, 0.3);
+  box-shadow: inset 0 0 0 2px rgba(37, 99, 235, 0.28);
 }
 
 .cell-main {
