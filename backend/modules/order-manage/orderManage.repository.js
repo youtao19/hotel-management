@@ -520,10 +520,56 @@ async function findActiveRoomConflict(runner, newRoomNumber, stayDate, orderNumb
  */
 async function findRoomByNumber(runner, roomNumber) {
   const result = await runner.query(
-    'SELECT room_number, type_code FROM rooms WHERE room_number = $1',
+    'SELECT room_number, type_code, status, price, is_closed FROM rooms WHERE room_number = $1',
     [roomNumber]
   );
   return result.rows[0] || null;
+}
+
+async function findChangeableOrder(runner, orderNumber) {
+  const result = await runner.query(
+    'SELECT * FROM orders WHERE order_id = $1 AND status IN ($2, $3) ORDER BY stay_date LIMIT 1',
+    [orderNumber, 'pending', 'checked-in']
+  );
+  return result.rows[0] || null;
+}
+
+async function countRoomConflicts(runner, roomNumber, orderNumber, checkInDate, checkOutDate) {
+  const result = await runner.query(`
+    SELECT COUNT(*) as count
+    FROM orders
+    WHERE room_number = $1
+      AND status IN ('pending', 'checked-in')
+      AND order_id != $2
+      AND check_in_date < $4::date
+      AND check_out_date > $3::date
+  `, [roomNumber, orderNumber, checkInDate, checkOutDate]);
+  return parseInt(result.rows[0].count, 10) || 0;
+}
+
+async function calculateNights(runner, checkInDate, checkOutDate) {
+  const result = await runner.query(
+    'SELECT ($2::date - $1::date) AS nights',
+    [checkInDate, checkOutDate]
+  );
+  return Number(result.rows?.[0]?.nights ?? 0);
+}
+
+async function updateOrderRoom(runner, orderNumber, roomNumber, roomType, totalPrice) {
+  const result = await runner.query(`
+    UPDATE orders
+    SET room_number = $1, room_type = $2, total_price = $3
+    WHERE order_id = $4
+    RETURNING *
+  `, [roomNumber, roomType, totalPrice, orderNumber]);
+  return result.rows[0] || null;
+}
+
+async function setRoomStatusOnly(runner, roomNumber, status) {
+  return runner.query(
+    'UPDATE rooms SET status = $1 WHERE room_number = $2',
+    [status, roomNumber]
+  );
 }
 
 /**
@@ -683,10 +729,13 @@ async function getDepositInfo(orderId) {
 
 module.exports = {
   checkOrderTableExists,
+  calculateNights,
+  countRoomConflicts,
   findOrderRowsByOrderId,
   findOrderRowById,
   findOrderRowForDayRoomChange,
   findActiveRoomConflict,
+  findChangeableOrder,
   findRoomByNumber,
   findBillsForSplitUpdate,
   findOrderRowsForCheckout,
@@ -709,12 +758,14 @@ module.exports = {
   listOrders,
   markRoomAvailable,
   markRoomCleaning,
+  setRoomStatusOnly,
   updateAllBillRoomNumbers,
   updateDailyRoomPrice,
   updateOrderPaymentMethodInTransaction,
   updateOrderEarlyCheckout,
   updateOrderFields,
   updateOrderDayRoom,
+  updateOrderRoom,
   updateRoomFeeBillsPaymentMethod,
   updateRoomFeeBillRoomNumber,
   updateOrderStatus,

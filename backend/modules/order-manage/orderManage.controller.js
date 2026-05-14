@@ -155,6 +155,48 @@ async function updateOrderDayRoom(req, res) {
 }
 
 /**
+ * 给订单编辑页整单更换房间。
+ * 保留旧 `/api/rooms/change-room` 路径，业务归属放在订单管理模块。
+ */
+async function changeOrderRoom(req, res) {
+  try {
+    console.log('=== 更换房间API请求 ===');
+    console.log('请求体:', JSON.stringify(req.body, null, 2));
+    console.log('Content-Type:', req.get('Content-Type'));
+
+    const { orderNumber, oldRoomNumber, newRoomNumber } = req.body;
+
+    if (!orderNumber || !oldRoomNumber || !newRoomNumber) {
+      console.log('参数验证失败:', { orderNumber, oldRoomNumber, newRoomNumber });
+      return res.status(400).json({
+        success: false,
+        message: '缺少必要参数：订单号、原房间号或新房间号',
+        received: { orderNumber, oldRoomNumber, newRoomNumber }
+      });
+    }
+
+    console.log('更换房间请求参数:', { orderNumber, oldRoomNumber, newRoomNumber });
+    const result = await orderManageService.changeOrderRoom(orderNumber, oldRoomNumber, newRoomNumber);
+
+    console.log('更换房间成功:', result);
+    return res.json(result);
+  } catch (error) {
+    console.error('更换房间失败:', error.message);
+    const clientErrorCodes = [
+      'MISSING_PARAMS', 'SAME_ROOM', 'ORDER_STATUS_INVALID', 'NEW_ROOM_NOT_FOUND',
+      'NEW_ROOM_CLOSED', 'NEW_ROOM_REPAIR', 'NEW_ROOM_NOT_AVAILABLE', 'NEW_ROOM_CONFLICT'
+    ];
+    const status = clientErrorCodes.includes(error.code) ? 400 : 500;
+    return res.status(status).json({
+      success: false,
+      message: error.message || '更换房间失败',
+      code: error.code || (status === 400 ? 'ROOM_CHANGE_VALIDATION' : 'ROOM_CHANGE_SERVER'),
+      stack: process.env.NODE_ENV === 'dev' ? error.stack : undefined
+    });
+  }
+}
+
+/**
  * 给订单编辑页同时保存订单和账单。
  * 支持每日房价和房费/押金支付拆分，金额校验与事务由 service 统一处理。
  */
@@ -307,6 +349,7 @@ async function checkOut(req, res) {
 }
 
 module.exports = {
+  changeOrderRoom,
   checkOut,
   earlyCheckout,
   getDepositInfo,

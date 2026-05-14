@@ -97,6 +97,7 @@ async function initializeSession() {
 
     const orderManageRoutes = require("./modules/order-manage/orderManage.routes");
     app.use("/api/orders", orderManageRoutes);
+    app.use("/api/rooms", orderManageRoutes.roomRoutes);
 
     const roomStatusRoutes = require("./modules/room-status/roomStatus.routes");
     app.use("/api/rooms", roomStatusRoutes);
@@ -104,8 +105,7 @@ async function initializeSession() {
     const roomManageRoutes = require("./modules/room-manage/roomManage.routes");
     app.use("/api/rooms", roomManageRoutes);
 
-    const roomTypeRoute = require("./routes/roomTypeRoute");
-    app.use("/api/room-types", roomTypeRoute);
+    app.use("/api/room-types", roomManageRoutes.roomTypeRoutes);
 
     const ratePlanRoute = require("./routes/ratePlanRoute");
     app.use("/api/rate-plans", ratePlanRoute);

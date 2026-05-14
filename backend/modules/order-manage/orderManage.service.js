@@ -23,6 +23,13 @@ function createPaymentSplitError(message, details = null) {
   return err;
 }
 
+function createOrderChangeRoomError(message, code, statusCode = 400) {
+  const err = new Error(message);
+  err.code = code;
+  err.statusCode = statusCode;
+  return err;
+}
+
 function normalizePayWay(method, fallback = DEFAULT_PAY_WAY) {
   const normalized = String(method || '').trim();
   if (!normalized) return fallback;
@@ -355,6 +362,98 @@ async function updateOrderDayRoom(orderNumber, stayDate, newRoomNumber, user) {
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('更新订单日期房间失败:', error);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * 整单更换房间。
+ * 订单行和已入住房态必须同进同退，公开路径仍兼容旧 `/api/rooms/change-room`。
+ */
+async function changeOrderRoom(orderNumber, oldRoomNumber, newRoomNumber) {
+  console.log(`更换房间请求: 订单 ${orderNumber} 从房间 ${oldRoomNumber} 换到 ${newRoomNumber}`);
+
+  if (!orderNumber || !oldRoomNumber || !newRoomNumber) {
+    throw createOrderChangeRoomError('缺少必要参数', 'MISSING_PARAMS');
+  }
+  if (oldRoomNumber === newRoomNumber) {
+    throw createOrderChangeRoomError('新房间与原房间相同，无需更换', 'SAME_ROOM');
+  }
+
+  const client = await orderManageRepository.getClient();
+  try {
+    await client.query('BEGIN');
+
+    const order = await orderManageRepository.findChangeableOrder(client, orderNumber);
+    if (!order) {
+      throw createOrderChangeRoomError('订单不存在或状态不允许更换房间（只有待入住和已入住订单可以更换房间）', 'ORDER_STATUS_INVALID');
+    }
+
+    const newRoom = await orderManageRepository.findRoomByNumber(client, newRoomNumber);
+    if (!newRoom) {
+      throw createOrderChangeRoomError('新房间不存在', 'NEW_ROOM_NOT_FOUND');
+    }
+    if (newRoom.is_closed) {
+      throw createOrderChangeRoomError('新房间已关闭，无法使用', 'NEW_ROOM_CLOSED');
+    }
+    if (newRoom.status === 'repair') {
+      throw createOrderChangeRoomError('新房间正在维修，无法使用', 'NEW_ROOM_REPAIR');
+    }
+    if (order.status === 'checked-in' && newRoom.status !== 'available') {
+      throw createOrderChangeRoomError(`新房间当前状态为"${newRoom.status}"，已入住订单只能换到可用房间`, 'NEW_ROOM_NOT_AVAILABLE');
+    }
+
+    const conflicts = await orderManageRepository.countRoomConflicts(
+      client,
+      newRoomNumber,
+      orderNumber,
+      order.check_in_date,
+      order.check_out_date
+    );
+    if (conflicts > 0) {
+      throw createOrderChangeRoomError('新房间在指定日期期间已被预订', 'NEW_ROOM_CONFLICT');
+    }
+
+    const nightsRaw = await orderManageRepository.calculateNights(client, order.check_in_date, order.check_out_date);
+    const nights = nightsRaw > 0 ? nightsRaw : 1;
+    const newTotalPrice = Number(newRoom.price) * nights;
+
+    console.log(`更换房间价格计算: 新房间单价 ${newRoom.price} × ${nights}晚 = ${newTotalPrice}`);
+    const updatedOrder = await orderManageRepository.updateOrderRoom(
+      client,
+      orderNumber,
+      newRoomNumber,
+      newRoom.type_code,
+      newTotalPrice
+    );
+    if (!updatedOrder) {
+      throw createOrderChangeRoomError('更新订单失败', 'UPDATE_ORDER_FAILED', 500);
+    }
+
+    if (order.status === 'checked-in') {
+      console.log('更新房间状态：已入住订单更换房间');
+      await orderManageRepository.setRoomStatusOnly(client, oldRoomNumber, 'cleaning');
+      await orderManageRepository.setRoomStatusOnly(client, newRoomNumber, 'occupied');
+      console.log(`房间状态已更新: ${oldRoomNumber} -> 清洁中, ${newRoomNumber} -> 占用`);
+    }
+
+    await client.query('COMMIT');
+    console.log(`房间更换成功: 订单 ${orderNumber} 已从 ${oldRoomNumber} 换到 ${newRoomNumber}`);
+
+    return {
+      success: true,
+      message: '房间更换成功',
+      updatedOrder,
+      newRoom: {
+        room_number: newRoom.room_number,
+        type_code: newRoom.type_code,
+        price: newRoom.price
+      }
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
     throw error;
   } finally {
     client.release();
@@ -1004,6 +1103,7 @@ async function checkOut(orderId, client) {
 }
 
 module.exports = {
+  changeOrderRoom,
   checkOut,
   earlyCheckout,
   getDepositInfo,

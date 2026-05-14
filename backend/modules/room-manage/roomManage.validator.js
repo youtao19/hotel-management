@@ -1,8 +1,6 @@
 const Ajv = require('ajv');
-const addFormats = require('ajv-formats');
 
 const ajv = new Ajv();
-addFormats(ajv);
 
 const VALID_ROOM_STATES = ['available', 'occupied', 'cleaning', 'repair', 'reserved'];
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -19,69 +17,23 @@ const roomSchema = {
   additionalProperties: false
 };
 
-const validateRoom = ajv.compile(roomSchema);
+const roomTypeSchema = {
+  type: 'object',
+  properties: {
+    type_code: { type: 'string' },
+    type_name: { type: 'string' },
+    base_price: { type: 'number' },
+    description: { type: 'string' }
+  },
+  required: ['type_code', 'type_name', 'base_price'],
+  additionalProperties: false
+};
 
-function normalizeOptionalText(value) {
-  return value ? String(value).trim() : '';
-}
+const validateRoom = ajv.compile(roomSchema);
+const validateRoomType = ajv.compile(roomTypeSchema);
 
 function isDateString(value) {
   return DATE_REGEX.test(value);
-}
-
-function normalizeRoomListQuery(query = {}) {
-  const normalizedDate = normalizeOptionalText(query.date);
-  const normalizedTypeCode = normalizeOptionalText(query.typeCode);
-  const normalizedStatus = normalizeOptionalText(query.status);
-  const normalizedKeyword = normalizeOptionalText(query.keyword);
-
-  if (normalizedDate && !isDateString(normalizedDate)) {
-    return { error: { message: '日期格式必须为 YYYY-MM-DD' } };
-  }
-
-  if (normalizedStatus && !VALID_ROOM_STATES.includes(normalizedStatus)) {
-    return { error: { message: '无效的房态筛选值' } };
-  }
-
-  return {
-    filters: {
-      date: normalizedDate || null,
-      typeCode: normalizedTypeCode || null,
-      status: normalizedStatus || null,
-      keyword: normalizedKeyword || null
-    }
-  };
-}
-
-function normalizeCalendarBoardQuery(query = {}) {
-  const normalizedStartDate = normalizeOptionalText(query.startDate);
-  const normalizedTypeCode = normalizeOptionalText(query.typeCode);
-  const normalizedStatus = normalizeOptionalText(query.status);
-  const normalizedKeyword = normalizeOptionalText(query.keyword);
-  const normalizedDays = Number(query.days || 14);
-
-  if (!normalizedStartDate) {
-    return { error: { message: '必须提供 startDate' } };
-  }
-  if (!isDateString(normalizedStartDate)) {
-    return { error: { message: 'startDate 格式必须为 YYYY-MM-DD' } };
-  }
-  if (normalizedDays !== 14) {
-    return { error: { message: 'days 当前仅支持 14' } };
-  }
-  if (normalizedStatus && !VALID_ROOM_STATES.includes(normalizedStatus)) {
-    return { error: { message: '无效的房态筛选值' } };
-  }
-
-  return {
-    filters: {
-      startDate: normalizedStartDate,
-      days: normalizedDays,
-      typeCode: normalizedTypeCode || null,
-      status: normalizedStatus || null,
-      keyword: normalizedKeyword || null
-    }
-  };
 }
 
 function validateDateRange(startDate, endDate) {
@@ -97,30 +49,12 @@ function validateDateRange(startDate, endDate) {
   return null;
 }
 
-function validateRoomStatusBody(body = {}) {
-  if (!body || Object.keys(body).length === 0) {
-    return { message: '请求体为空' };
-  }
-  if (body.status === undefined) {
-    return { message: '状态值未提供' };
-  }
-  if (!VALID_ROOM_STATES.includes(body.status)) {
-    return {
-      message: '无效的房间状态',
-      requestedStatus: body.status,
-      validStatuses: VALID_ROOM_STATES
-    };
-  }
-  return null;
-}
-
 module.exports = {
   VALID_ROOM_STATES,
   isDateString,
-  normalizeCalendarBoardQuery,
-  normalizeRoomListQuery,
+  roomTypeSchema,
   roomSchema,
   validateDateRange,
   validateRoom,
-  validateRoomStatusBody
+  validateRoomType
 };
