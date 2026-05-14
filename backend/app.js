@@ -131,8 +131,8 @@ async function initializeSession() {
     const revenueRoute = require("./routes/revenueRoute");
     app.use("/api/revenue", revenueRoute);
 
-    const dashboardMemoRoute = require("./routes/dashboardMemoRoute");
-    app.use("/api/dashboard/memos", dashboardMemoRoute);
+    const dashboardRoutes = require("./modules/dashboard/dashboard.routes");
+    app.use("/api/dashboard/memos", dashboardRoutes);
 
     const otaRoute = require("./routes/ota");
     app.use("/ota", otaRoute);
