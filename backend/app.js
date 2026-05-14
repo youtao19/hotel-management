@@ -86,10 +86,10 @@ async function initializeSession() {
     console.log('Session 中间件已初始化');
 
     // ✅ 然后注册所有路由 (确保在中间件之后)
-    const userRoute = require("./routes/userRoute");
+    const userRoute = require("./modules/auth/authUser.routes");
     app.use("/api/user", userRoute);
 
-    const authRoute = require("./routes/authRoute");
+    const authRoute = require("./modules/auth/auth.routes");
     app.use("/api/auth", authRoute);
 
     const orderCreateRoutes = require("./modules/order-create/orderCreate.routes");

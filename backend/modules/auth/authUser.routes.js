@@ -1,0 +1,20 @@
+"use strict";
+
+const express = require("express");
+const authentication = require("../authentication");
+const controller = require("./auth.controller");
+
+const router = express.Router();
+
+// 登出不要求认证，方便前端在 session 失效时也清理 cookie。
+router.get("/logout", controller.logout);
+
+router.use(authentication.ensureAuthenticated);
+
+// 当前登录员工信息。
+router.get("/info", controller.getCurrentUser);
+
+// 当前登录员工的邮箱验证状态。
+router.get("/check/email", controller.getCurrentUserEmailVerified);
+
+module.exports = router;
