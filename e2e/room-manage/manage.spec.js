@@ -11,9 +11,7 @@ test.describe('房间管理页面 E2E 测试', () => {
   test('页面基础布局检查', async ({ page }) => {
     // 检查刷新按钮是否存在于卡片内
     const refreshBtn = page.locator('.room-content-card').getByRole('button', { name: '刷新' });
-    // 如果没有 label，可能只有 tooltip，按 icon 找
-    const refreshIconBtn = page.locator('.room-content-card').locator('.q-btn:has(.q-icon[name="refresh"])');
-    await expect(refreshIconBtn).toBeVisible();
+    await expect(refreshBtn).toBeVisible();
 
     // 检查 Tab 页签
     await expect(page.getByRole('tab', { name: '客房列表' })).toBeVisible();

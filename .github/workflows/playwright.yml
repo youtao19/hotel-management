@@ -8,11 +8,42 @@ jobs:
   test:
     timeout-minutes: 60
     runs-on: ubuntu-latest
+    env:
+      TZ: 'Asia/Shanghai'
+
+    services:
+      postgres:
+        image: postgres:17.6-alpine
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: peach
+          POSTGRES_PASSWORD: 1219
+          POSTGRES_DB: hotel_db_test
+          TZ: 'Asia/Shanghai'
+          PGTZ: 'Asia/Shanghai'
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        env:
+          TZ: 'Asia/Shanghai'
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-node@v4
       with:
-        node-version: lts/*
+        node-version: '22'
     - name: Install dependencies
       run: npm ci
     - name: Install Playwright Browsers

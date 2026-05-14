@@ -17,12 +17,12 @@ test.describe('其他收入页面 E2E 测试', () => {
     // 检查核心表单字段
     await expect(page.getByPlaceholder('例如：张三')).toBeVisible();
     await expect(page.getByPlaceholder('0.00')).toBeVisible();
-    await expect(page.getByRole('button', { name: '确认录入' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '提交录入' })).toBeVisible();
   });
 
   test('表单校验简单测试', async ({ page }) => {
     // 点击提交但不输入任何内容
-    await page.getByRole('button', { name: '确认录入' }).click();
+    await page.getByRole('button', { name: '提交录入' }).click();
     
     // 检查可能的通知 (假设有提示，如 "请输入客人姓名" 或 "金额必须大于0")
     // 这里仅示例，实际效果由组件逻辑决定
