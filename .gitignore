@@ -59,3 +59,8 @@ node_modules/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+
+# Agent task runtime state
+.ai/tasks/*/STATE.json
+.ai/tasks/*/LOG.md
+.ai/archive/

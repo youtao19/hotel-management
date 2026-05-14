@@ -98,6 +98,9 @@ async function initializeSession() {
     const orderManageRoutes = require("./modules/order-manage/orderManage.routes");
     app.use("/api/orders", orderManageRoutes);
 
+    const roomStatusRoutes = require("./modules/room-status/roomStatus.routes");
+    app.use("/api/rooms", roomStatusRoutes);
+
     const roomRoute = require("./routes/roomRoute");
     app.use("/api/rooms", roomRoute);
 
