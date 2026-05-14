@@ -119,7 +119,7 @@ async function initializeSession() {
     const billRoute = require("./routes/billRoute");
     app.use("/api/bills", billRoute);
 
-    const reviewRoute = require("./routes/reviewRoute");
+    const reviewRoute = require("./modules/review/review.routes");
     app.use("/api/reviews", reviewRoute);
 
     const HandoverRoute = require("./routes/handoverRoute");

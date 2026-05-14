@@ -46,6 +46,11 @@ dev.env
 coverage
 *.lcov
 
+# Agent task state
+.ai/tasks/*/STATE.json
+.ai/tasks/*/LOG.md
+.ai/archive/
+
 
 # Playwright
 node_modules/
