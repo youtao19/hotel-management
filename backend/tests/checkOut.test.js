@@ -1,7 +1,7 @@
 const request = require('supertest');
 const app = require('../app');
 const tools = require('./tools');
-const { createOrder } = require('../modules/orderModule');
+const { createOrder } = require('../modules/order-create/orderCreate.service');
 const { query } = require('../database/postgreDB/pg');
 
 describe('订单退房接口', () => {

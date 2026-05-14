@@ -146,12 +146,12 @@
 - `orderCreate.service.js` 作为创建订单功能的业务调用边界；定价拆分、创建订单、办理入住和快速入住已迁入 service。
 - `orderCreate.repository.js` 保存日期序列查询、订单写入、办理入住订单/房态更新 SQL，以及快速入住返回结果需要的账单查询。
 - `orderCreate.validator.js` 保存 AJV schema 和字段归一化逻辑。
-- Phase 3 已迁移创建订单模块的主要流程；`orderModule` 保留兼容委托和其他订单管理接口。
+- Phase 3 已迁移创建订单模块的主要流程；旧 `orderModule` 已移除。
 
 ## 依赖说明
 
-- `../orderModule`
 - `../tools`
+- `../order-manage/orderManage.repository`
 - `../../database/postgreDB/pg`
 - `ajv`
 - `ajv-formats`
@@ -185,5 +185,5 @@ npm --workspace backend run test -- tests/createOrder.test.js tests/checkIn.test
 - API 路径不能改。
 - 请求和响应格式不能改。
 - DATE 字段按 `YYYY-MM-DD` 字符串处理，不使用 `toISOString()`。
-- Phase 3 已移动定价拆分、创建订单、办理入住和快速入住；旧 `orderModule` 仍保留兼容导出，供未迁移代码调用。
-- 旧 `backend/routes/orderRoute.js` 只保留未迁移的订单管理接口。
+- Phase 3 已移动定价拆分、创建订单、办理入住和快速入住；旧 `orderModule` 已移除。
+- 订单管理路由已迁入 `backend/modules/order-manage/orderManage.routes.js`。

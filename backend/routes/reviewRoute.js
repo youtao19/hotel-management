@@ -2,7 +2,7 @@
 
 const express = require('express');
 const reviewInvitationModule = require('../modules/reviewInvitationModule');
-const orderModule = require('../modules/orderModule');
+const orderManageService = require('../modules/order-manage/orderManage.service');
 const router = express.Router();
 const Ajv = require('ajv');
 const ajv = new Ajv();
@@ -74,7 +74,7 @@ router.post('/:orderId/invite', async (req, res) => {
     const { orderId } = req.params;
 
     // 检查订单是否存在
-    const orderRows = await orderModule.getOrderById(orderId);
+    const orderRows = await orderManageService.getOrder(orderId);
     const order = Array.isArray(orderRows) ? orderRows[0] : orderRows;
     if (!order) {
       return res.status(404).json({ message: '订单不存在' });
@@ -108,7 +108,7 @@ router.put('/:orderId/status', async (req, res) => {
     const { positive_review } = req.body;
 
     // 检查订单是否存在
-    const orderRows = await orderModule.getOrderById(orderId);
+    const orderRows = await orderManageService.getOrder(orderId);
     const order = Array.isArray(orderRows) ? orderRows[0] : orderRows;
     if (!order) {
       return res.status(404).json({ message: '订单不存在' });
@@ -185,7 +185,7 @@ router.get('/:orderId', async (req, res) => {
     const { orderId } = req.params;
 
     // 检查订单是否存在
-    const order = await orderModule.getOrderById(orderId);
+    const order = await orderManageService.getOrder(orderId);
     if (!order) {
       return res.status(404).json({ message: '订单不存在' });
     }

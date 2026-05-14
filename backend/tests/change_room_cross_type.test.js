@@ -8,7 +8,7 @@ const {
   addRoomType,
   addRoom
 } = require('./tools');
-const { createOrder } = require('../modules/orderModule');
+const { createOrder } = require('../modules/order-create/orderCreate.service');
 
 const TEST_PREFIX = 'CHANGE_ROOM_CROSS_TYPE_';
 

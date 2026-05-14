@@ -8,7 +8,7 @@ const {
   addRoomType,
   addRoom
 } = require('./tools');
-const { createOrder } = require('../modules/orderModule');
+const { createOrder } = require('../modules/order-create/orderCreate.service');
 
 const TEST_PREFIX = 'DAILY_ROOM_CASE_';
 

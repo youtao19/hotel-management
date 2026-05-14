@@ -6,7 +6,7 @@ const { query } = require('../database/postgreDB/pg');
 const Ajv = require('ajv');
 const ajv = new Ajv();
 const addFormats = require("ajv-formats");
-const { getOrderById } = require('../modules/orderModule');
+const orderManageService = require('../modules/order-manage/orderManage.service');
 addFormats(ajv);
 
 const PAY_WAY = ['现金', '微信', '微邮付', '平台'];
@@ -72,7 +72,7 @@ router.post('/add', async (req, res) => {
     let stay_type = null;
 
     // 如果订单存在，补全房间、客人、入住类型信息
-    const orderRows = await getOrderById(order_id);
+    const orderRows = await orderManageService.getOrder(order_id);
     if (orderRows && orderRows.length) {
       room_number = orderRows[0].room_number || null;
       guest_name = orderRows[0].guest_name || null;
@@ -357,7 +357,7 @@ router.post('/adjustment', async (req, res) => {
       return res.status(400).json({ message: '请求数据格式不正确', errors: validate.errors });
     }
     // 获取订单信息
-    const orderRes = await getOrderById(req.body.order_id);
+    const orderRes = await orderManageService.getOrder(req.body.order_id);
     if (!orderRes || orderRes.length === 0) {
       return res.status(400).json({ message: `订单号 '${req.body.order_id}' 不存在，无法调整金额` });
     }

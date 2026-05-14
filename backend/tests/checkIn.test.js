@@ -2,7 +2,7 @@ const request = require('supertest');
 const app = require('../app');
 const { query } = require('../database/postgreDB/pg');
 const { addRoomType, addRoom, buildOrderPayload, roomTypes, rooms, ORDERS} = require('./tools');
-const {createOrder} = require('../modules/orderModule');
+const { createOrder } = require('../modules/order-create/orderCreate.service');
 
 
 describe('办理入住接口', () => {

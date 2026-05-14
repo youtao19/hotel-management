@@ -1,7 +1,7 @@
 const request = require('supertest');
 const app = require('../app');
 const db = require('../database/postgreDB/pg');
-const { createOrder } = require('../modules/orderModule');
+const { createOrder } = require('../modules/order-create/orderCreate.service');
 
 // 中文注释：构造测试订单，验证订单列表筛选逻辑已下沉到后端接口。
 function buildOrderPayload({ orderId, guestName, roomNumber, status, checkInDate, checkOutDate, deposit = 0 }) {

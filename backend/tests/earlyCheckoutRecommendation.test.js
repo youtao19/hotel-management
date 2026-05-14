@@ -1,7 +1,7 @@
 const request = require('supertest'); // 测试用 HTTP 客户端
 const app = require('../app'); // Express 应用实例
 const db = require('../database/postgreDB/pg'); // 数据库工具
-const { createOrder } = require('../modules/orderModule'); // 创建订单方法
+const { createOrder } = require('../modules/order-create/orderCreate.service'); // 创建订单方法
 
 describe('提前退房建议退款逻辑', () => { // 建议退款逻辑测试套件
   beforeAll(async () => { // 初始化房型与房间

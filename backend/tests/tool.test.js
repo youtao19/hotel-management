@@ -2,7 +2,7 @@ const app = require('../app');
 const request = require('supertest');
 
 const {roomTypes,rooms,ORDERS,addRoomType,addRoom} = require('./tools');
-const {createOrder} = require('../modules/orderModule');
+const { createOrder } = require('../modules/order-create/orderCreate.service');
 
 describe('工具测试', () => {
   test('添加房间类型', async () => {

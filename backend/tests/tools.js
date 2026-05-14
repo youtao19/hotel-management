@@ -1,7 +1,7 @@
 const db = require('../database/postgreDB/pg');
 const request = require('supertest');
 const app = require('../app');
-const { createOrder } = require('../modules/orderModule');
+const { createOrder } = require('../modules/order-create/orderCreate.service');
 
 const roomTypes = [
   {
