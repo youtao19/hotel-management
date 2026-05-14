@@ -33,6 +33,7 @@ function shouldSkipGlobalBootstrap() {
 
   return (testPath.includes('/backend/modules/douyin/') && testPath.includes('/__tests__/'))
     || (testPath.includes('/backend/modules/order-create/__tests__/') && testPath.endsWith('.test.js'))
+    || (testPath.includes('/backend/modules/order-manage/__tests__/') && testPath.endsWith('.test.js'))
     ;
 }
 

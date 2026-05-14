@@ -1,5 +1,6 @@
 const { query, getClient } = require("../../database/postgreDB/pg");
-const { createOrder, updateOrderStatus } = require("../../modules/orderModule");
+const { createOrder } = require("../../modules/order-create/orderCreate.service");
+const { updateOrderStatusInTransaction } = require("../../modules/order-manage/orderManage.repository");
 
 function generateOrderNumber() {
     const now = new Date()
@@ -439,7 +440,7 @@ async function cancelPluginOrder({
     }
 
     // 真正的取消动作复用现有订单状态更新逻辑。
-    await updateOrderStatus(relationRow.local_order_id, 'cancelled', client);
+    await updateOrderStatusInTransaction(client, relationRow.local_order_id, 'cancelled');
 
     // 取消成功后同步 OTA 映射表中的状态与基础信息。
     await client.query(

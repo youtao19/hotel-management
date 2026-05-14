@@ -2,7 +2,8 @@ const request = require('supertest');
 const app = require('../app');
 const { query } = require('../database/postgreDB/pg');
 const { addRoomType, addRoom, buildOrderPayload, roomTypes,rooms } = require('./tools');
-const { createOrder, checkIn, getOrderById, checkOut } = require('../modules/orderModule');
+const { createOrder, checkIn } = require('../modules/order-create/orderCreate.service');
+const { getOrder: getOrderById, checkOut } = require('../modules/order-manage/orderManage.service');
 
 describe('账单金额调整接口', () => {
   let TEST_ORDER_ID;

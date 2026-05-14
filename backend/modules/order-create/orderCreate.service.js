@@ -1,13 +1,10 @@
 const { formatDate, toAmountNumber } = require('../tools');
 const billModule = require('../billModule');
 const orderCreateRepository = require('./orderCreate.repository');
+const orderManageRepository = require('../order-manage/orderManage.repository');
 
 const DEFAULT_PAY_WAY = '现金';
 const ALLOWED_SPLIT_PAY_WAYS = new Set(['现金', '微信', '微邮付', '平台']);
-
-function getOrderModule() {
-  return require('../orderModule');
-}
 
 function amountToCents(value) {
   return Math.round(toAmountNumber(value || 0) * 100);
@@ -533,7 +530,7 @@ async function fastCheckIn(orderData, createdBy = 'system') {
 
       await client.query('COMMIT');
 
-      const aggregatedOrder = await getOrderModule().getOrderById(normalized.orderId);
+      const aggregatedOrder = await orderManageRepository.findOrderRowsByOrderId(normalized.orderId);
       const createdBills = await orderCreateRepository.listBillsByOrderId(normalized.orderId);
 
       return { order: aggregatedOrder, bills: createdBills };

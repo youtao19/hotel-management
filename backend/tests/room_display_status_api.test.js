@@ -8,7 +8,7 @@ const {
   addRoomType,
   addRoom
 } = require('./tools');
-const { createOrder } = require('../modules/orderModule');
+const { createOrder } = require('../modules/order-create/orderCreate.service');
 
 const TEST_PREFIX = 'DISPLAY_STATUS_API_';
 

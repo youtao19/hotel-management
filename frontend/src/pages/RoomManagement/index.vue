@@ -21,6 +21,7 @@
           dense
           color="primary"
           icon="refresh"
+          aria-label="刷新"
           class="q-mr-sm"
           @click="refreshAll"
           :loading="roomsLoading || typesLoading"

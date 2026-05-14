@@ -2,7 +2,7 @@ const assert = require('assert');
 const request = require('supertest');
 const app = require('../app');
 const db = require('../database/postgreDB/pg');
-const { createOrder } = require('../modules/orderModule');
+const { createOrder } = require('../modules/order-create/orderCreate.service');
 
 async function ensureSeedData() {
   await db.query(

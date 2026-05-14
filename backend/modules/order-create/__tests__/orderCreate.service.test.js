@@ -1,11 +1,3 @@
-jest.mock('../../orderModule', () => ({
-  checkIn: jest.fn(),
-  createOrder: jest.fn(),
-  fastCheckIn: jest.fn(),
-  getOrderById: jest.fn(),
-  getPricingBreakdown: jest.fn()
-}));
-
 jest.mock('../orderCreate.repository', () => ({
   getClient: jest.fn(),
   insertOrderDay: jest.fn(),
@@ -18,13 +10,17 @@ jest.mock('../orderCreate.repository', () => ({
   updateRoomStatus: jest.fn()
 }));
 
+jest.mock('../../order-manage/orderManage.repository', () => ({
+  findOrderRowsByOrderId: jest.fn()
+}));
+
 jest.mock('../../billModule', () => ({
   addBill: jest.fn()
 }));
 
-const orderModule = require('../../orderModule');
 const billModule = require('../../billModule');
 const orderCreateRepository = require('../orderCreate.repository');
+const orderManageRepository = require('../../order-manage/orderManage.repository');
 const orderCreateService = require('../orderCreate.service');
 
 describe('创建订单业务服务', () => {
@@ -93,9 +89,7 @@ describe('创建订单业务服务', () => {
       average_price: 100,
       is_rest_room: false
     });
-    expect(orderCreateRepository.listStayDates).toHaveBeenCalledWith('2025-11-01', '2025-11-03');
-    expect(orderModule.getPricingBreakdown).not.toHaveBeenCalled();
-  });
+    expect(orderCreateRepository.listStayDates).toHaveBeenCalledWith('2025-11-01', '2025-11-03');  });
 
   test('休息房生成定价拆分时，应当保持半价规则且不查询日期序列', async () => {
     await expect(orderCreateService.getPricingBreakdown({
@@ -203,7 +197,7 @@ describe('创建订单业务服务', () => {
       }
     ]);
     billModule.addBill.mockResolvedValue({ bill_id: 1, change_type: '房费' });
-    orderModule.getOrderById.mockResolvedValue({ order_id: 'ORDER_FAST_001' });
+    orderManageRepository.findOrderRowsByOrderId.mockResolvedValue({ order_id: 'ORDER_FAST_001' });
     orderCreateRepository.listBillsByOrderId.mockResolvedValue([{ bill_id: 1 }]);
 
     await expect(orderCreateService.fastCheckIn(orderData, 'alice')).resolves.toEqual({
