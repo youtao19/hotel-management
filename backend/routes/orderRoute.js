@@ -4,7 +4,6 @@ router.use(express.json());
 const orderModule = require('../modules/orderModule');
 const { authenticationMiddleware } = require('../modules/authentication');
 const setup = require('../appSettings/setup');
-const { toAmountNumber } = require('../modules/tools');
 const Ajv = require('ajv');
 const ajv = new Ajv();
 const addFormats = require("ajv-formats");
@@ -13,95 +12,6 @@ const ORDER_DATE_FILTER_REGEX = /^\d{4}-\d{2}-\d{2}$/; // 列表筛选日期格�
 
 // 定义有效的订单状态
 const VALID_ORDER_STATES = ['pending', 'reserved', 'checked-in', 'checked-out', 'occupied', 'cancelled'];
-const SPLIT_PAY_WAYS = ['现金', '微信', '微邮付', '平台'];
-const splitItemSchema = {
-  type: 'object',
-  properties: {
-    method: { type: 'string', enum: SPLIT_PAY_WAYS },
-    amount: {
-      anyOf: [
-        { type: 'number', exclusiveMinimum: 0 },
-        { type: 'string', pattern: '^(0|[1-9]\\d*)(\\.\\d{1,2})?$', not: { const: '0' } }
-      ]
-    }
-  },
-  required: ['method', 'amount'],
-  additionalProperties: false
-};
-
-function normalizeOptionalSplitField(rawValue) {
-  if (rawValue === undefined || rawValue === null) return undefined;
-  if (Array.isArray(rawValue)) {
-    return rawValue.length > 0 ? rawValue : undefined;
-  }
-  if (typeof rawValue === 'object') {
-    return Object.keys(rawValue).length > 0 ? rawValue : undefined;
-  }
-  return rawValue;
-}
-
-
-const createOrderSchema = {
-  type: 'object',
-  properties: {
-    orderId: { type: 'string' },
-    sourceNumber: { type: 'string' },
-    orderSource: { type: 'string' },
-    guestName: { type: 'string' },
-    roomType: { type: 'string' },
-    roomNumber: { type: 'string' },
-    checkInDate: { type: 'string', format: 'date' },
-    checkOutDate: { type: 'string', format: 'date' },
-    status: { type: 'string', enum: VALID_ORDER_STATES },
-    paymentMethod: { type: 'string' },
-    phone: {
-      type: 'string',
-      pattern: '^$|^1[3-9]\\d{9}$'
-    },
-    roomPrice: {
-      type: 'object',
-      minProperties: 1,
-      propertyNames: { type: 'string', format: 'date' },
-      additionalProperties: {
-        anyOf: [
-          { type: 'number', exclusiveMinimum: 0 },
-          { type: 'string', pattern: '^(0|[1-9]\\d*)(\\.\\d+)?$', not: { const: '0' } }
-        ]
-      }
-    },
-    deposit: { type: 'number' },
-    isPrepaid: { type: 'boolean' },
-    prepaidAmount: { type: 'number', minimum: 0 },
-    roomFeePaymentSplits: {
-      anyOf: [
-        {
-          type: 'array',
-          minItems: 1,
-          items: splitItemSchema
-        },
-        {
-          type: 'object',
-          additionalProperties: {
-            type: 'array',
-            minItems: 1,
-            items: splitItemSchema
-          }
-        }
-      ]
-    },
-    depositPaymentSplits: {
-      type: 'array',
-      minItems: 1,
-      items: splitItemSchema
-    },
-    depositPaymentMethod: { type: 'string', enum: SPLIT_PAY_WAYS },
-    stayType: { type: 'string', enum: ['客房', '休息房'] },
-    createTime: { type: 'string', format: 'date-time' },
-    remarks: { type: 'string' }
-  },
-  required: ['orderId', 'orderSource', 'guestName', 'roomType', 'roomNumber', 'checkInDate', 'checkOutDate', 'status', 'paymentMethod', 'roomPrice', 'stayType'],
-  additionalProperties: true
-};
 
 const updateOrderStatusSchema = {
   type: 'object',
@@ -132,41 +42,6 @@ const earlyCheckoutSchema = {
   required: ['actualCheckoutTime', 'refundAmount'],
   additionalProperties: false
 };
-
-const pricingBreakdownSchema = {
-  type: 'object',
-  properties: {
-    checkInDate: { type: 'string', format: 'date' },
-    checkOutDate: { type: 'string', format: 'date' },
-    mode: { type: 'string', enum: ['from-room-price', 'distribute-total'] },
-    basePrice: {
-      anyOf: [
-        { type: 'number', exclusiveMinimum: 0 },
-        { type: 'string', pattern: '^(0|[1-9]\\d*)(\\.\\d{1,2})?$', not: { const: '0' } }
-      ]
-    },
-    totalPrice: {
-      anyOf: [
-        { type: 'number', exclusiveMinimum: 0 },
-        { type: 'string', pattern: '^(0|[1-9]\\d*)(\\.\\d{1,2})?$', not: { const: '0' } }
-      ]
-    }
-  },
-  required: ['checkInDate', 'checkOutDate', 'mode'],
-  allOf: [
-    {
-      if: { properties: { mode: { const: 'from-room-price' } } },
-      then: { required: ['basePrice'] }
-    },
-    {
-      if: { properties: { mode: { const: 'distribute-total' } } },
-      then: { required: ['totalPrice'] }
-    }
-  ],
-  additionalProperties: false
-};
-
-
 
 /**
  * 获取所有订单
@@ -231,36 +106,6 @@ router.get('/daily', async (req, res) => {
 });
 
 /**
- * 创建订单定价拆分（前端创建订单用）
- * POST /api/orders/pricing/breakdown
- */
-router.post('/pricing/breakdown', async (req, res) => {
-  try {
-    const validate = ajv.compile(pricingBreakdownSchema);
-    const valid = validate(req.body);
-    if (!valid) {
-      return res.status(400).json({
-        success: false,
-        message: '请求参数验证失败',
-        errors: validate.errors
-      });
-    }
-
-    const result = await orderModule.getPricingBreakdown(req.body);
-    return res.status(200).json({ success: true, data: result });
-  } catch (err) {
-    console.error('定价拆分失败:', err);
-    const code = err.code || 'UNKNOWN';
-    const status = ['INVALID_DATE_RANGE', 'INVALID_PRICE', 'INVALID_MODE'].includes(code) ? 400 : 500;
-    return res.status(status).json({
-      success: false,
-      message: err.message || '定价拆分失败',
-      error: { code, details: err.message }
-    });
-  }
-});
-
-/**
  * 获取特定ID的订单
  * GET /api/orders/:id
  */
@@ -285,101 +130,6 @@ router.get('/:id', async (req, res) => {
     });
   }
 });
-
-/**
- * 创建新订单
- * POST /api/orders/new
- */
-router.post('/new', async (req, res) => {
-
-  try {
-    console.log('收到订单创建请求，请求体:', JSON.stringify(req.body, null, 2));
-
-    // 请求参数验证
-    const validate = ajv.compile(createOrderSchema);
-    const valid = validate(req.body);
-    if (!valid) {
-      console.error('订单创建请求参数验证失败:', validate.errors);
-      return res.status(400).json({
-        success: false,
-        message: '请求参数验证失败',
-        errors: validate.errors
-      });
-    }
-    const newOrder = await orderModule.createOrder(req.body);
-
-    res.status(201).json({
-      success: true,
-      message: '订单创建成功',
-      data: {
-        order: newOrder
-      }
-    });
-
-  } catch (error) {
-    console.error('创建订单失败(路由层):', error.code || 'NO_CODE', error.message);
-
-    // 处理不同类型的错误
-    switch (error.code) {
-      case 'DUPLICATE_ORDER':
-        return res.status(409).json({
-          success: false,
-          message: '相同订单已存在',
-          data: {
-            existingOrder: error.existingOrder
-          }
-        });
-
-      case 'MISSING_REQUIRED_FIELDS':
-      case 'INVALID_ORDER_STATUS':
-      case 'INVALID_DATE_FORMAT':
-      case 'INVALID_DATE_RANGE':
-      case 'INVALID_PHONE_FORMAT':
-      case 'INVALID_PRICE':
-      case 'INVALID_PRICE_EMPTY':
-      case 'INVALID_PRICE_JSON':
-      case 'INVALID_PRICE_DATE_FORMAT':
-      case 'INVALID_PRICE_DATE_RANGE':
-      case 'INVALID_DEPOSIT':
-      case 'INVALID_STAY_TYPE':
-      case 'INVALID_ROOM_TYPE':
-      case 'INVALID_ROOM_NUMBER':
-      case 'ROOM_CLOSED':
-      case 'ROOM_ALREADY_BOOKED':
-        return res.status(400).json({
-          success: false,
-          message: error.message,
-          error: {
-            code: error.code,
-            details: error.message
-          }
-        });
-
-      case '23505': // 数据库唯一约束冲突
-        return res.status(409).json({
-          success: false,
-          message: '订单创建失败：数据重复',
-          error: error.message
-        });
-
-      case '23503': // 外键约束冲突
-        return res.status(400).json({
-          success: false,
-          message: '订单创建失败：无效的关联数据',
-          error: error.message
-        });
-
-      default:
-        return res.status(500).json({
-          success: false,
-          message: '订单创建失败',
-          error: { code: error.code || 'UNKNOWN', details: error.message }
-        });
-    }
-  }
-});
-
-
 
 /**
  * 更新订单状态
@@ -619,122 +369,6 @@ router.get('/:order_id/deposit-info', async (req, res) => {
   }
 });
 
-
-/**
- * 办理入住
- * POST /api/orders/:orderId/check-in
- * 请求体: { deposit: number } - 实际收取的押金金额
- */
-router.post('/:orderId/check-in', async (req, res) => {
-  try {
-    const { orderId } = req.params;
-    const { deposit, roomFeePaymentSplits, depositPaymentSplits, depositPaymentMethod } = req.body || {};
-
-    await orderModule.checkIn(orderId, deposit, undefined, {
-      roomFeePaymentSplits,
-      depositPaymentSplits,
-      depositPaymentMethod
-    });
-
-    return res.status(200).json({
-      success: true,
-      message: '办理入住成功'
-    });
-  } catch (error) {
-    console.error('❌ [check-in] 办理入住失败:', error);
-    const status = error.statusCode || 500;
-    return res.status(status).json({
-      success: false,
-      message: status === 500 ? '办理入住失败' : error.message,
-      error: error.message
-    });
-  }
-})
-
-/**
- * 快速入住：创建已入住订单和账单（使用事务）
- * POST /api/orders/fast-check-in
- */
-router.post('/fast-check-in', async (req, res) => {
-  try {
-    const body = req.body || {};
-    const normalizedRoomFeeSplits = normalizeOptionalSplitField(
-      body.roomFeePaymentSplits ?? body.room_fee_payment_splits
-    );
-    const normalizedDepositSplits = normalizeOptionalSplitField(
-      body.depositPaymentSplits ?? body.deposit_payment_splits
-    );
-    const orderData = {
-      orderId: body.orderId || body.order_id,
-      sourceNumber: body.sourceNumber || body.idSource || body.id_source || '',
-      orderSource: body.orderSource || body.order_source,
-      guestName: body.guestName || body.guest_name,
-      phone: body.phone,
-      roomType: body.room_types || body.roomType || body.room_type,
-      roomNumber: body.roomNumber || body.room_number,
-      checkInDate: body.checkInDate || body.check_in_date,
-      checkOutDate: body.checkOutDate || body.check_out_date,
-      status: body.status || 'checked-in',
-      paymentMethod: body.paymentMethod || body.payment_method,
-      roomPrice: body.roomPrice || body.total_price,
-      deposit: body.deposit,
-      isPrepaid: body.isPrepaid,
-      prepaidAmount: body.prepaidAmount || body.prepaid_amount,
-      roomFeePaymentSplits: normalizedRoomFeeSplits,
-      depositPaymentSplits: normalizedDepositSplits,
-      depositPaymentMethod: body.depositPaymentMethod || body.deposit_payment_method,
-      stayType: body.stayType || body.stay_type,
-      createTime: body.createTime || body.create_time,
-      remarks: body.remarks
-    };
-
-    // 验证请求数据
-    const validate = ajv.compile(createOrderSchema);
-    const valid = validate(orderData);
-    if (!valid) {
-      console.error('快速入住请求参数验证失败:', validate.errors);
-      return res.status(400).json({
-        success: false,
-        message: '请求参数验证失败',
-        errors: validate.errors
-      });
-    }
-
-    const depositAmount = toAmountNumber(orderData.deposit || 0);
-
-    console.log('🚀 收到快速入住请求:', {
-      order_id: orderData.orderId,
-      guest_name: orderData.guestName,
-      room_number: orderData.roomNumber,
-      deposit: depositAmount
-    });
-
-    // 调用业务逻辑函数
-    const result = await orderModule.fastCheckIn(orderData, req.user?.name || 'system');
-
-    console.log('✅ 快速入住成功:', result.order.order_id);
-
-    return res.status(200).json({
-      success: true,
-      message: '快速入住成功',
-      data: result
-    });
-
-  } catch (error) {
-    console.error('❌ 快速入住失败:', error);
-    // 重要：如果业务层已标注 statusCode/code，这里需要透传，
-    // 否则前端只会看到“500”，无法判断是参数问题还是事务问题。
-    const status = error.statusCode || 500;
-    return res.status(status).json({
-      success: false,
-      message: status === 500 ? '快速入住失败' : (error.message || '快速入住失败'),
-      error: {
-        code: error.code || 'UNKNOWN',
-        message: error.message
-      }
-    });
-  }
-});
 
 /**
  * 办理退房：更修订单状态，并将房间状态设置为“cleaning“

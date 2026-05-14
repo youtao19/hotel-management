@@ -98,16 +98,11 @@ describe('办理入住接口', () => {
       .post(`/api/orders/${orderPayload.orderId}/check-in`)
       .send({
         deposit: 80,
-        roomFeePaymentSplits: {
-          '2025-12-11': [
-            { method: '现金', amount: 40 },
-            { method: '微信', amount: 60 }
-          ],
-          '2025-12-12': [
-            { method: '微信', amount: 20 },
-            { method: '微邮付', amount: 100 }
-          ]
-        },
+        roomFeePaymentSplits: [
+          { method: '现金', amount: 40 },
+          { method: '微信', amount: 80 },
+          { method: '微邮付', amount: 100 }
+        ],
         depositPaymentSplits: [
           { method: '现金', amount: 30 },
           { method: '微信', amount: 50 }

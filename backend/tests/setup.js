@@ -1,7 +1,3 @@
-const db = require('../database/postgreDB/pg');
-const redisDB = require('../database/redis/redis');
-const app = require('../app');
-
 // 所有测试表，统一管理
 const tables = [
   'bills',
@@ -25,7 +21,7 @@ const tables = [
 ];
 
 /**
- * 判断当前测试文件是否属于纯 mock 的抖音单元测试。
+ * 判断当前测试文件是否属于不依赖数据库/App 的模块单元测试。
  * 说明：
  * 1. 这类测试不会访问真实数据库、Redis 或 Express 应用；
  * 2. 跳过全局初始化后，可以避免测试环境建表逻辑干扰单元测试断言。
@@ -35,7 +31,9 @@ const tables = [
 function shouldSkipGlobalBootstrap() {
   const testPath = expect.getState().testPath || '';
 
-  return testPath.includes('/backend/modules/douyin/') && testPath.includes('/__tests__/');
+  return (testPath.includes('/backend/modules/douyin/') && testPath.includes('/__tests__/'))
+    || (testPath.includes('/backend/modules/order-create/__tests__/') && testPath.endsWith('.test.js'))
+    ;
 }
 
 function shouldSkipAppBootstrap() {
@@ -50,9 +48,12 @@ function shouldSkipAppBootstrap() {
 // 全局测试设置
 beforeAll(async () => {
   if (shouldSkipGlobalBootstrap()) {
-    console.log('⏭️ 跳过抖音单元测试的全局初始化');
+    console.log('⏭️ 跳过模块单元测试的全局初始化');
     return;
   }
+
+  const db = require('../database/postgreDB/pg');
+  const app = require('../app');
 
   // 初始化数据库结构
   await db.initializePostgreDB();
@@ -70,9 +71,12 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (shouldSkipGlobalBootstrap()) {
-    console.log('⏭️ 跳过抖音单元测试的全局清理');
+    console.log('⏭️ 跳过模块单元测试的全局清理');
     return;
   }
+
+  const db = require('../database/postgreDB/pg');
+  const redisDB = require('../database/redis/redis');
 
   try {
     // 先禁用外键约束

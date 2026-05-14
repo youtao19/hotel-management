@@ -134,7 +134,7 @@
 }
 ```
 - 说明：
-  - `roomFeePaymentSplits` 既支持数组，也支持按日期对象（后端可识别两种格式）。
+  - `roomFeePaymentSplits` 仅支持数组。
   - 拆分金额必须与应收金额严格相等。
 - 成功响应：
 ```json
