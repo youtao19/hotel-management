@@ -4,6 +4,8 @@
 
 `room-status` 负责房间状态页的单日房态、14 天日历房态、单房间区间房态和手动修改基础房态。
 
+本模块先于 `room-manage` 挂载到 `/api/rooms`，用于承接房态页接口；房间增删改、可用房查询和整单换房仍归 `room-manage`。
+
 ## API 接口
 
 - `GET /api/rooms`
@@ -143,6 +145,7 @@ Response:
 ## 注意事项
 
 - API 路径不能改，旧 `/api/rooms` 挂载点仍然保留。
+- `GET /api/rooms/available`、`GET /api/rooms/number/:number`、房间增删改和整单换房不归本模块。
 - `display_status` 是展示状态：维修优先，其次订单占用/预订，再其次清扫，最后空闲。
 - `PATCH /api/rooms/:number/status` 只改房间基础状态，不改订单状态。
 - 状态设为 `repair` 时同步 `is_closed=true`；其他状态同步 `is_closed=false`，这会影响可用房和渠道库存。

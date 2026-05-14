@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const roomRouter = express.Router();
 const { authenticationMiddleware } = require('../authentication');
 const controller = require('./orderManage.controller');
 
@@ -35,10 +36,15 @@ router.post('/:orderId/check-out', controller.checkOut);
 // 修改订单某一天的房间号。
 router.put('/:orderNumber/day-room', authenticationMiddleware, controller.updateOrderDayRoom);
 
+// 兼容旧路径：订单详情页整单更换房间。
+roomRouter.post('/change-room', controller.changeOrderRoom);
+
 // 同时修改订单信息、每日房价和相关账单。
 router.put('/:orderNumber/with-bills', authenticationMiddleware, controller.updateOrderWithBills);
 
 // 修改订单基础信息。
 router.put('/:orderNumber', authenticationMiddleware, controller.updateOrder);
+
+router.roomRoutes = roomRouter;
 
 module.exports = router;
