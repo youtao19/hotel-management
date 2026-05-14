@@ -46,7 +46,6 @@ dev.env
 coverage
 *.lcov
 
-
 # Playwright
 node_modules/
 /test-results/
@@ -55,6 +54,7 @@ node_modules/
 /playwright/.cache/
 /playwright/.auth/
 
+# Agent task runtime state
 .ai/tasks/*/STATE.json
 .ai/tasks/*/LOG.md
 .ai/archive/

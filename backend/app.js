@@ -98,6 +98,9 @@ async function initializeSession() {
     const orderManageRoutes = require("./modules/order-manage/orderManage.routes");
     app.use("/api/orders", orderManageRoutes);
 
+    const roomStatusRoutes = require("./modules/room-status/roomStatus.routes");
+    app.use("/api/rooms", roomStatusRoutes);
+
     const roomManageRoutes = require("./modules/room-manage/roomManage.routes");
     app.use("/api/rooms", roomManageRoutes);
 
@@ -119,7 +122,7 @@ async function initializeSession() {
     const billRoute = require("./routes/billRoute");
     app.use("/api/bills", billRoute);
 
-    const reviewRoute = require("./routes/reviewRoute");
+    const reviewRoute = require("./modules/review/review.routes");
     app.use("/api/reviews", reviewRoute);
 
     const HandoverRoute = require("./routes/handoverRoute");
