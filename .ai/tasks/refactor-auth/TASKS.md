@@ -46,6 +46,13 @@
 - [x] 更新模块 README。
 - [x] 补充 controller/validator 单测。
 
+## Phase 4: middleware placement
+
+- [x] 将根级 `backend/modules/authentication.js` 移入 `backend/modules/auth/auth.middleware.js`。
+- [x] 更新 `backend/app.js`、auth 用户路由和跨模块认证引用。
+- [x] 更新 auth / order-manage 模块 README。
+- [x] 补充认证中间件单测。
+
 ## 非本次自动扩大范围
 
 - 不改前端接口调用。

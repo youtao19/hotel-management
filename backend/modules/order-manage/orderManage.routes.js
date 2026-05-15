@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const roomRouter = express.Router();
-const { authenticationMiddleware } = require('../authentication');
+const { authenticationMiddleware } = require('../auth/auth.middleware');
 const controller = require('./orderManage.controller');
 
 router.use(express.json());

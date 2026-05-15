@@ -20,7 +20,7 @@
 
 ## 当前阶段
 
-Phase 3: routes/controller/validator/service/repository 已拆分。旧 `backend/routes/authRoute.js` 和 `backend/routes/userRoute.js` 已删除，实际实现位于 `backend/modules/auth/`。
+Phase 4: routes/controller/validator/service/repository 已拆分，认证中间件也已归入 `backend/modules/auth/`。旧 `backend/routes/authRoute.js` 和 `backend/routes/userRoute.js` 已删除，实际实现位于 `backend/modules/auth/`。
 
 ## 请求和响应
 
@@ -197,12 +197,13 @@ Phase 3: routes/controller/validator/service/repository 已拆分。旧 `backend
 - `GET /api/user/logout` -> `authController.logout()` -> `req.logout()` / `res.clearCookie()`
 - `GET /api/user/info` -> `authService.getCurrentUser()` -> `authRepository.findAccountInfoById()`
 - `GET /api/user/check/email` -> `authService.getCurrentUserEmailVerified()` -> `authRepository.findEmailVerifiedByAccountId()`
+- 全局 session 初始化 -> `auth.middleware.authenticationMiddleware()` -> 挂载 `req.login()` / `req.logout()` / `req.isAuthenticated()`
+- 需要登录态的用户接口 -> `auth.middleware.ensureAuthenticated()`
 
 ## 依赖说明
 
 - `../../database/postgreDB/pg`
 - `../../database/redis/redis`
-- `../authentication`
 - `../rateLimiter`
 - `../emailSetup`
 - `bcrypt`
@@ -217,5 +218,6 @@ Phase 3: routes/controller/validator/service/repository 已拆分。旧 `backend
 - 登录失败状态码和 `Retry-After` 行为继续沿用旧接口。
 - 未验证邮箱仍计入登录失败限流，避免绕过账号保护。
 - 登出接口不要求认证，session 过期时也要允许前端清 cookie。
+- `auth.middleware.js` 是 session 登录态的唯一挂载点，跨模块需要认证时只引用这里。
 - Redis 验证码前缀继续使用 `emailVerification` 和 `resetPassword`。
 - `account.created_at` 仍由当前 Node `Date` 写入；本次不改数据库 schema 和时间语义。
