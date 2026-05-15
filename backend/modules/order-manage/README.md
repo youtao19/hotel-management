@@ -42,7 +42,7 @@ Phase 3（订单管理流程已完成）: routes/controller/validator/service/re
 
 ## 依赖说明
 
-- `../authentication`
+- `../auth/auth.middleware`
 - `../../database/postgreDB/pg`
 - `ajv`
 - `ajv-formats`
