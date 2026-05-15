@@ -8,7 +8,7 @@
 
 - 房间状态概览：归 `room-status`
 - 最近入住客人：归 `order-manage`
-- 收入统计：归 `income-statistics` / 当前 `revenueRoute`
+- 收入统计：归 `income-statistics`
 
 ## API 接口
 

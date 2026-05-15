@@ -2,6 +2,8 @@
 
 更新时间：2026-02-11
 
+> 模块实现位置：`backend/modules/income-statistics/README.md`。收入统计页面相关 API 已迁移到 `income-statistics` 模块，本文件保留为全局索引和对外说明。
+
 ## 1. 获取快速统计（今日/本周/本月）
 
 - Method: `GET`
