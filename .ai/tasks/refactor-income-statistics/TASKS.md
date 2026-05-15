@@ -12,7 +12,7 @@
 - [x] 拆分 service
 - [x] 拆分 repository，并迁移收入统计 SQL
 - [x] 在 `backend/app.js` 注册新模块路由
-- [x] 收窄旧 `revenueRoute`，避免已迁移接口重复实现
+- [x] 删除未使用的旧 `/api/revenue/receipts` 路由
 - [x] 补充模块 README 和全局接口文档索引
 - [x] 补充模块本地 controller/validator 测试
 - [x] 运行聚焦测试并修复本次迁移造成的问题
