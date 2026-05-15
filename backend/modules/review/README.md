@@ -16,7 +16,7 @@
 
 ## 当前阶段
 
-Phase 3: routes/controller/validator/service/repository 已拆分。旧 `../reviewInvitationModule` 仅保留兼容导出，实际业务流在 `review.service.js`，SQL 和数据库访问在 `review.repository.js`。
+Phase 3: routes/controller/validator/service/repository 已拆分。旧 `../reviewInvitationModule` 兼容导出已移除，实际业务流在 `review.service.js`，SQL 和数据库访问在 `review.repository.js`。
 
 ## 请求和响应
 
@@ -142,7 +142,7 @@ Phase 3: routes/controller/validator/service/repository 已拆分。旧 `../revi
 
 - API 路径不能改。
 - 请求和响应格式不能改。
-- 旧 `../reviewInvitationModule` 仅用于兼容旧引用，新代码应直接依赖本模块。
+- 旧 `../reviewInvitationModule` 已移除，新代码应直接依赖本模块。
 - `positive_review` 必须是布尔值，不能省略，也不能携带额外字段。
 - `GET /api/reviews/:orderId` 的 `order` 字段继续沿用 `orderManageService.getOrder()` 的数组响应口径。
 - DATE 字段按 `YYYY-MM-DD` 字符串透传，不使用 `toISOString()`。
