@@ -128,8 +128,8 @@ async function initializeSession() {
     const HandoverRoute = require("./routes/handoverRoute");
     app.use("/api/handover", HandoverRoute);
 
-    const revenueRoute = require("./routes/revenueRoute");
-    app.use("/api/revenue", revenueRoute);
+    const incomeStatisticsRoutes = require("./modules/income-statistics/incomeStatistics.routes");
+    app.use("/api/revenue", incomeStatisticsRoutes);
 
     const dashboardRoutes = require("./modules/dashboard/dashboard.routes");
     app.use("/api/dashboard/memos", dashboardRoutes);

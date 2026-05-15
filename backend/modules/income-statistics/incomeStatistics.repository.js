@@ -1,7 +1,7 @@
 "use strict";
 
 const Decimal = require("decimal.js");
-const { query } = require("../database/postgreDB/pg");
+const { query } = require("../../database/postgreDB/pg");
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -180,7 +180,7 @@ async function getDailyRevenue(startDate, endDate, roomType) {
 }
 
 /**
- * 获取每周收入统计（按周日为周起始）
+ * 获取每周收入统计（按周一为周起始，使用 PostgreSQL date_trunc('week') 口径）
  */
 async function getWeeklyRevenue(startDate, endDate, roomType) {
   assertDateString(startDate, "startDate");
@@ -480,8 +480,114 @@ async function getRevenueBillDetails({
   }
 }
 
+/**
+ * 获取每日营收明细。
+ */
+async function getDailyRevenueDetails(startDate, endDate, roomType) {
+  assertDateString(startDate, "startDate");
+  assertDateString(endDate, "endDate");
+
+  const sql = `
+    WITH order_income AS (
+      SELECT
+        o.order_id::text AS id,
+        o.order_id::text AS order_number,
+        o.room_number,
+        o.guest_name,
+        o.room_type,
+        rt.type_name AS room_type_name,
+        o.stay_date::date AS stay_date,
+        COALESCE(o.total_price, 0) AS total_amount,
+        o.payment_method,
+        o.check_out_date,
+        1 AS sort_type
+      FROM orders o
+      LEFT JOIN room_types rt ON o.room_type = rt.type_code
+      WHERE o.stay_date::date BETWEEN $1::date AND $2::date
+        AND o.status NOT IN ('cancelled')
+        AND ($3::text IS NULL OR o.room_type = $3::text)
+    ),
+    bill_income AS (
+      SELECT
+        ('BILL-' || b.bill_id)::text AS id,
+        COALESCE(b.order_id, ('CAR-' || b.bill_id)::text) AS order_number,
+        COALESCE(b.room_number, '租车收入') AS room_number,
+        COALESCE(b.guest_name, '未知客户') AS guest_name,
+        CASE
+          WHEN COALESCE(b.stay_type, '') = '租车收入' THEN NULL
+          ELSE ord.room_type
+        END AS room_type,
+        CASE
+          WHEN COALESCE(b.stay_type, '') = '租车收入' THEN '租车收入'
+          ELSE COALESCE(rt.type_name, ord.room_type)
+        END AS room_type_name,
+        DATE(b.create_time) AS stay_date,
+        COALESCE(b.change_price, 0) AS total_amount,
+        b.pay_way AS payment_method,
+        NULL::date AS check_out_date,
+        2 AS sort_type
+      FROM bills b
+      LEFT JOIN LATERAL (
+        SELECT
+          o.room_type
+        FROM orders o
+        WHERE o.order_id = b.order_id
+        ORDER BY o.stay_date DESC NULLS LAST, o.create_time DESC NULLS LAST
+        LIMIT 1
+      ) ord ON TRUE
+      LEFT JOIN room_types rt ON rt.type_code = ord.room_type
+      WHERE DATE(b.create_time) BETWEEN $1::date AND $2::date
+        AND COALESCE(b.change_price, 0) > 0
+        AND (
+          b.change_type = '补收'
+          OR COALESCE(b.stay_type, '') = '租车收入'
+        )
+        AND (
+          $3::text IS NULL
+          OR (
+            COALESCE(b.stay_type, '') <> '租车收入'
+            AND ord.room_type = $3::text
+          )
+        )
+    )
+    SELECT
+      id,
+      order_number,
+      room_number,
+      guest_name,
+      room_type,
+      room_type_name,
+      stay_date,
+      total_amount,
+      payment_method,
+      check_out_date
+    FROM (
+      SELECT * FROM order_income
+      UNION ALL
+      SELECT * FROM bill_income
+    ) t
+    ORDER BY stay_date DESC, sort_type ASC, room_number ASC, order_number ASC
+  `;
+
+  const result = await query(sql, [startDate, endDate, roomType || null]);
+  return (result.rows || []).map(row => ({
+    id: row.id,
+    order_number: row.order_number,
+    room_number: row.room_number,
+    guest_name: row.guest_name || "未知客户",
+    room_type: row.room_type,
+    room_type_name: row.room_type_name || row.room_type,
+    total_amount: parseFloat(row.total_amount || 0),
+    payment_method: row.payment_method,
+    stay_date: String(row.stay_date || ""),
+    check_out_date: row.check_out_date ? String(row.check_out_date) : "",
+    stay_date_display: String(row.stay_date || "")
+  }));
+}
+
 module.exports = {
   getDailyRevenue,
+  getDailyRevenueDetails,
   getWeeklyRevenue,
   getMonthlyRevenue,
   getRoomTypeRevenue,

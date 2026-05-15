@@ -20,7 +20,7 @@
 
 ## 当前阶段
 
-Phase 3: routes/controller/validator/service/repository 已拆分。旧 `backend/routes/authRoute.js` 和 `backend/routes/userRoute.js` 仅保留兼容导出，实际实现位于 `backend/modules/auth/`。
+Phase 3: routes/controller/validator/service/repository 已拆分。旧 `backend/routes/authRoute.js` 和 `backend/routes/userRoute.js` 已删除，实际实现位于 `backend/modules/auth/`。
 
 ## 请求和响应
 

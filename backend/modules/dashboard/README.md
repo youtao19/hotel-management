@@ -8,7 +8,7 @@
 
 - 房间状态概览：归 `room-status`
 - 最近入住客人：归 `order-manage`
-- 收入统计：归 `income-statistics` / 当前 `revenueRoute`
+- 收入统计：归 `income-statistics`
 
 ## API 接口
 
@@ -102,7 +102,7 @@ HTTP `204`，无响应体。
 
 ## 当前阶段
 
-Phase 3: routes/controller/validator/service/repository 已拆分，旧 `dashboardMemoRoute.js` 和 `dashboardMemoModule.js` 保留兼容导出。
+Phase 3: routes/controller/validator/service/repository 已拆分，旧 `dashboardMemoRoute.js` 和 `dashboardMemoModule.js` 已删除。
 
 ## 业务流程
 

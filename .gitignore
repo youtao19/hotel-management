@@ -55,6 +55,7 @@ node_modules/
 /playwright/.auth/
 
 # Agent task runtime state
+.ai/CURRENT_TASK
 .ai/tasks/*/STATE.json
 .ai/tasks/*/LOG.md
 .ai/archive/
