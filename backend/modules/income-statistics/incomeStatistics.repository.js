@@ -180,7 +180,7 @@ async function getDailyRevenue(startDate, endDate, roomType) {
 }
 
 /**
- * 获取每周收入统计（按周日为周起始）
+ * 获取每周收入统计（按周一为周起始，使用 PostgreSQL date_trunc('week') 口径）
  */
 async function getWeeklyRevenue(startDate, endDate, roomType) {
   assertDateString(startDate, "startDate");
