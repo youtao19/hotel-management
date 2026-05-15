@@ -100,7 +100,7 @@
 }
 ```
 
-业务调用：`orderCreateService.checkIn(orderId, deposit, paymentSplitPayload)`，service 负责办理入住流程，订单和房态更新委托 `orderCreate.repository`，账单写入继续使用 `billModule.addBill()`。
+业务调用：`orderCreateService.checkIn(orderId, deposit, paymentSplitPayload)`，service 负责办理入住流程，订单和房态更新委托 `orderCreate.repository`，账单写入继续使用 `bill/bill.service.addBill()`。
 
 ### POST /api/orders/pricing/breakdown
 

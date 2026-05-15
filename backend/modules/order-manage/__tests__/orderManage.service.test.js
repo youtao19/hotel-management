@@ -1,4 +1,4 @@
-jest.mock('../../billModule', () => ({
+jest.mock('../../bill/bill.service', () => ({
   addBill: jest.fn()
 }));
 
@@ -41,7 +41,7 @@ jest.mock('../orderManage.repository', () => ({
   updateOrderStatusInTransaction: jest.fn()
 }));
 
-const billModule = require('../../billModule');
+const billService = require('../../bill/bill.service');
 const orderManageRepository = require('../orderManage.repository');
 const orderManageService = require('../orderManage.service');
 
@@ -452,7 +452,7 @@ describe('订单管理业务服务', () => {
         check_out_date: '2025-12-05'
       }
     ]);
-    billModule.addBill.mockResolvedValue({ bill_id: 1, change_type: '退押', change_price: -12 });
+    billService.addBill.mockResolvedValue({ bill_id: 1, change_type: '退押', change_price: -12 });
 
     await expect(orderManageService.refundDeposit({
       order_id: 'ORDER_001',
@@ -462,7 +462,7 @@ describe('订单管理业务服务', () => {
     })).resolves.toEqual({ bill_id: 1, change_type: '退押', change_price: -12 });
 
     expect(orderManageRepository.findOrderRowsByOrderId).toHaveBeenCalledWith('ORDER_001');
-    expect(billModule.addBill).toHaveBeenCalledWith(expect.objectContaining({
+    expect(billService.addBill).toHaveBeenCalledWith(expect.objectContaining({
       order_id: 'ORDER_001',
       change_price: -12,
       change_type: '退押',
@@ -482,7 +482,7 @@ describe('订单管理业务服务', () => {
       change_price: 12
     })).rejects.toThrow('只有已退房或已取消的订单才能退押金');
 
-    expect(billModule.addBill).not.toHaveBeenCalled();
+    expect(billService.addBill).not.toHaveBeenCalled();
   });
 
   test('办理正常退房时，应当在同一个事务里更新订单状态和房态', async () => {

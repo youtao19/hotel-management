@@ -1,9 +1,9 @@
 "use strict";
 
-const setup = require("../appSettings/setup");
-const { query } = require("../database/postgreDB/pg");
-const emailJob = require("./emailSetup");
-const { formatDate } = require("./tools");
+const setup = require("../../appSettings/setup");
+const emailJob = require("../emailSetup");
+const { formatDate } = require("../tools");
+const billRepository = require("./bill.repository");
 
 const SUPPORTED_PAY_WAYS = new Set(['现金', '微信', '微邮付', '平台']);
 const ENGLISH_PAYWAY_MAP = {
@@ -12,8 +12,6 @@ const ENGLISH_PAYWAY_MAP = {
   weiyoufu: '微邮付',
   other: '其他'
 };
-
-const CHANGE_TYPE_ROOM_FEE = setup.changeType?.roomFee || '房费';
 
 const DATE_FORMATTER_CACHE = new Map();
 
@@ -31,8 +29,7 @@ function getFormatter(timezone = 'Asia/Shanghai') {
 
 function formatDateWithTimezone(dateInput, timezone = 'Asia/Shanghai') {
   const date = dateInput instanceof Date ? dateInput : new Date(dateInput || Date.now());
-  const formatter = getFormatter(timezone);
-  return formatter.format(date);
+  return getFormatter(timezone).format(date);
 }
 
 function normalizePayWay(value) {
@@ -61,7 +58,7 @@ function determineStayType(order = {}) {
       return checkIn === checkOut ? '休息房' : '客房';
     }
   } catch {
-    // ignore
+    // 日期字段可能来自历史数据，无法解析时按普通客房兜底。
   }
   return '客房';
 }
@@ -78,9 +75,9 @@ function calculateStayNights(order = {}) {
   if (!checkInYmd || !checkOutYmd) return 1;
 
   const ymdToUtcMs = (ymd) => {
-    const [y, m, d] = String(ymd).split('-').map(Number);
-    if (!y || !m || !d) return NaN;
-    return Date.UTC(y, m - 1, d);
+    const [year, month, day] = String(ymd).split('-').map(Number);
+    if (!year || !month || !day) return NaN;
+    return Date.UTC(year, month - 1, day);
   };
 
   const startMs = ymdToUtcMs(checkInYmd);
@@ -98,7 +95,6 @@ function calculateDailyAmount(order = {}) {
     return 0;
   }
 
-  // 如果订单已经按日拆分（存在 stay_date），直接使用当日价格
   if (order.stay_date) {
     return Number(totalPrice.toFixed(2));
   }
@@ -106,83 +102,6 @@ function calculateDailyAmount(order = {}) {
   const nights = calculateStayNights(order);
   const amount = totalPrice / nights;
   return Number(amount.toFixed(2));
-}
-
-async function fetchCandidateOrders(targetDate, statuses) {
-  const sql = `
-    SELECT
-      order_id,
-      room_number,
-      guest_name,
-      check_in_date,
-      check_out_date,
-      stay_date,
-      status,
-      payment_method,
-      total_price,
-      stay_type
-    FROM orders
-    WHERE check_in_date <= $1::date
-      AND check_out_date > $1::date
-      AND status = ANY($2::text[])
-  `;
-  const { rows } = await query(sql, [targetDate, statuses]);
-  return rows;
-}
-
-async function hasBillForDate(orderId, stayDate) {
-  const checkSql = `
-    SELECT bill_id
-    FROM bills
-    WHERE order_id = $1
-      AND stay_date = $2::date
-      AND change_type = $3
-    LIMIT 1
-  `;
-  const { rowCount } = await query(checkSql, [orderId, stayDate, CHANGE_TYPE_ROOM_FEE]);
-  return rowCount > 0;
-}
-
-async function insertDailyBill(order, stayDate, amount) {
-  const insertSql = `
-    INSERT INTO bills (
-      order_id,
-      room_number,
-      guest_name,
-      change_price,
-      change_type,
-      pay_way,
-      create_time,
-      remarks,
-      stay_type,
-      stay_date
-    ) VALUES (
-      $1, $2, $3, $4, $5,
-      $6, NOW(), $7, $8, $9
-    )
-    RETURNING bill_id
-  `;
-
-  const payWay = normalizePayWay(order.payment_method);
-  const stayType = determineStayType(order);
-  const remarks = `自动创建当日账单（${stayDate}）`;
-
-  const roomNumber = order.room_number ? String(order.room_number).slice(0, 10) : null;
-
-  const values = [
-    order.order_id,
-    roomNumber,
-    order.guest_name,
-    amount,
-    CHANGE_TYPE_ROOM_FEE,
-    payWay,
-    remarks,
-    stayType,
-    stayDate
-  ];
-
-  const { rows } = await query(insertSql, values);
-  return rows[0];
 }
 
 function buildEmailSummary(summary) {
@@ -214,32 +133,32 @@ function buildEmailSummary(summary) {
 
   if (createdBills.length) {
     lines.push('');
-    lines.push('✅ 新增账单：');
-    createdBills.slice(0, 20).forEach(item => {
+    lines.push('新增账单：');
+    createdBills.slice(0, 20).forEach((item) => {
       lines.push(`- 订单 ${item.orderId} -> 账单 ${item.billId} 金额 ¥${item.amount.toFixed(2)}`);
     });
     if (createdBills.length > 20) {
-      lines.push(`… 其余 ${createdBills.length - 20} 条已省略`);
+      lines.push(`... 其余 ${createdBills.length - 20} 条已省略`);
     }
   }
 
   if (failures.length) {
     lines.push('');
-    lines.push('❌ 失败详情：');
-    failures.slice(0, 20).forEach(item => {
+    lines.push('失败详情：');
+    failures.slice(0, 20).forEach((item) => {
       lines.push(`- 订单 ${item.orderId}: ${item.message}`);
     });
     if (failures.length > 20) {
-      lines.push(`… 其余 ${failures.length - 20} 条已省略`);
+      lines.push(`... 其余 ${failures.length - 20} 条已省略`);
     }
   }
 
   if (skippedNoAmount.length) {
     lines.push('');
-    lines.push('ℹ️ 因金额为0跳过：');
-    skippedNoAmount.slice(0, 20).forEach(orderId => lines.push(`- ${orderId}`));
+    lines.push('因金额为0跳过：');
+    skippedNoAmount.slice(0, 20).forEach((orderId) => lines.push(`- ${orderId}`));
     if (skippedNoAmount.length > 20) {
-      lines.push(`… 其余 ${skippedNoAmount.length - 20} 条已省略`);
+      lines.push(`... 其余 ${skippedNoAmount.length - 20} 条已省略`);
     }
   }
 
@@ -257,12 +176,11 @@ async function sendSummaryEmail(summary) {
   }
   const to = setup.autoBillJob.alertEmails;
   if (!to || !to.length) {
-    console.warn('[autoBillService] 未配置告警邮箱，略过发送汇总邮件');
+    console.warn('[billAutoService] 未配置告警邮箱，略过发送汇总邮件');
     return;
   }
   const subject = `${setup.appName} 自动账单任务汇总（${summary.targetDate}）`;
-  const text = buildEmailSummary(summary);
-  await emailJob.sendSystemEmail({ to, subject, text });
+  await emailJob.sendSystemEmail({ to, subject, text: buildEmailSummary(summary) });
 }
 
 async function runAutoBillJob(options = {}) {
@@ -319,7 +237,7 @@ async function runAutoBillJob(options = {}) {
       throw new Error('未配置订单状态白名单');
     }
 
-    const candidates = await fetchCandidateOrders(targetDate, statusWhitelist);
+    const candidates = await billRepository.fetchAutoBillCandidateOrders(targetDate, statusWhitelist);
     summary.totalCandidates = candidates.length;
     console.log(`[autoBillJob] ${targetDate} 候选订单 ${candidates.length} 条（状态: ${statusWhitelist.join(', ')})`);
 
@@ -331,13 +249,19 @@ async function runAutoBillJob(options = {}) {
           continue;
         }
 
-        const exists = await hasBillForDate(order.order_id, targetDate);
+        const exists = await billRepository.hasRoomFeeBillForDate(order.order_id, targetDate);
         if (exists) {
           summary.skippedExisting.push(order.order_id);
           continue;
         }
 
-        const inserted = await insertDailyBill(order, targetDate, amount);
+        const inserted = await billRepository.insertDailyRoomFeeBill(
+          order,
+          targetDate,
+          amount,
+          normalizePayWay(order.payment_method),
+          determineStayType(order)
+        );
         summary.createdBills.push({
           orderId: order.order_id,
           billId: inserted.bill_id,

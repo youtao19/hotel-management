@@ -119,8 +119,8 @@ async function initializeSession() {
     const douyinExternalRoute = require("./routes/douyinExternalRoute");
     app.use("/douyin", douyinExternalRoute);
 
-    const billRoute = require("./routes/billRoute");
-    app.use("/api/bills", billRoute);
+    const billRoutes = require("./modules/bill/bill.routes");
+    app.use("/api/bills", billRoutes);
 
     const reviewRoute = require("./modules/review/review.routes");
     app.use("/api/reviews", reviewRoute);
