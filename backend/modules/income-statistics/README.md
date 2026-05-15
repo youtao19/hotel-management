@@ -138,7 +138,7 @@ Response:
 
 - `../../database/postgreDB/pg`
 - `decimal.js`
-- `backend/modules/revenueModule.js` 仅作为旧导入路径兼容出口，实际实现已迁移到本模块 repository。
+- 收入统计实现位于本模块，旧 `backend/modules/revenueModule.js` 已删除。
 
 ## 注意事项
 
