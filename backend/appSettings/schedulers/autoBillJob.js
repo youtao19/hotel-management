@@ -2,7 +2,7 @@
 
 const cron = require("node-cron");
 const setup = require("../setup");
-const { runAutoBillJob } = require("../../modules/autoBillService");
+const { runAutoBillJob } = require("../../modules/bill/billAuto.service");
 
 let cronTask = null;
 

@@ -36,7 +36,7 @@ Phase 3（订单管理流程已完成）: routes/controller/validator/service/re
 - `PUT /api/orders/:orderNumber/with-bills` -> `orderManageService.updateOrderWithBills()` -> `orderManageRepository`
 - `GET /api/orders/:orderNumber/early-checkout/recommendation` -> `orderManageService.getEarlyCheckoutRecommendation()` -> `orderManageRepository.findOrderRowsByOrderId()`
 - `POST /api/orders/:orderNumber/early-checkout` -> `orderManageService.earlyCheckout()` -> `orderManageRepository`
-- `POST /api/orders/:order_id/refund-deposit` -> `orderManageService.refundDeposit()` -> `orderManageRepository.findOrderRowsByOrderId()` + `billModule.addBill()`
+- `POST /api/orders/:order_id/refund-deposit` -> `orderManageService.refundDeposit()` -> `orderManageRepository.findOrderRowsByOrderId()` + `bill/bill.service.addBill()`
 - `GET /api/orders/:order_id/deposit-info` -> `orderManageService.getDepositInfo()` -> `orderManageRepository.getDepositInfo()`
 - `POST /api/orders/:orderId/check-out` -> `orderManageService.checkOut()` -> `orderManageRepository`
 

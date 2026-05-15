@@ -1,5 +1,5 @@
 const { formatDate, toAmountNumber } = require('../tools');
-const billModule = require('../billModule');
+const billService = require('../bill/bill.service');
 const orderCreateRepository = require('./orderCreate.repository');
 const orderManageRepository = require('../order-manage/orderManage.repository');
 
@@ -420,7 +420,7 @@ async function checkIn(orderId, depositAmount, clientOrPaymentSplitPayload, paym
       console.log(`📝 [check-in] 更新订单 ${orderId} 押金: ${firstOrder.deposit} -> ${parsedDeposit}`);
 
       for (const split of depositSplits) {
-        const depositBill = await billModule.addBill({
+        const depositBill = await billService.addBill({
           order_id: orderId,
           room_number: firstOrder.room_number,
           guest_name: firstOrder.guest_name,
@@ -449,7 +449,7 @@ async function checkIn(orderId, depositAmount, clientOrPaymentSplitPayload, paym
         amount: toAmountNumber(ord.total_price)
       }];
       for (const split of daySplits) { // 给某一天插入"所有"支付方式
-        const roomBill = await billModule.addBill({
+        const roomBill = await billService.addBill({
           order_id: orderId,
           room_number: ord.room_number,
           guest_name: ord.guest_name,

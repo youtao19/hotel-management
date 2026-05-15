@@ -14,11 +14,11 @@ jest.mock('../../order-manage/orderManage.repository', () => ({
   findOrderRowsByOrderId: jest.fn()
 }));
 
-jest.mock('../../billModule', () => ({
+jest.mock('../../bill/bill.service', () => ({
   addBill: jest.fn()
 }));
 
-const billModule = require('../../billModule');
+const billService = require('../../bill/bill.service');
 const orderCreateRepository = require('../orderCreate.repository');
 const orderManageRepository = require('../../order-manage/orderManage.repository');
 const orderCreateService = require('../orderCreate.service');
@@ -131,7 +131,7 @@ describe('创建订单业务服务', () => {
         status: 'pending'
       }
     ]);
-    billModule.addBill
+    billService.addBill
       .mockResolvedValueOnce({ bill_id: 1, change_type: '收押' })
       .mockResolvedValueOnce({ bill_id: 2, change_type: '房费' });
 
@@ -143,13 +143,13 @@ describe('创建订单业务服务', () => {
     expect(orderCreateRepository.updateOrderDeposit).toHaveBeenCalledWith(client, 1, 200);
     expect(orderCreateRepository.updateOrderStatus).toHaveBeenCalledWith(client, 'ORDER_001', 'checked-in');
     expect(orderCreateRepository.updateRoomStatus).toHaveBeenCalledWith(client, '403', 'occupied');
-    expect(billModule.addBill).toHaveBeenCalledTimes(2);
-    expect(billModule.addBill.mock.calls[0][0]).toMatchObject({
+    expect(billService.addBill).toHaveBeenCalledTimes(2);
+    expect(billService.addBill.mock.calls[0][0]).toMatchObject({
       change_type: '收押',
       pay_way: '微信',
       change_price: 200
     });
-    expect(billModule.addBill.mock.calls[1][0]).toMatchObject({
+    expect(billService.addBill.mock.calls[1][0]).toMatchObject({
       change_type: '房费',
       pay_way: '现金',
       change_price: 100
@@ -196,7 +196,7 @@ describe('创建订单业务服务', () => {
         status: 'pending'
       }
     ]);
-    billModule.addBill.mockResolvedValue({ bill_id: 1, change_type: '房费' });
+    billService.addBill.mockResolvedValue({ bill_id: 1, change_type: '房费' });
     orderManageRepository.findOrderRowsByOrderId.mockResolvedValue({ order_id: 'ORDER_FAST_001' });
     orderCreateRepository.listBillsByOrderId.mockResolvedValue([{ bill_id: 1 }]);
 

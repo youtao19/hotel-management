@@ -1,5 +1,5 @@
 const { query } = require('../database/postgreDB/pg');
-const { runAutoBillJob } = require('../modules/autoBillService');
+const { runAutoBillJob } = require('../modules/bill/billAuto.service');
 const { buildOrderPayload, createOrder } = require('./tools');
 
 const TEST_ROOM_TYPE = 'AUTO_BILL_TYPE';

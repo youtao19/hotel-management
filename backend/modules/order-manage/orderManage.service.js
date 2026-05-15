@@ -1,4 +1,4 @@
-const billModule = require('../billModule');
+const billService = require('../bill/bill.service');
 const orderManageRepository = require('./orderManage.repository');
 const { formatDate, toDecimal, toAmountNumber } = require('../tools');
 
@@ -1007,7 +1007,7 @@ async function earlyCheckout(orderNumber, body = {}, user) {
 
 /**
  * 办理订单退押金。
- * 退押账单继续交给 billModule 写入，保证账单金额转负数规则不变。
+ * 退押账单继续交给 bill 服务写入，保证账单金额转负数规则不变。
  */
 async function refundDeposit(refundData) {
   console.log('处理退押金请求:', refundData);
@@ -1042,7 +1042,7 @@ async function refundDeposit(refundData) {
   };
   console.log('准备创建退押金账单，数据如下:', billData);
 
-  const bill = await billModule.addBill(billData);
+  const bill = await billService.addBill(billData);
   if (!bill) {
     throw new Error('创建账单失败');
   }

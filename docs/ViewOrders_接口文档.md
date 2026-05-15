@@ -5,7 +5,7 @@
 
 对应代码：
 - 前端接口封装：`frontend/src/api/index.js`
-- 后端路由：`backend/modules/order-manage/orderManage.routes.js`、`backend/modules/room-manage/roomManage.routes.js`、`backend/routes/billRoute.js`
+- 后端路由：`backend/modules/order-manage/orderManage.routes.js`、`backend/modules/room-manage/roomManage.routes.js`、`backend/modules/bill/bill.routes.js`
 - 相关 OTA 文档：`docs/OTA_接口文档.md`
 
 ## 2. 基础约定
@@ -420,6 +420,8 @@
   - `NEW_ROOM_CONFLICT`
 
 ## 3.7 账单接口（页面内使用）
+
+账单模块源文档：`backend/modules/bill/README.md`。本节保留 `/ViewOrders` 页面使用到的接口摘要。
 
 ### 3.7.1 获取订单账单列表（用于退押可用性计算）
 - Method：`GET`
