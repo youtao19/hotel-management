@@ -72,12 +72,12 @@ async function callDouyinApi() {
 ## 5. 当前项目落地建议
 
 ### 5.1 现状
-- 当前项目已封装统一请求客户端：[backend/modules/douyin/clients/douyinOpenApi.client.js](/Users/peach/develop/hotel-management/backend/modules/douyin/clients/douyinOpenApi.client.js)。
-- 当前方式基于 `axios + token.service`，已满足现有接口调用需求。
+- 当前项目尚未抽统一请求客户端，现有 OpenAPI 调用分散在 `backend/modules/douyin/rate-plan/` 和 `backend/modules/douyin/physical-room/`。
+- 当前方式基于原生 `fetch + token.service`，已满足现有接口调用需求。
 
 ### 5.2 建议
 - 短期：保持现有 `axios` 方案，优先保证业务接口稳定。
-- 中期：若要切换 SDK，建议只在 `douyinOpenApi.client.js` 内部替换，不改上层业务 service 调用签名。
+- 中期：若要切换 SDK，建议先抽 `douyinOpenApi.client.js`，再在 client 内部替换实现，不改上层业务 service 调用签名。
 - 多实例部署时，token 管理统一放到后端服务层（可加 Redis/DB 缓存锁），避免 token 互刷。
 
 ## 6. 排查清单（实用）

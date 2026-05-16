@@ -1,5 +1,5 @@
-const roomQuery = require('../roomQuery')
-const RoomStaticInfo = require('../selfMatchRoomStaticInfo');
+const roomQuery = require('../../modules/douyin/physical-room/roomQuery.service');
+const RoomStaticInfo = require('../../modules/douyin/physical-room/physicalRoom.service');
 
 async function runTest() {
   const roomIds = (await RoomStaticInfo.getRoomInfoFromDouyin('7507526304168216616')).room_ids;

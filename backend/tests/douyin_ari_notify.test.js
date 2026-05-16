@@ -9,13 +9,13 @@ process.env.DOUYIN_CLIENT_SECRET = 'DY_SECRET_TEST';
 process.env.DOUYIN_ACCOUNT_ID = 'DY_ACCOUNT_TEST';
 process.env.DOUYIN_OPENAPI_BASE_URL = 'https://open.douyin.test';
 
-jest.mock('../services/douyinTokenService', () => ({
+jest.mock('../modules/douyin/token/token.service', () => ({
   getToken: jest.fn()
 }));
 
 const { query } = require('../database/postgreDB/pg');
-const douyinTokenService = require('../services/douyinTokenService');
-const douyinAriNotifyRoute = require('../routes/douyinAriNotifyRoute');
+const douyinTokenService = require('../modules/douyin/token/token.service');
+const douyinAriNotifyRoute = require('../modules/douyin/rate-plan/ariNotify.routes');
 
 const originalFetch = global.fetch;
 

@@ -1,8 +1,8 @@
 "use strict";
 
-const db = require('../database/postgreDB/pg');
-const douyinTokenService = require('./douyinTokenService');
-const { douyinConfig } = require('../appSettings/douyin.config');
+const douyinTokenService = require('../token/token.service');
+const { douyinConfig } = require('../../../appSettings/douyin.config');
+const ratePlanRepository = require('./ratePlan.repository');
 
 const MAX_RATE_PLAN_IDS = 50;
 const MAX_DATE_RANGE_DAYS = 365;
@@ -136,7 +136,7 @@ function getDouyinLogId(result) {
 
 class DouyinAriNotifyService {
   constructor(options = {}) {
-    this.db = options.db || db;
+    this.ratePlanRepository = options.ratePlanRepository || ratePlanRepository;
     this.tokenService = options.tokenService || douyinTokenService;
     this.config = options.config || douyinConfig;
     this.fetchImpl = options.fetchImpl || ((...args) => global.fetch(...args));
@@ -216,37 +216,8 @@ class DouyinAriNotifyService {
   }
 
   async findDouyinRatePlans(localRatePlanIds) {
-    const result = await this.db.query(
-      `
-        SELECT
-          rp.id AS local_rate_plan_id,
-          ocm.channel_item_id AS douyin_rate_plan_id,
-          COALESCE(
-            ocm.channel_config ->> 'hotel_id',
-            ocm.channel_config ->> 'poi_id',
-            dpr.raw_payload ->> 'hotel_id',
-            dpr.raw_payload ->> 'poi_id',
-            dpr.raw_payload ->> 'hotelId',
-            dpr.raw_payload ->> 'poiId',
-            dpr.raw_payload -> 'hotel' ->> 'hotel_id'
-          ) AS hotel_id
-        FROM rate_plans rp
-        LEFT JOIN ota_channel_mappings ocm
-          -- 抖音价量态通知只认渠道侧售卖套餐 ID，本地 ID 不能直接作为 rate_plan_id。
-          ON ocm.local_target_type = 'RATE_PLAN'
-         AND ocm.local_target_id = rp.id
-         AND ocm.channel_code = 'DOUYIN'
-        LEFT JOIN douyin_room_type_mapping drm
-          ON drm.local_room_type = rp.room_type_code
-        LEFT JOIN douyin_physical_rooms dpr
-          ON dpr.room_id = drm.douyin_room_id
-        WHERE rp.id = ANY($1)
-        ORDER BY array_position($1::int[], rp.id)
-      `,
-      [localRatePlanIds]
-    );
-
-    return result.rows;
+    // 抖音价量态通知只认渠道侧售卖套餐 ID，本地 ID 不能直接作为 rate_plan_id。
+    return this.ratePlanRepository.findAriNotifyRatePlans(localRatePlanIds);
   }
 
   assertAllRatePlansSynced(localRatePlanIds, rows) {

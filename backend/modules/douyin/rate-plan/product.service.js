@@ -1,6 +1,7 @@
-const douyinTokenService = require('./douyinTokenService');
-const { douyinConfig } = require('../appSettings/douyin.config');
-const db = require('../database/postgreDB/pg');
+const douyinTokenService = require('../token/token.service');
+const { douyinConfig } = require('../../../appSettings/douyin.config');
+const channelMappingRepository = require('./channelMapping.repository');
+const productRepository = require('./product.repository');
 
 function createServiceError(message, statusCode = 500, details = {}) {
     const error = new Error(message);
@@ -117,32 +118,7 @@ class DouyinProductService {
     }
 
     async _getLocalProductDetails(id) {
-        const result = await db.query(
-            `
-                SELECT
-                    rp.*,
-                    rt.type_name AS room_type_name,
-                    drm.douyin_room_id,
-                    drm.douyin_room_name,
-                    dpr.room_id AS douyin_cached_room_id,
-                    dpr.account_id AS douyin_account_id,
-                    dpr.raw_payload AS douyin_room_payload,
-                    dpr.rate_plan_list AS douyin_rate_plan_list,
-                    ocm.channel_item_id AS douyin_rate_plan_id
-                FROM rate_plans rp
-                LEFT JOIN room_types rt ON rp.room_type_code = rt.type_code
-                LEFT JOIN douyin_room_type_mapping drm ON drm.local_room_type = rp.room_type_code
-                LEFT JOIN douyin_physical_rooms dpr ON dpr.room_id = drm.douyin_room_id
-                LEFT JOIN ota_channel_mappings ocm
-                    ON ocm.local_target_type = 'RATE_PLAN'
-                    AND ocm.local_target_id = rp.id
-                    AND ocm.channel_code = 'DOUYIN'
-                WHERE rp.id = $1
-            `,
-            [id]
-        );
-
-        return result.rows[0] || null;
+        return productRepository.findLocalProductDetails(id);
     }
 
     _resolveAccountId(localProduct, options) {
@@ -274,19 +250,12 @@ class DouyinProductService {
             log_id: syncResult.logId
         };
 
-        const sql = `
-            INSERT INTO ota_channel_mappings
-            (local_target_type, local_target_id, channel_code, channel_item_id, channel_config, sync_status)
-            VALUES ('RATE_PLAN', $1, 'DOUYIN', $2, $3, 1)
-            ON CONFLICT (local_target_type, local_target_id, channel_code)
-            DO UPDATE SET
-                channel_item_id = EXCLUDED.channel_item_id,
-                channel_config = EXCLUDED.channel_config,
-                sync_status = EXCLUDED.sync_status,
-                updated_at = CURRENT_TIMESTAMP;
-        `;
-
-        await db.query(sql, [localProduct.id, syncResult.douyinRatePlanId, JSON.stringify(channelConfig)]);
+        await channelMappingRepository.upsertRatePlanMapping({
+            localRatePlanId: localProduct.id,
+            douyinRatePlanId: syncResult.douyinRatePlanId,
+            channelConfig,
+            syncStatus: 1
+        });
     }
 
     async _savePhysicalRoomRatePlan(localProduct, syncResult) {
@@ -309,15 +278,7 @@ class DouyinProductService {
         });
         nextList.push(nextItem);
 
-        await db.query(
-            `
-                UPDATE douyin_physical_rooms
-                SET rate_plan_list = $1,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE room_id = $2
-            `,
-            [JSON.stringify(nextList), localProduct.douyin_room_id]
-        );
+        await productRepository.updatePhysicalRoomRatePlanList(localProduct.douyin_room_id, nextList);
     }
 }
 

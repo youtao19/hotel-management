@@ -1,6 +1,6 @@
 "use strict";
 
-const db = require('../database/postgreDB/pg');
+const ratePlanRepository = require('./ratePlan.repository');
 
 const ACTIVE_ORDER_STATUSES = ['pending', 'reserved', 'checked-in', 'occupied'];
 const MAX_STAY_NIGHTS = 366;
@@ -94,21 +94,6 @@ function amountYuanToCents(value) {
   return Math.round(amount * 100);
 }
 
-function getHotelIdSql() {
-  return `
-    COALESCE(
-      -- 抖音酒店 ID 在历史缓存和同步配置里字段名不统一，查询时按常见来源兜底。
-      dpr.raw_payload ->> 'hotel_id',
-      dpr.raw_payload ->> 'poi_id',
-      dpr.raw_payload ->> 'hotelId',
-      dpr.raw_payload ->> 'poiId',
-      dpr.raw_payload -> 'hotel' ->> 'hotel_id',
-      ocm.channel_config ->> 'hotel_id',
-      ocm.channel_config ->> 'poi_id'
-    )
-  `;
-}
-
 function normalizeRequest(payload = {}) {
   const ratePlanId = normalizeString(payload.rate_plan_id || payload.ratePlanId);
   const bizType = normalizeString(payload.biz_type || payload.bizType);
@@ -142,38 +127,7 @@ function normalizeRequest(payload = {}) {
 }
 
 async function findRatePlan(ratePlanId) {
-  const result = await db.query(
-    `
-      SELECT
-        ocm.channel_item_id AS rate_plan_id,
-        rp.id AS local_rate_plan_id,
-        rp.room_type_code,
-        rp.base_price,
-        rp.currency,
-        rp.status AS rate_plan_status,
-        rt.is_closed AS room_type_closed,
-        drm.douyin_room_id,
-        dpr.room_id AS cached_douyin_room_id,
-        dpr.status AS douyin_room_status,
-        ${getHotelIdSql()} AS hotel_id
-      FROM ota_channel_mappings ocm
-      JOIN rate_plans rp
-        ON rp.id = ocm.local_target_id
-       AND ocm.local_target_type = 'RATE_PLAN'
-      LEFT JOIN room_types rt
-        ON rt.type_code = rp.room_type_code
-      LEFT JOIN douyin_room_type_mapping drm
-        ON drm.local_room_type = rp.room_type_code
-      LEFT JOIN douyin_physical_rooms dpr
-        ON dpr.room_id = drm.douyin_room_id
-      WHERE ocm.channel_code = 'DOUYIN'
-        AND ocm.channel_item_id = $1
-      LIMIT 1
-    `,
-    [ratePlanId]
-  );
-
-  return result.rows[0] || null;
+  return ratePlanRepository.findRatePlanByDouyinId(ratePlanId);
 }
 
 async function getInventoryMap(roomTypeCode, dates) {
@@ -181,32 +135,15 @@ async function getInventoryMap(roomTypeCode, dates) {
     return new Map();
   }
 
-  const result = await db.query(
-    `
-      WITH target_dates AS (
-        SELECT unnest($1::date[]) AS stay_date
-      )
-      SELECT
-        to_char(td.stay_date, 'YYYY-MM-DD') AS stay_date,
-        COUNT(DISTINCT r.room_number) AS total_rooms,
-        COUNT(DISTINCT o.room_number) AS occupied_rooms
-      FROM target_dates td
-      LEFT JOIN rooms r
-        ON r.type_code = $2
-       AND r.is_closed = FALSE
-       AND r.status != 'repair'
-      LEFT JOIN orders o
-        ON o.room_number = r.room_number
-       AND o.stay_date = td.stay_date
-       -- 只有仍占用房量的订单参与扣减，取消和退房不影响预售券可订库存。
-       AND o.status = ANY($3)
-      GROUP BY td.stay_date
-    `,
-    [dates.map((date) => date.start), roomTypeCode, ACTIVE_ORDER_STATUSES]
+  // 只有仍占用房量的订单参与扣减，取消和退房不影响预售券可订库存。
+  const rows = await ratePlanRepository.getInventoryRowsByRoomType(
+    roomTypeCode,
+    dates.map((date) => date.start),
+    ACTIVE_ORDER_STATUSES
   );
 
   const inventoryMap = new Map();
-  for (const row of result.rows) {
+  for (const row of rows) {
     const totalRooms = Number(row.total_rooms || 0);
     const occupiedRooms = Number(row.occupied_rooms || 0);
     inventoryMap.set(row.stay_date, Math.max(totalRooms - occupiedRooms, 0));

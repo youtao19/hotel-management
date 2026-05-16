@@ -1,12 +1,12 @@
 "use strict";
 
 const express = require('express');
-const redisDb = require('../database/redis/redis');
-const signatureService = require('../services/douyinSignatureService');
-const webhookService = require('../services/douyinWebhookService');
-const priceVolumeService = require('../services/douyinPriceVolumeService');
-const bookableCheckService = require('../services/douyinBookableCheckService');
-const callbackLogService = require('../services/douyinCallbackLogService');
+const redisDb = require('../../../database/redis/redis');
+const signatureService = require('./signature.service');
+const webhookService = require('./webhook.service');
+const priceVolumeService = require('../rate-plan/priceVolume.service');
+const bookableCheckService = require('../rate-plan/bookableCheck.service');
+const callbackLogService = require('./callbackLog.service');
 
 function successResponse() {
   return {

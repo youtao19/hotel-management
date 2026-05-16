@@ -1,5 +1,5 @@
 // test_sync.js
-const douyinProductService = require('../douyinProductService'); // 路径根据你实际情况改
+const douyinProductService = require('../../modules/douyin/rate-plan/product.service');
 
 async function runTest() {
     console.log("🚀 开始测试抖音商品同步链路...");
