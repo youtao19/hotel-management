@@ -1,13 +1,13 @@
 const express = require('express');
 const request = require('supertest');
 
-jest.mock('../services/douyinTokenService', () => ({
+jest.mock('../modules/douyin/token/token.service', () => ({
   getToken: jest.fn()
 }));
 
 const { query } = require('../database/postgreDB/pg');
-const douyinTokenService = require('../services/douyinTokenService');
-const douyinRoomTypeMappingRoute = require('../routes/douyinRoomTypeMappingRoute');
+const douyinTokenService = require('../modules/douyin/token/token.service');
+const douyinRoomTypeMappingRoute = require('../modules/douyin/room-type-mapping/roomTypeMapping.routes');
 
 const originalFetch = global.fetch;
 

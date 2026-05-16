@@ -107,16 +107,16 @@ async function initializeSession() {
 
     app.use("/api/room-types", roomManageRoutes.roomTypeRoutes);
 
-    const ratePlanRoute = require("./routes/ratePlanRoute");
+    const ratePlanRoute = require("./modules/douyin/rate-plan/ratePlan.routes");
     app.use("/api/rate-plans", ratePlanRoute);
 
-    const douyinRoomTypeMappingRoute = require("./routes/douyinRoomTypeMappingRoute");
+    const douyinRoomTypeMappingRoute = require("./modules/douyin/room-type-mapping/roomTypeMapping.routes");
     app.use("/api/douyin/room-type-mapping", douyinRoomTypeMappingRoute);
 
-    const douyinAriNotifyRoute = require("./routes/douyinAriNotifyRoute");
+    const douyinAriNotifyRoute = require("./modules/douyin/rate-plan/ariNotify.routes");
     app.use("/api/douyin/ari-notify", douyinAriNotifyRoute);
 
-    const douyinExternalRoute = require("./routes/douyinExternalRoute");
+    const douyinExternalRoute = require("./modules/douyin/external/external.routes");
     app.use("/douyin", douyinExternalRoute);
 
     const billRoutes = require("./modules/bill/bill.routes");

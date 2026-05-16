@@ -1,6 +1,6 @@
-const { douyinConfig } = require('../appSettings/douyin.config');
-const douyinTokenService = require('./douyinTokenService');
-const db = require('../database/postgreDB/pg');
+const { douyinConfig } = require('../../../appSettings/douyin.config');
+const douyinTokenService = require('../token/token.service');
+const physicalRoomRepository = require('./physicalRoom.repository');
 
 function createServiceError(message, statusCode = 500, details = {}) {
     const error = new Error(message);
@@ -167,31 +167,13 @@ class RoomStaticInfo {
             ? JSON.stringify(room.rate_plan_list)
             : null;
 
-        await db.query(
-            `
-                INSERT INTO douyin_physical_rooms
-                    (account_id, room_id, room_name, status, audit_message, rate_plan_list, raw_payload)
-                VALUES ($1, $2, $3, $4, $5, COALESCE($6::jsonb, '[]'::jsonb), $7)
-                ON CONFLICT (room_id)
-                DO UPDATE SET
-                    account_id = EXCLUDED.account_id,
-                    room_name = EXCLUDED.room_name,
-                    status = EXCLUDED.status,
-                    audit_message = EXCLUDED.audit_message,
-                    rate_plan_list = COALESCE($6::jsonb, douyin_physical_rooms.rate_plan_list),
-                    raw_payload = EXCLUDED.raw_payload,
-                    updated_at = CURRENT_TIMESTAMP
-            `,
-            [
-                context.accountId,
-                roomId,
-                roomName,
-                status,
-                room.audit_message || room.audit_msg || null,
-                nextRatePlanList,
-                JSON.stringify(rawPayload)
-            ]
-        );
+        await physicalRoomRepository.upsertPhysicalRoom(room, context, {
+            roomId,
+            roomName,
+            status,
+            nextRatePlanList,
+            rawPayload
+        });
     }
 
     _resolveRoomStatus(room) {

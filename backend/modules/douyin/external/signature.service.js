@@ -2,7 +2,7 @@
 
 const crypto = require('crypto');
 const { URL } = require('url');
-const { douyinConfig } = require('../appSettings/douyin.config');
+const { douyinConfig } = require('../../../appSettings/douyin.config');
 
 function getClientSecret() {
   return process.env.DOUYIN_CLIENT_SECRET || douyinConfig.clientSecret || '';

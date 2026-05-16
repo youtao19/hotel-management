@@ -3,8 +3,8 @@
 const express = require('express');
 const Ajv = require('ajv');
 const addFormats = require('ajv-formats');
-const douyinAriNotifyService = require('../services/douyinAriNotifyService');
-const callbackLogService = require('../services/douyinCallbackLogService');
+const douyinAriNotifyService = require('./ariNotify.service');
+const callbackLogService = require('../external/callbackLog.service');
 
 const router = express.Router();
 const ajv = new Ajv({ allErrors: true });

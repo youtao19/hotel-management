@@ -58,6 +58,25 @@ async function upsertChannelMapping({
   return result.rows[0]
 }
 
+async function upsertRatePlanMapping({
+  localRatePlanId,
+  douyinRatePlanId,
+  channelConfig = {},
+  syncStatus = 1,
+  client,
+}) {
+  return upsertChannelMapping({
+    localTargetType: 'RATE_PLAN',
+    localTargetId: localRatePlanId,
+    channelCode: 'DOUYIN',
+    channelItemId: douyinRatePlanId,
+    channelConfig,
+    syncStatus,
+    client,
+  });
+}
+
 module.exports = {
   upsertChannelMapping,
+  upsertRatePlanMapping,
 }

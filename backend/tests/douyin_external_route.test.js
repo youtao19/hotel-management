@@ -10,7 +10,7 @@ process.env.DOUYIN_CLIENT_KEY = 'DY_CLIENT_TEST';
 process.env.DOUYIN_CLIENT_SECRET = 'DY_SECRET_TEST';
 
 const { query } = require('../database/postgreDB/pg');
-const { createDouyinExternalRouter } = require('../routes/douyinExternalRoute');
+const { createDouyinExternalRouter } = require('../modules/douyin/external/external.routes');
 
 async function readJsonLines(filePath) {
   try {

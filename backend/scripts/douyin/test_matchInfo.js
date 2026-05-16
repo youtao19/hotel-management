@@ -1,4 +1,4 @@
-const roomStaticInfo = require('../selfMatchRoomStaticInfo');
+const roomStaticInfo = require('../../modules/douyin/physical-room/physicalRoom.service');
 
 async function runTest() {
   const poiId = '7507526304168216616';

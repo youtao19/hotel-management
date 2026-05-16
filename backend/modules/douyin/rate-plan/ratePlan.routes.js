@@ -1,8 +1,8 @@
 const express = require('express');
 const Ajv = require('ajv');
 const addFormats = require('ajv-formats');
-const { query } = require('../database/postgreDB/pg');
-const douyinProductService = require('../services/douyinProductService');
+const { query } = require('../../../database/postgreDB/pg');
+const douyinProductService = require('./product.service');
 
 const router = express.Router();
 const ajv = new Ajv({ allErrors: true });

@@ -1,6 +1,6 @@
 const { randomUUID } = require('crypto');
-const redis = require('../database/redis/redis'); // 使用实际存在的 Redis 模块
-const { douyinConfig, validateDouyinConfig } = require('../appSettings/douyin.config');
+const redis = require('../../../database/redis/redis'); // 使用实际存在的 Redis 模块
+const { douyinConfig, validateDouyinConfig } = require('../../../appSettings/douyin.config');
 
 class DouyinTokenService {
     constructor() {
