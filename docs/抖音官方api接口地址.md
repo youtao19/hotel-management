@@ -13,7 +13,7 @@
 ### 1.1 OpenAPI接口调用约定
 - 链接：[OpenAPI接口调用约定](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/preparation/openapiinterfacecallconvention)
 - 用途：定义 OpenAPI 的通用调用方式、请求约束、认证头和调用流程，是后续所有 OpenAPI 请求的基础规范。
-- 当前代码关联：`backend/modules/douyin/token/token.service.js`；具体 OpenAPI 调用目前由 `backend/modules/douyin/rate-plan/product.service.js`、`backend/modules/douyin/rate-plan/ariNotify.service.js` 和 `backend/modules/douyin/physical-room/physicalRoom.service.js` 直接发起。
+- 当前代码关联：`backend/modules/douyin/token/token.service.js`；具体 OpenAPI 调用目前由 `backend/modules/douyin/presale-product/product.service.js`、`backend/modules/douyin/availability/ariNotify.service.js` 和 `backend/modules/douyin/physical-room/physicalRoom.service.js` 直接发起。
 
 ### 1.2 生成 client-token
 - 链接：[生成 client-token](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/preparation/client_token)
@@ -110,7 +110,7 @@
 ### 5.1 售卖房型静态信息接口
 - 链接：[售卖房型静态信息接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/house-type-update/static-room-info-api)
 - 用途：定义售卖房型的静态信息创建、更新或匹配所需字段。
-- 当前代码关联：当前未实现日历房售卖房型静态信息接口；本地售卖套餐同步抖音预售券见 `backend/modules/douyin/rate-plan/product.service.js`。
+- 当前代码关联：当前未实现日历房售卖房型静态信息接口；本地售卖套餐同步抖音预售券见 `backend/modules/douyin/presale-product/product.service.js`。
 
 ### 5.2 物理房型静态信息接口
 - 链接：[物理房型静态信息接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/room-info-ops/room-static-info-api)
@@ -139,7 +139,7 @@
 ### 6.2.1 日历房价库变更增量通知接口
 - 链接：[日历房价库变更增量通知接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/housing-updates/price-change-notification)
 - 用途：当酒店侧价格或库存变化时，通知抖音触发价量态拉取。
-- 当前代码关联：`backend/modules/douyin/rate-plan/ariNotify.service.js`、`backend/modules/douyin/rate-plan/ariNotify.routes.js`
+- 当前代码关联：`backend/modules/douyin/availability/ariNotify.service.js`、`backend/modules/douyin/availability/ariNotify.routes.js`
 - 本地实现入口：`POST /api/douyin/ari-notify`
 - 当前会一并发送 `hotel_ids`，优先取套餐渠道映射中的 `hotel_id/poi_id`，不足时回退到抖音物理房型缓存。
 - 当前默认会发送 `notify_scene: [1, 2, 3, 4]`，覆盖价格、库存、房态、日历属性四类变更场景。
@@ -147,12 +147,12 @@
 ### 6.2.2 房量房态推送接口
 - 链接：[房量房态推送接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/housing-update/room-status-push-api)
 - 用途：主动向抖音推送指定售卖房型和日期的房量与房态。
-- 当前代码关联：当前未实现主动房态推送；已实现“日历房价库变更增量通知”触发抖音拉取，见 `backend/modules/douyin/rate-plan/ariNotify.service.js`。
+- 当前代码关联：当前未实现主动房态推送；已实现“日历房价库变更增量通知”触发抖音拉取，见 `backend/modules/douyin/availability/ariNotify.service.js`。
 
 ### 6.2.3 房价推送接口
 - 链接：[房价推送接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/housing-updates/house-price-interface)
 - 用途：主动向抖音推送指定售卖房型和日期的房价。
-- 当前代码关联：当前未实现主动房价推送；已实现“日历房价库变更增量通知”触发抖音拉取，见 `backend/modules/douyin/rate-plan/ariNotify.service.js`。
+- 当前代码关联：当前未实现主动房价推送；已实现“日历房价库变更增量通知”触发抖音拉取，见 `backend/modules/douyin/availability/ariNotify.service.js`。
 
 ## 7. 酒店静态信息匹配/创建/更新能力
 
@@ -188,7 +188,7 @@
 #### 8.1.2 可订检查 SPI
 - 链接：[可订检查 SPI](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/accommodation-voucher-trade/bookable-check)
 - 用途：在预售券场景下由抖音向三方发起可订检查，确认当前商品是否可售。
-- 当前代码关联：`backend/modules/douyin/external/external.routes.js`、`backend/modules/douyin/rate-plan/bookableCheck.service.js`、`backend/modules/douyin/external/signature.service.js`
+- 当前代码关联：`backend/modules/douyin/external/external.routes.js`、`backend/modules/douyin/availability/bookableCheck.service.js`、`backend/modules/douyin/external/signature.service.js`
 - 本地实现入口：`POST /douyin/spi/bookable`
 - 抖音后台配置 URL：`https://<你的公网域名>/douyin/spi/bookable`
 - 当前支持范围：预售券 `biz_type=2011`；失败时返回 `data.ari.stock_and_amount[]`，字段包含 `room_id`、`rate_plan_id`、`timerange`、`original_amount`、`available`、`inventory`。
@@ -206,7 +206,7 @@
 #### 8.1.5 创建预售订单 SPI
 - 链接：[创建预售订单 SPI](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/accommodation-voucher-trade/create-pre-sale-order)
 - 用途：定义抖音向三方创建住宿预售券订单时的回调字段和成功响应。
-- 当前代码关联：当前未实现预售订单创建 SPI；预售券可订检查见 `backend/modules/douyin/rate-plan/bookableCheck.service.js`。
+- 当前代码关联：当前未实现预售订单创建 SPI；预售券可订检查见 `backend/modules/douyin/availability/bookableCheck.service.js`。
 
 #### 8.1.6 创建预约
 - 链接：[创建预约](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/accommodation-voucher-trade/create-booking-order)
@@ -223,7 +223,7 @@
 #### 8.2.1 创建/更新预定商品
 - 链接：[创建/更新预定商品](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/hotel-voucher-mgmt/create-update-products)
 - 用途：用于创建或更新住宿预售券关联的预定商品，是预售券商品化配置的基础能力。
-- 当前代码关联：`backend/database/postgreDB/tables/rate_plans.js`、`backend/modules/douyin/rate-plan/ratePlan.routes.js`、`backend/modules/douyin/rate-plan/product.service.js`、`docs/OTA_接口文档.md`
+- 当前代码关联：`backend/database/postgreDB/tables/rate_plans.js`、`backend/modules/douyin/rate-plan/ratePlan.routes.js`、`backend/modules/douyin/presale-product/product.service.js`、`docs/OTA_接口文档.md`
 - 字段映射：
   - `rate_plans.name` -> 抖音 `rate_plan_name`
   - `rate_plans.id` -> 抖音 `out_rate_plan_id`
@@ -264,7 +264,7 @@
 ### 9.1 酒店日历房价量态拉取接口
 - 链接：[酒店日历房价量态拉取接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/price-volume-pull/price-volume-interface)
 - 用途：由抖音主动调用三方接口，拉取指定酒店、售卖房型和日期范围内的价格、房量、房态数据。
-- 当前代码关联：`backend/modules/douyin/external/external.routes.js`、`backend/modules/douyin/rate-plan/priceVolume.service.js`、`backend/modules/douyin/external/signature.service.js`
+- 当前代码关联：`backend/modules/douyin/external/external.routes.js`、`backend/modules/douyin/availability/priceVolume.service.js`、`backend/modules/douyin/external/signature.service.js`
 - 本地实现入口：`POST /douyin/spi/price-volume`
 - 当前返回结构：`data.status` 与 `data.error_code` 同层，`data.room_rates[].rate_avail_infos[]` 按官方字段返回；价格由本地“元”转换为抖音要求的“分”，日期保持 `YYYY-MM-DD` 字符串。
 

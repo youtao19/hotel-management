@@ -1,6 +1,6 @@
 const douyinTokenService = require('../token/token.service');
 const { douyinConfig } = require('../../../appSettings/douyin.config');
-const channelMappingRepository = require('./channelMapping.repository');
+const channelMappingRepository = require('../channel-mapping/channelMapping.repository');
 const productRepository = require('./product.repository');
 
 function createServiceError(message, statusCode = 500, details = {}) {

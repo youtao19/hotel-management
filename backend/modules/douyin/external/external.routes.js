@@ -4,8 +4,8 @@ const express = require('express');
 const redisDb = require('../../../database/redis/redis');
 const signatureService = require('./signature.service');
 const webhookService = require('./webhook.service');
-const priceVolumeService = require('../rate-plan/priceVolume.service');
-const bookableCheckService = require('../rate-plan/bookableCheck.service');
+const priceVolumeService = require('../availability/priceVolume.service');
+const bookableCheckService = require('../availability/bookableCheck.service');
 const callbackLogService = require('./callbackLog.service');
 
 function successResponse() {

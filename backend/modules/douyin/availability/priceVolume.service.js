@@ -1,6 +1,6 @@
 "use strict";
 
-const ratePlanRepository = require('./ratePlan.repository');
+const availabilityRepository = require('./availability.repository');
 
 const ACTIVE_ORDER_STATUSES = ['pending', 'reserved', 'checked-in', 'occupied'];
 const MAX_DATE_RANGE_DAYS = 366;
@@ -115,11 +115,11 @@ function amountYuanToCents(value) {
 }
 
 async function findRatePlansByIds(ratePlanIds) {
-  return ratePlanRepository.findRatePlansByDouyinIds(ratePlanIds);
+  return availabilityRepository.findRatePlansByDouyinIds(ratePlanIds);
 }
 
 async function findRatePlansByHotels(hotelIds) {
-  return ratePlanRepository.findRatePlansByHotelIds(hotelIds);
+  return availabilityRepository.findRatePlansByHotelIds(hotelIds);
 }
 
 async function getInventoryMap(roomTypeCodes, dates) {
@@ -129,7 +129,7 @@ async function getInventoryMap(roomTypeCodes, dates) {
   }
 
   // 只有会占用房量的订单状态参与扣减，取消、退房等状态不影响可售库存。
-  const rows = await ratePlanRepository.getInventoryRowsByRoomTypes(typeCodes, dates, ACTIVE_ORDER_STATUSES);
+  const rows = await availabilityRepository.getInventoryRowsByRoomTypes(typeCodes, dates, ACTIVE_ORDER_STATUSES);
 
   const inventoryMap = new Map();
   for (const row of rows) {
