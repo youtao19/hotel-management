@@ -15,7 +15,7 @@ jest.mock('../modules/douyin/token/token.service', () => ({
 
 const { query } = require('../database/postgreDB/pg');
 const douyinTokenService = require('../modules/douyin/token/token.service');
-const douyinAriNotifyRoute = require('../modules/douyin/rate-plan/ariNotify.routes');
+const douyinAriNotifyRoute = require('../modules/douyin/availability/ariNotify.routes');
 
 const originalFetch = global.fetch;
 

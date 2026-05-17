@@ -23,7 +23,7 @@
 
 ## Phase 2：纳入渠道映射表
 
-- [x] 创建 `rate-plan/channelMapping.repository.js`。
+- [x] 创建 `channel-mapping/channelMapping.repository.js`。
 - [x] 将 `ota_channel_mappings` 的抖音写入改为 repository。
 - [x] 删除旧 `backend/modules/ota/repositories/channelMapping.repository.js`。
 
@@ -43,3 +43,4 @@
 - [x] 将原 `backend/services` 中的抖音物理房型查询和手动脚本迁入抖音模块。
 - [x] 清空旧 `backend/services` 目录并确认无旧路径引用。
 - [x] 将 `/api/rate-plans` 路由入口从 `backend/routes` 迁入 `backend/modules/douyin/rate-plan`。
+- [x] 将 `rate-plan/` 下非本地套餐接口的能力拆到 `presale-product/`、`availability/` 和 `channel-mapping/`。

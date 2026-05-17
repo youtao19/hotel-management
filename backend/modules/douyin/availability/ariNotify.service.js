@@ -2,7 +2,7 @@
 
 const douyinTokenService = require('../token/token.service');
 const { douyinConfig } = require('../../../appSettings/douyin.config');
-const ratePlanRepository = require('./ratePlan.repository');
+const availabilityRepository = require('./availability.repository');
 
 const MAX_RATE_PLAN_IDS = 50;
 const MAX_DATE_RANGE_DAYS = 365;
@@ -136,7 +136,7 @@ function getDouyinLogId(result) {
 
 class DouyinAriNotifyService {
   constructor(options = {}) {
-    this.ratePlanRepository = options.ratePlanRepository || ratePlanRepository;
+    this.ratePlanRepository = options.ratePlanRepository || availabilityRepository;
     this.tokenService = options.tokenService || douyinTokenService;
     this.config = options.config || douyinConfig;
     this.fetchImpl = options.fetchImpl || ((...args) => global.fetch(...args));

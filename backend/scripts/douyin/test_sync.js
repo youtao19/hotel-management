@@ -1,5 +1,5 @@
 // test_sync.js
-const douyinProductService = require('../../modules/douyin/rate-plan/product.service');
+const douyinProductService = require('../../modules/douyin/presale-product/product.service');
 
 async function runTest() {
     console.log("🚀 开始测试抖音商品同步链路...");

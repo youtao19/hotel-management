@@ -1,6 +1,6 @@
 "use strict";
 
-const ratePlanRepository = require('./ratePlan.repository');
+const availabilityRepository = require('./availability.repository');
 
 const ACTIVE_ORDER_STATUSES = ['pending', 'reserved', 'checked-in', 'occupied'];
 const MAX_STAY_NIGHTS = 366;
@@ -127,7 +127,7 @@ function normalizeRequest(payload = {}) {
 }
 
 async function findRatePlan(ratePlanId) {
-  return ratePlanRepository.findRatePlanByDouyinId(ratePlanId);
+  return availabilityRepository.findRatePlanByDouyinId(ratePlanId);
 }
 
 async function getInventoryMap(roomTypeCode, dates) {
@@ -136,7 +136,7 @@ async function getInventoryMap(roomTypeCode, dates) {
   }
 
   // 只有仍占用房量的订单参与扣减，取消和退房不影响预售券可订库存。
-  const rows = await ratePlanRepository.getInventoryRowsByRoomType(
+  const rows = await availabilityRepository.getInventoryRowsByRoomType(
     roomTypeCode,
     dates.map((date) => date.start),
     ACTIVE_ORDER_STATUSES

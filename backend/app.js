@@ -113,7 +113,7 @@ async function initializeSession() {
     const douyinRoomTypeMappingRoute = require("./modules/douyin/room-type-mapping/roomTypeMapping.routes");
     app.use("/api/douyin/room-type-mapping", douyinRoomTypeMappingRoute);
 
-    const douyinAriNotifyRoute = require("./modules/douyin/rate-plan/ariNotify.routes");
+    const douyinAriNotifyRoute = require("./modules/douyin/availability/ariNotify.routes");
     app.use("/api/douyin/ari-notify", douyinAriNotifyRoute);
 
     const douyinExternalRoute = require("./modules/douyin/external/external.routes");

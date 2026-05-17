@@ -155,7 +155,7 @@ qmd --index hotel-management search "autoBillJob" -c hotel-backend
 读取检索结果中的文件：
 
 ```bash
-qmd --index hotel-management get qmd://hotel-backend/modules/douyin/rate-plan/product.service.js -l 80
+qmd --index hotel-management get qmd://hotel-backend/modules/douyin/presale-product/product.service.js -l 80
 ```
 
 ## 维护规则
