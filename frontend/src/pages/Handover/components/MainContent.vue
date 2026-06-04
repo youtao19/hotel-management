@@ -2,16 +2,14 @@
   <div class="main-content">
     <div class="content-layout">
       <div class="main-area">
-        <div v-if="currentStep > 0" class="step-content q-mb-lg">
+        <div v-if="mode === 'current'" class="step-content">
           <HandoverProcess
-            :current-step="currentStep"
-            @step-change="handleStepChange"
             @complete="handleHandoverComplete"
-            @logout="handleLogout"
+            @show-history="handleShowHistory"
           />
         </div>
 
-        <div v-else-if="currentStep === -1" class="view-record-content">
+        <div v-else class="view-record-content">
           <q-card flat bordered class="record-detail-card">
             <q-card-section>
               <div class="record-header q-mb-lg">
@@ -57,57 +55,6 @@
             </q-card-section>
           </q-card>
         </div>
-
-        <div v-else class="initial-content">
-          <q-card flat bordered class="welcome-card q-mb-lg">
-            <q-card-section>
-              <div class="welcome-header">
-                <q-icon name="swap_horiz" size="3rem" color="primary" class="q-mb-md" />
-                <div class="text-h5 text-primary q-mb-sm">交接班系统</div>
-                <div class="text-body1 text-grey-7">
-                  欢迎使用酒店管理系统交接班功能，请在合适的时间开始交接班流程
-                </div>
-              </div>
-            </q-card-section>
-          </q-card>
-
-          <div class="handover-actions">
-            <q-btn
-              color="primary"
-              size="xl"
-              icon="swap_horiz"
-              label="开始交接班"
-              class="handover-btn q-mb-md"
-              :loading="isHandoverInProgress"
-              @click="handleStartHandover"
-            />
-          </div>
-        </div>
-      </div>
-
-      <div class="sidebar">
-        <div class="progress-sidebar">
-          <div class="sidebar-header">
-            <h6 class="text-primary q-mb-sm">交接班流程</h6>
-            <p class="text-caption text-grey-7">当前进度</p>
-          </div>
-
-          <q-stepper
-            v-model="currentStep"
-            color="primary"
-            animated
-            vertical
-            flat
-            class="sidebar-stepper"
-          >
-            <q-step :name="1" title="检查记录" caption="检查昨日交接记录" icon="history" />
-            <q-step :name="2" title="确认备用金" caption="核实备用金金额" icon="account_balance_wallet" />
-            <q-step :name="3" title="核对数据" caption="核对交接数据" icon="fact_check" />
-            <q-step :name="4" title="确认数据" caption="确认交接数据" icon="verified" />
-            <q-step :name="5" title="接班信息" caption="输入接班人和时间" icon="person_add" />
-            <q-step :name="6" title="完成交接" caption="完成流程" icon="check_circle" />
-          </q-stepper>
-        </div>
       </div>
     </div>
   </div>
@@ -116,8 +63,6 @@
 <script setup>
 import { ref, watch } from "vue";
 import { useQuasar } from "quasar";
-import { useRouter } from "vue-router";
-import { useUserStore } from "src/stores/userStore";
 import HandoverProcess from "./HandoverProcess.vue";
 import ShiftHandoverPaymentTable from "./ShiftHandoverPaymentTable.vue";
 import ShiftHandoverSpecialStats from "./ShiftHandoverSpecialStats.vue";
@@ -132,11 +77,8 @@ const props = defineProps({
 });
 
 const $q = useQuasar();
-const router = useRouter();
-const userStore = useUserStore();
 
-const isHandoverInProgress = ref(false);
-const currentStep = ref(0);
+const mode = ref("current");
 
 const createEmptyPaymentData = () => ({
   reserve: { 现金: 0, 微信: 0, 微邮付: 0, 其他: 0 },
@@ -166,39 +108,25 @@ function createEmptyRecordView() {
 
 const recordViewData = ref(createEmptyRecordView());
 
-const handleStartHandover = () => {
-  isHandoverInProgress.value = true;
-  $q.dialog({
-    title: "确认交接班",
-    message:
-      "确定要开始交接班流程吗？系统将引导您完成以下步骤：<br/>1. 检查昨日交接记录<br/>2. 确认备用金<br/>3. 核对交接数据<br/>4. 确认交接数据<br/>5. 输入接班信息<br/>6. 完成交接",
-    cancel: true,
-    persistent: true,
-    html: true
-  })
-    .onOk(() => {
-      currentStep.value = 1;
-    })
-    .onDismiss(() => {
-      isHandoverInProgress.value = false;
-    });
-};
-
-const handleStepChange = (step) => {
-  currentStep.value = step;
-};
-
 const handleHandoverComplete = () => {
-  currentStep.value = 6;
+  $q.notify({
+    type: "positive",
+    message: "交接班已完成",
+    position: "top"
+  });
 };
 
-const handleLogout = async () => {
-  await userStore.logout();
-  router.push("/login");
+const handleShowHistory = () => {
+  $q.notify({
+    type: "info",
+    message: "可在左侧历史记录区域查询和查看交接记录",
+    position: "top",
+    timeout: 1600
+  });
 };
 
 const closeRecordView = () => {
-  currentStep.value = 0;
+  mode.value = "current";
   recordViewData.value = createEmptyRecordView();
 };
 
@@ -226,7 +154,7 @@ const loadHandoverRecord = async (record) => {
       taskList: memos,
       newTaskTitle: ""
     };
-    currentStep.value = -1;
+    mode.value = "record";
   } catch (error) {
     console.error("加载交接记录失败:", error);
     $q.notify({
@@ -251,7 +179,8 @@ watch(
 .main-content {
   background: linear-gradient(135deg, #fafafa 0%, #e6e5e8 100%);
   position: relative;
-  height: 100vh;
+  height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -260,14 +189,22 @@ watch(
 .content-layout {
   display: flex;
   flex: 1;
-  height: 100vh;
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
+}
+
+.content-layout--confirmation .main-area {
+  align-items: stretch;
+  padding-top: 20px;
+  padding-bottom: 20px;
 }
 
 .main-area {
   flex: 1;
+  min-height: 0;
   padding: 20px;
-  overflow-y: auto;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -313,6 +250,13 @@ watch(
 .step-content {
   width: 100%;
   max-width: 1000px;
+}
+
+.content-layout--confirmation .step-content {
+  max-width: 1180px;
+  margin: 0 auto;
+  max-height: 100%;
+  overflow: hidden;
 }
 
 .handover-actions {

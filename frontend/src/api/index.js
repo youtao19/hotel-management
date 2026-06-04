@@ -383,35 +383,20 @@ export const revenueApi = {
 // 交接班相关接口
 export const shiftHandoverApi = {
 
-  // 获取交接班表格（计算版本）
-  getShiftTable: (params) => api.get('/handover/table', { params }),
+  // 获取当前交接班页面所需的汇总数据
+  getOverview: (params) => api.get('/handover/overview', { params }),
 
   // 获取交接班表格数据（从handover表查询）
   getHandoverTableData: (params) => api.get('/handover/handover-table', { params }),
 
-  // 获取备忘录
-  getRemarks: (params) => api.get('/handover/remarks', { params }),
-
   // 获取交接班特殊统计（开房数、休息房数、好评邀/得）
   getSpecialStats: (params) => api.get('/handover/special-stats', { params }),
-
-  // 保存管理员备忘录到交接班表
-  saveAdminMemo: (memoData) => api.post('/handover/save-admin-memo', memoData),
 
   // 获取交接班表中的管理员备忘录
   getAdminMemos: (params) => api.get('/handover/admin-memos', { params }),
 
-  // 检查昨日交接记录
-  checkYesterdayRecord: (params) => api.get('/handover/check-yesterday', { params }),
-
   // 查询所有交接班记录
   queryHandoverRecords: () => api.get('/handover/query'),
-
-  // 按日期范围查询交接班记录
-  queryHandoverByRange: (params) => api.get('/handover/query-by-range', { params }),
-
-  // 获取有交接记录的日期列表
-  getAvailableHandoverDates: () => api.get('/handover/available-dates'),
 
   // 完成交接班（保存完整数据）
   completeHandover: (handoverData) => api.post('/handover/complete', handoverData)

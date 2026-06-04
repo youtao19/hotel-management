@@ -1,321 +1,197 @@
 <template>
   <div class="handover-process">
-    <div v-if="currentStep === 1" class="step-card">
-      <q-card flat bordered>
-        <q-card-section>
-          <div class="row items-center q-mb-md">
-            <div class="col">
-              <div class="text-h6">
-                <q-icon name="history" color="primary" class="q-mr-sm" />
-                昨日交接记录检查
-              </div>
-              <div class="text-body2 text-grey-7">
-                检查昨日是否有完整的交接记录，确保数据连续性
-              </div>
-            </div>
-            <div class="col-auto">
-              <q-btn
-                color="primary"
-                icon="search"
-                label="检查昨日记录"
-                @click="checkYesterdayRecord"
-                :loading="isCheckingRecord"
-                :disable="isCheckingRecord"
+    <div class="handover-top-bar">
+      <div class="top-bar-title">交接班</div>
+
+      <q-input
+        :model-value="selectedDate"
+        dense
+        outlined
+        readonly
+        hide-bottom-space
+        class="top-date-input"
+      >
+        <template #prepend>
+          <q-icon name="event" />
+        </template>
+        <template #append>
+          <q-icon name="expand_more" class="cursor-pointer">
+            <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+              <q-date
+                :model-value="selectedDate"
+                mask="YYYY-MM-DD"
+                @update:model-value="handleDateChange"
               />
-            </div>
-          </div>
+            </q-popup-proxy>
+          </q-icon>
+        </template>
+      </q-input>
 
-          <div v-if="recordCheckResult.checked" class="q-mt-md">
-            <q-banner
-              :class="recordCheckResult.hasRecord ? 'bg-green-1 text-positive' : 'bg-orange-1 text-orange-9'"
-              dense
-              rounded
-            >
-              <template #avatar>
-                <q-icon :name="recordCheckResult.hasRecord ? 'check_circle' : 'warning'" />
-              </template>
-              <div class="text-body1">
-                {{ recordCheckResult.hasRecord ? '昨日记录完整' : '昨日记录缺失' }}（{{ recordCheckResult.yesterdayDate }}）
-              </div>
-              <div class="text-caption">
-                找到 {{ recordCheckResult.recordCount }} 条记录，备用金：¥{{ recordCheckResult.reserveAmount.toFixed(2) }}
-              </div>
-            </q-banner>
-          </div>
-        </q-card-section>
-      </q-card>
+      <div class="top-meta">
+        <span class="meta-label">当前班次：</span>
+        <span>{{ currentShiftLabel }}</span>
+      </div>
+
+      <div class="top-meta">
+        <span class="meta-label">当前用户：</span>
+        <span>{{ currentUserLabel }}</span>
+      </div>
+
+      <div class="top-meta">
+        <span class="meta-label">昨日交接班：</span>
+        <span :class="yesterdayStatusClass">{{ yesterdayStatusText }}</span>
+      </div>
+
+      <q-space />
+
+      <q-btn
+        flat
+        no-caps
+        icon="history"
+        label="历史记录"
+        class="history-link-btn"
+        @click="emit('show-history')"
+      />
     </div>
 
-    <div v-if="currentStep === 2" class="step-card">
-      <q-card flat bordered>
-        <q-card-section>
-          <div class="text-h6 q-mb-md">
-            <q-icon name="account_balance_wallet" color="primary" class="q-mr-sm" />
-            备用金确认
+    <div class="confirmation-layout">
+      <section class="confirmation-table-panel">
+        <div class="confirmation-heading">
+          <div>
+            <div class="text-h6 text-weight-bold">
+              <q-icon name="verified" color="primary" class="q-mr-sm" />
+              确认交接数据
+            </div>
+            <div class="text-caption text-grey-7 q-mt-xs">
+              表格金额由后端生成，留存款可在表内调整，保存时后端会重新校验。
+            </div>
           </div>
-          <q-table
-            :rows="pettyCashRows"
-            :columns="pettyCashColumns"
-            row-key="id"
-            flat
-            bordered
-            hide-pagination
-            :pagination="{ rowsPerPage: 0 }"
-            class="reserve-cash-table"
+          <q-badge
+            :color="yesterdayRecord.isComplete ? 'positive' : 'orange'"
+            outline
+            class="status-badge"
           >
-            <template #body-cell-cash="props">
-              <q-td :props="props" class="input-cell">
-                <div class="currency-input-wrap">
-                  <span class="currency-symbol">¥</span>
-                  <!-- 原生输入框：固定宽度，避免 Quasar 前缀导致符号与数字分离 -->
-                  <input
-                    v-model.number="props.row.cash"
-                    class="reserve-native-input"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    @input="handleReserveInputChange"
-                  />
-                </div>
-              </q-td>
-            </template>
-            <template #body-cell-wechat="props">
-              <q-td :props="props" class="input-cell">
-                <div class="currency-input-wrap">
-                  <span class="currency-symbol">¥</span>
-                  <!-- 原生输入框：固定宽度，避免 Quasar 前缀导致符号与数字分离 -->
-                  <input
-                    v-model.number="props.row.wechat"
-                    class="reserve-native-input"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    @input="handleReserveInputChange"
-                  />
-                </div>
-              </q-td>
-            </template>
-            <template #body-cell-weiyoufu="props">
-              <q-td :props="props" class="input-cell">
-                <div class="currency-input-wrap">
-                  <span class="currency-symbol">¥</span>
-                  <!-- 原生输入框：固定宽度，避免 Quasar 前缀导致符号与数字分离 -->
-                  <input
-                    v-model.number="props.row.weiyoufu"
-                    class="reserve-native-input"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    @input="handleReserveInputChange"
-                  />
-                </div>
-              </q-td>
-            </template>
-            <template #body-cell-other="props">
-              <q-td :props="props" class="input-cell">
-                <div class="currency-input-wrap">
-                  <span class="currency-symbol">¥</span>
-                  <!-- 原生输入框：固定宽度，避免 Quasar 前缀导致符号与数字分离 -->
-                  <input
-                    v-model.number="props.row.other"
-                    class="reserve-native-input"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    @input="handleReserveInputChange"
-                  />
-                </div>
-              </q-td>
-            </template>
-            <template #body-cell-total="props">
-              <q-td :props="props" class="total-amount-cell">
-                <div class="text-weight-bold text-primary total-amount">
-                  ¥{{ formatAmount(props.row.total) }}
-                </div>
-              </q-td>
-            </template>
-          </q-table>
+            {{ yesterdayRecord.isComplete ? "昨日记录完整" : "昨日记录缺失" }}
+          </q-badge>
+        </div>
 
-          <div class="text-center q-mt-md">
-            <q-btn
-              :color="reserveConfirmed ? 'grey-6' : 'positive'"
-              :icon="reserveConfirmed ? 'check_circle' : 'check'"
-              :label="reserveConfirmed ? '备用金已确认' : '确认备用金'"
-              :loading="isConfirmingReserve"
-              :disable="isConfirmingReserve || reserveConfirmed"
-              @click="handleConfirmReserveCash"
+        <ShiftHandoverPaymentTable
+          :payment-data="paymentData"
+          :read-only="false"
+          @update-retained="handleRetainedAmountUpdate"
+        />
+
+        <ShiftHandoverSpecialStats
+          :total-rooms="specialStats.openCount"
+          :rest-rooms="specialStats.restCount"
+          :vip-cards="vipCards"
+          :cashier-name="currentUserName"
+          :notes="handoverInfo.notes"
+          :good-review="goodReviewText"
+          :read-only="false"
+          @update:vip-cards="value => { vipCards = Number(value) || 0 }"
+          @update:notes="value => { handoverInfo.notes = value }"
+        />
+      </section>
+
+      <aside class="confirmation-sidebar">
+        <div class="sidebar-card">
+          <div class="sidebar-title">
+            <q-icon name="assignment_turned_in" color="primary" />
+            <span>交接确认</span>
+          </div>
+
+          <div class="handover-total">
+            <div class="total-label">应交款合计</div>
+            <div class="total-value">¥{{ formatAmount(handoverTotal) }}</div>
+          </div>
+
+          <div class="confirm-fields">
+            <q-input
+              v-model="handoverInfo.nextOperator"
+              label="接班人员"
+              outlined
+              dense
+              :rules="[val => !!val || '请输入接班人员姓名']"
+            />
+            <q-input
+              v-model="handoverInfo.handoverTime"
+              label="交接时间"
+              outlined
+              dense
+              type="datetime-local"
+            />
+            <q-input
+              v-model="handoverInfo.notes"
+              type="textarea"
+              label="交接备注"
+              outlined
+              dense
+              rows="3"
+              placeholder="需要接班人注意的事项..."
             />
           </div>
-        </q-card-section>
-      </q-card>
-    </div>
 
-    <div v-if="currentStep === 3" class="step-card">
-      <CheckData
-        :selected-date="selectedDate"
-        :columns="roomColumns"
-        :rows-hotel="hotelRoomData"
-        :rows-rest="restRoomData"
-        :rows-car="carIncomeData"
-        :hotel-summary="hotelSummary"
-        :rest-summary="restSummary"
-        :car-summary="carSummary"
-        :loading="isLoadingData"
-        :confirming="isConfirmingData"
-        :data-check-completed="dataCheckCompleted"
-        :all-data-confirmed="allDataConfirmed"
-        @update:date="updateDate"
-        @confirm-row="onConfirmRow"
-        @confirm-all="confirmAllRows"
-        @confirm-data="confirmDataCheck"
-      />
-    </div>
-
-    <div v-if="currentStep === 4" class="step-card">
-      <q-card flat bordered>
-        <q-card-section>
-          <div class="text-h6 q-mb-md">
-            <q-icon name="verified" color="primary" class="q-mr-sm" />
-            确认交接数据
+          <div class="confirm-checklist">
+            <div
+              v-for="item in confirmationChecklist"
+              :key="item.label"
+              class="checklist-item"
+              :class="{ 'checklist-item--done': item.done }"
+            >
+              <q-icon :name="item.done ? 'check_circle' : 'radio_button_unchecked'" />
+              <span>{{ item.label }}</span>
+            </div>
           </div>
-          <ShiftHandoverPaymentTable
-            :payment-data="confirmationData.paymentData"
-            :read-only="false"
-            @update-retained="handleRetainedAmountUpdate"
+
+          <q-btn
+            color="positive"
+            icon="check"
+            label="完成交接"
+            class="complete-button"
+            unelevated
+            :loading="loading || submitting"
+            :disable="loading || submitting || !canComplete"
+            @click="completeHandoverFlow"
           />
-          <div class="q-mt-lg">
-            <ShiftHandoverSpecialStats
-              :total-rooms="confirmationData.totalRooms"
-              :rest-rooms="confirmationData.restRooms"
-              :vip-cards="confirmationData.vipCards"
-              :cashier-name="confirmationData.cashierName"
-              :notes="confirmationData.notes"
-              :good-review="confirmationData.goodReview"
-              :read-only="false"
-              @update:vip-cards="value => updateSpecialStats('vipCards', value)"
-              @update:notes="value => updateSpecialStats('notes', value)"
-              @update:good-review="value => updateSpecialStats('goodReview', value)"
-            />
-          </div>
-        </q-card-section>
-      </q-card>
+        </div>
+      </aside>
     </div>
 
-    <div v-if="currentStep === 5" class="step-card">
-      <q-card flat bordered>
-        <q-card-section>
-          <div class="text-h6 q-mb-md">
-            <q-icon name="person_add" color="primary" class="q-mr-sm" />
-            接班人员信息
-          </div>
-          <div class="row q-gutter-md">
-            <div class="col">
-              <q-input v-model="handoverInfo.nextOperator" label="接班人员" outlined :rules="[val => !!val || '请输入接班人员姓名']" />
-            </div>
-            <div class="col">
-              <q-input v-model="handoverInfo.handoverTime" label="交接时间" outlined type="datetime-local" />
-            </div>
-          </div>
-          <div class="q-mt-md">
-            <q-input v-model="handoverInfo.notes" type="textarea" label="交接备注" outlined rows="3" placeholder="请输入需要说明的事项..." />
-          </div>
-        </q-card-section>
-      </q-card>
-    </div>
-
-    <div v-if="currentStep === 6" class="step-card">
-      <HandoverComplete :handover-info="completeHandoverInfo" @logout="$emit('logout')" />
-    </div>
-
-    <div class="step-actions q-mt-lg">
-      <q-btn v-if="currentStep > 1" color="grey-6" icon="arrow_back" label="上一步" class="q-mr-md" @click="previousStep" />
-      <q-btn
-        v-if="currentStep > 0 && currentStep < 5"
-        color="primary"
-        icon="arrow_forward"
-        label="下一步"
-        :loading="stepLoading"
-        @click="nextStep"
-      />
-      <q-btn
-        v-if="currentStep === 5"
-        color="positive"
-        icon="check"
-        label="完成交接"
-        :loading="stepLoading || submitting"
-        @click="completeHandoverFlow"
-      />
-    </div>
+    <q-inner-loading :showing="loading">
+      <q-spinner color="primary" size="42px" />
+    </q-inner-loading>
   </div>
 </template>
 
 <script setup>
-import { computed, ref, onMounted } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useQuasar } from "quasar";
-import { useUserStore } from "src/stores/userStore";
-import CheckData from "./CheckData.vue";
+import { shiftHandoverApi } from "src/api";
 import ShiftHandoverPaymentTable from "./ShiftHandoverPaymentTable.vue";
 import ShiftHandoverSpecialStats from "./ShiftHandoverSpecialStats.vue";
-import HandoverComplete from "./HandoverComplete.vue";
-import { useYesterdayRecord } from "../composables/useYesterdayRecord";
-import { usePettyCash } from "../composables/usePettyCash";
-import { useCheckDataLogic } from "../composables/useCheckDataLogic";
-import { useHandoverSummary } from "../composables/useHandoverSummary";
 import { useHandoverSubmit } from "../composables/useHandoverSubmit";
 
-const props = defineProps({
-  currentStep: {
-    type: Number,
-    required: true
-  }
-});
-
-const emit = defineEmits(["step-change", "complete", "logout"]);
+const emit = defineEmits(["complete", "show-history"]);
 
 const $q = useQuasar();
-const userStore = useUserStore();
 
-const { isCheckingRecord, recordCheckResult, checkYesterdayRecord } = useYesterdayRecord();
+const PAY_WAY_KEYS = ["现金", "微信", "微邮付", "其他"];
 
-const { pettyCashRows, retainedAmounts, updateTotal, confirmReserveCash, mapReserveRowToBuckets, applyYesterdayReserve } = usePettyCash();
-const isConfirmingReserve = ref(false);
-const reserveConfirmed = ref(false);
-const pettyCashColumns = [
-  { name: "label", label: "项目", field: "label", align: "left" },
-  { name: "cash", label: "现金", field: "cash", align: "center" },
-  { name: "wechat", label: "微信", field: "wechat", align: "center" },
-  { name: "weiyoufu", label: "微邮付", field: "weiyoufu", align: "center" },
-  { name: "other", label: "其他", field: "other", align: "center" },
-  { name: "total", label: "合计", field: "total", align: "center" }
-];
-
-const {
-  selectedDate,
-  isLoadingData,
-  isConfirmingData,
-  dataCheckCompleted,
-  hotelRoomData,
-  restRoomData,
-  carIncomeData,
-  roomColumns,
-  hotelSummary,
-  restSummary,
-  carSummary,
-  allDataConfirmed,
-  summaryDataObject,
-  loadBillsData,
-  confirmRow,
-  confirmAllRows,
-  confirmDataCheck,
-  updateDate
-} = useCheckDataLogic();
-
-const reserveBuckets = computed(() => mapReserveRowToBuckets());
-const { confirmationData, updateRetainedAmount, updateSpecialStats } = useHandoverSummary({
-  summaryDataObject,
-  reserveBuckets,
-  retainedAmounts
+const selectedDate = ref(formatLocalDate(new Date()));
+const loading = ref(false);
+const canComplete = ref(true);
+const paymentData = ref(createEmptyPaymentData());
+const specialStats = ref({ openCount: 0, restCount: 0, invited: 0, positive: 0 });
+const yesterdayRecord = ref({
+  hasRecord: false,
+  isComplete: false,
+  statusText: "检查中",
+  reserveDefaults: createEmptyBucket()
 });
+const currentShift = ref({ label: "早班", timeRange: "08:00-16:00" });
+const currentUser = ref({ name: "当前用户", role: "前台" });
+const vipCards = ref(0);
 
 const handoverInfo = ref({
   nextOperator: "",
@@ -324,224 +200,350 @@ const handoverInfo = ref({
 });
 
 const { submitting, completeHandover } = useHandoverSubmit({
-  confirmationData,
   handoverInfo,
-  selectedHandoverDate: selectedDate
+  selectedHandoverDate: selectedDate,
+  retainedAmount: computed(() => paymentData.value.retainedAmount || createEmptyBucket()),
+  vipCards
 });
 
-const stepLoading = ref(false);
-
-const completeHandoverInfo = computed(() => ({
-  currentOperator: userStore.user?.username || "交班人",
-  nextOperator: handoverInfo.value.nextOperator || "接班人",
-  completedTime: new Date().toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit"
-  })
+const currentShiftLabel = computed(() => `${currentShift.value.label}（${currentShift.value.timeRange}）`);
+const currentUserName = computed(() => currentUser.value.name || "当前用户");
+const currentUserLabel = computed(() => `${currentUserName.value}（${currentUser.value.role || "前台"}）`);
+const yesterdayStatusText = computed(() => yesterdayRecord.value.statusText || (yesterdayRecord.value.isComplete ? "已完成" : "缺失"));
+const yesterdayStatusClass = computed(() => ({
+  "yesterday-status": true,
+  "yesterday-status--done": yesterdayRecord.value.isComplete,
+  "yesterday-status--missing": !yesterdayRecord.value.isComplete
 }));
+const goodReviewText = computed(() => `邀${specialStats.value.invited || 0}得${specialStats.value.positive || 0}`);
+const handoverTotal = computed(() => sumBucket(paymentData.value.handoverAmount));
+const confirmationChecklist = computed(() => [
+  {
+    label: yesterdayRecord.value.isComplete ? "昨日记录完整" : "昨日记录已按缺失处理",
+    done: true
+  },
+  {
+    label: loading.value ? "交接表生成中" : "交接表已生成",
+    done: !loading.value
+  },
+  {
+    label: "接班人员已填写",
+    done: Boolean(handoverInfo.value.nextOperator)
+  }
+]);
+
+function createEmptyBucket() {
+  return PAY_WAY_KEYS.reduce((acc, key) => {
+    acc[key] = 0;
+    return acc;
+  }, {});
+}
+
+function createEmptyPaymentData() {
+  return {
+    reserve: createEmptyBucket(),
+    hotelIncome: createEmptyBucket(),
+    restIncome: createEmptyBucket(),
+    carRentIncome: createEmptyBucket(),
+    totalIncome: createEmptyBucket(),
+    hotelRefundDeposit: createEmptyBucket(),
+    restRefundDeposit: createEmptyBucket(),
+    totalRefundDeposit: createEmptyBucket(),
+    retainedAmount: createEmptyBucket(),
+    handoverAmount: createEmptyBucket()
+  };
+}
+
+function formatLocalDate(date) {
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
 
 function formatDateTimeLocal(date) {
   const pad = (value) => String(value).padStart(2, "0");
-  const year = date.getFullYear();
-  const month = pad(date.getMonth() + 1);
-  const day = pad(date.getDate());
-  const hours = pad(date.getHours());
-  const minutes = pad(date.getMinutes());
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-const handleRetainedAmountUpdate = ({ payWay, value }) => updateRetainedAmount(payWay, value);
+function toAmount(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Number(numeric.toFixed(2)) : 0;
+}
 
-const onConfirmRow = ({ row }) => {
-  confirmRow(row);
-};
+function sumBucket(bucket = {}) {
+  return PAY_WAY_KEYS.reduce((sum, key) => sum + toAmount(bucket[key]), 0);
+}
 
-// 编辑备用金后，实时更新合计并要求重新确认。
-const handleReserveInputChange = () => {
-  updateTotal();
-  reserveConfirmed.value = false;
-};
+function normalizePaymentData(source = {}) {
+  const empty = createEmptyPaymentData();
+  return {
+    reserve: source.reserve || empty.reserve,
+    hotelIncome: source.hotelIncome || empty.hotelIncome,
+    restIncome: source.restIncome || empty.restIncome,
+    carRentIncome: source.carRentIncome || empty.carRentIncome,
+    totalIncome: source.totalIncome || empty.totalIncome,
+    hotelRefundDeposit: source.hotelRefundDeposit || source.hotelDeposit || empty.hotelRefundDeposit,
+    restRefundDeposit: source.restRefundDeposit || source.restDeposit || empty.restRefundDeposit,
+    totalRefundDeposit: source.totalRefundDeposit || empty.totalRefundDeposit,
+    retainedAmount: source.retainedAmount || empty.retainedAmount,
+    handoverAmount: source.handoverAmount || empty.handoverAmount
+  };
+}
 
-// 备用金金额统一展示为两位小数，避免不同浏览器数字宽度抖动。
+function recalculateLocalPaymentData() {
+  const current = normalizePaymentData(paymentData.value);
+  PAY_WAY_KEYS.forEach((key) => {
+    current.totalIncome[key] = toAmount(
+      toAmount(current.reserve[key])
+      + toAmount(current.hotelIncome[key])
+      + toAmount(current.restIncome[key])
+      + toAmount(current.carRentIncome[key])
+    );
+    current.totalRefundDeposit[key] = toAmount(
+      toAmount(current.hotelRefundDeposit[key]) + toAmount(current.restRefundDeposit[key])
+    );
+    current.handoverAmount[key] = toAmount(
+      current.totalIncome[key] - current.totalRefundDeposit[key] - toAmount(current.retainedAmount[key])
+    );
+  });
+  paymentData.value = current;
+}
+
 function formatAmount(value) {
-  const normalized = Number(value);
-  if (!Number.isFinite(normalized)) {
-    return "0.00";
-  }
-  return normalized.toFixed(2);
+  return toAmount(value).toFixed(2);
 }
 
-const handleConfirmReserveCash = async () => {
+async function loadOverview() {
   try {
-    isConfirmingReserve.value = true;
-    confirmReserveCash();
-    reserveConfirmed.value = true;
-    $q.notify({ type: "positive", message: "备用金确认完成", position: "top" });
+    loading.value = true;
+    const response = await shiftHandoverApi.getOverview({ date: selectedDate.value });
+    if (!response.success) {
+      throw new Error(response.message || "获取交接班数据失败");
+    }
+
+    const data = response.data || {};
+    paymentData.value = normalizePaymentData(data.paymentData);
+    specialStats.value = data.specialStats || specialStats.value;
+    yesterdayRecord.value = data.yesterdayRecord || yesterdayRecord.value;
+    currentShift.value = data.currentShift || currentShift.value;
+    currentUser.value = data.currentUser || currentUser.value;
+    canComplete.value = data.canComplete !== false;
+    vipCards.value = Number(data.paymentData?.vipCards) || 0;
+  } catch (error) {
+    console.error("加载交接班数据失败:", error);
+    $q.notify({
+      type: "negative",
+      message: error.message || "加载交接班数据失败",
+      position: "top"
+    });
   } finally {
-    isConfirmingReserve.value = false;
+    loading.value = false;
   }
-};
+}
 
-const nextStep = async () => {
-  try {
-    stepLoading.value = true;
-    if (props.currentStep === 1 && !recordCheckResult.value.checked) {
-      $q.notify({ type: "warning", message: "请先检查昨日交接记录", position: "top" });
-      return;
+function handleRetainedAmountUpdate({ payWay, value }) {
+  paymentData.value = {
+    ...paymentData.value,
+    retainedAmount: {
+      ...(paymentData.value.retainedAmount || createEmptyBucket()),
+      [payWay]: toAmount(value)
     }
-    if (props.currentStep === 1) {
-      // 第2步直接使用后端返回的备用金默认值，不再在前端做业务口径判断。
-      applyYesterdayReserve(recordCheckResult.value.reserveDefaults || {});
-      reserveConfirmed.value = false;
-    }
-    if (props.currentStep === 2 && !reserveConfirmed.value) {
-      $q.notify({ type: "warning", message: "请先确认备用金", position: "top" });
-      return;
-    }
-    if (props.currentStep === 3) {
-      if (!dataCheckCompleted.value) {
-        $q.notify({ type: "warning", message: "请完成数据核对", position: "top" });
-        return;
-      }
-    }
-    if (props.currentStep < 6) {
-      emit("step-change", props.currentStep + 1);
-    }
-  } finally {
-    stepLoading.value = false;
-  }
-};
+  };
+  recalculateLocalPaymentData();
+}
 
-const previousStep = () => {
-  if (props.currentStep > 1) {
-    emit("step-change", props.currentStep - 1);
-  }
-};
+function handleDateChange(value) {
+  if (!value) return;
+  selectedDate.value = value;
+  loadOverview();
+}
 
-const completeHandoverFlow = async () => {
+async function completeHandoverFlow() {
   const success = await completeHandover();
   if (success) {
-    emit("step-change", 6);
     emit("complete");
+    await loadOverview();
   }
-};
+}
 
-onMounted(() => {
-  loadBillsData(selectedDate.value);
-});
+onMounted(loadOverview);
 </script>
 
 <style scoped>
 .handover-process {
+  position: relative;
   width: 100%;
-  max-width: 1000px;
+  max-width: 1180px;
+  height: 100%;
+  overflow: hidden;
 }
 
-.step-card {
-  animation: slideIn 0.3s ease-out;
-}
-
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.step-actions {
+.handover-top-bar {
   display: flex;
-  justify-content: flex-start;
+  min-height: 64px;
+  align-items: center;
+  gap: 22px;
+  padding: 12px 18px;
+  margin-bottom: 16px;
+  background: #fff;
+  border: 1px solid #dbe3ef;
+  border-radius: 6px;
+}
+
+.top-bar-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.top-date-input {
+  width: 168px;
+}
+
+.top-meta {
+  font-size: 14px;
+  color: #374151;
+  white-space: nowrap;
+}
+
+.meta-label {
+  color: #7b8494;
+}
+
+.yesterday-status {
+  font-weight: 700;
+}
+
+.yesterday-status--done {
+  color: #16a34a;
+}
+
+.yesterday-status--missing {
+  color: #f97316;
+}
+
+.history-link-btn {
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.confirmation-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 20px;
+  height: calc(100% - 82px);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.confirmation-table-panel,
+.sidebar-card {
+  background: #fff;
+  border: 1px solid #dbe3ef;
+  border-radius: 6px;
+}
+
+.confirmation-table-panel {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 18px 20px;
+}
+
+.confirmation-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.status-badge {
+  padding: 7px 12px;
+  font-size: 13px;
+}
+
+.confirmation-sidebar {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.sidebar-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 18px;
+}
+
+.sidebar-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #1f2937;
+  margin-bottom: 18px;
+}
+
+.handover-total {
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  border: 1px solid #b7e4bd;
+  border-radius: 6px;
+  background: #f1fbf3;
+}
+
+.total-label {
+  color: #5f7a64;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.total-value {
+  color: #166534;
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.confirm-fields {
+  display: grid;
   gap: 12px;
 }
 
-.reserve-cash-table :deep(.q-table__bottom) {
-  display: none;
+.confirm-checklist {
+  display: grid;
+  gap: 8px;
+  padding: 14px 0;
+  margin-top: auto;
+  border-top: 1px solid #edf0f5;
 }
 
-.reserve-cash-table :deep(thead th) {
-  background: #fafafa;
-  font-weight: 600;
-  padding: 14px 12px;
-}
-
-.reserve-cash-table :deep(tbody td) {
-  padding: 16px 12px;
-  vertical-align: middle;
-}
-
-.reserve-cash-table :deep(.input-cell .q-field__native),
-.reserve-cash-table :deep(.input-cell input) {
-  font-variant-numeric: tabular-nums;
-}
-
-.currency-input-wrap {
+.checklist-item {
   display: flex;
-  width: 100%;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
+  gap: 8px;
+  color: #8792a2;
+  font-size: 14px;
 }
 
-.currency-symbol {
-  color: #2f2f2f;
-  line-height: 1;
-  width: 12px;
-  text-align: center;
+.checklist-item--done {
+  color: #1d7ad8;
+  font-weight: 600;
 }
 
-.reserve-native-input {
-  width: 86px;
-  border: 0;
-  background: transparent;
-  color: #2f2f2f;
+.complete-button {
+  height: 46px;
   font-size: 16px;
-  line-height: 1;
-  text-align: left;
-  padding: 0;
-  font-variant-numeric: tabular-nums;
+  font-weight: 700;
 }
 
-.reserve-native-input:focus {
-  outline: none;
-}
+@media (max-width: 1180px) {
+  .confirmation-layout {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
 
-/* 隐藏 number 输入框默认上下箭头，减少列对齐抖动。 */
-.reserve-cash-table :deep(.input-cell input::-webkit-outer-spin-button),
-.reserve-cash-table :deep(.input-cell input::-webkit-inner-spin-button) {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-.reserve-cash-table :deep(.input-cell input[type="number"]) {
-  -moz-appearance: textfield;
-}
-
-.reserve-cash-table :deep(th),
-.reserve-cash-table :deep(td) {
-  text-align: center;
-}
-
-.reserve-cash-table :deep(th:first-child),
-.reserve-cash-table :deep(td:first-child) {
-  width: 120px;
-  text-align: left;
-  padding-left: 20px;
-}
-
-.reserve-cash-table :deep(th:last-child),
-.reserve-cash-table :deep(td:last-child) {
-  width: 170px;
-}
-
-.amount-cell,
-.total-amount {
-  font-variant-numeric: tabular-nums;
+  .confirmation-sidebar {
+    overflow: visible;
+  }
 }
 </style>

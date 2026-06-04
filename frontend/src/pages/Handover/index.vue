@@ -1,10 +1,10 @@
 <template>
   <q-page class="handover-page">
-    <div class="row full-height">
-      <div class="col-1">
+    <div class="handover-root row">
+      <div class="handover-history-column col-1">
         <HistoryPanel @select-record="handleRecordSelect" />
       </div>
-      <div class="col-11">
+      <div class="handover-content-column col-11">
         <MainContent :selected-record="selectedRecord" />
       </div>
     </div>
@@ -25,7 +25,21 @@ const handleRecordSelect = (record) => {
 
 <style scoped>
 .handover-page {
-  height: 100vh;
+  height: calc(100vh - 65px);
+  max-height: calc(100vh - 65px);
+  min-height: 0;
   overflow: hidden;
+}
+
+.handover-root,
+.handover-history-column,
+.handover-content-column {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+:global(.q-layout:has(.handover-page) .q-page-container) {
+  padding-bottom: 0 !important;
 }
 </style>

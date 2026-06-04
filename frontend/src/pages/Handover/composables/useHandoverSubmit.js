@@ -1,31 +1,10 @@
 import { ref } from "vue";
 import { useQuasar } from "quasar";
 import { shiftHandoverApi } from "src/api";
-import { useUserStore } from "src/stores/userStore";
 
-export function useHandoverSubmit({ confirmationData, handoverInfo, selectedHandoverDate }) {
+export function useHandoverSubmit({ handoverInfo, selectedHandoverDate, retainedAmount, vipCards }) {
   const $q = useQuasar();
-  const userStore = useUserStore();
   const submitting = ref(false);
-
-  const formatLocalDate = (date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  };
-
-  const resolveBusinessDate = () => {
-    if (selectedHandoverDate?.value) return selectedHandoverDate.value;
-    const now = new Date();
-    const currentHour = now.getHours();
-    const businessDate = new Date(now);
-    if (currentHour < 8) {
-      businessDate.setDate(businessDate.getDate() - 1);
-    }
-    businessDate.setDate(businessDate.getDate() - 1);
-    return formatLocalDate(businessDate);
-  };
 
   const completeHandover = async () => {
     if (!handoverInfo.value.nextOperator) {
@@ -39,29 +18,12 @@ export function useHandoverSubmit({ confirmationData, handoverInfo, selectedHand
 
     try {
       submitting.value = true;
-      const date = resolveBusinessDate();
-      const pd = confirmationData.value?.paymentData || {};
       const payload = {
-        date,
-        handoverPerson: userStore.user?.username || "当前操作员",
+        date: selectedHandoverDate.value,
         receivePerson: handoverInfo.value.nextOperator,
-        paymentData: {
-          reserve: pd.reserve,
-          hotelIncome: pd.hotelIncome,
-          restIncome: pd.restIncome,
-          carRentIncome: pd.carRentIncome,
-          totalIncome: pd.totalIncome,
-          // 后端字段名为 deposit
-          hotelDeposit: pd.hotelRefundDeposit,
-          restDeposit: pd.restRefundDeposit,
-          totalRefundDeposit: pd.totalRefundDeposit,
-          retainedAmount: pd.retainedAmount,
-          handoverAmount: pd.handoverAmount
-        },
-        vipCard: confirmationData.value.vipCards || 0,
-        taskList: confirmationData.value.taskList || [],
-        notes: handoverInfo.value.notes || "",
-        handoverTime: handoverInfo.value.handoverTime || undefined
+        retainedAmount: retainedAmount.value,
+        vipCard: Number(vipCards.value) || 0,
+        notes: handoverInfo.value.notes || ""
       };
 
       const response = await shiftHandoverApi.completeHandover(payload);

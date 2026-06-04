@@ -48,14 +48,13 @@ import { shiftHandoverApi } from "src/api";
 const $q = useQuasar()
 const isLoading = ref(false)
 const historyRecords = ref([])
-const availableDates = ref([])
 
 // 计算属性
 const hasHistoryRecords = computed(() => historyRecords.value.length > 0)
 
 
 // 搜索历史记录
-const handleSearchHistory = async () => {
+const handleSearchHistory = async ({ silent = false } = {}) => {
   try {
     isLoading.value = true
 
@@ -76,11 +75,13 @@ const handleSearchHistory = async () => {
         paymentCount: record.paymentCount
       }))
 
-      $q.notify({
-        type: 'positive',
-        message: `查询成功，找到 ${historyRecords.value.length} 条交接班记录`,
-        position: 'top'
-      })
+      if (!silent) {
+        $q.notify({
+          type: 'positive',
+          message: `查询成功，找到 ${historyRecords.value.length} 条交接班记录`,
+          position: 'top'
+        })
+      }
     } else {
       throw new Error(response.message || '查询失败')
     }
@@ -107,27 +108,10 @@ const handleSelectRecord = (record) => {
 }
 
 
-// 获取可用日期
-const loadAvailableDates = async () => {
-  try {
-    const response = await shiftHandoverApi.getAvailableHandoverDates()
-    if (response.success) {
-      availableDates.value = response.data
-      console.log('可用的交接班日期:', availableDates.value)
-    }
-  } catch (error) {
-    console.error('获取可用日期失败:', error)
-  }
-}
-
-
-
 // 生命周期钩子
 onMounted(() => {
   console.log('HistoryPanel mounted')
-  // 组件挂载时自动加载可用日期
-  loadAvailableDates()
-  handleSearchHistory()
+  handleSearchHistory({ silent: true })
 })
 </script>
 
@@ -136,7 +120,8 @@ onMounted(() => {
   background-color: #f5f5f5;
   padding: 16px 8px;
   border-right: 1px solid #e0e0e0;
-  height: 100vh;
+  height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -160,6 +145,7 @@ onMounted(() => {
 
 .history-list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 4px;

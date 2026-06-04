@@ -41,6 +41,58 @@ function convertBucketsToCents(bucket) {
   return result;
 }
 
+function normalizeAmount(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) {
+    return 0;
+  }
+  return Number(num.toFixed(2));
+}
+
+function normalizePaywayBucket(bucket = {}) {
+  return PAY_WAY_KEYS.reduce((acc, key) => {
+    acc[key] = normalizeAmount(bucket[key]);
+    return acc;
+  }, {});
+}
+
+function recalculatePaymentData(paymentData = {}, overrides = {}) {
+  const reserve = normalizePaywayBucket(overrides.reserve || paymentData.reserve);
+  const hotelIncome = normalizePaywayBucket(paymentData.hotelIncome);
+  const restIncome = normalizePaywayBucket(paymentData.restIncome);
+  const carRentIncome = normalizePaywayBucket(paymentData.carRentIncome);
+  const hotelRefundDeposit = normalizePaywayBucket(paymentData.hotelRefundDeposit || paymentData.hotelDeposit);
+  const restRefundDeposit = normalizePaywayBucket(paymentData.restRefundDeposit || paymentData.restDeposit);
+  const retainedAmount = normalizePaywayBucket(overrides.retainedAmount || paymentData.retainedAmount);
+
+  const totalIncome = createPaywayBuckets();
+  const totalRefundDeposit = createPaywayBuckets();
+  const handoverAmount = createPaywayBuckets();
+
+  PAY_WAY_KEYS.forEach((key) => {
+    totalIncome[key] = normalizeAmount(
+      reserve[key] + hotelIncome[key] + restIncome[key] + carRentIncome[key]
+    );
+    totalRefundDeposit[key] = normalizeAmount(hotelRefundDeposit[key] + restRefundDeposit[key]);
+    handoverAmount[key] = normalizeAmount(totalIncome[key] - totalRefundDeposit[key] - retainedAmount[key]);
+  });
+
+  return {
+    reserve,
+    hotelIncome,
+    restIncome,
+    carRentIncome,
+    totalIncome,
+    hotelDeposit: hotelRefundDeposit,
+    restDeposit: restRefundDeposit,
+    hotelRefundDeposit,
+    restRefundDeposit,
+    totalRefundDeposit,
+    retainedAmount,
+    handoverAmount
+  };
+}
+
 /**
  * 获取表格数据
  * @param {date} date - 查询日期
@@ -753,6 +805,105 @@ async function getHandoverTableData(date) {
   }
 }
 
+async function getPreviousHandoverStatus(date) {
+  const yesterdayDate = getPreviousDateString(date);
+  const sql = `
+    SELECT
+      date::text as date,
+      COUNT(DISTINCT payment_type) as payment_count,
+      array_agg(DISTINCT payment_type ORDER BY payment_type) as payment_types,
+      MIN(handover_person) as handover_person,
+      MIN(takeover_person) as takeover_person
+    FROM handover
+    WHERE date = $1::date
+      AND payment_type IN (1, 2, 3, 4)
+    GROUP BY date
+  `;
+
+  const result = await query(sql, [yesterdayDate]);
+  const hasRecord = result.rows.length > 0;
+  const paymentCount = hasRecord ? Number(result.rows[0].payment_count) : 0;
+  const isComplete = hasRecord && paymentCount === 4;
+  const handoverAmounts = createPaywayBuckets();
+
+  if (isComplete) {
+    const amountSql = `
+      SELECT payment_type, handover
+      FROM handover
+      WHERE date = $1::date
+        AND payment_type IN (1, 2, 3, 4)
+      ORDER BY payment_type
+    `;
+    const amountResult = await query(amountSql, [yesterdayDate]);
+    const paymentTypeMapping = { 1: '现金', 2: '微信', 3: '微邮付', 4: '其他' };
+    amountResult.rows.forEach((row) => {
+      const method = paymentTypeMapping[row.payment_type];
+      if (method) {
+        handoverAmounts[method] = normalizeAmount(row.handover);
+      }
+    });
+  }
+
+  return {
+    date: yesterdayDate,
+    hasRecord,
+    isComplete,
+    paymentCount,
+    paymentTypes: hasRecord ? result.rows[0].payment_types : [],
+    handoverPerson: hasRecord ? result.rows[0].handover_person : null,
+    takeoverPerson: hasRecord ? result.rows[0].takeover_person : null,
+    handoverAmounts,
+    reserveDefaults: {
+      '现金': 320,
+      '微信': isComplete ? handoverAmounts['微信'] : 0,
+      '微邮付': 0,
+      '其他': 0
+    },
+    statusText: isComplete ? '已完成' : (hasRecord ? '记录不完整' : '缺失')
+  };
+}
+
+function resolveCurrentShift(now = new Date()) {
+  const hour = now.getHours();
+  if (hour >= 8 && hour < 16) {
+    return { code: 'morning', label: '早班', timeRange: '08:00-16:00' };
+  }
+  if (hour >= 16) {
+    return { code: 'evening', label: '晚班', timeRange: '16:00-00:00' };
+  }
+  return { code: 'night', label: '夜班', timeRange: '00:00-08:00' };
+}
+
+function resolveCurrentUser(account = {}) {
+  return {
+    id: account.id || null,
+    name: account.username || account.name || account.email || '当前用户',
+    role: account.role || '前台'
+  };
+}
+
+async function getHandoverOverview({ date, account }) {
+  const yesterdayRecord = await getPreviousHandoverStatus(date);
+  const [rawPaymentData, specialStats] = await Promise.all([
+    getShiftTable(date),
+    getShiftSpecialStats(date)
+  ]);
+  const paymentData = recalculatePaymentData(rawPaymentData, {
+    reserve: yesterdayRecord.reserveDefaults
+  });
+
+  return {
+    businessDate: date,
+    currentShift: resolveCurrentShift(),
+    currentUser: resolveCurrentUser(account),
+    yesterdayRecord,
+    paymentData,
+    specialStats,
+    canComplete: true,
+    completeBlockReasons: []
+  };
+}
+
 /**
  * 检查昨日是否有交接记录
  * @param {string} date - 当前日期 YYYY-MM-DD
@@ -982,6 +1133,9 @@ module.exports = {
   startHandover,
   getReserveCash,
   getShiftSpecialStats,
+  getHandoverOverview,
+  getPreviousHandoverStatus,
+  recalculatePaymentData,
   getHandoverTableData,
   saveAdminMemoToHandover,
   getAdminMemosFromHandover,
