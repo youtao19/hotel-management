@@ -13,6 +13,13 @@ const {
   recalculatePaymentData
 } = require('./shift-handover/shiftHandover.calculator');
 
+const {
+  getPreviousBusinessDate,
+  buildReserveDefaults,
+  resolveCurrentShift,
+  resolveCurrentUser
+} = require('./shift-handover/shiftHandover.businessRules');
+
 /**
  * 获取表格数据
  * @param {date} date - 查询日期
@@ -21,7 +28,7 @@ const {
 async function getShiftTable(date) {
   try{
     // 解析日期，并拿到前一天的日期
-    const predate = getPreviousDateString(date)
+    const predate = getPreviousBusinessDate(date)
 
     // 创建对象
     const pay_ways = { 1:'现金', 2:'微信', 3:'微邮付', 4:'其他' }
@@ -227,21 +234,6 @@ async function getAvailableDatesFlexible() {
 }
 
 /**
- * 获取前一天的日期 YYYY-MM-DD
- * @param {string} dateStr YYYY-MM-DD
- * @returns {string} YYYY-MM-DD
- */
-function getPreviousDateString(dateStr) {
-  const [year, month, day] = dateStr.split('-').map(Number);
-  const d = new Date(year, month - 1, day); // 本地时区
-  d.setDate(d.getDate() - 1);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${dd}`;
-}
-
-/**
  * 开始交接班：若不存在则创建当天记录（使用默认数据初始化）
  * - 单日单条：存在则直接返回存在信息
  * - 首日或缺省：使用默认备用金与空字段
@@ -344,7 +336,7 @@ async function startHandover(handoverData) {
     } else {
       // 计算模式：使用现有逻辑自动计算
       console.log('使用计算模式，自动计算交接班数据');
-      handoverDate = getPreviousDateString(date);
+      handoverDate = getPreviousBusinessDate(date);
       payData = await getShiftTable(handoverDate);
     }
 
@@ -726,7 +718,7 @@ async function getHandoverTableData(date) {
 }
 
 async function getPreviousHandoverStatus(date) {
-  const yesterdayDate = getPreviousDateString(date);
+  const yesterdayDate = getPreviousBusinessDate(date);
   const sql = `
     SELECT
       date::text as date,
@@ -773,32 +765,8 @@ async function getPreviousHandoverStatus(date) {
     handoverPerson: hasRecord ? result.rows[0].handover_person : null,
     takeoverPerson: hasRecord ? result.rows[0].takeover_person : null,
     handoverAmounts,
-    reserveDefaults: {
-      '现金': 320,
-      '微信': isComplete ? handoverAmounts['微信'] : 0,
-      '微邮付': 0,
-      '其他': 0
-    },
+    reserveDefaults: buildReserveDefaults({ isComplete, handoverAmounts }),
     statusText: isComplete ? '已完成' : (hasRecord ? '记录不完整' : '缺失')
-  };
-}
-
-function resolveCurrentShift(now = new Date()) {
-  const hour = now.getHours();
-  if (hour >= 8 && hour < 16) {
-    return { code: 'morning', label: '早班', timeRange: '08:00-16:00' };
-  }
-  if (hour >= 16) {
-    return { code: 'evening', label: '晚班', timeRange: '16:00-00:00' };
-  }
-  return { code: 'night', label: '夜班', timeRange: '00:00-08:00' };
-}
-
-function resolveCurrentUser(account = {}) {
-  return {
-    id: account.id || null,
-    name: account.username || account.name || account.email || '当前用户',
-    role: account.role || '前台'
   };
 }
 
@@ -832,7 +800,7 @@ async function getHandoverOverview({ date, account }) {
 async function checkYesterdayHandoverRecord(date) {
   try {
     // 获取昨日日期
-    const yesterdayDate = getPreviousDateString(date);
+    const yesterdayDate = getPreviousBusinessDate(date);
 
     // 查询昨日是否有交接记录（查询支付方式1-4的记录）
     const sql = `
@@ -862,7 +830,7 @@ async function checkYesterdayHandoverRecord(date) {
     // 出错时返回默认值
     return {
       hasYesterdayRecord: false,
-      yesterdayDate: getPreviousDateString(date),
+      yesterdayDate: getPreviousBusinessDate(date),
       reserveAmount: 0,
       recordCount: 0
     };
