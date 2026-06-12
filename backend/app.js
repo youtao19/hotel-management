@@ -125,8 +125,8 @@ async function initializeSession() {
     const reviewRoute = require("./modules/review/review.routes");
     app.use("/api/reviews", reviewRoute);
 
-    const HandoverRoute = require("./routes/handoverRoute");
-    app.use("/api/handover", HandoverRoute);
+    const shiftHandoverRoutes = require("./modules/shift-handover/shiftHandover.routes");
+    app.use("/api/handover", shiftHandoverRoutes);
 
     const incomeStatisticsRoutes = require("./modules/income-statistics/incomeStatistics.routes");
     app.use("/api/revenue", incomeStatisticsRoutes);

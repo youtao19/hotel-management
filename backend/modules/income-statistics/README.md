@@ -7,7 +7,7 @@
 不归属本模块：
 
 - 其他收入录入：归 `bill` 模块的 `POST /api/bills/other-income`
-- 交接班现金核对：归 `shift-handover` / 当前 `handoverRoute`
+- 交接班现金核对：归 `shift-handover`
 - 收款核对流水：使用 `bill` 或 `shift-handover` 模块，不在收入统计模块保留单独 receipts 接口
 
 ## API 接口

@@ -183,12 +183,12 @@ Review `compose.yaml`, Dockerfiles, and `.github/workflows/` for the deployment 
 | `backend/modules/dashboard/` | Main dashboard data aggregation |
 | `backend/modules/review/` | Guest review invitation and rating management |
 | `backend/modules/douyin/` | Douyin OTA integration (29 files: token, packages, rate plans, webhooks) |
+| `backend/modules/shift-handover/` | Shift handover API, validation, transaction save, and module docs |
 | `backend/modules/handoverModule.js` | Shift handover processing |
 
 ### Backend Routes
 | File | Purpose |
 |---|---|
-| `backend/routes/handoverRoute.js` | Handover API endpoints |
 | `backend/routes/ota/` | OTA channel route stubs (Fliggy, etc.) |
 | `backend/routes/plugin/` | Plugin-based external integrations |
 
