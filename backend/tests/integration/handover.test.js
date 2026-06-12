@@ -67,6 +67,30 @@ describe('交接班当前页面接口', () => {
     }));
   });
 
+  test('handover-table 没有已保存记录时，应返回计算结果和兼容字段', async () => {
+    const response = await request(app)
+      .get('/api/handover/handover-table')
+      .query({ date: '2025-11-02' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data).toEqual(expect.objectContaining({
+      reserve: expect.any(Object),
+      hotelIncome: expect.any(Object),
+      restIncome: expect.any(Object),
+      hotelDeposit: expect.any(Object),
+      restDeposit: expect.any(Object),
+      hotelRefund: expect.any(Object),
+      restRefund: expect.any(Object),
+      hotelRefundDeposit: expect.any(Object),
+      restRefundDeposit: expect.any(Object),
+      retainedAmount: expect.any(Object),
+      handoverAmount: expect.any(Object)
+    }));
+    expect(response.body.data.hotelRefund).toEqual(response.body.data.hotelDeposit);
+    expect(response.body.data.restRefund).toEqual(response.body.data.restDeposit);
+  });
+
   test('complete 由后端重算表格金额，不要求前端提交整张 paymentData', async () => {
     const overviewRes = await request(app)
       .get('/api/handover/overview')
@@ -104,5 +128,41 @@ describe('交接班当前页面接口', () => {
     expect(Number(saved.rows[0].retained)).toBe(320);
     expect(Number(saved.rows[0].handover)).toBe(expectedCashHandover);
     expect(saved.rows[0].remarks).toBe('新版单页交接完成');
+  });
+
+  test('handover-table 在 /complete 保存后返回人员、会员卡、备注和留存金额', async () => {
+    const tableResponse = await request(app)
+      .get('/api/handover/handover-table')
+      .query({ date: '2025-11-02' });
+
+    expect(tableResponse.status).toBe(200);
+    expect(tableResponse.body.success).toBe(true);
+    expect(tableResponse.body.data).toEqual(expect.objectContaining({
+      vipCards: 6,
+      takeoverPerson: 'peach',
+      remarks: '新版单页交接完成'
+    }));
+    expect(tableResponse.body.data.retainedAmount['现金']).toBe(320);
+  });
+
+  test('overview.specialStats 与 /special-stats 当前各自的响应结构', async () => {
+    const overview = await request(app)
+      .get('/api/handover/overview')
+      .query({ date: '2025-11-02' });
+    const stats = await request(app)
+      .get('/api/handover/special-stats')
+      .query({ date: '2025-11-02' });
+
+    expect(overview.status).toBe(200);
+    expect(stats.status).toBe(200);
+
+    for (const payload of [overview.body.data.specialStats, stats.body.data]) {
+      expect(payload).toEqual({
+        openCount: expect.any(Number),
+        restCount: expect.any(Number),
+        invited: expect.any(Number),
+        positive: expect.any(Number)
+      });
+    }
   });
 });
