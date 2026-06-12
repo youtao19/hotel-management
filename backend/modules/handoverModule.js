@@ -1,97 +1,17 @@
 const { query, getClient } = require('../database/postgreDB/pg');
 const { formatDate } = require('./tools');
 
-const PAY_WAY_KEYS = ['现金', '微信', '微邮付', '其他'];
-
-function createPaywayBuckets() {
-  return PAY_WAY_KEYS.reduce((acc, key) => {
-    acc[key] = 0;
-    return acc;
-  }, {});
-}
-
-function amountToCents(value) {
-  const num = Number(value);
-  if (!Number.isFinite(num)) {
-    return 0;
-  }
-  return Math.round(num * 100);
-}
-
-function centsToAmount(cents) {
-  return Number((cents / 100).toFixed(2));
-}
-
-function convertBucketsToAmounts(bucket) {
-  const result = {};
-  for (const key of PAY_WAY_KEYS) {
-    result[key] = centsToAmount(bucket[key] || 0);
-  }
-  return result;
-}
-
-function convertBucketsToCents(bucket) {
-  const result = createPaywayBuckets();
-  if (!bucket) {
-    return result;
-  }
-  for (const key of PAY_WAY_KEYS) {
-    result[key] = amountToCents(bucket[key] || 0);
-  }
-  return result;
-}
-
-function normalizeAmount(value) {
-  const num = Number(value);
-  if (!Number.isFinite(num)) {
-    return 0;
-  }
-  return Number(num.toFixed(2));
-}
-
-function normalizePaywayBucket(bucket = {}) {
-  return PAY_WAY_KEYS.reduce((acc, key) => {
-    acc[key] = normalizeAmount(bucket[key]);
-    return acc;
-  }, {});
-}
-
-function recalculatePaymentData(paymentData = {}, overrides = {}) {
-  const reserve = normalizePaywayBucket(overrides.reserve || paymentData.reserve);
-  const hotelIncome = normalizePaywayBucket(paymentData.hotelIncome);
-  const restIncome = normalizePaywayBucket(paymentData.restIncome);
-  const carRentIncome = normalizePaywayBucket(paymentData.carRentIncome);
-  const hotelRefundDeposit = normalizePaywayBucket(paymentData.hotelRefundDeposit || paymentData.hotelDeposit);
-  const restRefundDeposit = normalizePaywayBucket(paymentData.restRefundDeposit || paymentData.restDeposit);
-  const retainedAmount = normalizePaywayBucket(overrides.retainedAmount || paymentData.retainedAmount);
-
-  const totalIncome = createPaywayBuckets();
-  const totalRefundDeposit = createPaywayBuckets();
-  const handoverAmount = createPaywayBuckets();
-
-  PAY_WAY_KEYS.forEach((key) => {
-    totalIncome[key] = normalizeAmount(
-      reserve[key] + hotelIncome[key] + restIncome[key] + carRentIncome[key]
-    );
-    totalRefundDeposit[key] = normalizeAmount(hotelRefundDeposit[key] + restRefundDeposit[key]);
-    handoverAmount[key] = normalizeAmount(totalIncome[key] - totalRefundDeposit[key] - retainedAmount[key]);
-  });
-
-  return {
-    reserve,
-    hotelIncome,
-    restIncome,
-    carRentIncome,
-    totalIncome,
-    hotelDeposit: hotelRefundDeposit,
-    restDeposit: restRefundDeposit,
-    hotelRefundDeposit,
-    restRefundDeposit,
-    totalRefundDeposit,
-    retainedAmount,
-    handoverAmount
-  };
-}
+const {
+  PAYMENT_METHODS: PAY_WAY_KEYS,
+  amountToCents,
+  centsToAmount,
+  createPaymentBuckets: createPaywayBuckets,
+  convertBucketsToAmounts,
+  convertBucketsToCents,
+  normalizeAmount,
+  normalizePaymentBucket: normalizePaywayBucket,
+  recalculatePaymentData
+} = require('./shift-handover/shiftHandover.calculator');
 
 /**
  * 获取表格数据

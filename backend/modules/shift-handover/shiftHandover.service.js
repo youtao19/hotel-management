@@ -1,5 +1,6 @@
 "use strict";
 
+const calculator = require("./shiftHandover.calculator");
 const handoverModule = require("../handoverModule");
 const repository = require("./shiftHandover.repository");
 
@@ -42,7 +43,7 @@ async function completeHandover({ body, account }) {
   } = body;
   const operatorName = resolveOperatorName({ handoverPerson, account });
   const overview = await handoverModule.getHandoverOverview({ date, account });
-  const paymentData = handoverModule.recalculatePaymentData(overview.paymentData, { retainedAmount });
+  const paymentData = calculator.recalculatePaymentData(overview.paymentData, { retainedAmount });
 
   const savedRecords = await repository.saveCompletedHandover({
     date,
