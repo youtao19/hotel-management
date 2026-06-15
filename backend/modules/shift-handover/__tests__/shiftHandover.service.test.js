@@ -198,3 +198,27 @@ describe("shiftHandover.service.getTableData", () => {
     expect(result.hotelRefundDeposit).toEqual(result.hotelDeposit);
   });
 });
+
+describe("shiftHandover.service.getAdminMemos", () => {
+  test("只返回 type === admin 的任务", async () => {
+    repository.findAdminMemoTasks.mockResolvedValue([
+      { id: 1, title: "管理员事项", type: "admin", completed: false },
+      { id: 2, title: "普通事项", type: "normal", completed: false }
+    ]);
+
+    const result = await service.getAdminMemos("2026-06-12");
+
+    expect(result).toEqual([
+      expect.objectContaining({ title: "管理员事项", type: "admin" })
+    ]);
+    expect(result).toHaveLength(1);
+  });
+
+  test("查询失败时返回空数组", async () => {
+    repository.findAdminMemoTasks.mockResolvedValue([]);
+
+    const result = await service.getAdminMemos("2026-06-12");
+
+    expect(result).toEqual([]);
+  });
+});

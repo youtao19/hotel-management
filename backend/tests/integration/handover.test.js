@@ -145,6 +145,32 @@ describe('交接班当前页面接口', () => {
     expect(tableResponse.body.data.retainedAmount['现金']).toBe(320);
   });
 
+  test('admin-memos 只返回 type=admin 的备忘录', async () => {
+    await query(
+      `INSERT INTO handover (
+        date, payment_type, task_list, handover_person, takeover_person
+      ) VALUES ($1::date, 1, $2::jsonb, '', '')`,
+      [
+        "2025-11-03",
+        JSON.stringify([
+          { id: 1, title: "管理员事项", type: "admin", completed: false },
+          { id: 2, title: "普通事项", type: "normal", completed: false }
+        ])
+      ]
+    );
+
+    const response = await request(app)
+      .get("/api/handover/admin-memos")
+      .query({ date: "2025-11-03" });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data).toEqual([
+      expect.objectContaining({ title: "管理员事项", type: "admin" })
+    ]);
+    expect(response.body.data).toHaveLength(1);
+  });
+
   test('overview.specialStats 与 /special-stats 当前各自的响应结构', async () => {
     const overview = await request(app)
       .get('/api/handover/overview')

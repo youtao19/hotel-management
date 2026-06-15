@@ -248,7 +248,8 @@ async function getSpecialStats(date) {
 }
 
 async function getAdminMemos(date) {
-  return repository.findAdminMemoTasks(date);
+  const tasks = await repository.findAdminMemoTasks(date);
+  return tasks.filter((task) => task.type === "admin");
 }
 
 async function listRecords() {
