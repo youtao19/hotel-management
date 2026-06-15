@@ -1,9 +1,15 @@
 "use strict";
 
 const { getClient, query } = require("../../database/postgreDB/pg");
+const { formatDate } = require("../tools");
 const { PAYMENT_METHODS } = require("./shiftHandover.validator");
+const {
+  createPaymentBuckets,
+  normalizeAmount
+} = require("./shiftHandover.calculator");
 
 const PAYMENT_TYPE_MAPPING = { "现金": 1, "微信": 2, "微邮付": 3, "其他": 4 };
+const PAYMENT_TYPE_REVERSE = { 1: "现金", 2: "微信", 3: "微邮付", 4: "其他" };
 
 async function getSpecialStats(date) {
   const roomSql = `
@@ -148,8 +154,217 @@ async function saveCompletedHandover({ date, operatorName, receivePerson, vipCar
   }
 }
 
+async function findBillsByBusinessDate(date) {
+  const sql = `
+    SELECT bill_id, order_id, pay_way, change_price, change_type, stay_type, stay_date
+    FROM bills
+    WHERE stay_date::date = $1::date
+    ORDER BY bill_id ASC
+  `;
+  const result = await query(sql, [date]);
+  return result.rows;
+}
+
+async function findReserveByDate(date) {
+  try {
+    const sql = `
+      SELECT payment_type, handover
+      FROM handover
+      WHERE date = $1::date
+        AND payment_type IN (1,2,3,4)
+    `;
+    const result = await query(sql, [date]);
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    const reserveCash = createPaymentBuckets();
+    for (const row of result.rows) {
+      const method = PAYMENT_TYPE_REVERSE[row.payment_type];
+      if (method) {
+        const amount = Number(row.handover);
+        reserveCash[method] = Number.isFinite(amount)
+          ? Number(amount.toFixed(2))
+          : 0;
+      }
+    }
+    return reserveCash;
+  } catch (error) {
+    console.error("获取备用金失败:", error);
+    return null;
+  }
+}
+
+async function findHandoverRowsByDate(date) {
+  const sql = `
+    SELECT
+      payment_type,
+      reserve_cash,
+      room_income,
+      rest_income,
+      rent_income,
+      total_income,
+      room_refund,
+      rest_refund,
+      retained,
+      handover,
+      vip_card,
+      handover_person,
+      takeover_person,
+      remarks,
+      task_list
+    FROM handover
+    WHERE date = $1::date
+      AND payment_type IN (1, 2, 3, 4)
+    ORDER BY payment_type
+  `;
+  const result = await query(sql, [date]);
+  return result.rows;
+}
+
+async function findPreviousHandoverSummary(date) {
+  const sql = `
+    SELECT
+      date::text as date,
+      COUNT(DISTINCT payment_type) as payment_count,
+      array_agg(DISTINCT payment_type ORDER BY payment_type) as payment_types,
+      MIN(handover_person) as handover_person,
+      MIN(takeover_person) as takeover_person
+    FROM handover
+    WHERE date = $1::date
+      AND payment_type IN (1, 2, 3, 4)
+    GROUP BY date
+  `;
+
+  const result = await query(sql, [date]);
+  const hasRecord = result.rows.length > 0;
+  const paymentCount = hasRecord ? Number(result.rows[0].payment_count) : 0;
+  const isComplete = hasRecord && paymentCount === 4;
+  const handoverAmounts = createPaymentBuckets();
+
+  if (isComplete) {
+    const amountSql = `
+      SELECT payment_type, handover
+      FROM handover
+      WHERE date = $1::date
+        AND payment_type IN (1, 2, 3, 4)
+      ORDER BY payment_type
+    `;
+    const amountResult = await query(amountSql, [date]);
+    amountResult.rows.forEach((row) => {
+      const method = PAYMENT_TYPE_REVERSE[row.payment_type];
+      if (method) {
+        handoverAmounts[method] = normalizeAmount(row.handover);
+      }
+    });
+  }
+
+  return {
+    date,
+    hasRecord,
+    isComplete,
+    paymentCount,
+    paymentTypes: hasRecord ? result.rows[0].payment_types : [],
+    handoverPerson: hasRecord ? result.rows[0].handover_person : null,
+    takeoverPerson: hasRecord ? result.rows[0].takeover_person : null,
+    handoverAmounts
+  };
+}
+
+async function findAdminMemoTasks(date) {
+  try {
+    const sql = `
+      SELECT task_list
+      FROM handover
+      WHERE date = $1::date
+        AND payment_type = 1
+      LIMIT 1
+    `;
+    const result = await query(sql, [date]);
+
+    if (result.rows.length === 0) {
+      return [];
+    }
+
+    const record = result.rows[0];
+    if (Array.isArray(record.task_list)) {
+      return record.task_list;
+    }
+    if (typeof record.task_list === "string") {
+      try {
+        const parsed = JSON.parse(record.task_list);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  } catch (error) {
+    console.error("获取管理员备忘录失败:", error);
+    return [];
+  }
+}
+
+async function getOverviewSpecialStats(date) {
+  const targetDate = formatDate(date || new Date());
+
+  const roomCountSql = `
+    WITH pending_orders AS (
+      SELECT order_id, stay_type
+      FROM orders
+      WHERE status = 'pending'
+        AND check_in_date::date = $1::date
+    ),
+    active_orders AS (
+      SELECT
+        o.order_id,
+        o.stay_type,
+        MIN(b.stay_date::date) AS first_stay_date
+      FROM orders o
+      LEFT JOIN bills b ON b.order_id = o.order_id
+      WHERE o.status IN ('checked-in', 'checked-out')
+      GROUP BY o.order_id, o.stay_type
+    )
+    SELECT
+      COALESCE((SELECT COUNT(*) FROM pending_orders WHERE stay_type = '客房'), 0) +
+      COALESCE((SELECT COUNT(*) FROM active_orders WHERE stay_type = '客房' AND first_stay_date = $1::date), 0) AS open_count,
+      COALESCE((SELECT COUNT(*) FROM pending_orders WHERE stay_type = '休息房'), 0) +
+      COALESCE((SELECT COUNT(*) FROM active_orders WHERE stay_type = '休息房' AND first_stay_date = $1::date), 0) AS rest_count
+  `;
+
+  const reviewSql = `
+    SELECT
+      COUNT(*) AS invited,
+      COUNT(*) FILTER (WHERE positive_review = true) AS positive
+    FROM review_invitations
+    WHERE invite_time::date = $1::date
+  `;
+
+  try {
+    const roomRes = await query(roomCountSql, [targetDate]);
+    const reviewRes = await query(reviewSql, [targetDate]);
+
+    return {
+      openCount: parseInt(roomRes.rows[0]?.open_count) || 0,
+      restCount: parseInt(roomRes.rows[0]?.rest_count) || 0,
+      invited: parseInt(reviewRes.rows[0]?.invited) || 0,
+      positive: parseInt(reviewRes.rows[0]?.positive) || 0
+    };
+  } catch (error) {
+    console.error("获取交接班特殊统计失败:", error);
+    return { openCount: 0, restCount: 0, invited: 0, positive: 0 };
+  }
+}
+
 module.exports = {
   listCompletedHandoverRecords,
   saveCompletedHandover,
-  getSpecialStats
+  getSpecialStats,
+  findBillsByBusinessDate,
+  findHandoverRowsByDate,
+  findReserveByDate,
+  findPreviousHandoverSummary,
+  findAdminMemoTasks,
+  getOverviewSpecialStats
 };

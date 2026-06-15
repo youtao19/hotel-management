@@ -20,6 +20,8 @@ const {
   resolveCurrentUser
 } = require('./shift-handover/shiftHandover.businessRules');
 
+const repository = require('./shift-handover/shiftHandover.repository');
+
 /**
  * 获取表格数据
  * @param {date} date - 查询日期
@@ -54,15 +56,8 @@ async function getShiftTable(date) {
     console.log('备用金:', convertBucketsToAmounts(reserve))
 
 
-    const billSql = `
-      SELECT bill_id, order_id, pay_way, change_price, change_type, stay_type, stay_date
-      FROM bills
-      WHERE stay_date::date = $1::date
-      ORDER BY bill_id ASC
-    `;
-
     // 获取账单数据
-    const billRes = await query(billSql, [date])
+    const billRes = { rows: await repository.findBillsByBusinessDate(date) }
 
     // 遍历账单记录，根据 change_type 分类统计
     for (const row of billRes.rows) {
@@ -467,39 +462,7 @@ async function startHandover(handoverData) {
 // 获取某日备用金（若不存在返回 null）
 // 规则：某日备用金 = 前一日各支付方式的交接款 handover 之和
 async function getReserveCash(date) {
-  try {
-    const sql = `
-      SELECT payment_type, handover
-      FROM handover
-      WHERE date = $1::date
-        AND payment_type IN (1,2,3,4)
-      `;
-    const result = await query(sql, [date]);
-
-    if (result.rows.length === 0) {
-      return null; // 前一日无记录，返回 null
-    }
-    const reserveCash = createPaywayBuckets();
-    const pay_way_reverse_mapping = {
-      1: '现金',
-      2: '微信',
-      3: '微邮付',
-      4: '其他',
-    };
-    for (const row of result.rows) {
-      const method = pay_way_reverse_mapping[row.payment_type];
-      if (method) {
-        const amount = Number(row.handover);
-        reserveCash[method] = Number.isFinite(amount)
-          ? Number(amount.toFixed(2))
-          : 0;
-      }
-    }
-    return reserveCash;
-  } catch (error) {
-    console.error('获取备用金失败:', error);
-    return null;
-  }
+  return repository.findReserveByDate(date);
 }
 
 
@@ -509,66 +472,7 @@ async function getReserveCash(date) {
  * @returns {Promise<Object>} { openCount, restCount, invited, positive }
  */
 async function getShiftSpecialStats(date) {
-  const targetDate = formatDate(date || new Date())
-
-  // 统计开房/休息房数量
-  const roomCountSql = `
-    WITH pending_orders AS (
-      SELECT order_id, stay_type
-      FROM orders
-      WHERE status = 'pending'
-        AND check_in_date::date = $1::date
-    ),
-    active_orders AS (
-      SELECT
-        o.order_id,
-        o.stay_type,
-        MIN(b.stay_date::date) AS first_stay_date
-      FROM orders o
-      LEFT JOIN bills b ON b.order_id = o.order_id
-      WHERE o.status IN ('checked-in', 'checked-out')
-      GROUP BY o.order_id, o.stay_type
-    )
-    SELECT
-      COALESCE((SELECT COUNT(*) FROM pending_orders WHERE stay_type = '客房'), 0) +
-      COALESCE((SELECT COUNT(*) FROM active_orders WHERE stay_type = '客房' AND first_stay_date = $1::date), 0) AS open_count,
-      COALESCE((SELECT COUNT(*) FROM pending_orders WHERE stay_type = '休息房'), 0) +
-      COALESCE((SELECT COUNT(*) FROM active_orders WHERE stay_type = '休息房' AND first_stay_date = $1::date), 0) AS rest_count
-  `;
-
-  // 统计好评邀请/得到数量 - 使用正确的字段名
-  const reviewSql = `
-    SELECT
-      COUNT(*) AS invited,
-      COUNT(*) FILTER (WHERE positive_review = true) AS positive
-    FROM review_invitations
-    WHERE invite_time::date = $1::date
-  `
-
-  try {
-    const roomRes = await query(roomCountSql, [targetDate])
-    const reviewRes = await query(reviewSql, [targetDate])
-
-    const result = {
-      openCount: parseInt(roomRes.rows[0]?.open_count) || 0,
-      restCount: parseInt(roomRes.rows[0]?.rest_count) || 0,
-      invited: parseInt(reviewRes.rows[0]?.invited) || 0,
-      positive: parseInt(reviewRes.rows[0]?.positive) || 0
-    }
-
-    return result
-  } catch (error) {
-    console.error('获取交接班特殊统计失败:', error)
-
-    // 如果查询失败，返回默认值而不是抛出错误
-    const defaultResult = {
-      openCount: 0,
-      restCount: 0,
-      invited: 0,
-      positive: 0
-    }
-    return defaultResult
-  }
+  return repository.getOverviewSpecialStats(date);
 }
 
 
@@ -607,32 +511,10 @@ async function getHandoverTableData(date) {
     let handoverAmount = initPaywayBuckets();  // 交接款
 
     // 查询handover表中指定日期的数据
-    const sql = `
-      SELECT
-        payment_type,
-        reserve_cash,
-        room_income,
-        rest_income,
-        rent_income,
-        total_income,
-        room_refund,
-        rest_refund,
-        retained,
-        handover,
-        vip_card,
-        handover_person,
-        takeover_person,
-        remarks
-      FROM handover
-      WHERE date = $1::date
-        AND payment_type IN (1, 2, 3, 4)
-      ORDER BY payment_type
-    `;
-
-    const result = await query(sql, [date]);
+    const rows = await repository.findHandoverRowsByDate(date);
 
     // 如果没有找到数据，使用计算版本（从bills表计算）
-    if (result.rows.length === 0) {
+    if (rows.length === 0) {
       console.log(`日期 ${date} 没有找到handover记录，使用计算版本`);
       return await getShiftTable(date);
     }
@@ -644,38 +526,21 @@ async function getHandoverTableData(date) {
     let remarks = '';
 
     // 首先尝试从查询结果中找到支付方式1的记录
-    const cashRecord = result.rows.find(row => row.payment_type === 1);
+    const cashRecord = rows.find(row => row.payment_type === 1);
     if (cashRecord) {
       vipCards = Number(cashRecord.vip_card) || 0;
       handoverPerson = cashRecord.handover_person || '';
       takeoverPerson = cashRecord.takeover_person || '';
       remarks = cashRecord.remarks || '';
     } else {
-      // 如果查询结果中没有支付方式1的记录，单独查询一次
-      try {
-        const vipCardQuery = `
-          SELECT vip_card, handover_person, takeover_person, remarks FROM handover
-          WHERE date = $1::date AND payment_type = 1
-          LIMIT 1
-        `;
-        const vipCardResult = await query(vipCardQuery, [date]);
-        if (vipCardResult.rows.length > 0) {
-          vipCards = Number(vipCardResult.rows[0].vip_card) || 0;
-          handoverPerson = vipCardResult.rows[0].handover_person || '';
-          takeoverPerson = vipCardResult.rows[0].takeover_person || '';
-          remarks = vipCardResult.rows[0].remarks || '';
-        }
-      } catch (error) {
-        console.warn('查询vipCard和人员信息失败，使用默认值:', error);
-        vipCards = 0;
-        handoverPerson = '';
-        takeoverPerson = '';
-        remarks = '';
-      }
+      vipCards = 0;
+      handoverPerson = '';
+      takeoverPerson = '';
+      remarks = '';
     }
 
     // 处理查询结果，将数据库格式转换为前端需要的格式
-    for (const row of result.rows) {
+    for (const row of rows) {
       const paymentMethod = paymentTypeMapping[row.payment_type];
 
       if (paymentMethod) {
@@ -719,54 +584,22 @@ async function getHandoverTableData(date) {
 
 async function getPreviousHandoverStatus(date) {
   const yesterdayDate = getPreviousBusinessDate(date);
-  const sql = `
-    SELECT
-      date::text as date,
-      COUNT(DISTINCT payment_type) as payment_count,
-      array_agg(DISTINCT payment_type ORDER BY payment_type) as payment_types,
-      MIN(handover_person) as handover_person,
-      MIN(takeover_person) as takeover_person
-    FROM handover
-    WHERE date = $1::date
-      AND payment_type IN (1, 2, 3, 4)
-    GROUP BY date
-  `;
-
-  const result = await query(sql, [yesterdayDate]);
-  const hasRecord = result.rows.length > 0;
-  const paymentCount = hasRecord ? Number(result.rows[0].payment_count) : 0;
-  const isComplete = hasRecord && paymentCount === 4;
-  const handoverAmounts = createPaywayBuckets();
-
-  if (isComplete) {
-    const amountSql = `
-      SELECT payment_type, handover
-      FROM handover
-      WHERE date = $1::date
-        AND payment_type IN (1, 2, 3, 4)
-      ORDER BY payment_type
-    `;
-    const amountResult = await query(amountSql, [yesterdayDate]);
-    const paymentTypeMapping = { 1: '现金', 2: '微信', 3: '微邮付', 4: '其他' };
-    amountResult.rows.forEach((row) => {
-      const method = paymentTypeMapping[row.payment_type];
-      if (method) {
-        handoverAmounts[method] = normalizeAmount(row.handover);
-      }
-    });
-  }
+  const summary = await repository.findPreviousHandoverSummary(yesterdayDate);
 
   return {
     date: yesterdayDate,
-    hasRecord,
-    isComplete,
-    paymentCount,
-    paymentTypes: hasRecord ? result.rows[0].payment_types : [],
-    handoverPerson: hasRecord ? result.rows[0].handover_person : null,
-    takeoverPerson: hasRecord ? result.rows[0].takeover_person : null,
-    handoverAmounts,
-    reserveDefaults: buildReserveDefaults({ isComplete, handoverAmounts }),
-    statusText: isComplete ? '已完成' : (hasRecord ? '记录不完整' : '缺失')
+    hasRecord: summary.hasRecord,
+    isComplete: summary.isComplete,
+    paymentCount: summary.paymentCount,
+    paymentTypes: summary.paymentTypes,
+    handoverPerson: summary.handoverPerson,
+    takeoverPerson: summary.takeoverPerson,
+    handoverAmounts: summary.handoverAmounts,
+    reserveDefaults: buildReserveDefaults({
+      isComplete: summary.isComplete,
+      handoverAmounts: summary.handoverAmounts
+    }),
+    statusText: summary.isComplete ? '已完成' : (summary.hasRecord ? '记录不完整' : '缺失')
   };
 }
 
@@ -965,50 +798,8 @@ async function saveAdminMemoToHandover(memoData) {
  * @returns {Promise<Array>} 管理员备忘录列表
  */
 async function getAdminMemosFromHandover(date) {
-  try {
-    if (!date) {
-      throw new Error('日期不能为空');
-    }
-
-    // 查找支付方式1（现金）的交接班记录
-    const findSql = `
-      SELECT task_list
-      FROM handover
-      WHERE date = $1::date
-        AND payment_type = 1
-      LIMIT 1
-    `;
-
-    const findResult = await query(findSql, [date]);
-
-    if (findResult.rows.length === 0) {
-      return []; // 没有找到记录，返回空数组
-    }
-
-    const record = findResult.rows[0];
-    let taskList = [];
-
-    try {
-      // PostgreSQL JSONB字段返回的已经是JavaScript对象/数组
-      if (Array.isArray(record.task_list)) {
-        taskList = record.task_list;
-      } else if (typeof record.task_list === 'string') {
-        taskList = JSON.parse(record.task_list);
-      } else {
-        taskList = [];
-      }
-    } catch (e) {
-      console.warn('解析task_list失败:', e);
-      taskList = [];
-    }
-
-    // 只返回管理员添加的备忘录
-    return taskList.filter(task => task.type === 'admin');
-
-  } catch (error) {
-    console.error('获取管理员备忘录失败:', error);
-    return []; // 出错时返回空数组，不影响页面显示
-  }
+  const tasks = await repository.findAdminMemoTasks(date);
+  return tasks.filter(task => task.type === 'admin');
 }
 
 
