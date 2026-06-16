@@ -183,8 +183,7 @@ Review `compose.yaml`, Dockerfiles, and `.github/workflows/` for the deployment 
 | `backend/modules/dashboard/` | Main dashboard data aggregation |
 | `backend/modules/review/` | Guest review invitation and rating management |
 | `backend/modules/douyin/` | Douyin OTA integration (29 files: token, packages, rate plans, webhooks) |
-| `backend/modules/shift-handover/` | Shift handover API, validation, transaction save, and module docs |
-| `backend/modules/handoverModule.js` | Shift handover processing |
+| `backend/modules/shift-handover/` | Shift handover: API, validation, transaction save, amount calculation, business rules, and module docs |
 
 ### Backend Routes
 | File | Purpose |
@@ -235,7 +234,7 @@ These files have high complexity and should be approached carefully:
 | `backend/modules/order-create/orderCreate.service.js` | Core order creation with pricing breakdowns, payment splits, and transaction management |
 | `backend/modules/order-manage/orderManage.service.js` | Order lifecycle logic: check-in, check-out, extend stay, cancel, room change |
 | `backend/modules/order-manage/orderManage.repository.js` | Complex SQL queries for order operations with status transitions |
-| `backend/modules/handoverModule.js` | Shift handover with multi-payment aggregation and reconciliation |
+| `backend/modules/shift-handover/shiftHandover.service.js` | Shift handover with multi-payment aggregation, overview orchestration, and reconciliation |
 | `backend/modules/income-statistics/incomeStatistics.repository.js` | Complex revenue queries with date filtering and aggregation |
 
 ### Integration Complexity

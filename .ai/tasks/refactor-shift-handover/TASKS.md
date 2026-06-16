@@ -32,6 +32,15 @@
 - [x] 将历史交接记录查询 SQL 移入 repository。
 - [x] 将完成交接班的事务写入移入 repository。
 
+## Phase 4：删除遗留 handoverModule
+
+- [x] 提取金额计算。
+- [x] 提取日期和班次规则。
+- [x] 迁移读取 SQL。
+- [x] 迁移页面业务编排。
+- [x] 迁移管理员备忘录。
+- [x] 删除无调用旧流程和 handoverModule.js。
+
 ## 文档和验证
 
 - [x] 创建 `backend/modules/shift-handover/README.md`。

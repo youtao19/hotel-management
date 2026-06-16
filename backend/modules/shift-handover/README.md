@@ -160,22 +160,38 @@ date=YYYY-MM-DD
 }
 ```
 
-## 当前阶段
+## 内部结构
 
-Phase 3: routes/controller/validator/service/repository 已拆分。金额计算和部分已有交接班读取逻辑仍复用 `../handoverModule`，避免在本次迁移中改变金额口径、日期处理和历史兼容行为。
+- `shiftHandover.routes.js`：HTTP 路由。
+- `shiftHandover.controller.js`：请求解析和响应。
+- `shiftHandover.validator.js`：AJV 参数校验。
+- `shiftHandover.service.js`：页面汇总和完成交接班业务流程。
+- `shiftHandover.repository.js`：PostgreSQL 查询和事务写入。
+- `shiftHandover.calculator.js`：纯金额计算。
+- `shiftHandover.businessRules.js`：营业日期、班次和默认备用金规则。
 
 ## 业务流程
 
-- `GET /api/handover/overview` -> `shiftHandover.service.getOverview()` -> `handoverModule.getHandoverOverview()`
-- `GET /api/handover/handover-table` -> `shiftHandover.service.getTableData()` -> `handoverModule.getHandoverTableData()`
+- `GET /api/handover/overview` -> `shiftHandover.service.getOverview()` -> calculator/businessRules/repository 编排
+- `GET /api/handover/handover-table` -> `shiftHandover.service.getTableData()` -> 有保存记录则映射、否则按 bills 计算
 - `GET /api/handover/special-stats` -> `shiftHandover.repository.getSpecialStats()`
-- `GET /api/handover/admin-memos` -> `handoverModule.getAdminMemosFromHandover()`
+- `GET /api/handover/admin-memos` -> `shiftHandover.service.getAdminMemos()` -> repository 读取并过滤 `type === "admin"`
 - `GET /api/handover/query` -> `shiftHandover.repository.listCompletedHandoverRecords()`
 - `POST /api/handover/complete` -> 后端重算交接表金额 -> `shiftHandover.repository.saveCompletedHandover()`
 
+## 数据口径
+
+特殊统计当前存在两套 SQL 口径，本轮分别保留，未合并：
+
+- overview 页面汇总统计：`shiftHandover.repository.getOverviewSpecialStats()`（用于 overview 汇总）。
+- `/special-stats` 独立接口统计：`shiftHandover.repository.getSpecialStats()`。
+
+不要宣称两者已经统一。
+
 ## 依赖说明
 
-- `../handoverModule`: 保留既有交接班金额计算、表格读取和管理员备忘录兼容逻辑。
+- `./shiftHandover.calculator`：纯金额计算（分计算、元返回、支付方式常量）。
+- `./shiftHandover.businessRules`：营业日期、班次和默认备用金规则。
 - `../../database/postgreDB/pg`: 查询和完成交接班事务写入。
 
 ## 注意事项
