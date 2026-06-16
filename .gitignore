@@ -59,3 +59,11 @@ node_modules/
 .ai/tasks/*/STATE.json
 .ai/tasks/*/LOG.md
 .ai/archive/
+
+.codegraph
+.codex
+.cursor
+.gemini
+.gitnexus
+.understand-anything
+.venv
