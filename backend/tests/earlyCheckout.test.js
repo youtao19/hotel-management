@@ -1,6 +1,7 @@
 const request = require('supertest');
 const app = require('../app');
 const db = require('../database/postgreDB/pg');
+const { authedRequest } = require('./tools');
 const { createOrder } = require('../modules/order-create/orderCreate.service');
 
 describe('提前退房接口', () => {
@@ -46,7 +47,7 @@ describe('提前退房接口', () => {
       remarks: '提前退房接口测试'
     });
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post(`/api/orders/${orderId}/early-checkout`)
       .send({
         actualCheckoutTime: '2026-01-11T09:00',
@@ -108,7 +109,7 @@ describe('提前退房接口', () => {
       remarks: '未入住退房接口测试'
     });
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post(`/api/orders/${orderId}/early-checkout`)
       .send({
         actualCheckoutTime: '2026-01-15T09:00',

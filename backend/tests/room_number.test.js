@@ -2,6 +2,7 @@ const app = require('../app');
 const request = require('supertest');
 const { query } = require('../database/postgreDB/pg');
 const {
+  authedRequest,
   rooms,
   addRoom,
   roomTypes,
@@ -17,7 +18,7 @@ describe('房间参数验证', () => {
   test('POST /api/rooms 缺少必填字段时返回 400', async () => {
     const invalidPayload = { room_number: 'PARAM_101' };
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post('/api/rooms')
       .send(invalidPayload);
 
@@ -34,7 +35,7 @@ describe('房间参数验证', () => {
       price: 180
     };
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post('/api/rooms')
       .send(invalidPayload);
 
@@ -44,7 +45,7 @@ describe('房间参数验证', () => {
   });
 
   test('PATCH /api/rooms/:number/status 请求体为空时返回 400', async () => {
-    const response = await request(app)
+    const response = await authedRequest()
       .patch('/api/rooms/PARAM_103/status')
       .send({});
 
@@ -53,7 +54,7 @@ describe('房间参数验证', () => {
   });
 
   test('PATCH /api/rooms/:number/status 状态非法时返回 400', async () => {
-    const response = await request(app)
+    const response = await authedRequest()
       .patch('/api/rooms/PARAM_104/status')
       .send({ status: 'invalid-status' });
 
@@ -88,7 +89,7 @@ describe('房间接口测试', () => {
       price: 150
     };
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post('/api/rooms')
       .send(newRoom);
 
@@ -106,7 +107,7 @@ describe('房间接口测试', () => {
       price: 180
     };
 
-    const response = await request(app)
+    const response = await authedRequest()
       .put('/api/rooms/101')
       .send(updatedRoom);
 
@@ -150,7 +151,7 @@ describe('更新房间状态' , () => {
   });
 
   test('更新房间状态 - repair', async () => {
-    const response = await request(app)
+    const response = await authedRequest()
       .patch('/api/rooms/101/status')
       .send({ status: 'repair' });
 
@@ -159,7 +160,7 @@ describe('更新房间状态' , () => {
   });
 
   test('更新房间状态 - cleaning', async () => {
-    const response = await request(app)
+    const response = await authedRequest()
       .patch('/api/rooms/101/status')
       .send({ status: 'cleaning' });
 
@@ -168,7 +169,7 @@ describe('更新房间状态' , () => {
   });
 
   test('更新房间状态 - reserved', async () => {
-    const response = await request(app)
+    const response = await authedRequest()
       .patch('/api/rooms/101/status')
       .send({ status: 'reserved' });
 
@@ -177,7 +178,7 @@ describe('更新房间状态' , () => {
   });
 
   test('更新房间状态 - occupied', async () => {
-    const response = await request(app)
+    const response = await authedRequest()
       .patch('/api/rooms/101/status')
       .send({ status: 'occupied' });
 
@@ -186,7 +187,7 @@ describe('更新房间状态' , () => {
   });
 
   test('更新房间状态 - available', async () => {
-    const response = await request(app)
+    const response = await authedRequest()
       .patch('/api/rooms/101/status')
       .send({ status: 'available' });
 
@@ -292,7 +293,7 @@ describe('获取可用房间列表', () => {
     });
 
     // 查询该天的可用房间
-    const response = await request(app)
+    const response = await authedRequest()
       .get('/api/rooms/available')
       .query({ startDate: '2024-12-01', endDate: '2024-12-01' });
 
@@ -316,7 +317,7 @@ describe('获取可用房间列表', () => {
       checkOutDate: '2024-12-13'
     });
 
-    const response = await request(app)
+    const response = await authedRequest()
       .get('/api/rooms/available')
       .query({ startDate: '2024-12-12', endDate: '2024-12-14' });
 
@@ -335,7 +336,7 @@ describe('获取可用房间列表', () => {
       checkOutDate: '2025-10-15'
     });
 
-    const response = await request(app)
+    const response = await authedRequest()
       .get('/api/rooms/available')
       .query({ startDate: '2025-10-10', endDate: '2025-10-15' });
 
@@ -345,7 +346,7 @@ describe('获取可用房间列表', () => {
     expect(availableNumbers).toEqual(expect.arrayContaining(['A201', 'A202', 'A203']));
 
 
-    const response2 = await request(app)
+    const response2 = await authedRequest()
       .get('/api/rooms/available')
       .query({ startDate: '2025-10-07', endDate: '2025-10-13' });
 
@@ -354,7 +355,7 @@ describe('获取可用房间列表', () => {
     expect(availableNumbers2).not.toContain('A204');
     expect(availableNumbers2).toEqual(expect.arrayContaining(['A201', 'A202', 'A203']));
 
-    const response3 = await request(app)
+    const response3 = await authedRequest()
       .get('/api/rooms/available')
       .query({ startDate: '2025-10-11', endDate: '2025-10-14' });
 
@@ -363,7 +364,7 @@ describe('获取可用房间列表', () => {
     expect(availableNumbers3).not.toContain('A204');
     expect(availableNumbers3).toEqual(expect.arrayContaining(['A201', 'A202', 'A203']));
 
-    const response4 = await request(app)
+    const response4 = await authedRequest()
       .get('/api/rooms/available')
       .query({ startDate: '2025-10-13', endDate: '2025-10-20' });
     expect(response4.statusCode).toBe(200);
@@ -394,7 +395,7 @@ describe('获取可用房间列表', () => {
       checkOutDate: '2025-11-10'
     });
 
-    const response = await request(app)
+    const response = await authedRequest()
       .get('/api/rooms/available')
       .query({ startDate: '2025-11-04', endDate: '2025-11-08' });
 
@@ -405,7 +406,7 @@ describe('获取可用房间列表', () => {
     expect(availableNumbers).not.toContain('A203');
     expect(availableNumbers).toEqual(expect.arrayContaining(['A204']));
 
-    const response2 = await request(app)
+    const response2 = await authedRequest()
       .get('/api/rooms/available')
       .query({ startDate: '2025-11-05', endDate: '2025-11-06' });
 
@@ -426,7 +427,7 @@ describe('获取房间', () => {
     await addRoomType(roomTypes);
     await addRoom(rooms);
 
-    const response = await request(app)
+    const response = await authedRequest()
       .get('/api/rooms/');
 
     expect(response.statusCode).toBe(200);
@@ -435,7 +436,7 @@ describe('获取房间', () => {
   });
 
   test('根据房间号获取房间信息', async () => {
-    const response = await request(app)
+    const response = await authedRequest()
       .get('/api/rooms/number/101');
 
     expect(response.statusCode).toBe(200);

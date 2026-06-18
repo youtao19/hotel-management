@@ -1,6 +1,7 @@
 const request = require('supertest');
 const app = require('../../app');
 const { query } = require('../../database/postgreDB/pg');
+const { authedRequest } = require('../tools');
 
 // 中文注释：固定测试日期，避免依赖数据库 current_date 导致断言不稳定。
 const TARGET_DATE = '2026-02-10';
@@ -92,7 +93,7 @@ describe('收入统计：补收与租车收入口径', () => {
   });
 
   test('GET /api/revenue/quick-stats：单日口径包含补收与租车收入', async () => {
-    const res = await request(app)
+    const res = await authedRequest()
       .get('/api/revenue/quick-stats')
       .query({ startDate: TARGET_DATE, endDate: TARGET_DATE });
 
@@ -102,7 +103,7 @@ describe('收入统计：补收与租车收入口径', () => {
   });
 
   test('GET /api/revenue/series?bucket=daily：每日趋势包含补收与租车收入', async () => {
-    const res = await request(app)
+    const res = await authedRequest()
       .get('/api/revenue/series')
       .query({
         startDate: PREV_DATE,
@@ -129,7 +130,7 @@ describe('收入统计：补收与租车收入口径', () => {
   });
 
   test('GET /api/revenue/daily-details：明细表口径与今日收入一致', async () => {
-    const res = await request(app)
+    const res = await authedRequest()
       .get('/api/revenue/daily-details')
       .query({
         startDate: TARGET_DATE,
@@ -154,7 +155,7 @@ describe('收入统计：补收与租车收入口径', () => {
   });
 
   test('GET /api/revenue/bills：支持多条件筛选（日期+支付方式+账单类型）', async () => {
-    const res = await request(app)
+    const res = await authedRequest()
       .get('/api/revenue/bills')
       .query({
         date: TARGET_DATE,

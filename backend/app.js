@@ -1,11 +1,9 @@
 "use strict";
 const express = require("express");
-const session = require("express-session");
 const setup = require("./appSettings/setup");
 const posgreDB = require("./database/postgreDB/pg");
 const authtication = require("./modules/auth/auth.middleware");
 const RedisDb = require('./database/redis/redis');
-const { RedisStore } = require("connect-redis");
 const path = require("path");
 
 let app = express();
@@ -29,9 +27,9 @@ const staticFileRoot = path.join(__dirname, 'frontend_dist');
 const cors = require('cors');
 
 // 允许来自测试端口和开发端口的访问
+// JWT 走 Authorization 头，不依赖 cookie，无需 credentials，保留以兼容历史请求
 app.use(cors({
-  origin: ['http://localhost:9011', 'http://localhost:9000'],
-  credentials: true
+  origin: ['http://localhost:9011', 'http://localhost:9000']
 }));
 
 // 解析中间件
@@ -55,43 +53,45 @@ app.use(express.text({
 
 
 
-// 初始化 session 和 Redis store 的函数
-async function initializeSession() {
-    const redisClient = await RedisDb.initialize();
+// 初始化 Redis 客户端（验证码、登录限流仍依赖 Redis）并挂载路由的函数
+async function initializeRoutes() {
+    await RedisDb.initialize();
 
-    const sessionOptions = {
-        name: setup.appName + ".sid",
-        store: new RedisStore({ client: redisClient }),
-        secret: setup.sessionSecret,
-        resave: false,
-        rolling: false,
-        cookie: {
-            secure: setup.env === "production", // ✅ 只有生产环境才用 true
-            maxAge: setup.cookieMaxAge,
-            sameSite: setup.env === "production" ? "none" : "lax", // ✅ 生产环境用 none，其他用 lax
-            httpOnly: true // ✅ 添加安全性
-        },
-        saveUninitialized: false,
-    };
-
-    if (setup.env === "production") {
-        sessionOptions.proxy = true;
-        app.set("trust proxy", true);
-    }
-
-    // ✅ 先注册 session 和 authentication 中间件
-    app.use(session(sessionOptions));
+    // Bearer token 解析中间件：解析成功写 req.account，失败不拦截，由 ensureAuthenticated 守卫
     app.use(authtication.authenticationMiddleware);
 
-    console.log('Session 中间件已初始化');
+    console.log('认证中间件已初始化');
 
-    // ✅ 然后注册所有路由 (确保在中间件之后)
+    // 公开入口：员工认证、健康检查、外部渠道/插件回调
     const userRoute = require("./modules/auth/authUser.routes");
     app.use("/api/user", userRoute);
 
     const authRoute = require("./modules/auth/auth.routes");
     app.use("/api/auth", authRoute);
 
+    app.get("/api/hup", (req, res) => res.status(200).json({ ok: true }));
+
+    // 外部入口（自有签名鉴权，不走员工 JWT）
+    const otaRoute = require("./routes/ota");
+    app.use("/ota", otaRoute);
+
+    const douyinExternalRoute = require("./modules/douyin/external/external.routes");
+    app.use("/douyin", douyinExternalRoute);
+
+    const pluginRoute = require("./routes/plugin/plugin-order.routes");
+    app.use("/api/plugin", pluginRoute);
+
+    const pluginRoomTypeRoute = require("./routes/plugin/plugin-room-types.api");
+    app.use("/api/plugin/room-types", pluginRoomTypeRoute);
+
+    const pluginRoomTypeMappingRoute = require("./routes/plugin/room-map/room-map.routes");
+    app.use("/api/plugin/room-type-mapping", pluginRoomTypeMappingRoute);
+
+    // 员工 JWT 鉴权守卫：所有后续 /api 业务路由需要 Bearer token
+    // 测试和真实环境使用同一套 JWT 校验逻辑；集成测试通过 tools.js 的 authHeader() 或 authedRequest() 注入 token
+    app.use("/api", authtication.ensureAuthenticated);
+
+    // 受保护后台业务路由
     const orderCreateRoutes = require("./modules/order-create/orderCreate.routes");
     app.use("/api/orders", orderCreateRoutes);
 
@@ -116,9 +116,6 @@ async function initializeSession() {
     const douyinAriNotifyRoute = require("./modules/douyin/availability/ariNotify.routes");
     app.use("/api/douyin/ari-notify", douyinAriNotifyRoute);
 
-    const douyinExternalRoute = require("./modules/douyin/external/external.routes");
-    app.use("/douyin", douyinExternalRoute);
-
     const billRoutes = require("./modules/bill/bill.routes");
     app.use("/api/bills", billRoutes);
 
@@ -133,23 +130,6 @@ async function initializeSession() {
 
     const dashboardRoutes = require("./modules/dashboard/dashboard.routes");
     app.use("/api/dashboard/memos", dashboardRoutes);
-
-    const otaRoute = require("./routes/ota");
-    app.use("/ota", otaRoute);
-
-    const pluginRoute = require("./routes/plugin/plugin-order.routes");
-    app.use("/api/plugin", pluginRoute);
-
-    const pluginRoomTypeRoute = require("./routes/plugin/plugin-room-types.api");
-    app.use("/api/plugin/room-types", pluginRoomTypeRoute);
-
-    const pluginRoomTypeMappingRoute = require("./routes/plugin/room-map/room-map.routes");
-    app.use("/api/plugin/room-type-mapping", pluginRoomTypeMappingRoute);
-
-    // 只注册当前已重建并可验签的抖音外部回调入口；历史 /api/douyin/* 模块仍保持停用。
-    // 本地售卖套餐 CRUD 已迁移到 /api/rate-plans，不依赖历史抖音路由。
-
-    app.get("/api/hup", (req, res) => res.status(200).json({ ok: true }));
 
     // ✅ SPA History Fallback - 必须在静态文件服务之前
     const history = require('connect-history-api-fallback');
@@ -168,4 +148,4 @@ async function initializeSession() {
 }
 
 module.exports = app;
-module.exports.initializeSession = initializeSession;
+module.exports.initializeSession = initializeRoutes;

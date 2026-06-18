@@ -72,6 +72,17 @@ const autoBillConfig = {
   monitorWithEmailOnly: true
 };
 
+// JWT secret: production must configure JWT_SECRET, dev/test fall back to sessionSecret.
+const jwtSecret = process.env.JWT_SECRET || setup_fallbackSecret();
+
+function setup_fallbackSecret() {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Missing env : JWT_SECRET');
+  }
+  // dev/test 环境缺少 JWT_SECRET 时沿用旧 sessionSecret，避免本地联调被卡住。
+  return process.env.APP_NAME + '2023';
+}
+
 const setup = {
   opanaiKey: process.env.OPENAI_O_KEY,
   openaiHost: process.env.OPENAI_HOST,
@@ -80,6 +91,8 @@ const setup = {
   env: process.env.NODE_ENV,
   appName: process.env.APP_NAME,
   sessionSecret: process.env.APP_NAME + "2023",
+  jwtSecret,
+  jwtExpiresIn: "14d",
   appUrl: process.env.APP_URL,
   cookieMaxAge: 1000 * 60 * 60 * 24 * 7 * 2, //2 weeks
   reqSizeLimit: "1mb",

@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const roomRouter = express.Router();
-const { authenticationMiddleware } = require('../auth/auth.middleware');
 const controller = require('./orderManage.controller');
 
 router.use(express.json());
@@ -13,7 +12,7 @@ router.get('/', controller.listOrders);
 router.get('/daily', controller.listDailyOrders);
 
 // 获取提前退房的建议退款金额和可退日期。
-router.get('/:orderNumber/early-checkout/recommendation', authenticationMiddleware, controller.getEarlyCheckoutRecommendation);
+router.get('/:orderNumber/early-checkout/recommendation', controller.getEarlyCheckoutRecommendation);
 
 // 获取订单押金状态和当前可退金额。
 router.get('/:order_id/deposit-info', controller.getDepositInfo);
@@ -25,7 +24,7 @@ router.get('/:id', controller.getOrder);
 router.post('/:orderNumber/status', controller.updateOrderStatus);
 
 // 办理提前退房并生成退款相关结果。
-router.post('/:orderNumber/early-checkout', authenticationMiddleware, controller.earlyCheckout);
+router.post('/:orderNumber/early-checkout', controller.earlyCheckout);
 
 // 办理订单退押金。
 router.post('/:order_id/refund-deposit', controller.refundDeposit);
@@ -34,16 +33,16 @@ router.post('/:order_id/refund-deposit', controller.refundDeposit);
 router.post('/:orderId/check-out', controller.checkOut);
 
 // 修改订单某一天的房间号。
-router.put('/:orderNumber/day-room', authenticationMiddleware, controller.updateOrderDayRoom);
+router.put('/:orderNumber/day-room', controller.updateOrderDayRoom);
 
 // 兼容旧路径：订单详情页整单更换房间。
 roomRouter.post('/change-room', controller.changeOrderRoom);
 
 // 同时修改订单信息、每日房价和相关账单。
-router.put('/:orderNumber/with-bills', authenticationMiddleware, controller.updateOrderWithBills);
+router.put('/:orderNumber/with-bills', controller.updateOrderWithBills);
 
 // 修改订单基础信息。
-router.put('/:orderNumber', authenticationMiddleware, controller.updateOrder);
+router.put('/:orderNumber', controller.updateOrder);
 
 router.roomRoutes = roomRouter;
 

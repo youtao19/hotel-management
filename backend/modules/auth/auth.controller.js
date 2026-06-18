@@ -1,7 +1,7 @@
 "use strict";
 
-const setup = require("../../appSettings/setup");
 const authService = require("./auth.service");
+const { signAccountToken } = require("./jwt.helper");
 const {
   validateCode,
   validateEmail,
@@ -54,6 +54,7 @@ async function signup(req, res) {
 /**
  * 员工登录。
  * 未验证邮箱仍按登录失败计入限流，防止绕过账号保护。
+ * 登录成功后签发 JWT，前端保存到 localStorage 并作为 Bearer token 携带。
  */
 async function login(req, res) {
   try {
@@ -65,9 +66,13 @@ async function login(req, res) {
     const result = await authService.login({
       email: req.body.email,
       pw: req.body.pw,
-      ipAddr: req.ip,
-      login: req.login.bind(req)
+      ipAddr: req.ip
     });
+
+    if (result.status === 200 && result.body) {
+      result.body = { ...result.body, token: signAccountToken(result.body) };
+    }
+
     return sendServiceResult(res, result);
   } catch (error) {
     console.error("some error occurred in login", error);
@@ -166,50 +171,20 @@ async function checkResetCode(req, res) {
 }
 
 /**
- * 登出时无论 session 是否存在都清 cookie。
- * 用户点登出表达的是退出意图，后端销毁失败也不应把前端卡住。
+ * 前端清理 token 的触发通道。
+ * JWT 无状态，后端不维护 session 或 token 黑名单；仅向前端返回成功语义。
  */
-async function logout(req, res) {
-  const cookieName = `${setup.appName}.sid`;
-  const clearOptions = {
-    path: "/",
-    httpOnly: true,
-    sameSite: setup.env === "production" ? "none" : "lax",
-    secure: setup.env === "production"
-  };
-
-  try {
-    if (req.session && req.logout) {
-      await req.logout();
-    } else if (req.session) {
-      await new Promise((resolve, reject) => {
-        req.session.destroy((error) => {
-          if (error) {
-            console.error("Session destroy 失败:", error);
-            reject(error);
-          } else {
-            resolve();
-          }
-        });
-      });
-    }
-
-    res.clearCookie(cookieName, clearOptions);
-    return res.status(200).json({ message: "登出成功" });
-  } catch (error) {
-    console.error("登出操作失败:", error);
-    res.clearCookie(cookieName, clearOptions);
-    return res.status(200).json({ message: "登出完成" });
-  }
+async function logout(_req, res) {
+  return res.status(200).json({ message: "登出成功" });
 }
 
 async function getCurrentUser(req, res) {
   try {
-    if (!req.session.account || !req.session.account.id) {
+    if (!req.account || !req.account.id) {
       return res.status(401).json({ message: "未登录" });
     }
 
-    const rows = await authService.getCurrentUser(req.session.account.id);
+    const rows = await authService.getCurrentUser(req.account.id);
     if (rows.length === 0) {
       return res.status(404).json({ message: "用户不存在" });
     }
@@ -223,7 +198,7 @@ async function getCurrentUser(req, res) {
 
 async function getCurrentUserEmailVerified(req, res) {
   try {
-    const result = await authService.getCurrentUserEmailVerified(req.session.account.id);
+    const result = await authService.getCurrentUserEmailVerified(req.account.id);
     return res.status(200).json(result);
   } catch (error) {
     console.log(`/check/email route failed with error ${error}`);

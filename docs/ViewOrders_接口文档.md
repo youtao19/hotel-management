@@ -10,13 +10,15 @@
 
 ## 2. 基础约定
 - 前端 Axios `baseURL`：`/api`
-- 前端默认 `withCredentials: true`（会携带 session cookie）
+- 前端通过请求拦截器在 `Authorization: Bearer <token>` 中携带员工登录 JWT（不再依赖 session cookie）
+- 后台业务 `/api` 路由统一由员工 JWT 守卫保护，缺少/过期/非法 token 返回 `401`
 - 页面主路由：`/ViewOrders`
 
 ### 2.1 通用状态码（约定）
 - `200` 成功
 - `201` 创建成功
 - `400` 参数/业务校验失败
+- `401` 未登录或 token 失效
 - `404` 资源不存在
 - `500` 服务端异常
 

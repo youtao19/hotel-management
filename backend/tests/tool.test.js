@@ -1,14 +1,14 @@
 const app = require('../app');
 const request = require('supertest');
 
-const {roomTypes,rooms,ORDERS,addRoomType,addRoom} = require('./tools');
+const {authedRequest, roomTypes,rooms,ORDERS,addRoomType,addRoom} = require('./tools');
 const { createOrder } = require('../modules/order-create/orderCreate.service');
 
 describe('工具测试', () => {
   test('添加房间类型', async () => {
     await addRoomType(roomTypes);
 
-    const response = await request(app)
+    const response = await authedRequest()
       .get('/api/room-types/');
 
     expect(response.statusCode).toBe(200);
@@ -19,7 +19,7 @@ describe('工具测试', () => {
   test('添加房间', async () => {
     await addRoom(rooms);
 
-    const response = await request(app)
+    const response = await authedRequest()
       .get('/api/rooms/');
 
     expect(response.statusCode).toBe(200);
@@ -33,7 +33,7 @@ describe('工具测试', () => {
       await createOrder(order);
     }
 
-    const response = await request(app)
+    const response = await authedRequest()
       .get('/api/orders/');
 
     expect(response.statusCode).toBe(200);

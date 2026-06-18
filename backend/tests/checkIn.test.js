@@ -1,7 +1,7 @@
 const request = require('supertest');
 const app = require('../app');
 const { query } = require('../database/postgreDB/pg');
-const { addRoomType, addRoom, buildOrderPayload, roomTypes, rooms, ORDERS} = require('./tools');
+const { authedRequest, authHeader, addRoomType, addRoom, buildOrderPayload, roomTypes, rooms, ORDERS} = require('./tools');
 const { createOrder } = require('../modules/order-create/orderCreate.service');
 
 
@@ -21,7 +21,7 @@ describe('办理入住接口', () => {
     const orderId = orderPayload.orderId;
     const depositAmount = 20;
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post(`/api/orders/${orderId}/check-in`)
       .send({ deposit: depositAmount });
 
@@ -51,7 +51,7 @@ describe('办理入住接口', () => {
     });
     await createOrder(orderPayload);
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post(`/api/orders/${orderPayload.orderId}/check-in`)
       .send({
         deposit: 66,
@@ -94,7 +94,7 @@ describe('办理入住接口', () => {
     });
     await createOrder(orderPayload);
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post(`/api/orders/${orderPayload.orderId}/check-in`)
       .send({
         deposit: 80,
@@ -159,7 +159,7 @@ describe('办理入住接口', () => {
     await createOrder(orderPayload);
     const orderId = orderPayload.orderId;
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post(`/api/orders/${orderId}/check-in`)
       .send({});
 
@@ -179,7 +179,7 @@ describe('办理入住接口', () => {
   });
 
   test('订单不存在时返回 404', async () => {
-    const response = await request(app)
+    const response = await authedRequest()
       .post(`/api/orders/${12345}NOT_FOUND/check-in`)
       .send({ deposit: 100 });
 
@@ -199,7 +199,7 @@ describe('办理入住接口', () => {
     const orderId = orderPayload.orderId;
 
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post(`/api/orders/${orderId}/check-in`)
       .send({ deposit: 200 });
 
@@ -239,7 +239,7 @@ describe('快速入住接口', () => {
     });
 
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post('/api/orders/fast-check-in')
       .send(payload);
 
@@ -277,7 +277,7 @@ describe('快速入住接口', () => {
       status: 'pending'
     });
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post('/api/orders/fast-check-in')
       .send(payload);
 
@@ -312,7 +312,7 @@ describe('快速入住接口', () => {
       status: 'pending'
     });
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post('/api/orders/fast-check-in')
       .send(payload);
 
@@ -352,7 +352,7 @@ describe('快速入住接口', () => {
       status: 'pending'
     });
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post('/api/orders/fast-check-in')
       .send(payload);
 
@@ -404,7 +404,7 @@ describe('快速入住接口', () => {
       status: 'pending'
     });
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post('/api/orders/fast-check-in')
       .send(payload);
 
@@ -461,7 +461,7 @@ describe('快速入住接口', () => {
       status: 'pending'
     });
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post('/api/orders/fast-check-in')
       .send(payload);
 
@@ -492,7 +492,7 @@ describe('快速入住接口', () => {
     });
     delete payload.roomNumber; // 明确删除 roomNumber 字段
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post('/api/orders/fast-check-in')
       .send(payload);
 

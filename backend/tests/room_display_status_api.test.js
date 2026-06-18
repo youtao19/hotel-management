@@ -2,6 +2,7 @@ const request = require('supertest');
 const app = require('../app');
 const { query } = require('../database/postgreDB/pg');
 const {
+  authedRequest,
   roomTypes,
   rooms,
   buildOrderPayload,
@@ -48,7 +49,7 @@ describe('房态 API - display_status（SQL计算）', () => {
 
     await createOrder(orderPayload);
 
-    const res = await request(app).get('/api/rooms').query({ date: '2025-12-10' });
+    const res = await authedRequest().get('/api/rooms').query({ date: '2025-12-10' });
     expect(res.statusCode).toBe(200);
     expect(Array.isArray(res.body.data)).toBe(true);
 
@@ -75,7 +76,7 @@ describe('房态 API - display_status（SQL计算）', () => {
 
     await createOrder(orderPayload);
 
-    const res = await request(app).get('/api/rooms').query({ date: '2025-12-20' });
+    const res = await authedRequest().get('/api/rooms').query({ date: '2025-12-20' });
     expect(res.statusCode).toBe(200);
 
     const room105 = findRoom(res.body.data, '105');
@@ -101,7 +102,7 @@ describe('房态 API - display_status（SQL计算）', () => {
 
     await createOrder(orderPayload);
 
-    const res = await request(app).get('/api/rooms').query({ date: '2025-12-21' });
+    const res = await authedRequest().get('/api/rooms').query({ date: '2025-12-21' });
     expect(res.statusCode).toBe(200);
 
     const room106 = findRoom(res.body.data, '106');
@@ -129,7 +130,7 @@ describe('房态 API - display_status（SQL计算）', () => {
 
     await createOrder(orderPayload);
 
-    const res = await request(app).get('/api/rooms').query({ date: '2025-12-12' });
+    const res = await authedRequest().get('/api/rooms').query({ date: '2025-12-12' });
     expect(res.statusCode).toBe(200);
 
     const room113 = findRoom(res.body.data, '113');
@@ -160,7 +161,7 @@ describe('房态 API - display_status（SQL计算）', () => {
 
     await createOrder(orderPayload);
 
-    const res = await request(app)
+    const res = await authedRequest()
       .get('/api/rooms/status-range')
       .query({ roomNumber: '108', startDate: '2025-12-15', endDate: '2025-12-18' });
 

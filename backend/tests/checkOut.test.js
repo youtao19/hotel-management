@@ -27,7 +27,7 @@ describe('订单退房接口', () => {
     await createOrder(order);
 
     // 调用退房接口
-    const response = await request(app)
+    const response = await tools.authedRequest()
       .post(`/api/orders/${order.orderId}/check-out`);
 
     expect(response.status).toBe(200);
@@ -66,7 +66,7 @@ describe('订单退房接口', () => {
     await createOrder(order);
 
     // 调用退房接口
-    const response = await request(app)
+    const response = await tools.authedRequest()
       .post(`/api/orders/${order.orderId}/check-out`);
 
     expect(response.status).toBe(200);
@@ -102,7 +102,7 @@ describe('订单退房接口', () => {
     await createOrder(order);
 
     // 调用退房接口
-    const response = await request(app)
+    const response = await tools.authedRequest()
       .post(`/api/orders/${order.orderId}/check-out`);
 
     expect(response.status).toBe(200);

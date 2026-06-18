@@ -1,7 +1,7 @@
 const request = require('supertest');
 const app = require('../app');
 const { query } = require('../database/postgreDB/pg');
-const { addRoomType, addRoom,buildOrderPayload,roomTypes,rooms } = require('./tools');
+const { authedRequest, authHeader, addRoomType, addRoom,buildOrderPayload,roomTypes,rooms } = require('./tools');
 const { createOrder } = require('../modules/order-create/orderCreate.service');
 
 describe('订单修改接口集成测试', () => {
@@ -19,7 +19,7 @@ describe('订单修改接口集成测试', () => {
     await createOrder(createPayload);
 
     // 步骤 2：调用详情接口确认订单已存在
-    const detailResponse = await request(app)
+    const detailResponse = await authedRequest()
       .get(`/api/orders/${orderId}`);
 
     expect(detailResponse.statusCode).toBe(200);
@@ -34,7 +34,7 @@ describe('订单修改接口集成测试', () => {
     };
 
     // 步骤 3：调用修改接口更新订单关键信息
-    const updateResponse = await request(app)
+    const updateResponse = await authedRequest()
       .put(`/api/orders/${orderId}`)
       .send(updatePayload);
 
@@ -43,7 +43,7 @@ describe('订单修改接口集成测试', () => {
     expect(updateResponse.body.data[0].payment_method).toBe(updatePayload.payment_method);
 
     // 步骤 4：再次查询订单，确认所有修改生效
-    const finalDetailResponse = await request(app)
+    const finalDetailResponse = await authedRequest()
       .get(`/api/orders/${orderId}`);
 
     expect(finalDetailResponse.statusCode).toBe(200);
@@ -69,12 +69,12 @@ describe('订单修改接口集成测试', () => {
     await createOrder(createPayload);
 
     // 先办理入住，生成原始房费/押金账单。
-    const checkInResponse = await request(app)
+    const checkInResponse = await authedRequest()
       .post(`/api/orders/${orderId}/check-in`)
       .send({ deposit: 100 });
     expect(checkInResponse.statusCode).toBe(200);
 
-    const updateResponse = await request(app)
+    const updateResponse = await authedRequest()
       .put(`/api/orders/${orderId}/with-bills`)
       .send({
         orderData: {

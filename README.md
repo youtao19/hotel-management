@@ -61,7 +61,7 @@
 | 层级 | 技术 |
 | --- | --- |
 | 前端 | Vue 3、Quasar、Pinia、Axios、Chart.js、Material Icons |
-| 后端 | Node.js、Express 5、AJV、express-session、bcrypt、node-cron |
+| 后端 | Node.js、Express 5、AJV、JWT(jsonwebtoken)、bcrypt、node-cron |
 | 数据 | PostgreSQL、Redis |
 | 测试 | Jest、Supertest、Playwright |
 | 工程 | npm workspaces、Docker Compose、GitHub Actions、nodemon、concurrently |
@@ -77,7 +77,7 @@ hotel-management/
 │       ├── stores/           # Pinia
 │       └── router/
 ├── backend/                  # Express API
-│   ├── app.js                # 中间件、Session、路由注册、静态资源托管
+│   ├── app.js                # 中间件、JWT 鉴权、路由注册、静态资源托管
 │   ├── modules/              # 页面/业务导向模块
 │   ├── routes/               # 渠道、账单、交接班等路由
 │   ├── database/             # PostgreSQL 表定义与 Redis 连接
@@ -200,7 +200,8 @@ cp dev.env.template dev.env
 | `NODE_ENV` / `NODE_PORT` | 后端运行环境与端口 |
 | `POSTGRES_HOST` / `POSTGRES_PORT` / `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | PostgreSQL 连接 |
 | `REDIS_HOST` / `REDIS_PORT` / `REDIS_PW` | Redis 连接 |
-| `APP_URL` / `APP_NAME` | 应用地址与 session cookie 名称 |
+| `APP_URL` / `APP_NAME` | 应用地址与名称 |
+| `JWT_SECRET` | 员工登录态 JWT 签名密钥（生产必填，dev/test 缺省时回落到 `APP_NAME`） |
 | `AUTO_BILL_*` | 自动账单任务配置 |
 | `OTA_*` | OTA 渠道签名、防重放和开关配置 |
 | `PLUGIN_*` | 插件 API 动态签名配置 |

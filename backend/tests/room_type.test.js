@@ -2,7 +2,7 @@ const app = require('../app');
 const request = require('supertest');
 const { query } = require('../database/postgreDB/pg');
 // 引入房型/房间/订单测试工具，构造删除房型关联订单用例数据
-const { roomTypes, addRoomType, addRoom, createOrder, buildOrderPayload } = require('./tools');
+const { authedRequest, authHeader, roomTypes, addRoomType, addRoom, createOrder, buildOrderPayload } = require('./tools');
 
 describe('参数验证测试', () => {
   test('POST /api/room-types 缺少必填字段时返回 400', async () => {
@@ -10,7 +10,7 @@ describe('参数验证测试', () => {
       type_code: 'INVALID'
     };
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post('/api/room-types')
       .send(invalidPayload);
 
@@ -27,7 +27,7 @@ describe('参数验证测试', () => {
       description: '测试描述'
     };
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post('/api/room-types')
       .send(invalidPayload);
 
@@ -45,7 +45,7 @@ describe('参数验证测试', () => {
       extra_field: 'should be rejected'
     };
 
-    const response = await request(app)
+    const response = await authedRequest()
       .put('/api/room-types/EXTRA_CODE')
       .send(invalidPayload);
 
@@ -65,7 +65,7 @@ describe('房型接口测试', () => {
       description: '宽敞舒适的豪华房'
     };
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post('/api/room-types')
       .send(newRoomType);
 
@@ -85,7 +85,7 @@ describe('房型接口测试', () => {
       description: '享有海景的宽敞舒适豪华房'
     };
 
-    const response = await request(app)
+    const response = await authedRequest()
       .put('/api/room-types/DELUXE')
       .send(updatedRoomType);
 
@@ -98,7 +98,7 @@ describe('房型接口测试', () => {
   });
 
   test('删除房型', async () => {
-    const response = await request(app)
+    const response = await authedRequest()
       .delete('/api/room-types/DELUXE');
 
     expect(response.statusCode).toBe(200);
@@ -137,7 +137,7 @@ describe('房型接口测试', () => {
         stayType: '客房'
       }));
 
-      const response = await request(app)
+      const response = await authedRequest()
         .delete(`/api/room-types/${typeCode}`);
 
       expect(response.statusCode).toBe(400);
@@ -153,7 +153,7 @@ describe('房型接口测试', () => {
   test('获取所有房型', async () => {
     await addRoomType(roomTypes);
 
-    const response = await request(app)
+    const response = await authedRequest()
       .get('/api/room-types/');
 
     expect(response.statusCode).toBe(200);
@@ -162,28 +162,28 @@ describe('房型接口测试', () => {
   });
 
   test('根据类型代码获取房型', async () => {
-    const response = await request(app)
+    const response = await authedRequest()
       .get('/api/room-types/asu_xiao_zhu');
 
     expect(response.statusCode).toBe(200);
     expect(response.body.data.type_code).toBe('asu_xiao_zhu');
     expect(response.body.data.type_name).toBe('阿苏晓筑');
 
-    const response2 = await request(app)
+    const response2 = await authedRequest()
       .get('/api/room-types/bo_ye_shuang');
 
     expect(response2.statusCode).toBe(200);
     expect(response2.body.data.type_code).toBe('bo_ye_shuang');
     expect(response2.body.data.type_name).toBe('泊野双床');
 
-    const response3 = await request(app)
+    const response3 = await authedRequest()
       .get('/api/room-types/zui_shan_tang');
 
     expect(response3.statusCode).toBe(200);
     expect(response3.body.data.type_code).toBe('zui_shan_tang');
     expect(response3.body.data.type_name).toBe('醉山塘');
 
-    const response4 = await request(app)
+    const response4 = await authedRequest()
       .get('/api/room-types/non_existent_code');
 
     expect(response4.statusCode).toBe(404);

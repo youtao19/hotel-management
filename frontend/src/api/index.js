@@ -1,18 +1,37 @@
 import axios from 'axios'
 
+// JWT token 在 localStorage 中的 key
+const AUTH_TOKEN_KEY = 'auth_token'
+
+function getAuthToken() {
+  return localStorage.getItem(AUTH_TOKEN_KEY)
+}
+
+export function setAuthToken(token) {
+  if (token) {
+    localStorage.setItem(AUTH_TOKEN_KEY, token)
+  } else {
+    localStorage.removeItem(AUTH_TOKEN_KEY)
+  }
+}
+
 // 创建axios实例
 const api = axios.create({
   // 使用相对路径，通过 Vite/Quasar 的 proxy 转发到后端
   // Docker 环境：proxy 会转发到 http://backend:3000
   // 本地开发：proxy 会转发到 http://localhost:3000
   baseURL: '/api',
-  timeout: 30000, // 增加到30秒
-  withCredentials: true // 允许携带session cookie
+  timeout: 30000 // 增加到30秒
+  // JWT 走 Authorization 头，不再依赖 session cookie，无需 withCredentials
 })
 
-// 请求拦截器
+// 请求拦截器：业务请求统一注入 Bearer token
 api.interceptors.request.use(
   config => {
+    const token = getAuthToken()
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
     return config
   },
   error => {
@@ -43,19 +62,25 @@ api.interceptors.response.use(
       }
     }
 
-    // 处理错误响应
     if (error.response) {
       const status = error.response.status
       const url = originalRequest.url
 
-      // 对于 /user/info 接口的 401 错误，完全静默处理
+      // /auth/login 返回 401 表示账号未授权，由登录页自行处理，不要清理 token
+      const isLoginRequest = url === '/auth/login' || url.endsWith('/auth/login')
+
+      // 对于 /user/info 接口的 401 错误，完全静默处理，但仍需清理过期 token
       if (status === 401 && (url === '/user/info' || url.endsWith('/user/info'))) {
         // 不记录任何日志，静默处理
+        setAuthToken(null)
+      } else if (status === 401 && !isLoginRequest) {
+        // 其他业务接口 401：token 失效或未登录，清理本地登录态
+        // 避免循环依赖：这里不直接调用 store，仅清 token，路由守卫会重定向到登录页
+        setAuthToken(null)
+        console.warn('登录态已失效，请重新登录')
       } else if (status !== 401) {
-        // 其他非 401 错误正常记录
         console.error('API请求错误:', error.response || error)
       }
-      // 其他 401 错误（非 user/info 接口）也不记录日志，但组件可以自行处理
     } else {
       console.error('网络请求失败:', error.message || error)
     }

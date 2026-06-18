@@ -2,6 +2,47 @@ const db = require('../database/postgreDB/pg');
 const request = require('supertest');
 const app = require('../app');
 const { createOrder } = require('../modules/order-create/orderCreate.service');
+const { signAccountToken } = require('../modules/auth/jwt.helper');
+
+/**
+ * 签发用于集成测试的员工 JWT。
+ * 测试只表达"这是已登录员工请求"，不关心签名算法和密钥细节。
+ * @param {{id?:number,name?:string,email?:string}} [accountOverride] 覆盖默认测试账号字段
+ * @returns {string} 签名后的 JWT
+ */
+function createTestAuthToken(accountOverride = {}) {
+  return signAccountToken({
+    id: accountOverride.id || 1,
+    name: accountOverride.name || '测试账号',
+    email: accountOverride.email || 'test@example.com'
+  });
+}
+
+/**
+ * 返回包含 Bearer token 的基础请求头对象，供 supertest .set() 使用。
+ * @param {object} [accountOverride] 覆盖默认测试账号字段
+ * @returns {{Authorization:string}} 请求头对象
+ */
+function authHeader(accountOverride) {
+  return { Authorization: `Bearer ${createTestAuthToken(accountOverride)}` };
+}
+
+/**
+ * 创建携带员工 JWT 的请求包装对象，支持 .get/.post/.put/.patch/.delete。
+ * 每个方法等价于 `request(app)[method](url).set(authHeader(accountOverride))`。
+ * @param {object} [accountOverride] 覆盖默认测试账号字段
+ * @returns {{get:function,post:function,put:function,patch:function,delete:function}} HTTP 方法包装对象
+ */
+function authedRequest(accountOverride) {
+  const headers = authHeader(accountOverride);
+  return {
+    get(url) { return request(app).get(url).set(headers); },
+    post(url) { return request(app).post(url).set(headers); },
+    put(url) { return request(app).put(url).set(headers); },
+    patch(url) { return request(app).patch(url).set(headers); },
+    delete(url) { return request(app).delete(url).set(headers); },
+  };
+}
 
 const roomTypes = [
   {
@@ -242,5 +283,8 @@ module.exports = {
   addRoomType,
   addRoom,
   createOrder,
-  buildOrderPayload
+  buildOrderPayload,
+  createTestAuthToken,
+  authHeader,
+  authedRequest
 };

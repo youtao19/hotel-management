@@ -2,6 +2,7 @@ const request = require('supertest');
 const app = require('../app');
 const { query } = require('../database/postgreDB/pg');
 const {
+  authedRequest,
   roomTypes,
   rooms,
   buildOrderPayload,
@@ -26,7 +27,7 @@ const toYmd = (value) => {
 
 // 统一获取每日安排并过滤本测试写入的数据
 const fetchDailyRows = async () => {
-  const response = await request(app).get('/api/orders/daily');
+  const response = await authedRequest().get('/api/orders/daily');
   expect(response.statusCode).toBe(200);
   expect(Array.isArray(response.body.data)).toBe(true);
   return response.body.data.filter(row => row.order_id.startsWith(TEST_PREFIX));
@@ -64,7 +65,7 @@ describe('每日房间安排 API - 更换房间场景', () => {
     });
     await createOrder(orderPayload);
 
-    const res = await request(app)
+    const res = await authedRequest()
       .put(`/api/orders/${orderId}/day-room`)
       .send({ stayDate: '2025-10-20', newRoomNumber: '117' }); // 117: you_ge_yuan_zi
 
@@ -94,7 +95,7 @@ describe('每日房间安排 API - 更换房间场景', () => {
     });
     await createOrder(orderPayload);
 
-    const res = await request(app)
+    const res = await authedRequest()
       .put(`/api/orders/${orderId}/day-room`)
       .send({ stayDate: '2025-10-30', newRoomNumber: '102' }); // 102: asu_xiao_zhu，跨房型更换
 
@@ -136,7 +137,7 @@ describe('每日房间安排 API - 更换房间场景', () => {
     ];
 
     for (const { stayDate, newRoomNumber } of changes) {
-      const res = await request(app)
+      const res = await authedRequest()
         .put(`/api/orders/${orderId}/day-room`)
         .send({ stayDate, newRoomNumber });
       expect(res.statusCode).toBe(200);
@@ -174,7 +175,7 @@ describe('每日房间安排 API - 更换房间场景', () => {
     await createOrder(orderPayload);
 
     // 将房型从 bo_ye_shuang 切换到 yun_ju_ying_yin（房间 401）
-    const res = await request(app)
+    const res = await authedRequest()
       .put(`/api/orders/${orderId}/day-room`)
       .send({ stayDate: '2025-11-05', newRoomNumber: '401' });
 

@@ -1,7 +1,7 @@
 const request = require('supertest');
 const app = require('../app');
 const { query } = require('../database/postgreDB/pg');
-const { addRoomType, addRoom, buildOrderPayload, roomTypes,rooms } = require('./tools');
+const { authedRequest, authHeader, addRoomType, addRoom, buildOrderPayload, roomTypes,rooms } = require('./tools');
 const { createOrder, checkIn } = require('../modules/order-create/orderCreate.service');
 const { getOrder: getOrderById, checkOut } = require('../modules/order-manage/orderManage.service');
 
@@ -47,7 +47,7 @@ describe('账单金额调整接口', () => {
       notes: '补收测试 - 正值'
     };
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post('/api/bills/adjustment')
       .send(payload);
 
@@ -75,7 +75,7 @@ describe('账单金额调整接口', () => {
       notes: '退款测试 - 负值'
     };
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post('/api/bills/add')
       .send(payload);
 
@@ -104,7 +104,7 @@ describe('账单金额调整接口', () => {
       notes: '退款测试 - 正值'
     };
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post('/api/bills/add')
       .send(payload);
 
@@ -134,7 +134,7 @@ describe('账单金额调整接口', () => {
       notes: '支付方式测试'
     };
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post('/api/bills/add')
       .send(payload);
 
@@ -159,7 +159,7 @@ describe('账单金额调整接口', () => {
       notes: '补收测试 - 负值'
     };
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post('/api/bills/add')
       .send(payload);
 
@@ -186,7 +186,7 @@ describe('账单金额调整接口', () => {
       notes: '退押测试 - 正值'
     };
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post('/api/bills/add')
       .send(payload);
 
@@ -251,7 +251,7 @@ describe('账单金额调整接口', () => {
     expect(billInsert.rows.length).toBe(1);
     const insertedBillId = billInsert.rows[0].bill_id;
 
-    const response = await request(app).get(`/api/bills/by-date/${targetDate}`);
+    const response = await authedRequest().get(`/api/bills/by-date/${targetDate}`);
     expect(response.statusCode).toBe(200);
     expect(response.body.success).toBe(true);
 
@@ -303,7 +303,7 @@ describe('退押金接口', () => {
     };
 
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post(`/api/orders/${order.orderId}/refund-deposit`)
       .send(payload);
 
@@ -351,7 +351,7 @@ describe('退押金接口', () => {
       create_time: new Date()
     }
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post(`/api/orders/${orderPayload.orderId}/refund-deposit`)
       .send(refundData);
 
@@ -371,7 +371,7 @@ describe('退押金接口', () => {
     expect(bills.rows[0].pay_way).toBe(refundData.pay_way);
 
     // 验证押金状态
-    const depositInfo = await request(app)
+    const depositInfo = await authedRequest()
       .get(`/api/orders/${orderPayload.orderId}/deposit-info`);
 
     expect(depositInfo.statusCode).toBe(200);

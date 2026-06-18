@@ -165,7 +165,7 @@ describe('收入统计：单日收入（导入 sql/orders.csv）', () => {
     ['2025-11-06', 2891.76],
     ['2025-11-07', 4845.85],
   ])('单日收入统计：%s', async (dateStr, expectedRevenue) => {
-    const res = await request(app)
+    const res = await tools.authedRequest()
       // 中文注释：单日收入使用 quick-stats 的 today 口径（startDate=endDate）
       .get('/api/revenue/quick-stats')
       .query({ startDate: dateStr, endDate: dateStr });
@@ -181,7 +181,7 @@ describe('收入统计：房型收入汇总（导入 sql/orders.csv）', () => {
     const endDate = '2025-11-07';
 
     // 中文注释：后端接口返回 room_type 维度的 order_count 与 total_revenue
-    const res = await request(app)
+    const res = await tools.authedRequest()
       .get('/api/revenue/room-type')
       .query({ startDate, endDate });
 
@@ -226,7 +226,7 @@ describe('收入统计：房型收入汇总（导入 sql/orders.csv）', () => {
 
 describe('收入统计：本周/本月卡片（导入 sql/orders.csv）', () => {
   test('GET /api/revenue/quick-stats：本周/本月与数据库 current_date 口径一致', async () => {
-    const res = await request(app).get('/api/revenue/quick-stats');
+    const res = await tools.authedRequest().get('/api/revenue/quick-stats');
     expect(res.statusCode).toBe(200);
 
     // 中文注释：直接使用数据库计算周一/月初，避免在 Node 里解析 DATE 字段（遵守日期处理规范）

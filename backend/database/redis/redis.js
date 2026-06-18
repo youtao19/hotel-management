@@ -64,6 +64,24 @@ const redis = {
                 console.error('[Redis] Close failed:', error);
             }
         }
+    },
+
+    /**
+     * 暴力断开 Redis 连接，确保 Jest 能自然退出。
+     * client.quit() 在某些版本中不会关闭底层 socket，
+     * 导致 Node 事件循环仍有活跃句柄，Jest 无法退出。
+     * disconnect() 直接关闭 TCP 连接，消除残留。
+     */
+    async disconnect() {
+        if (client) {
+            try {
+                await client.disconnect();
+            } catch (_) {
+                // 忽略重复断开或已关闭的错误
+            }
+            client = null;
+            initPromise = null;
+        }
     }
 };
 

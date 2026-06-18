@@ -35,6 +35,7 @@ function shouldSkipGlobalBootstrap() {
     || (testPath.includes('/backend/modules/dashboard/__tests__/') && testPath.endsWith('.test.js'))
     || (testPath.includes('/backend/modules/order-create/__tests__/') && testPath.endsWith('.test.js'))
     || (testPath.includes('/backend/modules/order-manage/__tests__/') && testPath.endsWith('.test.js'))
+    || (testPath.includes('/backend/modules/auth/__tests__/') && testPath.endsWith('.test.js'))
     ;
 }
 
@@ -68,6 +69,7 @@ beforeAll(async () => {
   // ✅ 初始化 app 的 session 和路由（重要！）
   await app.initializeSession();
 
+
   console.log('✅ 测试环境初始化完成');
 });
 
@@ -96,9 +98,14 @@ afterAll(async () => {
   } catch (err) {
     console.error('❌ 清空测试表时出错:', err);
   } finally {
-    // 关闭数据库连接
+    // 关闭数据库和 Redis 连接，使 Jest 能自然退出
     await db.closePool();
-    await redisDB.close();
+    // 优先使用 disconnect() 关闭底层 socket，确保句柄释放；回退到 quit()
+    if (typeof redisDB.disconnect === 'function') {
+      await redisDB.disconnect();
+    } else {
+      await redisDB.close();
+    }
 
     console.log('✅ 测试环境清理完成');
   }

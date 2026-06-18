@@ -1,6 +1,7 @@
 const request = require('supertest');
 const app = require('../app');
 const db = require('../database/postgreDB/pg');
+const { authedRequest } = require('./tools');
 const { createOrder } = require('../modules/order-create/orderCreate.service');
 
 // 中文注释：构造测试订单，验证订单列表筛选逻辑已下沉到后端接口。
@@ -127,7 +128,7 @@ describe('订单列表后端筛选', () => {
   });
 
   test('支持按关键词搜索订单列表', async () => {
-    const response = await request(app)
+    const response = await authedRequest()
       .get('/api/orders')
       .query({ search: '筛选客人乙' });
 
@@ -138,7 +139,7 @@ describe('订单列表后端筛选', () => {
   });
 
   test('支持按状态筛选订单列表', async () => {
-    const response = await request(app)
+    const response = await authedRequest()
       .get('/api/orders')
       .query({ status: 'cancelled' });
 
@@ -149,7 +150,7 @@ describe('订单列表后端筛选', () => {
   });
 
   test('支持按日期筛选订单列表（匹配入住或退房日期）', async () => {
-    const response = await request(app)
+    const response = await authedRequest()
       .get('/api/orders')
       .query({ date: '2026-02-04' });
 
@@ -159,7 +160,7 @@ describe('订单列表后端筛选', () => {
   });
 
   test('日期筛选格式不合法时返回 400', async () => {
-    const response = await request(app)
+    const response = await authedRequest()
       .get('/api/orders')
       .query({ date: '2026/02/04' });
 
@@ -168,7 +169,7 @@ describe('订单列表后端筛选', () => {
   });
 
   test('列表返回后端计算的退押资格字段', async () => {
-    const response = await request(app).get('/api/orders');
+    const response = await authedRequest().get('/api/orders');
     expect(response.statusCode).toBe(200);
 
     const rowD = response.body.data.find((item) => item.order_id === orderIds[3]);

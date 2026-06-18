@@ -12,7 +12,9 @@
 首期渠道固定为 `meituan`，只支持“推送新订单 + 查询/设置库存配额”。
 
 ## 2. 鉴权约定
-- 所有请求都必须带以下请求头：
+- OTA/插件外部入口使用各自的签名或 Token 鉴权（`x-ota-*` 签名头、`PLUGIN_API_TOKEN` Bearer），**不走员工登录 JWT**。
+- 员工后台业务 `/api` 路由统一由员工 JWT 守卫保护（`Authorization: Bearer <token>`），与本节渠道鉴权相互独立。
+- 所有 OTA 请求都必须带以下请求头：
   - `x-ota-channel`: 固定 `meituan`
   - `x-ota-key`: 渠道访问 key
   - `x-ota-timestamp`: Unix 时间戳，默认允许偏差 `300` 秒

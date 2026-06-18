@@ -1,6 +1,7 @@
 const request = require('supertest');
 const app = require('../app');
 const { query } = require('../database/postgreDB/pg');
+const { authedRequest } = require('./tools');
 
 const TEST_GUEST = `OTHER_INCOME_${Date.now()}`;
 const TEST_TYPE = '租车收入';
@@ -22,7 +23,7 @@ describe('POST /api/bills/other-income', () => {
       remarks: 'API 自动化测试'
     };
 
-    const res = await request(app).post('/api/bills/other-income').send(payload);
+    const res = await authedRequest().post('/api/bills/other-income').send(payload);
 
     expect(res.statusCode).toBe(201);
     expect(res.body.success).toBe(true);
@@ -54,7 +55,7 @@ describe('POST /api/bills/other-income', () => {
       remarks: '无效时间格式'
     };
 
-    const res = await request(app).post('/api/bills/other-income').send(payload);
+    const res = await authedRequest().post('/api/bills/other-income').send(payload);
 
     expect(res.statusCode).toBe(400);
     expect(res.body.message).toBe('请求数据格式不正确');

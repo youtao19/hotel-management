@@ -1,111 +1,64 @@
 "use strict";
 
-const isAuthenticated = function () {
-  return this.session && this.session.authenticated;
-};
+const { verifyAccountToken } = require("./jwt.helper");
 
-const login = function (params, callback) {
-  const req = this;
-  if (!callback) {
-    return new Promise((resolve, reject) => {
-      try {
-        if (!params.account.id) {
-          reject("account info returned from db misssing _id");
-        } else {
-          // 登录后重建 session，避免沿用登录前的 session id。
-          req.session.regenerate(function (err) {
-            if (err) {
-              reject(err);
-            } else {
-              req.session.account = params.account;
-              req.session.authenticated = true;
-              // 保存完成后再响应，避免前端跳转时 cookie 尚未落库。
-              req.session.save(function (err) {
-                if (err) {
-                  reject(err);
-                } else {
-                  resolve(null);
-                }
-              });
-            }
-          });
-        }
-      } catch (e) {
-        return reject(e);
-      }
-    });
+/**
+ * 从请求头读取并校验 Bearer token。
+ * 不直接返回 401，方便公开路由共用且不强制鉴权。
+ * 解析失败时返回具体原因，便于中间件回 401。
+ * @param {import('express').Request} req 请求对象
+ * @returns {{ok:true,account:object}|{ok:false,reason:string}}
+ */
+function resolveAccountFromRequest(req) {
+  const authorization = req.headers.authorization || "";
+  if (!authorization) {
+    return { ok: false, reason: "missing" };
+  }
+
+  if (!authorization.startsWith("Bearer ")) {
+    return { ok: false, reason: "format" };
+  }
+
+  const token = authorization.slice("Bearer ".length).trim();
+  if (!token) {
+    return { ok: false, reason: "empty" };
   }
 
   try {
-    req.session.regenerate(function (err) {
-      if (err) {
-        callback(err);
-      } else {
-        req.session.account = params.account;
-        req.session.authenticated = true;
-
-        req.session.save(function (err) {
-          if (err) {
-            callback(err);
-          } else {
-            callback(null);
-          }
-        });
-      }
-    });
-  } catch (e) {
-    return callback(e);
+    return { ok: true, account: verifyAccountToken(token) };
+  } catch (error) {
+    // 过期和签名/格式错误都视为未授权，不对外区分细节。
+    return { ok: false, reason: "invalid" };
   }
-};
+}
 
-const logout = function (callback) {
-  const req = this;
-  if (!callback) {
-    return new Promise((resolve, reject) => {
-      try {
-        delete req.session.account;
-        delete req.session.authenticated;
-        req.session.destroy(function (err) {
-          if (err) {
-            return reject(err);
-          }
-          return resolve(null);
-        });
-      } catch (e) {
-        return reject(e);
-      }
-    });
+/**
+ * 解析当前请求的登录账号。
+ * 登录态中间件对所有请求运行：解析成功时写入 req.account，
+ * 解析失败时不拦截，由具体路由用 ensureAuthenticated 守卫。
+ */
+function authenticationMiddleware(req, _res, next) {
+  const result = resolveAccountFromRequest(req);
+  if (result.ok) {
+    req.account = result.account;
   }
-
-  try {
-    delete req.session.account;
-    delete req.session.authenticated;
-    req.session.destroy(function (err) {
-      if (err) {
-        return callback(err);
-      }
-      return callback(null);
-    });
-  } catch (e) {
-    return callback(e);
-  }
-};
-
-function authenticationMiddleware(req, res, next) {
-  req.login = login;
-  req.logout = logout;
-  req.isAuthenticated = isAuthenticated;
   next();
 }
 
-const ensureAuthenticated = function (req, res, next) {
-  if (req.isAuthenticated()) {
+/**
+ * 受保护后台业务 API 的统一守卫。
+ * 测试和真实环境使用同一套 JWT 判断逻辑；集成测试通过 tools.js 的 authHeader() 注入 token。
+ */
+function ensureAuthenticated(req, res, next) {
+  if (req.account && req.account.id) {
     return next();
   }
-  res.status(401).json();
-};
+
+  return res.status(401).json({ message: "未登录" });
+}
 
 module.exports = {
   authenticationMiddleware,
-  ensureAuthenticated
+  ensureAuthenticated,
+  resolveAccountFromRequest
 };

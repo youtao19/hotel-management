@@ -1,7 +1,7 @@
 const request = require("supertest");
 const app = require("../app");
 const { query } = require("../database/postgreDB/pg");
-const { addRoomType, addRoom, createOrder, buildOrderPayload } = require("./tools");
+const { authedRequest, authHeader, addRoomType, addRoom, createOrder, buildOrderPayload } = require("./tools");
 
 const TEST_ROOM_TYPE = {
   type_code: "REVIEW_TEST_TYPE",
@@ -65,7 +65,7 @@ describe("POST /api/reviews/:orderId/invite", () => {
 
     const guestName = order.guestName || order.guest_name;
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post(`/api/reviews/${order.order_id}/invite`)
       .send();
 
@@ -87,7 +87,7 @@ describe("POST /api/reviews/:orderId/invite", () => {
   });
 
   test("订单不存在返回 404", async () => {
-    const response = await request(app)
+    const response = await authedRequest()
       .post("/api/reviews/NON_EXIST_ORDER/invite")
       .send();
 
@@ -102,13 +102,13 @@ describe("PUT /api/reviews/:orderId/status", () => {
 
     const guestName = order.guestName || order.guest_name;
 
-    const inviteResponse = await request(app)
+    const inviteResponse = await authedRequest()
       .post(`/api/reviews/${order.order_id}/invite`)
       .send();
 
     expect(inviteResponse.statusCode).toBe(200);
 
-    const response = await request(app)
+    const response = await authedRequest()
       .put(`/api/reviews/${order.order_id}/status`)
       .send({ positive_review: true });
 
@@ -132,7 +132,7 @@ describe("PUT /api/reviews/:orderId/status", () => {
   test("缺少 positive_review 字段返回 400", async () => {
     const order = await createTestOrder();
 
-    const response = await request(app)
+    const response = await authedRequest()
       .put(`/api/reviews/${order.order_id}/status`)
       .send({});
 
@@ -150,7 +150,7 @@ describe("PUT /api/reviews/:orderId/status", () => {
   test("未邀请订单无法设置好评状态", async () => {
     const order = await createTestOrder();
 
-    const response = await request(app)
+    const response = await authedRequest()
       .put(`/api/reviews/${order.order_id}/status`)
       .send({ positive_review: false });
 

@@ -3,6 +3,7 @@ const fs = require('fs');
 const request = require('supertest');
 const app = require('../../app');
 const { query } = require('../../database/postgreDB/pg');
+const { authedRequest } = require('../tools');
 
 async function executeSqlFile(filePath) {
   const sql = fs.readFileSync(filePath, 'utf8').trim();
@@ -26,7 +27,7 @@ describe('交接班当前页面接口', () => {
   });
 
   test('overview 一次返回当前交接班页面需要的表格、班次和昨日状态', async () => {
-    const overviewRes = await request(app)
+    const overviewRes = await authedRequest()
       .get('/api/handover/overview')
       .query({ date: '2025-11-02' });
 
@@ -68,7 +69,7 @@ describe('交接班当前页面接口', () => {
   });
 
   test('handover-table 没有已保存记录时，应返回计算结果和兼容字段', async () => {
-    const response = await request(app)
+    const response = await authedRequest()
       .get('/api/handover/handover-table')
       .query({ date: '2025-11-02' });
 
@@ -92,12 +93,12 @@ describe('交接班当前页面接口', () => {
   });
 
   test('complete 由后端重算表格金额，不要求前端提交整张 paymentData', async () => {
-    const overviewRes = await request(app)
+    const overviewRes = await authedRequest()
       .get('/api/handover/overview')
       .query({ date: '2025-11-02' });
     const expectedCashHandover = overviewRes.body.data.paymentData.handoverAmount['现金'];
 
-    const completeRes = await request(app)
+    const completeRes = await authedRequest()
       .post('/api/handover/complete')
       .send({
         date: '2025-11-02',
@@ -131,7 +132,7 @@ describe('交接班当前页面接口', () => {
   });
 
   test('handover-table 在 /complete 保存后返回人员、会员卡、备注和留存金额', async () => {
-    const tableResponse = await request(app)
+    const tableResponse = await authedRequest()
       .get('/api/handover/handover-table')
       .query({ date: '2025-11-02' });
 
@@ -159,7 +160,7 @@ describe('交接班当前页面接口', () => {
       ]
     );
 
-    const response = await request(app)
+    const response = await authedRequest()
       .get("/api/handover/admin-memos")
       .query({ date: "2025-11-03" });
 
@@ -172,10 +173,10 @@ describe('交接班当前页面接口', () => {
   });
 
   test('overview.specialStats 与 /special-stats 当前各自的响应结构', async () => {
-    const overview = await request(app)
+    const overview = await authedRequest()
       .get('/api/handover/overview')
       .query({ date: '2025-11-02' });
-    const stats = await request(app)
+    const stats = await authedRequest()
       .get('/api/handover/special-stats')
       .query({ date: '2025-11-02' });
 

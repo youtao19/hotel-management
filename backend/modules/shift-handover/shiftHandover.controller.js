@@ -14,7 +14,7 @@ async function getOverview(req, res) {
 
     const data = await service.getOverview({
       date: parsed.value.date,
-      account: req.session?.account
+      account: req.account
     });
 
     return res.json({ success: true, data });
@@ -100,7 +100,7 @@ async function completeHandover(req, res) {
 
     const operatorName = service.resolveOperatorName({
       handoverPerson: parsed.value.handoverPerson,
-      account: req.session?.account
+      account: req.account
     });
 
     console.log("收到完成交接班请求:", {
@@ -113,7 +113,7 @@ async function completeHandover(req, res) {
 
     const data = await service.completeHandover({
       body: parsed.value,
-      account: req.session?.account
+      account: req.account
     });
 
     console.log("交接班记录保存完成，共", data.recordCount, "条");

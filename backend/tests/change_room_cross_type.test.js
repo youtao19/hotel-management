@@ -2,6 +2,7 @@ const request = require('supertest');
 const app = require('../app');
 const { query } = require('../database/postgreDB/pg');
 const {
+  authedRequest,
   roomTypes,
   rooms,
   buildOrderPayload,
@@ -51,7 +52,7 @@ describe('更换房间 API - 跨房型更换', () => {
     await createOrder(orderPayload);
 
     // 将订单从 202 更换到 401（跨房型：yun_ju_ying_yin）
-    const res = await request(app)
+    const res = await authedRequest()
       .post('/api/rooms/change-room')
       .send({
         orderNumber: orderId,

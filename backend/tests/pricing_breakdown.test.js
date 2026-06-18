@@ -1,9 +1,10 @@
 const request = require('supertest');
 const app = require('../app');
+const { authedRequest } = require('./tools');
 
 describe('创建订单定价拆分接口', () => {
   test('from-room-price：多日初始化每日价格', async () => {
-    const res = await request(app)
+    const res = await authedRequest()
       .post('/api/orders/pricing/breakdown')
       .send({
         checkInDate: '2025-11-01',
@@ -22,7 +23,7 @@ describe('创建订单定价拆分接口', () => {
   });
 
   test('from-room-price：休息房自动半价', async () => {
-    const res = await request(app)
+    const res = await authedRequest()
       .post('/api/orders/pricing/breakdown')
       .send({
         checkInDate: '2025-11-01',
@@ -41,7 +42,7 @@ describe('创建订单定价拆分接口', () => {
   });
 
   test('distribute-total：按天平均分摊并处理分余数', async () => {
-    const res = await request(app)
+    const res = await authedRequest()
       .post('/api/orders/pricing/breakdown')
       .send({
         checkInDate: '2025-11-01',
@@ -63,7 +64,7 @@ describe('创建订单定价拆分接口', () => {
   });
 
   test('参数缺失时返回 400', async () => {
-    const res = await request(app)
+    const res = await authedRequest()
       .post('/api/orders/pricing/breakdown')
       .send({
         checkInDate: '2025-11-01',

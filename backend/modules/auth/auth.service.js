@@ -39,7 +39,7 @@ async function consumeLimiters(limiters) {
   }
 }
 
-async function login({ email, pw, ipAddr, login }) {
+async function login({ email, pw, ipAddr }) {
   const usernameIPkey = getUsernameIPkey(email, ipAddr);
   const [resUsernameAndIP, resSlowByIP] = await Promise.all([
     limiterConsecutiveFailsByUsernameAndIP.get(usernameIPkey),
@@ -100,7 +100,6 @@ async function login({ email, pw, ipAddr, login }) {
     name: account.name,
     email: account.email
   };
-  await login({ account: loggedInAccount });
 
   if (resUsernameAndIP !== null && resUsernameAndIP.consumedPoints > 0) {
     await limiterConsecutiveFailsByUsernameAndIP.delete(usernameIPkey);

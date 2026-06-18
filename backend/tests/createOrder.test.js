@@ -2,7 +2,7 @@ const request = require('supertest');
 const { query } = require('../database/postgreDB/pg');
 const app = require('../app');
 
-const { roomTypes, rooms, ORDERS, addRoom, addRoomType } = require('./tools');
+const { authedRequest, authHeader, roomTypes, rooms, ORDERS, addRoom, addRoomType } = require('./tools');
 
 
 const baseOrderData = ORDERS[0]
@@ -18,7 +18,7 @@ describe('参数验证', () => {
       const payload = buildOrderPayload();
       delete payload.orderId;
 
-      const response = await request(app)
+      const response = await authedRequest()
         .post('/api/orders/new')
         .send(payload);
 
@@ -28,7 +28,7 @@ describe('参数验证', () => {
     });
 
     test('status 不在允许列表时返回 400', async () => {
-      const response = await request(app)
+      const response = await authedRequest()
         .post('/api/orders/new')
         .send(buildOrderPayload({ status: 'invalid-status' }));
 
@@ -38,7 +38,7 @@ describe('参数验证', () => {
     });
 
     test('check_in_date 格式错误时返回 400', async () => {
-      const response = await request(app)
+      const response = await authedRequest()
         .post('/api/orders/new')
         .send(buildOrderPayload({ checkInDate: '2025/10/20' }));
 
@@ -60,7 +60,7 @@ describe('创建订单接口', () => {
 
   test('创建订单成功', async () => {
     const payload = buildOrderPayload();
-    const response = await request(app)
+    const response = await authedRequest()
       .post('/api/orders/new')
       .send(payload);
 
@@ -76,7 +76,7 @@ describe('创建订单接口', () => {
 
   test('phone 为空字符串时仍可创建', async () => {
     const payload = buildOrderPayload({ phone: '' });
-    const response = await request(app)
+    const response = await authedRequest()
       .post('/api/orders/new')
       .send(payload);
 
@@ -93,7 +93,7 @@ describe('创建订单接口', () => {
       }
     });
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post('/api/orders/new')
       .send(singleDayOrder);
 
@@ -116,7 +116,7 @@ describe('创建订单接口', () => {
       remarks: '测试休息房'
     });
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post('/api/orders/new')
       .send(restOrder);
 
@@ -146,7 +146,7 @@ describe('创建订单接口', () => {
       remarks: "提前入住，请准备好房卡"
     });
 
-    const response = await request(app)
+    const response = await authedRequest()
       .post('/api/orders/new')
       .send(mulOrder);
 

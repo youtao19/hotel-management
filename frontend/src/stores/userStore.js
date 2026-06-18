@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { userApi } from '../api'
+import { setAuthToken } from '../api/index'
 
 
 export const useUserStore = defineStore('user', () => {
@@ -71,8 +72,9 @@ export const useUserStore = defineStore('user', () => {
       console.log('登录响应:', response);
 
       // 注意：axios响应拦截器已经返回了response.data，所以这里直接是用户数据
-      // 成功登录时，后端返回用户信息对象 {id, name, email}
+      // 成功登录时，后端返回 {id, name, email, token}，token 保存到 localStorage 供请求拦截器注入
       if (response && response.id) {
+        setAuthToken(response.token)
         user.value = {
           isLoggedIn: true,
           username: response.name, // 后端返回的是name字段
@@ -124,7 +126,7 @@ export const useUserStore = defineStore('user', () => {
       loading.value = true
       error.value = null
 
-      // 调用登出API，销毁session
+      // 通知后端登出语义；JWT 无状态，后端不维护 session，前端最终以本地清理为准
       await userApi.logout()
 
     } catch (err) {
@@ -135,7 +137,8 @@ export const useUserStore = defineStore('user', () => {
       loading.value = false
     }
 
-    // 无论API调用是否成功，都清理前端用户状态
+    // 无论API调用是否成功，都清理前端登录态和本地 token
+    setAuthToken(null)
     user.value = {
       isLoggedIn: false,
       username: '',
@@ -150,7 +153,16 @@ export const useUserStore = defineStore('user', () => {
 
   // 检查是否已登录
   async function checkAuth() {
-    // 始终向后端确认一次，避免依赖可能过期的本地状态
+    // 无 token 直接判定未登录，避免无谓的 /user/info 请求和 401 噪声
+    if (!localStorage.getItem('auth_token')) {
+      user.value = {
+        isLoggedIn: false,
+        username: '',
+        avatar: '',
+      }
+      return false
+    }
+    // 有 token 时再向后端确认，处理 token 过期或被吊销的情况
     const userData = await fetchCurrentUser()
     return !!userData
   }
