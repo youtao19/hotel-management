@@ -61,7 +61,7 @@ describe("shiftHandover.businessRules", () => {
   });
 
   describe("buildReserveDefaults", () => {
-    test("完整交接时现金 320，微信取昨日交接款", () => {
+    test("现金不从昨日推导，微信取昨日交接款", () => {
       const defaults = rules.buildReserveDefaults({
         isComplete: true,
         handoverAmounts: {
@@ -72,7 +72,7 @@ describe("shiftHandover.businessRules", () => {
         },
       });
       expect(defaults).toEqual({
-        "现金": 320,
+        "现金": 0,
         "微信": 200,
         "微邮付": 0,
         "其他": 0,
@@ -90,7 +90,7 @@ describe("shiftHandover.businessRules", () => {
         },
       });
       expect(defaults).toEqual({
-        "现金": 320,
+        "现金": 0,
         "微信": 0,
         "微邮付": 0,
         "其他": 0,

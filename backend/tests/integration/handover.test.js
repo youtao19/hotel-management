@@ -19,6 +19,13 @@ describe('交接班当前页面接口', () => {
     await query('TRUNCATE TABLE rooms RESTART IDENTITY CASCADE;');
     await query('TRUNCATE TABLE room_types RESTART IDENTITY CASCADE;');
     await query('TRUNCATE TABLE handover RESTART IDENTITY CASCADE;');
+    await query('TRUNCATE TABLE handover_daily_settings RESTART IDENTITY CASCADE;');
+
+    await query(
+      `INSERT INTO handover_daily_settings (business_date, cash_reserve, cash_retained, set_by)
+       VALUES ($1::date, $2, $3, $4)`,
+      ['2025-11-02', 320, 320, '测试账号']
+    );
 
     await executeSqlFile(path.resolve(__dirname, '../../../sql/room_types.sql'));
     await executeSqlFile(path.resolve(__dirname, '../../../sql/rooms.sql'));
@@ -48,7 +55,7 @@ describe('交接班当前页面接口', () => {
       hasRecord: false,
       isComplete: false,
       reserveDefaults: {
-        '现金': 320,
+        '现金': 0,
         '微信': 0,
         '微邮付': 0,
         '其他': 0
@@ -60,6 +67,11 @@ describe('交接班当前页面接口', () => {
       '微邮付': 0,
       '其他': 0
     });
+    expect(overviewRes.body.data.cashReserveSetting).toEqual(expect.objectContaining({
+      configured: true,
+      amount: 320,
+      setBy: '测试账号'
+    }));
     expect(overviewRes.body.data.specialStats).toEqual(expect.objectContaining({
       openCount: expect.any(Number),
       restCount: expect.any(Number),
@@ -129,6 +141,36 @@ describe('交接班当前页面接口', () => {
     expect(Number(saved.rows[0].retained)).toBe(320);
     expect(Number(saved.rows[0].handover)).toBe(expectedCashHandover);
     expect(saved.rows[0].remarks).toBe('新版单页交接完成');
+  });
+
+  test('未设置现金备用金时，后端拒绝完成交接', async () => {
+    const date = '2025-11-05';
+    const response = await authedRequest()
+      .post('/api/handover/complete')
+      .send({ date, receivePerson: 'peach' });
+
+    expect(response.status).toBe(409);
+    expect(response.body.message).toBe('请先设置今日备用金与留存款');
+
+    const saved = await query('SELECT COUNT(*) AS count FROM handover WHERE date = $1::date', [date]);
+    expect(Number(saved.rows[0].count)).toBe(0);
+  });
+
+  test('设置现金备用金后，概览使用设置值而非固定默认值', async () => {
+    const date = '2025-11-06';
+    const setResponse = await authedRequest()
+      .put('/api/handover/daily-cash-reserve')
+      .send({ date, cashReserve: 0, cashRetained: 0 });
+
+    expect(setResponse.status).toBe(200);
+    expect(setResponse.body.data.cashReserve).toBe(0);
+
+    const overview = await authedRequest()
+      .get('/api/handover/overview')
+      .query({ date });
+    expect(overview.body.data.cashReserveSetting.configured).toBe(true);
+    expect(overview.body.data.paymentData.reserve['现金']).toBe(0);
+    expect(overview.body.data.canComplete).toBe(true);
   });
 
   test('handover-table 在 /complete 保存后返回人员、会员卡、备注和留存金额', async () => {

@@ -40,8 +40,29 @@ date=YYYY-MM-DD
     "currentShift": {},
     "currentUser": {},
     "yesterdayRecord": {},
+    "cashReserveSetting": {
+      "configured": true,
+      "amount": 320,
+      "cashRetained": 320,
+      "setBy": "操作员"
+    },
+    "isCompleted": false,
     "specialStats": {}
   }
+}
+```
+
+### PUT /api/handover/daily-cash-reserve
+
+按营业日期保存现金备用金与留存款。该表是两项金额的唯一来源；设置为 `0` 有效，未设置时不能完成交接，完成交接后不可修改。
+
+请求体：
+
+```json
+{
+  "date": "2025-11-02",
+  "cashReserve": 320,
+  "cashRetained": 320
 }
 ```
 
@@ -178,6 +199,7 @@ date=YYYY-MM-DD
 - `GET /api/handover/admin-memos` -> `shiftHandover.service.getAdminMemos()` -> repository 读取并过滤 `type === "admin"`
 - `GET /api/handover/query` -> `shiftHandover.repository.listCompletedHandoverRecords()`
 - `POST /api/handover/complete` -> 后端重算交接表金额 -> `shiftHandover.repository.saveCompletedHandover()`
+- `PUT /api/handover/daily-cash-reserve` -> 校验当天未完成交接 -> 保存 `handover_daily_settings` 中的现金备用金与留存款
 
 ## 数据口径
 
@@ -191,7 +213,7 @@ date=YYYY-MM-DD
 ## 依赖说明
 
 - `./shiftHandover.calculator`：纯金额计算（分计算、元返回、支付方式常量）。
-- `./shiftHandover.businessRules`：营业日期、班次和默认备用金规则。
+- `./shiftHandover.businessRules`：营业日期、班次和非现金支付方式的默认备用金规则。
 - `../../database/postgreDB/pg`: 查询和完成交接班事务写入。
 
 ## 注意事项
@@ -200,4 +222,5 @@ date=YYYY-MM-DD
 - 请求和响应格式不能改。
 - `date` 是 PostgreSQL `DATE` 字段，按 `YYYY-MM-DD` 字符串传递，不做 UTC 转换。
 - 完成交接班仍由后端重新计算金额，前端只提交留存金额、接班人、会员卡和备注。
+- 现金备用金与留存款只能从 `handover_daily_settings` 读取，不再使用固定值或昨日交接款作为回退。
 - 完成交接班写入四种支付方式必须保持同一个事务。

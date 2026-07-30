@@ -47,14 +47,13 @@ function resolveCurrentUser(account = {}) {
 }
 
 /**
- * 构建默认备用金规则
- * 现金固定 320，微信取昨日完整交接款（isComplete 时），其余为 0
+ * 构建非现金支付方式的默认备用金规则；现金必须由当日设置表提供，不能从昨日推导。
  * @param {{ isComplete: boolean, handoverAmounts: Object }} param0
  * @returns {Object}
  */
 function buildReserveDefaults({ isComplete, handoverAmounts }) {
   return {
-    "现金": 320,
+    "现金": 0,
     "微信": isComplete ? handoverAmounts["微信"] : 0,
     "微邮付": 0,
     "其他": 0,

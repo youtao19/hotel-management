@@ -2,13 +2,16 @@
 
 jest.mock("../shiftHandover.repository", () => ({
   findBillsByBusinessDate: jest.fn(),
+  findDailyCashReserve: jest.fn(),
   findHandoverRowsByDate: jest.fn(),
   findReserveByDate: jest.fn(),
+  isHandoverComplete: jest.fn(),
   findPreviousHandoverSummary: jest.fn(),
   findAdminMemoTasks: jest.fn(),
   getOverviewSpecialStats: jest.fn(),
   getSpecialStats: jest.fn(),
   listCompletedHandoverRecords: jest.fn(),
+  saveDailyCashReserve: jest.fn(),
   saveCompletedHandover: jest.fn()
 }));
 
@@ -24,7 +27,7 @@ jest.mock("../shiftHandover.businessRules", () => ({
     ].join("-");
   }),
   buildReserveDefaults: jest.fn(({ isComplete, handoverAmounts }) => ({
-    "现金": 320,
+    "现金": 0,
     "微信": isComplete ? handoverAmounts["微信"] : 0,
     "微邮付": 0,
     "其他": 0
@@ -72,6 +75,14 @@ describe("shiftHandover.service.getOverview", () => {
       "其他": 400
     });
     repository.findBillsByBusinessDate.mockResolvedValue([]);
+    repository.findDailyCashReserve.mockResolvedValue({
+      date: "2026-06-12",
+      cashReserve: 320,
+      cashRetained: 320,
+      setBy: "peach",
+      updatedAt: "2026-06-12 08:00:00"
+    });
+    repository.isHandoverComplete.mockResolvedValue(false);
     repository.getOverviewSpecialStats.mockResolvedValue({
       openCount: 0,
       restCount: 0,
@@ -92,6 +103,8 @@ describe("shiftHandover.service.getOverview", () => {
       "微邮付": 0,
       "其他": 0
     });
+    expect(result.cashReserveSetting).toEqual(expect.objectContaining({ configured: true, amount: 320, cashRetained: 320 }));
+    expect(result.canComplete).toBe(true);
     expect(result.specialStats).toEqual({
       openCount: 0,
       restCount: 0,
@@ -114,6 +127,8 @@ describe("shiftHandover.service.getOverview", () => {
     });
     repository.findReserveByDate.mockResolvedValue(null);
     repository.findBillsByBusinessDate.mockResolvedValue([]);
+    repository.findDailyCashReserve.mockResolvedValue(null);
+    repository.isHandoverComplete.mockResolvedValue(false);
     repository.getOverviewSpecialStats.mockResolvedValue({
       openCount: 1,
       restCount: 2,
@@ -129,11 +144,14 @@ describe("shiftHandover.service.getOverview", () => {
     expect(result.yesterdayRecord.date).toBe("2026-06-11");
     expect(result.yesterdayRecord.hasRecord).toBe(false);
     expect(result.paymentData.reserve).toEqual({
-      "现金": 320,
+      "现金": 0,
       "微信": 0,
       "微邮付": 0,
       "其他": 0
     });
+    expect(result.cashReserveSetting.configured).toBe(false);
+    expect(result.canComplete).toBe(false);
+    expect(result.completeBlockReasons).toEqual(["请先设置今日备用金与留存款"]);
   });
 });
 
@@ -220,5 +238,69 @@ describe("shiftHandover.service.getAdminMemos", () => {
     const result = await service.getAdminMemos("2026-06-12");
 
     expect(result).toEqual([]);
+  });
+});
+
+describe("shiftHandover.service 现金备用金约束", () => {
+  test("未设置今日备用金与留存款时拒绝完成交接", async () => {
+    repository.findPreviousHandoverSummary.mockResolvedValue({
+      hasRecord: false,
+      isComplete: false,
+      paymentCount: 0,
+      paymentTypes: [],
+      handoverPerson: null,
+      takeoverPerson: null,
+      handoverAmounts: { "现金": 0, "微信": 0, "微邮付": 0, "其他": 0 }
+    });
+    repository.findReserveByDate.mockResolvedValue(null);
+    repository.findBillsByBusinessDate.mockResolvedValue([]);
+    repository.findDailyCashReserve.mockResolvedValue(null);
+    repository.getOverviewSpecialStats.mockResolvedValue({ openCount: 0, restCount: 0, invited: 0, positive: 0 });
+    repository.isHandoverComplete.mockResolvedValue(false);
+
+    await expect(service.completeHandover({
+      body: { date: "2026-07-30", receivePerson: "peach" },
+      account: { username: "youtao" }
+    })).rejects.toMatchObject({ status: 409, message: "请先设置今日备用金与留存款" });
+
+    expect(repository.saveCompletedHandover).not.toHaveBeenCalled();
+  });
+
+  test("已完成交接时拒绝修改备用金与留存款", async () => {
+    repository.isHandoverComplete.mockResolvedValue(true);
+
+    await expect(service.setDailyCashReserve({
+      date: "2026-07-30",
+      cashReserve: 500,
+      cashRetained: 320,
+      account: { username: "youtao" }
+    })).rejects.toMatchObject({ status: 409, message: "当日交接已完成，备用金与留存款不可修改" });
+
+    expect(repository.saveDailyCashReserve).not.toHaveBeenCalled();
+  });
+
+  test("未完成交接时保存备用金与留存款", async () => {
+    repository.isHandoverComplete.mockResolvedValue(false);
+    repository.saveDailyCashReserve.mockResolvedValue({
+      date: "2026-07-30",
+      cashReserve: 0,
+      cashRetained: 0,
+      setBy: "youtao"
+    });
+
+    const result = await service.setDailyCashReserve({
+      date: "2026-07-30",
+      cashReserve: 0,
+      cashRetained: 0,
+      account: { username: "youtao" }
+    });
+
+    expect(result.cashReserve).toBe(0);
+    expect(repository.saveDailyCashReserve).toHaveBeenCalledWith({
+      date: "2026-07-30",
+      cashReserve: 0,
+      cashRetained: 0,
+      setBy: "youtao"
+    });
   });
 });

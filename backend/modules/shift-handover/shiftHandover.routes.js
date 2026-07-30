@@ -8,6 +8,9 @@ const router = express.Router();
 // 获取当前交接班页面的一次性汇总数据。
 router.get("/overview", controller.getOverview);
 
+// 设置当天现金备用金；交接完成后由服务层拒绝修改。
+router.put("/daily-cash-reserve", controller.setDailyCashReserve);
+
 // 获取已保存的交接班表格数据。
 router.get("/handover-table", controller.getHandoverTable);
 

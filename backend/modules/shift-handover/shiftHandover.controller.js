@@ -129,9 +129,31 @@ async function completeHandover(req, res) {
       stack: error.stack
     });
 
-    return res.status(500).json({
+    return res.status(error.status || 500).json({
       success: false,
       message: error.message || "完成交接班失败"
+    });
+  }
+}
+
+/**
+ * 保存指定营业日的现金备用金与留存款；金额来源固定在后端设置表，不接受交接金额等派生数据。
+ */
+async function setDailyCashReserve(req, res) {
+  try {
+    const parsed = validator.readDailyCashReserveBody(req.body);
+    if (parsed.error) return sendValidationError(res, parsed.error);
+
+    const data = await service.setDailyCashReserve({
+      ...parsed.value,
+      account: req.account
+    });
+    return res.json({ success: true, data, message: "今日现金备用金与留存款已保存" });
+  } catch (error) {
+    console.error("保存今日现金备用金失败:", error);
+    return res.status(error.status || 500).json({
+      success: false,
+      message: error.message || "保存今日现金备用金与留存款失败"
     });
   }
 }
@@ -142,5 +164,6 @@ module.exports = {
   getHandoverTable,
   getOverview,
   getSpecialStats,
-  queryHandoverRecords
+  queryHandoverRecords,
+  setDailyCashReserve
 };

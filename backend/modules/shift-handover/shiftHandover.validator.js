@@ -56,8 +56,20 @@ const completeHandoverSchema = {
   additionalProperties: false
 };
 
+const dailyCashReserveSchema = {
+  type: "object",
+  properties: {
+    date: { type: "string", format: "date" },
+    cashReserve: { type: "number", minimum: 0, maximum: 99999999.99 },
+    cashRetained: { type: "number", minimum: 0, maximum: 99999999.99 }
+  },
+  required: ["date", "cashReserve", "cashRetained"],
+  additionalProperties: false
+};
+
 const validateRequiredDateQuery = ajv.compile(requiredDateQuerySchema);
 const validateCompleteHandover = ajv.compile(completeHandoverSchema);
+const validateDailyCashReserve = ajv.compile(dailyCashReserveSchema);
 
 function sanitizeQuery(query = {}) {
   return Object.keys(query).reduce((acc, key) => {
@@ -106,14 +118,46 @@ function readCompleteHandoverBody(body = {}) {
   return { value: body };
 }
 
+/**
+ * 读取每日现金备用金与留存款；金额精度限定为分，避免金额计算出现无法保存的尾数。
+ * @param {object} body 请求体
+ * @returns {{value?: object, error?: object}} 解析结果
+ */
+function readDailyCashReserveBody(body = {}) {
+  const isValid = validateDailyCashReserve(body);
+  const cashReserve = Number(body.cashReserve);
+  const cashRetained = Number(body.cashRetained);
+  const hasMoreThanTwoDecimals = [cashReserve, cashRetained].some((amount) => (
+    Number.isFinite(amount) && Math.abs(amount * 100 - Math.round(amount * 100)) > 1e-8
+  ));
+
+  if (!isValid || hasMoreThanTwoDecimals) {
+    return {
+      error: {
+        status: 400,
+        body: {
+          success: false,
+          message: "现金备用金与留存款必须是大于等于 0 的两位小数金额",
+          errors: isValid ? [{ field: "cashReserve", message: "金额最多保留两位小数" }] : formatAjvErrors(validateDailyCashReserve.errors)
+        }
+      }
+    };
+  }
+
+  return { value: { date: body.date, cashReserve, cashRetained } };
+}
+
 module.exports = {
   PAYMENT_METHODS,
   completeHandoverSchema,
+  dailyCashReserveSchema,
   formatAjvErrors,
   readCompleteHandoverBody,
+  readDailyCashReserveBody,
   readDateQuery,
   requiredDateQuerySchema,
   sanitizeQuery,
   validateCompleteHandover,
+  validateDailyCashReserve,
   validateRequiredDateQuery
 };

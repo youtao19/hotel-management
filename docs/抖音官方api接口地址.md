@@ -188,10 +188,11 @@
 #### 8.1.2 可订检查 SPI
 - 链接：[可订检查 SPI](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/accommodation-voucher-trade/bookable-check)
 - 用途：在预售券场景下由抖音向三方发起可订检查，确认当前商品是否可售。
+- 抖音侧前置：应用需已获得 Scope `life.capacity.trip_trade_order` 和“住宿预售券交易正向能力”，并在抖音后台配置可公网访问的 SPI 地址；代码存在不代表应用已获此权限。
 - 当前代码关联：`backend/modules/douyin/external/external.routes.js`、`backend/modules/douyin/availability/bookableCheck.service.js`、`backend/modules/douyin/external/signature.service.js`
 - 本地实现入口：`POST /douyin/spi/bookable`
 - 抖音后台配置 URL：`https://<你的公网域名>/douyin/spi/bookable`
-- 当前支持范围：预售券 `biz_type=2011`；失败时返回 `data.ari.stock_and_amount[]`，字段包含 `room_id`、`rate_plan_id`、`timerange`、`original_amount`、`available`、`inventory`。
+- 当前支持范围：预售券 `biz_type=2011`；已校验套餐/物理房型映射、房态、库存和总价，失败时返回 `data.ari.stock_and_amount[]`，字段包含 `room_id`、`rate_plan_id`、`timerange`、`original_amount`、`available`、`inventory`。不支持预约单 `2012`、日历房 `2021`、钟点房时段、入住人数/住客信息、会员和购买限制等扩展校验。
 
 #### 8.1.3 支付结果通知 SPI
 - 链接：[支付结果通知 spi](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/accommodation-voucher-trade/paynotice)

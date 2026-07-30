@@ -66,6 +66,17 @@
               表格金额由后端生成，留存款可在表内调整，保存时后端会重新校验。
             </div>
           </div>
+          <q-btn
+            outline
+            dense
+            no-caps
+            color="primary"
+            icon="payments"
+            :label="cashSettingButtonLabel"
+            class="cash-reserve-button"
+            :disable="loading || handoverCompleted"
+            @click="cashReserveDialog = true"
+          />
           <q-badge
             :color="yesterdayRecord.isComplete ? 'positive' : 'orange'"
             outline
@@ -77,6 +88,7 @@
 
         <ShiftHandoverPaymentTable
           :payment-data="paymentData"
+          :cash-reserve-configured="cashReserveSetting.configured"
           :read-only="false"
           @update-retained="handleRetainedAmountUpdate"
         />
@@ -158,6 +170,71 @@
       </aside>
     </div>
 
+    <q-dialog v-model="cashReserveDialog" persistent>
+      <q-card class="cash-reserve-dialog">
+        <q-card-section class="cash-reserve-dialog__header">
+          <div class="cash-reserve-dialog__icon">
+            <q-icon name="account_balance_wallet" size="24px" />
+          </div>
+          <div>
+          <div class="text-h6">设置备用金与留存款</div>
+            <div class="cash-reserve-dialog__date">营业日期：{{ selectedDate }}</div>
+          </div>
+        </q-card-section>
+
+        <q-card-section class="cash-reserve-dialog__body">
+          <div class="cash-reserve-dialog__hint">备用金将用于今日交接班的现金核对。</div>
+          <div class="cash-reserve-dialog__fields">
+            <div class="cash-reserve-dialog__field">
+              <q-input
+                v-model.number="cashReserveInput"
+                type="number"
+                min="0"
+                step="0.01"
+                outlined
+                dense
+                autofocus
+                label="现金备用金（元）"
+                :rules="[value => Number.isFinite(Number(value)) && Number(value) >= 0 || '请输入大于等于 0 的金额']"
+              >
+                <template #prepend>
+                  <span class="cash-reserve-dialog__currency">¥</span>
+                </template>
+              </q-input>
+              <div class="cash-reserve-dialog__presets">
+                <span class="cash-reserve-dialog__preset-label">常用金额</span>
+                <q-btn unelevated dense no-caps color="primary" label="320 元" class="cash-reserve-dialog__preset" @click="cashReserveInput = 320" />
+              </div>
+            </div>
+            <div class="cash-reserve-dialog__field">
+              <q-input
+                v-model.number="cashRetainedInput"
+                type="number"
+                min="0"
+                step="0.01"
+                outlined
+                dense
+                label="现金留存款（元）"
+                :rules="[value => Number.isFinite(Number(value)) && Number(value) >= 0 || '请输入大于等于 0 的金额']"
+              >
+                <template #prepend>
+                  <span class="cash-reserve-dialog__currency">¥</span>
+                </template>
+              </q-input>
+              <div class="cash-reserve-dialog__presets">
+                <span class="cash-reserve-dialog__preset-label">常用金额</span>
+                <q-btn unelevated dense no-caps color="primary" label="320 元" class="cash-reserve-dialog__preset" @click="cashRetainedInput = 320" />
+              </div>
+            </div>
+          </div>
+        </q-card-section>
+        <q-card-actions class="cash-reserve-dialog__actions">
+          <q-btn flat no-caps label="取消" :disable="savingCashReserve" v-close-popup />
+          <q-btn color="primary" no-caps unelevated label="保存" :loading="savingCashReserve" @click="saveCashReserve" />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
     <q-inner-loading :showing="loading">
       <q-spinner color="primary" size="42px" />
     </q-inner-loading>
@@ -181,7 +258,14 @@ const PAY_WAY_KEYS = ["现金", "微信", "微邮付", "其他"];
 const selectedDate = ref(formatLocalDate(new Date()));
 const loading = ref(false);
 const canComplete = ref(true);
+const completeBlockReasons = ref([]);
+const isCompleted = ref(false);
 const paymentData = ref(createEmptyPaymentData());
+const cashReserveSetting = ref({ configured: false, amount: null, cashRetained: null, setBy: null, updatedAt: null });
+const cashReserveDialog = ref(false);
+const cashReserveInput = ref(0);
+const cashRetainedInput = ref(0);
+const savingCashReserve = ref(false);
 const specialStats = ref({ openCount: 0, restCount: 0, invited: 0, positive: 0 });
 const yesterdayRecord = ref({
   hasRecord: false,
@@ -217,6 +301,11 @@ const yesterdayStatusClass = computed(() => ({
 }));
 const goodReviewText = computed(() => `邀${specialStats.value.invited || 0}得${specialStats.value.positive || 0}`);
 const handoverTotal = computed(() => sumBucket(paymentData.value.handoverAmount));
+const handoverCompleted = computed(() => isCompleted.value);
+const cashSettingButtonLabel = computed(() => {
+  if (handoverCompleted.value) return "备用金与留存款已锁定";
+  return "设置备用金与留存款";
+});
 const confirmationChecklist = computed(() => [
   {
     label: yesterdayRecord.value.isComplete ? "昨日记录完整" : "昨日记录已按缺失处理",
@@ -225,6 +314,10 @@ const confirmationChecklist = computed(() => [
   {
     label: loading.value ? "交接表生成中" : "交接表已生成",
     done: !loading.value
+  },
+  {
+    label: cashReserveSetting.value.configured ? "今日备用金与留存款已设置" : (completeBlockReasons.value[0] || "请先设置今日备用金与留存款"),
+    done: cashReserveSetting.value.configured
   },
   {
     label: "接班人员已填写",
@@ -326,7 +419,12 @@ async function loadOverview() {
     yesterdayRecord.value = data.yesterdayRecord || yesterdayRecord.value;
     currentShift.value = data.currentShift || currentShift.value;
     currentUser.value = data.currentUser || currentUser.value;
+    cashReserveSetting.value = data.cashReserveSetting || cashReserveSetting.value;
+    cashReserveInput.value = data.cashReserveSetting?.configured ? Number(data.cashReserveSetting.amount) : 0;
+    cashRetainedInput.value = data.cashReserveSetting?.configured ? Number(data.cashReserveSetting.cashRetained) : 0;
     canComplete.value = data.canComplete !== false;
+    completeBlockReasons.value = data.completeBlockReasons || [];
+    isCompleted.value = data.isCompleted === true;
     vipCards.value = Number(data.paymentData?.vipCards) || 0;
   } catch (error) {
     console.error("加载交接班数据失败:", error);
@@ -338,6 +436,51 @@ async function loadOverview() {
   } finally {
     loading.value = false;
   }
+}
+
+async function saveCashReserve() {
+  const rawReserve = cashReserveInput.value;
+  const rawRetained = cashRetainedInput.value;
+  const cashReserve = Number(rawReserve);
+  const cashRetained = Number(rawRetained);
+  const hasInvalidAmount = [rawReserve, rawRetained].some((value) => value === "" || value === null || value === undefined)
+    || !Number.isFinite(cashReserve)
+    || !Number.isFinite(cashRetained)
+    || cashReserve < 0
+    || cashRetained < 0;
+
+  if (hasInvalidAmount) {
+    $q.notify({ type: "negative", message: "请输入大于等于 0 的备用金与留存款", position: "top" });
+    return;
+  }
+
+  try {
+    savingCashReserve.value = true;
+    const response = await shiftHandoverApi.setDailyCashReserve({
+      date: selectedDate.value,
+      cashReserve: Number(cashReserve.toFixed(2)),
+      cashRetained: Number(cashRetained.toFixed(2))
+    });
+    if (!response.success) {
+      throw new Error(response.message || "保存备用金与留存款失败");
+    }
+    cashReserveDialog.value = false;
+    await loadOverview();
+    $q.notify({ type: "positive", message: "备用金与留存款已保存", position: "top" });
+  } catch (error) {
+    $q.notify({
+      type: "negative",
+      message: error.response?.data?.message || error.message || "保存备用金与留存款失败",
+      position: "top"
+    });
+  } finally {
+    savingCashReserve.value = false;
+  }
+}
+
+// 预设值仅用于减少重复输入，仍由后端校验金额和当日交接状态。
+function applyCashReservePreset(amount) {
+  cashReserveInput.value = amount;
 }
 
 function handleRetainedAmountUpdate({ payWay, value }) {
@@ -429,6 +572,106 @@ onMounted(loadOverview);
   font-weight: 600;
 }
 
+.cash-reserve-dialog {
+  width: 560px;
+  max-width: calc(100vw - 32px);
+  overflow: hidden;
+  border-radius: 14px;
+  box-shadow: 0 18px 45px rgba(24, 57, 93, 0.18);
+}
+
+.cash-reserve-dialog__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 20px 14px;
+  background: linear-gradient(135deg, #f2f8ff 0%, #fff 72%);
+}
+
+.cash-reserve-dialog__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  color: #1976d2;
+  background: #e4f1ff;
+  border-radius: 12px;
+}
+
+.cash-reserve-dialog__date {
+  margin-top: 4px;
+  color: #738196;
+  font-size: 13px;
+}
+
+.cash-reserve-dialog__body {
+  display: grid;
+  gap: 12px;
+  padding: 16px 20px 18px;
+}
+
+.cash-reserve-dialog__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.cash-reserve-dialog__field {
+  padding: 12px;
+  background: #f8fbff;
+  border: 1px solid #e2eaf4;
+  border-radius: 10px;
+}
+
+.cash-reserve-dialog__hint {
+  padding: 8px 10px;
+  color: #5f6f82;
+  font-size: 13px;
+  line-height: 20px;
+  background: #f7faff;
+  border-radius: 8px;
+}
+
+.cash-reserve-dialog__currency {
+  color: #1976d2;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.cash-reserve-dialog__presets {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.cash-reserve-dialog__preset-label {
+  color: #738196;
+  font-size: 13px;
+}
+
+.cash-reserve-dialog__preset {
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+.cash-reserve-dialog__actions {
+  gap: 8px;
+  justify-content: flex-end;
+  padding: 10px 20px 14px;
+  border-top: 1px solid #edf1f6;
+}
+
+.cash-reserve-dialog__actions .q-btn {
+  min-width: 80px;
+  min-height: 38px;
+  border-radius: 8px;
+}
+
 .confirmation-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 374px;
@@ -462,6 +705,13 @@ onMounted(loadOverview);
 
 .status-badge {
   padding: 7px 12px;
+  font-size: 13px;
+}
+
+.cash-reserve-button {
+  align-self: flex-start;
+  min-height: 34px;
+  padding: 0 12px;
   font-size: 13px;
 }
 

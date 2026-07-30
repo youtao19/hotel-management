@@ -7,7 +7,7 @@
         </tr>
         <tr class="sub-header">
           <th class="payment-method-header">支付方式</th>
-          <th class="payment-method-header">备用金<br/><small>(来自昨日)</small></th>
+          <th class="payment-method-header">备用金<br/><small>(现金来自今日设置)</small></th>
           <th class="income-header">客房<br/>收入1<br/><small>(房费+押金)</small></th>
           <th class="income-header">休息房<br/>收入2<br/><small>(房费+押金)</small></th>
           <th class="income-header">租车<br/>收入3</th>
@@ -21,8 +21,9 @@
       <tbody>
         <tr class="payment-row cash-row">
           <td class="payment-label">现金</td>
-          <td class="editable-cell">
-            <q-input :model-value="getDisplayValue(paymentData.reserve, payWay.cash)" type="number" dense borderless class="table-input" readonly />
+          <td class="editable-cell cash-reserve-cell">
+            <template v-if="cashReserveConfigured">{{ formatAmount(getDisplayValue(paymentData.reserve, payWay.cash)) }}</template>
+            <span v-else class="cash-reserve-unset">未设置</span>
           </td>
           <td class="editable-cell">
             <q-input :model-value="getDisplayValue(paymentData.hotelIncome, payWay.cash)" type="number" dense borderless class="table-input" readonly />
@@ -47,8 +48,7 @@
               dense
               borderless
               class="table-input"
-              :readonly="readOnly"
-              @update:model-value="val => onRetainedInput(payWay.cash, val)"
+              readonly
             />
           </td>
           <td class="auto-calculate">{{ formatAmount(calculateHandover(payWay.cash)) }}</td>
@@ -164,7 +164,8 @@
 import { defineProps, computed } from 'vue'
 const props = defineProps({
   paymentData: { type: Object, required: true },
-  readOnly: { type: Boolean, default: false }
+  readOnly: { type: Boolean, default: false },
+  cashReserveConfigured: { type: Boolean, default: true }
 })
 const emit = defineEmits(['update-retained'])
 
@@ -266,6 +267,15 @@ const onRetainedInput = (payWayKey, value) => {
 
 .shift-table-wrapper {
   margin-bottom: 20px;
+}
+
+.cash-reserve-cell {
+  text-align: center;
+  color: #2d8b3c;
+}
+
+.cash-reserve-unset {
+  color: #f97316;
 }
 
 .shift-table {

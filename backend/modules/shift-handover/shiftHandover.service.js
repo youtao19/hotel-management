@@ -91,10 +91,6 @@ function aggregateBills(rows, reserve) {
       retainedAmount[method];
   }
 
-  // 现金留存款 320
-  retainedAmount["现金"] = amountToCents(320);
-  handoverAmount["现金"] -= retainedAmount["现金"];
-
   const response = {
     reserve: convertBucketsToAmounts(reserve),
     hotelIncome: convertBucketsToAmounts(hotelIncome),
@@ -122,6 +118,7 @@ async function buildCalculatedPaymentData(date) {
   const reserveFromPrev = await repository.findReserveByDate(predate);
   if (reserveFromPrev) {
     reserve = convertBucketsToCents(reserveFromPrev);
+    reserve["现金"] = 0;
   }
 
   const rows = await repository.findBillsByBusinessDate(date);
@@ -191,7 +188,20 @@ function mapSavedHandoverRows(rows) {
 async function getTableData(date) {
   const rows = await repository.findHandoverRowsByDate(date);
   if (rows.length === 0) {
-    return buildCalculatedPaymentData(date);
+    const [paymentData, cashReserveSetting] = await Promise.all([
+      buildCalculatedPaymentData(date),
+      repository.findDailyCashReserve(date)
+    ]);
+    return recalculatePaymentData(paymentData, {
+      reserve: {
+        ...paymentData.reserve,
+        "现金": cashReserveSetting?.cashReserve || 0
+      },
+      retainedAmount: {
+        ...paymentData.retainedAmount,
+        "现金": cashReserveSetting?.cashRetained || 0
+      }
+    });
   }
   return mapSavedHandoverRows(rows);
 }
@@ -199,6 +209,10 @@ async function getTableData(date) {
 async function getYesterdayRecord(date) {
   const yesterdayDate = businessRules.getPreviousBusinessDate(date);
   const summary = await repository.findPreviousHandoverSummary(yesterdayDate);
+  const reserveDefaults = businessRules.buildReserveDefaults({
+    isComplete: summary.isComplete,
+    handoverAmounts: summary.handoverAmounts
+  });
 
   return {
     date: yesterdayDate,
@@ -209,10 +223,7 @@ async function getYesterdayRecord(date) {
     handoverPerson: summary.handoverPerson,
     takeoverPerson: summary.takeoverPerson,
     handoverAmounts: summary.handoverAmounts,
-    reserveDefaults: businessRules.buildReserveDefaults({
-      isComplete: summary.isComplete,
-      handoverAmounts: summary.handoverAmounts
-    }),
+    reserveDefaults,
     statusText: summary.isComplete
       ? "已完成"
       : summary.hasRecord
@@ -223,23 +234,40 @@ async function getYesterdayRecord(date) {
 
 async function getOverview({ date, account }) {
   const yesterdayRecord = await getYesterdayRecord(date);
-  const [rawPaymentData, specialStats] = await Promise.all([
+  const [rawPaymentData, specialStats, cashReserveSetting, isCompleted] = await Promise.all([
     buildCalculatedPaymentData(date),
-    repository.getOverviewSpecialStats(date)
+    repository.getOverviewSpecialStats(date),
+    repository.findDailyCashReserve(date),
+    repository.isHandoverComplete(date)
   ]);
+  const reserve = {
+    ...yesterdayRecord.reserveDefaults,
+    "现金": cashReserveSetting?.cashReserve || 0
+  };
   const paymentData = recalculatePaymentData(rawPaymentData, {
-    reserve: yesterdayRecord.reserveDefaults
+    reserve,
+    retainedAmount: {
+      ...rawPaymentData.retainedAmount,
+      "现金": cashReserveSetting?.cashRetained || 0
+    }
   });
+  const configured = Boolean(cashReserveSetting);
 
   return {
     businessDate: date,
     currentShift: businessRules.resolveCurrentShift(),
     currentUser: businessRules.resolveCurrentUser(account),
     yesterdayRecord,
+    isCompleted,
+    cashReserveSetting: configured
+      ? { configured: true, amount: cashReserveSetting.cashReserve, cashRetained: cashReserveSetting.cashRetained, setBy: cashReserveSetting.setBy, updatedAt: cashReserveSetting.updatedAt }
+      : { configured: false, amount: null, cashRetained: null, setBy: null, updatedAt: null },
     paymentData,
     specialStats,
-    canComplete: true,
-    completeBlockReasons: []
+    canComplete: configured && !isCompleted,
+    completeBlockReasons: !configured
+      ? ["请先设置今日备用金与留存款"]
+      : isCompleted ? ["当日交接已完成"] : []
   };
 }
 
@@ -267,7 +295,17 @@ async function completeHandover({ body, account }) {
   } = body;
   const operatorName = resolveOperatorName({ handoverPerson, account });
   const overview = await getOverview({ date, account });
-  const paymentData = recalculatePaymentData(overview.paymentData, { retainedAmount });
+  if (!overview.cashReserveSetting.configured) {
+    const error = new Error("请先设置今日备用金与留存款");
+    error.status = 409;
+    throw error;
+  }
+  const paymentData = recalculatePaymentData(overview.paymentData, {
+    retainedAmount: {
+      ...retainedAmount,
+      "现金": overview.cashReserveSetting.cashRetained
+    }
+  });
 
   const savedRecords = await repository.saveCompletedHandover({
     date,
@@ -287,6 +325,22 @@ async function completeHandover({ body, account }) {
   };
 }
 
+/**
+ * 保存每日现金备用金与留存款；交接完成后拒绝修改，避免最终交接款失去可追溯性。
+ * @param {{date: string, cashReserve: number, cashRetained: number, account: object}} input 设置请求
+ * @returns {Promise<object>} 已保存设置
+ */
+async function setDailyCashReserve({ date, cashReserve, cashRetained, account }) {
+  if (await repository.isHandoverComplete(date)) {
+    const error = new Error("当日交接已完成，备用金与留存款不可修改");
+    error.status = 409;
+    throw error;
+  }
+
+  const setBy = resolveOperatorName({ account });
+  return repository.saveDailyCashReserve({ date, cashReserve, cashRetained, setBy });
+}
+
 module.exports = {
   completeHandover,
   getAdminMemos,
@@ -294,5 +348,6 @@ module.exports = {
   getSpecialStats,
   getTableData,
   listRecords,
-  resolveOperatorName
+  resolveOperatorName,
+  setDailyCashReserve
 };

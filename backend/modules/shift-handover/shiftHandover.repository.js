@@ -196,6 +196,74 @@ async function findReserveByDate(date) {
   }
 }
 
+/**
+ * 查询当日已保存的现金备用金；记录不存在与金额为 0 必须区分，不能用默认值替代。
+ * @param {string} date 营业日期
+ * @returns {Promise<object|null>} 备用金设置或空
+ */
+async function findDailyCashReserve(date) {
+  const result = await query(
+    `SELECT business_date::text AS business_date, cash_reserve, cash_retained, set_by, updated_at
+     FROM handover_daily_settings
+     WHERE business_date = $1::date`,
+    [date]
+  );
+
+  if (result.rows.length === 0) return null;
+
+  const row = result.rows[0];
+  return {
+    date: row.business_date,
+    cashReserve: normalizeAmount(row.cash_reserve),
+    cashRetained: normalizeAmount(row.cash_retained),
+    setBy: row.set_by,
+    updatedAt: row.updated_at
+  };
+}
+
+/**
+ * 判断当天四种支付方式是否全部已保存；完成后备用金必须锁定以保护交接快照。
+ * @param {string} date 营业日期
+ * @returns {Promise<boolean>} 是否已完成交接
+ */
+async function isHandoverComplete(date) {
+  const result = await query(
+    `SELECT COUNT(DISTINCT payment_type) AS payment_count
+     FROM handover
+     WHERE date = $1::date
+       AND payment_type IN (1, 2, 3, 4)`,
+    [date]
+  );
+  return Number(result.rows[0].payment_count) === 4;
+}
+
+/**
+ * 按营业日期保存现金备用金与留存款；只覆盖当日未完成交接前的设置记录。
+ * @param {{date: string, cashReserve: number, cashRetained: number, setBy: string}} input 设置内容
+ * @returns {Promise<object>} 已保存的设置
+ */
+async function saveDailyCashReserve({ date, cashReserve, cashRetained, setBy }) {
+  const result = await query(
+    `INSERT INTO handover_daily_settings (business_date, cash_reserve, cash_retained, set_by)
+     VALUES ($1::date, $2, $3, $4)
+     ON CONFLICT (business_date) DO UPDATE SET
+       cash_reserve = EXCLUDED.cash_reserve,
+       cash_retained = EXCLUDED.cash_retained,
+       set_by = EXCLUDED.set_by,
+       updated_at = CURRENT_TIMESTAMP
+     RETURNING business_date::text AS business_date, cash_reserve, cash_retained, set_by, updated_at`,
+    [date, cashReserve, cashRetained, setBy]
+  );
+  const row = result.rows[0];
+  return {
+    date: row.business_date,
+    cashReserve: normalizeAmount(row.cash_reserve),
+    cashRetained: normalizeAmount(row.cash_retained),
+    setBy: row.set_by,
+    updatedAt: row.updated_at
+  };
+}
+
 async function findHandoverRowsByDate(date) {
   const sql = `
     SELECT
@@ -362,9 +430,12 @@ module.exports = {
   saveCompletedHandover,
   getSpecialStats,
   findBillsByBusinessDate,
+  findDailyCashReserve,
   findHandoverRowsByDate,
   findReserveByDate,
+  isHandoverComplete,
   findPreviousHandoverSummary,
   findAdminMemoTasks,
-  getOverviewSpecialStats
+  getOverviewSpecialStats,
+  saveDailyCashReserve
 };

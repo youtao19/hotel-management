@@ -424,7 +424,10 @@ export const shiftHandoverApi = {
   queryHandoverRecords: () => api.get('/handover/query'),
 
   // 完成交接班（保存完整数据）
-  completeHandover: (handoverData) => api.post('/handover/complete', handoverData)
+  completeHandover: (handoverData) => api.post('/handover/complete', handoverData),
+
+  // 保存当前营业日的现金备用金与留存款
+  setDailyCashReserve: (data) => api.put('/handover/daily-cash-reserve', data)
 
 }
 

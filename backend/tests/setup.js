@@ -16,6 +16,7 @@ const tables = [
   'room_types',
   'review_invitations',
   'handover',
+  'handover_daily_settings',
   'dashboard_memos',
   'account'
 ];
@@ -36,6 +37,7 @@ function shouldSkipGlobalBootstrap() {
     || (testPath.includes('/backend/modules/order-create/__tests__/') && testPath.endsWith('.test.js'))
     || (testPath.includes('/backend/modules/order-manage/__tests__/') && testPath.endsWith('.test.js'))
     || (testPath.includes('/backend/modules/auth/__tests__/') && testPath.endsWith('.test.js'))
+    || (testPath.includes('/backend/modules/shift-handover/__tests__/') && testPath.endsWith('.test.js'))
     ;
 }
 
