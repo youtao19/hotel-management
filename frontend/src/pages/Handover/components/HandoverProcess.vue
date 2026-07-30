@@ -372,18 +372,21 @@ onMounted(loadOverview);
 .handover-process {
   position: relative;
   width: 100%;
-  max-width: 1180px;
+  max-width: 1260px;
   height: 100%;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
 .handover-top-bar {
   display: flex;
-  min-height: 64px;
+  min-height: 102px;
   align-items: center;
   gap: 22px;
-  padding: 12px 18px;
-  margin-bottom: 16px;
+  padding: 18px 22px;
+  margin-bottom: 20px;
+  flex-shrink: 0;
   background: #fff;
   border: 1px solid #dbe3ef;
   border-radius: 6px;
@@ -428,9 +431,9 @@ onMounted(loadOverview);
 
 .confirmation-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-columns: minmax(0, 1fr) 374px;
   gap: 20px;
-  height: calc(100% - 82px);
+  flex: 1;
   min-height: 0;
   overflow: hidden;
 }
@@ -446,7 +449,7 @@ onMounted(loadOverview);
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  padding: 18px 20px;
+  padding: 24px;
 }
 
 .confirmation-heading {
@@ -471,7 +474,7 @@ onMounted(loadOverview);
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 18px;
+  padding: 24px;
 }
 
 .sidebar-title {

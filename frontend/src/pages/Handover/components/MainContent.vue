@@ -177,7 +177,7 @@ watch(
 
 <style scoped>
 .main-content {
-  background: linear-gradient(135deg, #fafafa 0%, #e6e5e8 100%);
+  background: #f4f8fd;
   position: relative;
   height: 100%;
   min-height: 0;
@@ -203,7 +203,7 @@ watch(
 .main-area {
   flex: 1;
   min-height: 0;
-  padding: 20px;
+  padding: 24px 28px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -249,7 +249,10 @@ watch(
 
 .step-content {
   width: 100%;
-  max-width: 1000px;
+  max-width: 1260px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
 }
 
 .content-layout--confirmation .step-content {

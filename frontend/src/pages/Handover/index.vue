@@ -39,6 +39,14 @@ const handleRecordSelect = (record) => {
   overflow: hidden;
 }
 
+.handover-history-column {
+  display: none;
+}
+
+.handover-content-column {
+  width: 100%;
+}
+
 :global(.q-layout:has(.handover-page) .q-page-container) {
   padding-bottom: 0 !important;
 }
