@@ -414,6 +414,9 @@ export const shiftHandoverApi = {
   // 获取交接班表格数据（从handover表查询）
   getHandoverTableData: (params) => api.get('/handover/handover-table', { params }),
 
+  // 获取交接表金额的账单来源明细
+  getSourceDetails: (params) => api.get('/handover/source-details', { params }),
+
   // 获取交接班特殊统计（开房数、休息房数、好评邀/得）
   getSpecialStats: (params) => api.get('/handover/special-stats', { params }),
 

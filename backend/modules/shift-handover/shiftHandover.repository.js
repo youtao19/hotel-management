@@ -80,7 +80,10 @@ async function listCompletedHandoverRecords() {
   }));
 }
 
-async function saveCompletedHandover({ date, operatorName, receivePerson, vipCard, notes, paymentData }) {
+/**
+ * 保存完成交接及其来源快照；两类数据必须同事务提交，避免历史金额失去可追溯依据。
+ */
+async function saveCompletedHandover({ date, operatorName, receivePerson, vipCard, notes, paymentData, sourceDetails }) {
   let client;
 
   try {
@@ -91,9 +94,10 @@ async function saveCompletedHandover({ date, operatorName, receivePerson, vipCar
       INSERT INTO handover (
         date, handover_person, takeover_person, vip_card, payment_type,
         reserve_cash, room_income, rest_income, rent_income, total_income,
-        room_refund, rest_refund, retained, handover, task_list, remarks
+        room_refund, rest_refund, retained, handover, source_snapshot_created,
+        task_list, remarks
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, true, $15, $16)
       ON CONFLICT (date, payment_type) DO UPDATE SET
         handover_person = EXCLUDED.handover_person,
         takeover_person = EXCLUDED.takeover_person,
@@ -107,6 +111,7 @@ async function saveCompletedHandover({ date, operatorName, receivePerson, vipCar
         rest_refund = EXCLUDED.rest_refund,
         retained = EXCLUDED.retained,
         handover = EXCLUDED.handover,
+        source_snapshot_created = true,
         task_list = EXCLUDED.task_list,
         remarks = EXCLUDED.remarks
       RETURNING *;
@@ -136,6 +141,34 @@ async function saveCompletedHandover({ date, operatorName, receivePerson, vipCar
       })
     );
 
+    await client.query(
+      "DELETE FROM handover_source_snapshot WHERE business_date = $1::date",
+      [date]
+    );
+
+    if (sourceDetails.length > 0) {
+      const snapshotSql = `
+        INSERT INTO handover_source_snapshot (
+          business_date, source_item, payment_method, bill_id, order_id,
+          room_number, guest_name, change_type, source_amount,
+          bill_create_time, remarks
+        ) VALUES ($1::date, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `;
+      await Promise.all(sourceDetails.map((detail) => client.query(snapshotSql, [
+        date,
+        detail.item,
+        detail.paymentMethod,
+        detail.billId,
+        detail.orderId,
+        detail.roomNumber,
+        detail.guestName,
+        detail.changeType,
+        detail.amount,
+        detail.createTime,
+        detail.remarks
+      ])));
+    }
+
     await client.query("COMMIT");
     return results.flatMap(result => result.rows);
   } catch (error) {
@@ -156,12 +189,46 @@ async function saveCompletedHandover({ date, operatorName, receivePerson, vipCar
 
 async function findBillsByBusinessDate(date) {
   const sql = `
-    SELECT bill_id, order_id, pay_way, change_price, change_type, stay_type, stay_date
+    SELECT
+      bill_id, order_id, room_number, guest_name, pay_way, change_price,
+      change_type, stay_type, stay_date, create_time, remarks
     FROM bills
     WHERE stay_date::date = $1::date
-    ORDER BY bill_id ASC
+    ORDER BY create_time ASC, bill_id ASC
   `;
   const result = await query(sql, [date]);
+  return result.rows;
+}
+
+/**
+ * 判断已完成交接是否已保存来源快照；空明细也会标记，不能误回退为实时账单。
+ */
+async function hasSourceSnapshot(date) {
+  const result = await query(
+    `SELECT COALESCE(BOOL_AND(source_snapshot_created), false) AS exists
+     FROM handover
+     WHERE date = $1::date
+       AND payment_type IN (1, 2, 3, 4)`,
+    [date]
+  );
+  return result.rows[0].exists;
+}
+
+/**
+ * 查询已完成交接的固定来源明细，展示顺序与实时账单参考保持一致。
+ */
+async function findSourceSnapshots({ date, item, paymentMethod }) {
+  const result = await query(
+    `SELECT
+       bill_id, order_id, room_number, guest_name, change_type,
+       source_amount, bill_create_time, remarks
+     FROM handover_source_snapshot
+     WHERE business_date = $1::date
+       AND source_item = $2
+       AND payment_method = $3
+     ORDER BY bill_create_time ASC NULLS LAST, bill_id ASC NULLS LAST`,
+    [date, item, paymentMethod]
+  );
   return result.rows;
 }
 
@@ -430,10 +497,12 @@ module.exports = {
   saveCompletedHandover,
   getSpecialStats,
   findBillsByBusinessDate,
+  findSourceSnapshots,
   findDailyCashReserve,
   findHandoverRowsByDate,
   findReserveByDate,
   isHandoverComplete,
+  hasSourceSnapshot,
   findPreviousHandoverSummary,
   findAdminMemoTasks,
   getOverviewSpecialStats,

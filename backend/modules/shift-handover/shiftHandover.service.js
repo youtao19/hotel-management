@@ -7,6 +7,7 @@ const repository = require("./shiftHandover.repository");
 const {
   PAYMENT_METHODS,
   amountToCents,
+  centsToAmount,
   convertBucketsToAmounts,
   convertBucketsToCents,
   createPaymentBuckets,
@@ -21,6 +22,14 @@ const BILL_PAY_WAY_MAPPING = {
 };
 
 const PAYMENT_TYPE_MAPPING = { 1: "现金", 2: "微信", 3: "微邮付", 4: "其他" };
+const SOURCE_ITEMS = [
+  "hotelIncome",
+  "restIncome",
+  "carRentIncome",
+  "hotelRefundDeposit",
+  "restRefundDeposit"
+];
+const INCOME_CHANGE_TYPES = new Set(["房费", "收押", "订单账单", "补收", "退款"]);
 
 function resolveOperatorName({ handoverPerson, account }) {
   return handoverPerson
@@ -34,45 +43,69 @@ function mapBillPaymentMethod(payWay) {
   return BILL_PAY_WAY_MAPPING[payWay] || "其他";
 }
 
-function aggregateBills(rows, reserve) {
-  const hotelIncome = createPaymentBuckets();
-  const restIncome = createPaymentBuckets();
-  const carRentIncome = createPaymentBuckets();
-  const hotelDeposit = createPaymentBuckets();
-  const restDeposit = createPaymentBuckets();
+/**
+ * 将单笔账单归属到交接表项目；收入调整按原始正负金额累计，退押改用绝对值以匹配退押列口径。
+ */
+function classifyBill(row) {
+  const paymentMethod = mapBillPaymentMethod(row.pay_way);
+  const amountCents = amountToCents(row.change_price);
+
+  if (row.stay_type === "租车收入" || row.change_type === "租车收入") {
+    return { item: "carRentIncome", paymentMethod, amountCents };
+  }
+  if (row.change_type === "退押") {
+    if (row.stay_type === "客房") return { item: "hotelRefundDeposit", paymentMethod, amountCents: Math.abs(amountCents) };
+    if (row.stay_type === "休息房") return { item: "restRefundDeposit", paymentMethod, amountCents: Math.abs(amountCents) };
+    return null;
+  }
+  if (!INCOME_CHANGE_TYPES.has(row.change_type)) return null;
+  if (row.stay_type === "客房") return { item: "hotelIncome", paymentMethod, amountCents };
+  if (row.stay_type === "休息房") return { item: "restIncome", paymentMethod, amountCents };
+  return null;
+}
+
+/**
+ * 用同一分类结果同时生成金额桶和可展示的来源明细，防止两套口径逐渐偏离。
+ */
+function collectBillSources(rows) {
+  const buckets = SOURCE_ITEMS.reduce((result, item) => {
+    result[item] = createPaymentBuckets();
+    return result;
+  }, {});
+  const sourceDetails = [];
 
   for (const row of rows) {
-    const { pay_way: rawPayWay, change_price, change_type, stay_type } = row;
-    const amountCents = amountToCents(change_price);
-    const payWay = mapBillPaymentMethod(rawPayWay);
+    const classified = classifyBill(row);
+    if (!classified) continue;
 
-    if (change_type === "房费") {
-      if (stay_type === "客房") {
-        hotelIncome[payWay] += amountCents;
-      } else if (stay_type === "休息房") {
-        restIncome[payWay] += amountCents;
-      }
-    } else if (change_type === "收押") {
-      if (stay_type === "客房") {
-        hotelIncome[payWay] += amountCents;
-      } else if (stay_type === "休息房") {
-        restIncome[payWay] += amountCents;
-      }
-    } else if (change_type === "退押") {
-      const refundAmount = Math.abs(amountCents);
-      if (stay_type === "客房") {
-        hotelDeposit[payWay] += refundAmount;
-      } else if (stay_type === "休息房") {
-        restDeposit[payWay] += refundAmount;
-      }
-    } else if (change_type === "订单账单") {
-      if (stay_type === "客房") {
-        hotelIncome[payWay] += amountCents;
-      } else if (stay_type === "休息房") {
-        restIncome[payWay] += amountCents;
-      }
-    }
+    buckets[classified.item][classified.paymentMethod] += classified.amountCents;
+    sourceDetails.push({
+      item: classified.item,
+      paymentMethod: classified.paymentMethod,
+      billId: row.bill_id || null,
+      orderId: row.order_id || null,
+      roomNumber: row.room_number || null,
+      guestName: row.guest_name || null,
+      changeType: row.change_type || "",
+      amount: centsToAmount(classified.amountCents),
+      createTime: row.create_time || null,
+      remarks: row.remarks || ""
+    });
   }
+
+  return { buckets, sourceDetails };
+}
+
+/**
+ * 汇总账单到交接表金额；来源分类必须由 collectBillSources 统一提供。
+ */
+function aggregateBills(rows, reserve) {
+  const { buckets, sourceDetails } = collectBillSources(rows);
+  const hotelIncome = buckets.hotelIncome;
+  const restIncome = buckets.restIncome;
+  const carRentIncome = buckets.carRentIncome;
+  const hotelDeposit = buckets.hotelRefundDeposit;
+  const restDeposit = buckets.restRefundDeposit;
 
   const totalIncome = createPaymentBuckets();
   const retainedAmount = createPaymentBuckets();
@@ -108,7 +141,7 @@ function aggregateBills(rows, reserve) {
   response.hotelRefundDeposit = response.hotelDeposit;
   response.restRefundDeposit = response.restDeposit;
 
-  return response;
+  return { paymentData: response, sourceDetails };
 }
 
 async function buildCalculatedPaymentData(date) {
@@ -122,7 +155,46 @@ async function buildCalculatedPaymentData(date) {
   }
 
   const rows = await repository.findBillsByBusinessDate(date);
-  return aggregateBills(rows, reserve);
+  return aggregateBills(rows, reserve).paymentData;
+}
+
+/**
+ * 查询实时来源明细；当前交接和没有快照的旧历史记录都使用这一参考数据。
+ */
+async function buildLiveSourceDetails(date, item, paymentMethod) {
+  const rows = await repository.findBillsByBusinessDate(date);
+  const { sourceDetails } = collectBillSources(rows);
+  return sourceDetails.filter((detail) => (
+    (!item || detail.item === item)
+    && (!paymentMethod || detail.paymentMethod === paymentMethod)
+  ));
+}
+
+/**
+ * 返回指定金额单元格的来源，优先读取完成交接时固定的快照。
+ */
+async function getSourceDetails({ date, item, paymentMethod }) {
+  const isCompleted = await repository.isHandoverComplete(date);
+  if (!isCompleted) {
+    return { sourceMode: "live", details: await buildLiveSourceDetails(date, item, paymentMethod) };
+  }
+  if (await repository.hasSourceSnapshot(date)) {
+    const rows = await repository.findSourceSnapshots({ date, item, paymentMethod });
+    return {
+      sourceMode: "snapshot",
+      details: rows.map((row) => ({
+        billId: row.bill_id,
+        orderId: row.order_id,
+        roomNumber: row.room_number,
+        guestName: row.guest_name,
+        changeType: row.change_type,
+        amount: Number(row.source_amount || 0),
+        createTime: row.bill_create_time,
+        remarks: row.remarks || ""
+      }))
+    };
+  }
+  return { sourceMode: "reference", details: await buildLiveSourceDetails(date, item, paymentMethod) };
 }
 
 function mapSavedHandoverRows(rows) {
@@ -192,7 +264,7 @@ async function getTableData(date) {
       buildCalculatedPaymentData(date),
       repository.findDailyCashReserve(date)
     ]);
-    return recalculatePaymentData(paymentData, {
+    const recalculated = recalculatePaymentData(paymentData, {
       reserve: {
         ...paymentData.reserve,
         "现金": cashReserveSetting?.cashReserve || 0
@@ -202,6 +274,10 @@ async function getTableData(date) {
         "现金": cashReserveSetting?.cashRetained || 0
       }
     });
+    // 旧页面仍读取这两个别名，来源功能不能破坏已有交接表响应契约。
+    recalculated.hotelRefund = recalculated.hotelDeposit;
+    recalculated.restRefund = recalculated.restDeposit;
+    return recalculated;
   }
   return mapSavedHandoverRows(rows);
 }
@@ -307,13 +383,15 @@ async function completeHandover({ body, account }) {
     }
   });
 
+  const sourceDetails = await buildLiveSourceDetails(date, null, null);
   const savedRecords = await repository.saveCompletedHandover({
     date,
     operatorName,
     receivePerson,
     vipCard,
     notes,
-    paymentData
+    paymentData,
+    sourceDetails
   });
 
   return {
@@ -345,9 +423,12 @@ module.exports = {
   completeHandover,
   getAdminMemos,
   getOverview,
+  getSourceDetails,
   getSpecialStats,
   getTableData,
   listRecords,
   resolveOperatorName,
+  classifyBill,
+  collectBillSources,
   setDailyCashReserve
 };

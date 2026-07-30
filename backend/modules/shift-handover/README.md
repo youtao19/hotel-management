@@ -83,6 +83,20 @@ date=YYYY-MM-DD
 }
 ```
 
+### GET /api/handover/source-details
+
+查询交接表中客房收入、休息房收入、租车收入、客房退押或休息房退押的来源账单。
+
+请求参数：
+
+```txt
+date=YYYY-MM-DD&item=hotelIncome&paymentMethod=微信
+```
+
+`item` 可为 `hotelIncome`、`restIncome`、`carRentIncome`、`hotelRefundDeposit`、`restRefundDeposit`。
+
+响应中的 `sourceMode` 为 `live`（当前交接实时账单）、`snapshot`（已完成交接快照）或 `reference`（旧历史记录的实时账单参考）。
+
 ### GET /api/handover/special-stats
 
 请求参数：
@@ -195,6 +209,7 @@ date=YYYY-MM-DD
 
 - `GET /api/handover/overview` -> `shiftHandover.service.getOverview()` -> calculator/businessRules/repository 编排
 - `GET /api/handover/handover-table` -> `shiftHandover.service.getTableData()` -> 有保存记录则映射、否则按 bills 计算
+- `GET /api/handover/source-details` -> `shiftHandover.service.getSourceDetails()` -> 当前账单、交接快照或历史账单参考
 - `GET /api/handover/special-stats` -> `shiftHandover.repository.getSpecialStats()`
 - `GET /api/handover/admin-memos` -> `shiftHandover.service.getAdminMemos()` -> repository 读取并过滤 `type === "admin"`
 - `GET /api/handover/query` -> `shiftHandover.repository.listCompletedHandoverRecords()`
@@ -224,3 +239,4 @@ date=YYYY-MM-DD
 - 完成交接班仍由后端重新计算金额，前端只提交留存金额、接班人、会员卡和备注。
 - 现金备用金与留存款只能从 `handover_daily_settings` 读取，不再使用固定值或昨日交接款作为回退。
 - 完成交接班写入四种支付方式必须保持同一个事务。
+- 完成交接时同时保存来源账单快照，后续账单变动不得改变该交接记录的来源明细。

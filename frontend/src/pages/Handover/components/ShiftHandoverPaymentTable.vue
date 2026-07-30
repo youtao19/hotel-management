@@ -19,141 +19,33 @@
         </tr>
       </thead>
       <tbody>
-        <tr class="payment-row cash-row">
-          <td class="payment-label">现金</td>
-          <td class="editable-cell cash-reserve-cell">
-            <template v-if="cashReserveConfigured">{{ formatAmount(getDisplayValue(paymentData.reserve, payWay.cash)) }}</template>
+        <tr v-for="row in paymentRows" :key="row.key" class="payment-row" :class="row.className">
+          <td class="payment-label">{{ row.label }}</td>
+          <td class="editable-cell" :class="{ 'cash-reserve-cell': row.key === payWay.cash }">
+            <template v-if="row.key !== payWay.cash || cashReserveConfigured">{{ formatAmount(getDisplayValue(paymentData.reserve, row.key)) }}</template>
             <span v-else class="cash-reserve-unset">未设置</span>
           </td>
-          <td class="editable-cell">
-            <q-input :model-value="getDisplayValue(paymentData.hotelIncome, payWay.cash)" type="number" dense borderless class="table-input" readonly />
+          <td v-for="item in sourceItems" :key="item.key" class="editable-cell source-cell" @click="showSource(item.key, row.key)">
+            {{ formatAmount(getDisplayValue(paymentData[item.key], row.key)) }}
+            <q-tooltip>查看来源</q-tooltip>
           </td>
-          <td class="editable-cell">
-            <q-input :model-value="getDisplayValue(paymentData.restIncome, payWay.cash)" type="number" dense borderless class="table-input" readonly />
-          </td>
-          <td class="editable-cell">
-            <q-input :model-value="getDisplayValue(paymentData.carRentIncome, payWay.cash)" type="number" dense borderless class="table-input" readonly />
-          </td>
-          <td class="total-cell">{{ formatAmount(calculateRowTotal(payWay.cash)) }}</td>
-          <td class="editable-cell">
-            <q-input :model-value="getDisplayValue(paymentData.hotelRefundDeposit, payWay.cash)" type="number" dense borderless class="table-input" readonly />
-          </td>
-          <td class="editable-cell">
-            <q-input :model-value="getDisplayValue(paymentData.restRefundDeposit, payWay.cash)" type="number" dense borderless class="table-input" readonly />
+          <td class="total-cell">{{ formatAmount(calculateRowTotal(row.key)) }}</td>
+          <td v-for="item in refundItems" :key="item.key" class="editable-cell source-cell" @click="showSource(item.key, row.key)">
+            {{ formatAmount(getDisplayValue(paymentData[item.key], row.key)) }}
+            <q-tooltip>查看来源</q-tooltip>
           </td>
           <td class="editable-cell">
             <q-input
-              :model-value="getDisplayValue(paymentData.retainedAmount, payWay.cash)"
+              :model-value="getDisplayValue(paymentData.retainedAmount, row.key)"
               type="number"
               dense
               borderless
               class="table-input"
-              readonly
+              :readonly="readOnly || row.key === payWay.cash"
+              @update:model-value="val => onRetainedInput(row.key, val)"
             />
           </td>
-          <td class="auto-calculate">{{ formatAmount(calculateHandover(payWay.cash)) }}</td>
-        </tr>
-        <tr class="payment-row wechat-row">
-          <td class="payment-label">微信</td>
-          <td class="editable-cell">
-            <q-input :model-value="getDisplayValue(paymentData.reserve, payWay.wechat)" type="number" dense borderless class="table-input" readonly />
-          </td>
-          <td class="editable-cell">
-            <q-input :model-value="getDisplayValue(paymentData.hotelIncome, payWay.wechat)" type="number" dense borderless class="table-input" readonly />
-          </td>
-          <td class="editable-cell">
-            <q-input :model-value="getDisplayValue(paymentData.restIncome, payWay.wechat)" type="number" dense borderless class="table-input" readonly />
-          </td>
-          <td class="editable-cell">
-            <q-input :model-value="getDisplayValue(paymentData.carRentIncome, payWay.wechat)" type="number" dense borderless class="table-input" readonly />
-          </td>
-          <td class="total-cell">{{ formatAmount(calculateRowTotal(payWay.wechat)) }}</td>
-          <td class="editable-cell">
-            <q-input :model-value="getDisplayValue(paymentData.hotelRefundDeposit, payWay.wechat)" type="number" dense borderless class="table-input" readonly />
-          </td>
-          <td class="editable-cell">
-            <q-input :model-value="getDisplayValue(paymentData.restRefundDeposit, payWay.wechat)" type="number" dense borderless class="table-input" readonly />
-          </td>
-          <td class="editable-cell">
-            <q-input
-              :model-value="getDisplayValue(paymentData.retainedAmount, payWay.wechat)"
-              type="number"
-              dense
-              borderless
-              class="table-input"
-              :readonly="readOnly"
-              @update:model-value="val => onRetainedInput(payWay.wechat, val)"
-            />
-          </td>
-          <td class="auto-calculate">{{ formatAmount(calculateHandover(payWay.wechat)) }}</td>
-        </tr>
-        <tr class="payment-row digital-row">
-          <td class="payment-label">微邮付</td>
-          <td class="editable-cell">
-            <q-input :model-value="getDisplayValue(paymentData.reserve, payWay.digital)" type="number" dense borderless class="table-input" readonly />
-          </td>
-          <td class="editable-cell">
-            <q-input :model-value="getDisplayValue(paymentData.hotelIncome, payWay.digital)" type="number" dense borderless class="table-input" readonly />
-          </td>
-          <td class="editable-cell">
-            <q-input :model-value="getDisplayValue(paymentData.restIncome, payWay.digital)" type="number" dense borderless class="table-input" readonly />
-          </td>
-          <td class="editable-cell">
-            <q-input :model-value="getDisplayValue(paymentData.carRentIncome, payWay.digital)" type="number" dense borderless class="table-input" readonly />
-          </td>
-          <td class="total-cell">{{ formatAmount(calculateRowTotal(payWay.digital)) }}</td>
-          <td class="editable-cell">
-            <q-input :model-value="getDisplayValue(paymentData.hotelRefundDeposit, payWay.digital)" type="number" dense borderless class="table-input" readonly />
-          </td>
-          <td class="editable-cell">
-            <q-input :model-value="getDisplayValue(paymentData.restRefundDeposit, payWay.digital)" type="number" dense borderless class="table-input" readonly />
-          </td>
-          <td class="editable-cell">
-            <q-input
-              :model-value="getDisplayValue(paymentData.retainedAmount, payWay.digital)"
-              type="number"
-              dense
-              borderless
-              class="table-input"
-              :readonly="readOnly"
-              @update:model-value="val => onRetainedInput(payWay.digital, val)"
-            />
-          </td>
-          <td class="auto-calculate">{{ formatAmount(calculateHandover(payWay.digital)) }}</td>
-        </tr>
-        <tr class="payment-row other-row">
-          <td class="payment-label">其他方式</td>
-          <td class="editable-cell">
-            <q-input :model-value="getDisplayValue(paymentData.reserve, payWay.other)" type="number" dense borderless class="table-input" readonly />
-          </td>
-          <td class="editable-cell">
-            <q-input :model-value="getDisplayValue(paymentData.hotelIncome, payWay.other)" type="number" dense borderless class="table-input" readonly />
-          </td>
-          <td class="editable-cell">
-            <q-input :model-value="getDisplayValue(paymentData.restIncome, payWay.other)" type="number" dense borderless class="table-input" readonly />
-          </td>
-          <td class="editable-cell">
-            <q-input :model-value="getDisplayValue(paymentData.carRentIncome, payWay.other)" type="number" dense borderless class="table-input" readonly />
-          </td>
-          <td class="total-cell">{{ formatAmount(calculateRowTotal(payWay.other)) }}</td>
-          <td class="editable-cell">
-            <q-input :model-value="getDisplayValue(paymentData.hotelRefundDeposit, payWay.other)" type="number" dense borderless class="table-input" readonly />
-          </td>
-          <td class="editable-cell">
-            <q-input :model-value="getDisplayValue(paymentData.restRefundDeposit, payWay.other)" type="number" dense borderless class="table-input" readonly />
-          </td>
-          <td class="editable-cell">
-            <q-input
-              :model-value="getDisplayValue(paymentData.retainedAmount, payWay.other)"
-              type="number"
-              dense
-              borderless
-              class="table-input"
-              :readonly="readOnly"
-              @update:model-value="val => onRetainedInput(payWay.other, val)"
-            />
-          </td>
-          <td class="auto-calculate">{{ formatAmount(calculateHandover(payWay.other)) }}</td>
+          <td class="auto-calculate">{{ formatAmount(calculateHandover(row.key)) }}</td>
         </tr>
       </tbody>
     </table>
@@ -167,9 +59,24 @@ const props = defineProps({
   readOnly: { type: Boolean, default: false },
   cashReserveConfigured: { type: Boolean, default: true }
 })
-const emit = defineEmits(['update-retained'])
+const emit = defineEmits(['update-retained', 'show-source'])
 
 const payWay = { cash: '现金', wechat: '微信', digital: '微邮付', other: '其他' }
+const paymentRows = [
+  { key: payWay.cash, label: '现金', className: 'cash-row' },
+  { key: payWay.wechat, label: '微信', className: 'wechat-row' },
+  { key: payWay.digital, label: '微邮付', className: 'digital-row' },
+  { key: payWay.other, label: '其他方式', className: 'other-row' }
+]
+const sourceItems = [
+  { key: 'hotelIncome' },
+  { key: 'restIncome' },
+  { key: 'carRentIncome' }
+]
+const refundItems = [
+  { key: 'hotelRefundDeposit' },
+  { key: 'restRefundDeposit' }
+]
 
 function createEmptyBuckets() {
   return { '现金': 0, '微信': 0, '微邮付': 0, '其他': 0 }
@@ -261,6 +168,11 @@ const onRetainedInput = (payWayKey, value) => {
   })
 }
 
+// 只有账单直接汇总的单元格可追溯，计算列与设置项不触发来源查询。
+const showSource = (item, paymentMethod) => {
+  emit('show-source', { item, paymentMethod })
+}
+
 </script>
 
 <style scoped>
@@ -276,6 +188,14 @@ const onRetainedInput = (payWayKey, value) => {
 
 .cash-reserve-unset {
   color: #f97316;
+}
+
+.source-cell {
+  cursor: pointer;
+}
+
+.source-cell:hover {
+  background: #eef6ff;
 }
 
 .shift-table {

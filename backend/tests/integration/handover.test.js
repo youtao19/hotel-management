@@ -20,6 +20,7 @@ describe('交接班当前页面接口', () => {
     await query('TRUNCATE TABLE room_types RESTART IDENTITY CASCADE;');
     await query('TRUNCATE TABLE handover RESTART IDENTITY CASCADE;');
     await query('TRUNCATE TABLE handover_daily_settings RESTART IDENTITY CASCADE;');
+    await query('TRUNCATE TABLE handover_source_snapshot RESTART IDENTITY CASCADE;');
 
     await query(
       `INSERT INTO handover_daily_settings (business_date, cash_reserve, cash_retained, set_by)
@@ -102,6 +103,59 @@ describe('交接班当前页面接口', () => {
     }));
     expect(response.body.data.hotelRefund).toEqual(response.body.data.hotelDeposit);
     expect(response.body.data.restRefund).toEqual(response.body.data.restDeposit);
+  });
+
+  test('来源明细接口按当前账单返回客房微信收入', async () => {
+    const date = '2025-11-04';
+    await query(
+      `INSERT INTO bills (
+        bill_id, order_id, room_number, guest_name, change_price, change_type,
+        pay_way, create_time, remarks, stay_type, stay_date
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::timestamptz, $9, $10, $11::date)`,
+      [1000, 'SOURCE-001', '301', '来源测试客人', 88, '房费', '微信', '2025-11-04T10:00:00+08:00', '来源测试', '客房', date]
+    );
+
+    const response = await authedRequest()
+      .get('/api/handover/source-details')
+      .query({ date, item: 'hotelIncome', paymentMethod: '微信' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.sourceMode).toBe('live');
+    expect(response.body.data.details).toEqual(expect.arrayContaining([
+      expect.objectContaining({ guestName: '来源测试客人', roomNumber: '301', amount: 88 })
+    ]));
+  });
+
+  test('来源明细接口拒绝非可追溯项目', async () => {
+    const response = await authedRequest()
+      .get('/api/handover/source-details')
+      .query({ date: '2025-11-04', item: 'handoverAmount', paymentMethod: '微信' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe('来源明细查询参数不正确');
+  });
+
+  test('完成交接后来源明细固定读取快照', async () => {
+    const date = '2025-11-04';
+    await authedRequest()
+      .put('/api/handover/daily-cash-reserve')
+      .send({ date, cashReserve: 0, cashRetained: 0 });
+
+    const complete = await authedRequest()
+      .post('/api/handover/complete')
+      .send({ date, receivePerson: '快照接班人' });
+    expect(complete.status).toBe(200);
+
+    await query("UPDATE bills SET change_price = 99 WHERE order_id = 'SOURCE-001'");
+    const response = await authedRequest()
+      .get('/api/handover/source-details')
+      .query({ date, item: 'hotelIncome', paymentMethod: '微信' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.sourceMode).toBe('snapshot');
+    expect(response.body.data.details).toEqual(expect.arrayContaining([
+      expect.objectContaining({ guestName: '来源测试客人', amount: 88 })
+    ]));
   });
 
   test('complete 由后端重算表格金额，不要求前端提交整张 paymentData', async () => {

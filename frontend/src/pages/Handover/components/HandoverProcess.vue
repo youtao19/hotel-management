@@ -91,6 +91,7 @@
           :cash-reserve-configured="cashReserveSetting.configured"
           :read-only="false"
           @update-retained="handleRetainedAmountUpdate"
+          @show-source="openSourceDetails"
         />
 
         <ShiftHandoverSpecialStats
@@ -235,6 +236,13 @@
       </q-card>
     </q-dialog>
 
+    <HandoverSourceDetailsDrawer
+      v-model="sourceDrawer.visible"
+      :date="selectedDate"
+      :item="sourceDrawer.item"
+      :payment-method="sourceDrawer.paymentMethod"
+    />
+
     <q-inner-loading :showing="loading">
       <q-spinner color="primary" size="42px" />
     </q-inner-loading>
@@ -247,6 +255,7 @@ import { useQuasar } from "quasar";
 import { shiftHandoverApi } from "src/api";
 import ShiftHandoverPaymentTable from "./ShiftHandoverPaymentTable.vue";
 import ShiftHandoverSpecialStats from "./ShiftHandoverSpecialStats.vue";
+import HandoverSourceDetailsDrawer from "./HandoverSourceDetailsDrawer.vue";
 import { useHandoverSubmit } from "../composables/useHandoverSubmit";
 
 const emit = defineEmits(["complete", "show-history"]);
@@ -266,6 +275,7 @@ const cashReserveDialog = ref(false);
 const cashReserveInput = ref(0);
 const cashRetainedInput = ref(0);
 const savingCashReserve = ref(false);
+const sourceDrawer = ref({ visible: false, item: "", paymentMethod: "" });
 const specialStats = ref({ openCount: 0, restCount: 0, invited: 0, positive: 0 });
 const yesterdayRecord = ref({
   hasRecord: false,
@@ -492,6 +502,13 @@ function handleRetainedAmountUpdate({ payWay, value }) {
     }
   };
   recalculateLocalPaymentData();
+}
+
+/**
+ * 当前交接表来源按正在查看的营业日期查询，金额归属仍由后端统一校验。
+ */
+function openSourceDetails({ item, paymentMethod }) {
+  sourceDrawer.value = { visible: true, item, paymentMethod };
 }
 
 function handleDateChange(value) {

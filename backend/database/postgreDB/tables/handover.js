@@ -19,6 +19,7 @@ const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
   rest_refund NUMERIC(10,2) DEFAULT 0,  -- 休息房退押
   retained NUMERIC(10,2) DEFAULT 0,     -- 留存款
   handover NUMERIC(10,2) DEFAULT 0,     -- 交接款
+  source_snapshot_created BOOLEAN NOT NULL DEFAULT FALSE, -- 已保存来源快照标记
 
   task_list JSONB DEFAULT '[]'::jsonb,  -- 备忘录（JSON数组，更灵活）
   remarks TEXT,                          -- 备注信息

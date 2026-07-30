@@ -2,10 +2,12 @@
 
 jest.mock("../shiftHandover.repository", () => ({
   findBillsByBusinessDate: jest.fn(),
+  findSourceSnapshots: jest.fn(),
   findDailyCashReserve: jest.fn(),
   findHandoverRowsByDate: jest.fn(),
   findReserveByDate: jest.fn(),
   isHandoverComplete: jest.fn(),
+  hasSourceSnapshot: jest.fn(),
   findPreviousHandoverSummary: jest.fn(),
   findAdminMemoTasks: jest.fn(),
   getOverviewSpecialStats: jest.fn(),
@@ -214,6 +216,52 @@ describe("shiftHandover.service.getTableData", () => {
     expect(repository.findBillsByBusinessDate).toHaveBeenCalled();
     expect(result.reserve).toEqual(expect.any(Object));
     expect(result.hotelRefundDeposit).toEqual(result.hotelDeposit);
+  });
+});
+
+describe("shiftHandover.service 来源分类", () => {
+  test("补收和退款按住宿类型进入收入，退押与租车进入各自项目", () => {
+    expect(service.classifyBill({ pay_way: "微信", change_price: 20, change_type: "补收", stay_type: "客房" }))
+      .toEqual({ item: "hotelIncome", paymentMethod: "微信", amountCents: 2000 });
+    expect(service.classifyBill({ pay_way: "现金", change_price: -15, change_type: "退款", stay_type: "休息房" }))
+      .toEqual({ item: "restIncome", paymentMethod: "现金", amountCents: -1500 });
+    expect(service.classifyBill({ pay_way: "微邮付", change_price: -30, change_type: "退押", stay_type: "客房" }))
+      .toEqual({ item: "hotelRefundDeposit", paymentMethod: "微邮付", amountCents: 3000 });
+    expect(service.classifyBill({ pay_way: "微信", change_price: 50, change_type: "租车收入", stay_type: "租车收入" }))
+      .toEqual({ item: "carRentIncome", paymentMethod: "微信", amountCents: 5000 });
+    expect(service.classifyBill({ pay_way: "微信", change_price: 20, change_type: "补收", stay_type: "其他" }))
+      .toBeNull();
+  });
+
+  test("已完成新交接优先返回快照，旧交接回退为实时账单参考", async () => {
+    repository.isHandoverComplete.mockResolvedValue(true);
+    repository.hasSourceSnapshot.mockResolvedValue(true);
+    repository.findSourceSnapshots.mockResolvedValue([{
+      bill_id: 10,
+      order_id: "O10",
+      room_number: "301",
+      guest_name: "张三",
+      change_type: "房费",
+      source_amount: "88.00",
+      bill_create_time: "2026-07-30 10:00:00",
+      remarks: ""
+    }]);
+
+    const snapshot = await service.getSourceDetails({ date: "2026-07-30", item: "hotelIncome", paymentMethod: "微信" });
+    expect(snapshot.sourceMode).toBe("snapshot");
+    expect(snapshot.details[0]).toEqual(expect.objectContaining({ billId: 10, guestName: "张三", amount: 88 }));
+
+    repository.hasSourceSnapshot.mockResolvedValue(false);
+    repository.findBillsByBusinessDate.mockResolvedValue([{
+      bill_id: 11,
+      pay_way: "微信",
+      change_price: 66,
+      change_type: "房费",
+      stay_type: "客房"
+    }]);
+    const reference = await service.getSourceDetails({ date: "2026-07-29", item: "hotelIncome", paymentMethod: "微信" });
+    expect(reference.sourceMode).toBe("reference");
+    expect(reference.details).toEqual([expect.objectContaining({ billId: 11, amount: 66 })]);
   });
 });
 

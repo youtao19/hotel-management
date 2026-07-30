@@ -30,7 +30,11 @@
               </div>
 
               <div class="q-mb-lg">
-                <ShiftHandoverPaymentTable :payment-data="recordViewData.paymentData" :read-only="true" />
+                <ShiftHandoverPaymentTable
+                  :payment-data="recordViewData.paymentData"
+                  :read-only="true"
+                  @show-source="openRecordSourceDetails"
+                />
               </div>
 
               <div class="q-mb-lg">
@@ -57,6 +61,12 @@
         </div>
       </div>
     </div>
+    <HandoverSourceDetailsDrawer
+      v-model="sourceDrawer.visible"
+      :date="selectedRecord?.date || ''"
+      :item="sourceDrawer.item"
+      :payment-method="sourceDrawer.paymentMethod"
+    />
   </div>
 </template>
 
@@ -67,6 +77,7 @@ import HandoverProcess from "./HandoverProcess.vue";
 import ShiftHandoverPaymentTable from "./ShiftHandoverPaymentTable.vue";
 import ShiftHandoverSpecialStats from "./ShiftHandoverSpecialStats.vue";
 import ShiftHandoverMemoList from "./ShiftHandoverMemoList.vue";
+import HandoverSourceDetailsDrawer from "./HandoverSourceDetailsDrawer.vue";
 import { shiftHandoverApi } from "src/api";
 
 const props = defineProps({
@@ -79,6 +90,7 @@ const props = defineProps({
 const $q = useQuasar();
 
 const mode = ref("current");
+const sourceDrawer = ref({ visible: false, item: "", paymentMethod: "" });
 
 const createEmptyPaymentData = () => ({
   reserve: { 现金: 0, 微信: 0, 微邮付: 0, 其他: 0 },
@@ -129,6 +141,13 @@ const closeRecordView = () => {
   mode.value = "current";
   recordViewData.value = createEmptyRecordView();
 };
+
+/**
+ * 历史交接与当前交接共用来源抽屉，快照或实时参考由后端根据日期决定。
+ */
+function openRecordSourceDetails({ item, paymentMethod }) {
+  sourceDrawer.value = { visible: true, item, paymentMethod };
+}
 
 const loadHandoverRecord = async (record) => {
   if (!record?.date) return;

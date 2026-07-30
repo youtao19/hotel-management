@@ -164,7 +164,49 @@
 }
 ```
 
-## 6. 历史记录
+## 6. 查询金额来源明细
+- Method：`GET`
+- Path：`/api/handover/source-details`
+- 用途：查询交接表中可追溯金额的账单来源；当前交接读取实时账单，完成后的新记录读取快照，旧记录返回实时账单参考。
+
+Query：
+
+```json
+{
+  "date": "2026-06-04",
+  "item": "hotelIncome",
+  "paymentMethod": "微信"
+}
+```
+
+`item` 仅支持 `hotelIncome`、`restIncome`、`carRentIncome`、`hotelRefundDeposit`、`restRefundDeposit`。
+
+成功响应示例：
+
+```json
+{
+  "success": true,
+  "data": {
+    "sourceMode": "snapshot",
+    "details": [
+      {
+        "billId": 1001,
+        "orderId": "ORDER-001",
+        "roomNumber": "301",
+        "guestName": "张三",
+        "changeType": "房费",
+        "amount": 188,
+        "createTime": "2026-06-04 10:30:00",
+        "remarks": ""
+      }
+    ]
+  }
+}
+```
+
+`sourceMode`：`live` 为当前交接的实时账单，`snapshot` 为完成交接时固定的快照，`reference` 为上线前历史记录的实时账单参考。
+
+## 7. 历史记录
 
 ### 5.1 查询历史记录列表
 - Method：`GET`

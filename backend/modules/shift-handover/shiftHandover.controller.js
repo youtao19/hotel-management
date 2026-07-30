@@ -40,6 +40,22 @@ async function getHandoverTable(req, res) {
   }
 }
 
+/**
+ * 获取交接表金额的来源明细；是否读取快照由服务层按交接完成状态决定。
+ */
+async function getSourceDetails(req, res) {
+  try {
+    const parsed = validator.readSourceDetailsQuery(req.query);
+    if (parsed.error) return sendValidationError(res, parsed.error);
+
+    const data = await service.getSourceDetails(parsed.value);
+    return res.json({ success: true, data });
+  } catch (error) {
+    console.error("获取交接班来源明细失败:", error);
+    return res.status(500).json({ success: false, message: error.message || "获取来源明细失败" });
+  }
+}
+
 async function getSpecialStats(req, res) {
   try {
     const parsed = validator.readDateQuery(req.query);
@@ -162,6 +178,7 @@ module.exports = {
   completeHandover,
   getAdminMemos,
   getHandoverTable,
+  getSourceDetails,
   getOverview,
   getSpecialStats,
   queryHandoverRecords,

@@ -7,6 +7,7 @@ const ajv = new Ajv({ allErrors: true, removeAdditional: "failing", coerceTypes:
 addFormats(ajv);
 
 const PAYMENT_METHODS = ["现金", "微信", "微邮付", "其他"];
+const SOURCE_ITEMS = ["hotelIncome", "restIncome", "carRentIncome", "hotelRefundDeposit", "restRefundDeposit"];
 
 function formatAjvErrors(errors = []) {
   return errors.map((error) => {
@@ -42,6 +43,17 @@ const requiredDateQuerySchema = {
   additionalProperties: false
 };
 
+const sourceDetailsQuerySchema = {
+  type: "object",
+  properties: {
+    date: { type: "string", format: "date" },
+    item: { type: "string", enum: SOURCE_ITEMS },
+    paymentMethod: { type: "string", enum: PAYMENT_METHODS }
+  },
+  required: ["date", "item", "paymentMethod"],
+  additionalProperties: false
+};
+
 const completeHandoverSchema = {
   type: "object",
   properties: {
@@ -68,6 +80,7 @@ const dailyCashReserveSchema = {
 };
 
 const validateRequiredDateQuery = ajv.compile(requiredDateQuerySchema);
+const validateSourceDetailsQuery = ajv.compile(sourceDetailsQuerySchema);
 const validateCompleteHandover = ajv.compile(completeHandoverSchema);
 const validateDailyCashReserve = ajv.compile(dailyCashReserveSchema);
 
@@ -96,6 +109,26 @@ function readDateQuery(query = {}) {
     };
   }
 
+  return { value: queryData };
+}
+
+/**
+ * 读取来源明细筛选条件；限制为可追溯项目和既有支付方式，避免前端拼接任意查询口径。
+ */
+function readSourceDetailsQuery(query = {}) {
+  const queryData = sanitizeQuery(query);
+  if (!validateSourceDetailsQuery(queryData)) {
+    return {
+      error: {
+        status: 400,
+        body: {
+          success: false,
+          message: "来源明细查询参数不正确",
+          errors: formatAjvErrors(validateSourceDetailsQuery.errors)
+        }
+      }
+    };
+  }
   return { value: queryData };
 }
 
@@ -149,15 +182,18 @@ function readDailyCashReserveBody(body = {}) {
 
 module.exports = {
   PAYMENT_METHODS,
+  SOURCE_ITEMS,
   completeHandoverSchema,
   dailyCashReserveSchema,
   formatAjvErrors,
   readCompleteHandoverBody,
   readDailyCashReserveBody,
   readDateQuery,
+  readSourceDetailsQuery,
   requiredDateQuerySchema,
   sanitizeQuery,
   validateCompleteHandover,
   validateDailyCashReserve,
-  validateRequiredDateQuery
+  validateRequiredDateQuery,
+  validateSourceDetailsQuery
 };

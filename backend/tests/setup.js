@@ -17,6 +17,7 @@ const tables = [
   'review_invitations',
   'handover',
   'handover_daily_settings',
+  'handover_source_snapshot',
   'dashboard_memos',
   'account'
 ];
