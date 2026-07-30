@@ -16,7 +16,7 @@
     "export-all": "node scripts/exportAll.js",
     "db:backup": "node scripts/exportAll.js",
     "db:init": "dotenv -e ../dev.env -- node -e \"require('./database/postgreDB/pg').initializeHotelDB()\"",
-    "db:migrate": "node database/postgreDB/migrations/run-migrations.js"
+    "db:migrate": "dotenv -e ../dev.env -- node database/postgreDB/migrations/run-migrations.js"
   },
   "dependencies": {
     "ajv": "^8.17.1",
