@@ -29,6 +29,10 @@
 date=YYYY-MM-DD
 ```
 
+`date` 可省略；省略时后端按北京时间返回默认日期。上一营业日未完成时默认返回上一营业日，否则返回当天。响应中的 `displayDate` 为实际展示日期，`readOnly` 表示该日期是否只能查看。
+
+已完成历史日期读取已保存交接数据；未完成历史日期的交接表金额为 0；当天和未来日期按所选日期实时计算但只读。
+
 响应格式：
 
 ```json
@@ -137,28 +141,6 @@ date=YYYY-MM-DD
 }
 ```
 
-### GET /api/handover/query
-
-响应格式：
-
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "date": "2025-11-02",
-      "handoverPerson": "操作员",
-      "takeoverPerson": "接班人",
-      "vipCards": 0,
-      "taskList": [],
-      "remarks": "",
-      "paymentCount": 4
-    }
-  ],
-  "message": "成功查询到 1 条交接班记录"
-}
-```
-
 ### POST /api/handover/complete
 
 请求体：
@@ -212,7 +194,6 @@ date=YYYY-MM-DD
 - `GET /api/handover/source-details` -> `shiftHandover.service.getSourceDetails()` -> 当前账单、交接快照或历史账单参考
 - `GET /api/handover/special-stats` -> `shiftHandover.repository.getSpecialStats()`
 - `GET /api/handover/admin-memos` -> `shiftHandover.service.getAdminMemos()` -> repository 读取并过滤 `type === "admin"`
-- `GET /api/handover/query` -> `shiftHandover.repository.listCompletedHandoverRecords()`
 - `POST /api/handover/complete` -> 后端重算交接表金额 -> `shiftHandover.repository.saveCompletedHandover()`
 - `PUT /api/handover/daily-cash-reserve` -> 校验当天未完成交接 -> 保存 `handover_daily_settings` 中的现金备用金与留存款
 

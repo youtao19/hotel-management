@@ -3,10 +3,7 @@
     <div class="content-layout">
       <div class="main-area">
         <div v-if="mode === 'current'" class="step-content">
-          <HandoverProcess
-            @complete="handleHandoverComplete"
-            @show-history="handleShowHistory"
-          />
+          <HandoverProcess @complete="handleHandoverComplete" />
         </div>
 
         <div v-else class="view-record-content">
@@ -125,15 +122,6 @@ const handleHandoverComplete = () => {
     type: "positive",
     message: "交接班已完成",
     position: "top"
-  });
-};
-
-const handleShowHistory = () => {
-  $q.notify({
-    type: "info",
-    message: "可在左侧历史记录区域查询和查看交接记录",
-    position: "top",
-    timeout: 1600
   });
 };
 

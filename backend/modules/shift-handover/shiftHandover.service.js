@@ -308,14 +308,31 @@ async function getYesterdayRecord(date) {
   };
 }
 
+/**
+ * 默认日期和写入资格由后端按北京时间统一判定，不能信任前端传入日期。
+ */
+async function resolveHandoverView(date) {
+  const hasBeijingClock = typeof businessRules.getBeijingBusinessDate === "function";
+  const today = hasBeijingClock ? businessRules.getBeijingBusinessDate() : date;
+  const editableDate = hasBeijingClock ? businessRules.getPreviousBusinessDate(today) : date;
+  const editableCompleted = await repository.isHandoverComplete(editableDate);
+  const displayDate = date || (editableCompleted ? today : editableDate);
+  return { today, displayDate, canEdit: displayDate === editableDate && !editableCompleted };
+}
+
 async function getOverview({ date, account }) {
-  const yesterdayRecord = await getYesterdayRecord(date);
-  const [rawPaymentData, specialStats, cashReserveSetting, isCompleted] = await Promise.all([
-    buildCalculatedPaymentData(date),
-    repository.getOverviewSpecialStats(date),
-    repository.findDailyCashReserve(date),
-    repository.isHandoverComplete(date)
+  const view = await resolveHandoverView(date);
+  const yesterdayRecord = await getYesterdayRecord(view.displayDate);
+  const [specialStats, cashReserveSetting, isCompleted] = await Promise.all([
+    repository.getOverviewSpecialStats(view.displayDate),
+    repository.findDailyCashReserve(view.displayDate),
+    repository.isHandoverComplete(view.displayDate)
   ]);
+  const rawPaymentData = isCompleted
+    ? await getTableData(view.displayDate)
+    : view.displayDate < view.today
+      ? aggregateBills([], createPaymentBuckets()).paymentData
+      : await buildCalculatedPaymentData(view.displayDate);
   const reserve = {
     ...yesterdayRecord.reserveDefaults,
     "现金": cashReserveSetting?.cashReserve || 0
@@ -330,7 +347,9 @@ async function getOverview({ date, account }) {
   const configured = Boolean(cashReserveSetting);
 
   return {
-    businessDate: date,
+    businessDate: view.displayDate,
+    displayDate: view.displayDate,
+    readOnly: !view.canEdit,
     currentShift: businessRules.resolveCurrentShift(),
     currentUser: businessRules.resolveCurrentUser(account),
     yesterdayRecord,
@@ -340,10 +359,10 @@ async function getOverview({ date, account }) {
       : { configured: false, amount: null, cashRetained: null, setBy: null, updatedAt: null },
     paymentData,
     specialStats,
-    canComplete: configured && !isCompleted,
+    canComplete: view.canEdit && configured && !isCompleted,
     completeBlockReasons: !configured
       ? ["请先设置今日备用金与留存款"]
-      : isCompleted ? ["当日交接已完成"] : []
+      : !view.canEdit ? ["当前日期仅可查看"] : isCompleted ? ["当日交接已完成"] : []
   };
 }
 
@@ -354,10 +373,6 @@ async function getSpecialStats(date) {
 async function getAdminMemos(date) {
   const tasks = await repository.findAdminMemoTasks(date);
   return tasks.filter((task) => task.type === "admin");
-}
-
-async function listRecords() {
-  return repository.listCompletedHandoverRecords();
 }
 
 async function completeHandover({ body, account }) {
@@ -371,6 +386,11 @@ async function completeHandover({ body, account }) {
   } = body;
   const operatorName = resolveOperatorName({ handoverPerson, account });
   const overview = await getOverview({ date, account });
+  if (overview.readOnly) {
+    const error = new Error("当前日期仅可查看，不能完成交接");
+    error.status = 409;
+    throw error;
+  }
   if (!overview.cashReserveSetting.configured) {
     const error = new Error("请先设置今日备用金与留存款");
     error.status = 409;
@@ -414,6 +434,12 @@ async function setDailyCashReserve({ date, cashReserve, cashRetained, account })
     error.status = 409;
     throw error;
   }
+  const view = await resolveHandoverView(date);
+  if (!view.canEdit) {
+    const error = new Error("当前日期仅可查看，不能设置备用金与留存款");
+    error.status = 409;
+    throw error;
+  }
 
   const setBy = resolveOperatorName({ account });
   return repository.saveDailyCashReserve({ date, cashReserve, cashRetained, setBy });
@@ -426,7 +452,6 @@ module.exports = {
   getSourceDetails,
   getSpecialStats,
   getTableData,
-  listRecords,
   resolveOperatorName,
   classifyBill,
   collectBillSources,

@@ -42,6 +42,7 @@ const requiredDateQuerySchema = {
   required: ["date"],
   additionalProperties: false
 };
+const overviewQuerySchema = { type: "object", properties: { date: { type: "string", format: "date" } }, additionalProperties: false };
 
 const sourceDetailsQuerySchema = {
   type: "object",
@@ -80,6 +81,7 @@ const dailyCashReserveSchema = {
 };
 
 const validateRequiredDateQuery = ajv.compile(requiredDateQuerySchema);
+const validateOverviewQuery = ajv.compile(overviewQuerySchema);
 const validateSourceDetailsQuery = ajv.compile(sourceDetailsQuerySchema);
 const validateCompleteHandover = ajv.compile(completeHandoverSchema);
 const validateDailyCashReserve = ajv.compile(dailyCashReserveSchema);
@@ -109,6 +111,12 @@ function readDateQuery(query = {}) {
     };
   }
 
+  return { value: queryData };
+}
+
+function readOverviewQuery(query = {}) {
+  const queryData = sanitizeQuery(query);
+  if (!validateOverviewQuery(queryData)) return { error: { status: 400, body: { success: false, message: "日期参数不正确", errors: formatAjvErrors(validateOverviewQuery.errors) } } };
   return { value: queryData };
 }
 
@@ -189,6 +197,7 @@ module.exports = {
   readCompleteHandoverBody,
   readDailyCashReserveBody,
   readDateQuery,
+  readOverviewQuery,
   readSourceDetailsQuery,
   requiredDateQuerySchema,
   sanitizeQuery,

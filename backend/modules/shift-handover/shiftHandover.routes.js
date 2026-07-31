@@ -23,9 +23,6 @@ router.get("/special-stats", controller.getSpecialStats);
 // 获取交接班表中的管理员备忘录。
 router.get("/admin-memos", controller.getAdminMemos);
 
-// 查询已完成的交接班历史记录。
-router.get("/query", controller.queryHandoverRecords);
-
 // 完成交接班并保存四种支付方式的核对结果。
 router.post("/complete", controller.completeHandover);
 

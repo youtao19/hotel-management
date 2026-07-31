@@ -423,9 +423,6 @@ export const shiftHandoverApi = {
   // 获取交接班表中的管理员备忘录
   getAdminMemos: (params) => api.get('/handover/admin-memos', { params }),
 
-  // 查询所有交接班记录
-  queryHandoverRecords: () => api.get('/handover/query'),
-
   // 完成交接班（保存完整数据）
   completeHandover: (handoverData) => api.post('/handover/complete', handoverData),
 

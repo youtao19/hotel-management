@@ -18,6 +18,19 @@ function getPreviousBusinessDate(dateString) {
 }
 
 /**
+ * 交接资格必须按酒店所在时区判断，避免浏览器或服务器默认时区造成跨日误判。
+ */
+function getBeijingBusinessDate(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(now).reduce((result, part) => ({ ...result, [part.type]: part.value }), {});
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+/**
  * 根据本地时间判断当前班次
  * @param {Date} now
  * @returns {{ code: string, label: string, timeRange: string }}
@@ -62,6 +75,7 @@ function buildReserveDefaults({ isComplete, handoverAmounts }) {
 
 module.exports = {
   buildReserveDefaults,
+  getBeijingBusinessDate,
   getPreviousBusinessDate,
   resolveCurrentShift,
   resolveCurrentUser,

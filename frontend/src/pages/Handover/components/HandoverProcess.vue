@@ -42,16 +42,6 @@
         <span :class="yesterdayStatusClass">{{ yesterdayStatusText }}</span>
       </div>
 
-      <q-space />
-
-      <q-btn
-        flat
-        no-caps
-        icon="history"
-        label="历史记录"
-        class="history-link-btn"
-        @click="emit('show-history')"
-      />
     </div>
 
     <div class="confirmation-layout">
@@ -74,7 +64,7 @@
             icon="payments"
             :label="cashSettingButtonLabel"
             class="cash-reserve-button"
-            :disable="loading || handoverCompleted"
+            :disable="loading || readOnly"
             @click="cashReserveDialog = true"
           />
           <q-badge
@@ -89,7 +79,7 @@
         <ShiftHandoverPaymentTable
           :payment-data="paymentData"
           :cash-reserve-configured="cashReserveSetting.configured"
-          :read-only="false"
+          :read-only="readOnly"
           @update-retained="handleRetainedAmountUpdate"
           @show-source="openSourceDetails"
         />
@@ -101,7 +91,7 @@
           :cashier-name="currentUserName"
           :notes="handoverInfo.notes"
           :good-review="goodReviewText"
-          :read-only="false"
+          :read-only="readOnly"
           @update:vip-cards="value => { vipCards = Number(value) || 0 }"
           @update:notes="value => { handoverInfo.notes = value }"
         />
@@ -125,6 +115,7 @@
               label="接班人员"
               outlined
               dense
+              :readonly="readOnly"
               :rules="[val => !!val || '请输入接班人员姓名']"
             />
             <q-input
@@ -133,6 +124,7 @@
               outlined
               dense
               type="datetime-local"
+              :readonly="readOnly"
             />
             <q-input
               v-model="handoverInfo.notes"
@@ -141,6 +133,7 @@
               outlined
               dense
               rows="3"
+              :readonly="readOnly"
               placeholder="需要接班人注意的事项..."
             />
           </div>
@@ -164,7 +157,7 @@
             class="complete-button"
             unelevated
             :loading="loading || submitting"
-            :disable="loading || submitting || !canComplete"
+            :disable="loading || submitting || readOnly || !canComplete"
             @click="completeHandoverFlow"
           />
         </div>
@@ -258,17 +251,18 @@ import ShiftHandoverSpecialStats from "./ShiftHandoverSpecialStats.vue";
 import HandoverSourceDetailsDrawer from "./HandoverSourceDetailsDrawer.vue";
 import { useHandoverSubmit } from "../composables/useHandoverSubmit";
 
-const emit = defineEmits(["complete", "show-history"]);
+const emit = defineEmits(["complete"]);
 
 const $q = useQuasar();
 
 const PAY_WAY_KEYS = ["现金", "微信", "微邮付", "其他"];
 
-const selectedDate = ref(formatLocalDate(new Date()));
+const selectedDate = ref("");
 const loading = ref(false);
 const canComplete = ref(true);
 const completeBlockReasons = ref([]);
 const isCompleted = ref(false);
+const readOnly = ref(true);
 const paymentData = ref(createEmptyPaymentData());
 const cashReserveSetting = ref({ configured: false, amount: null, cashRetained: null, setBy: null, updatedAt: null });
 const cashReserveDialog = ref(false);
@@ -418,12 +412,13 @@ function formatAmount(value) {
 async function loadOverview() {
   try {
     loading.value = true;
-    const response = await shiftHandoverApi.getOverview({ date: selectedDate.value });
+    const response = await shiftHandoverApi.getOverview(selectedDate.value ? { date: selectedDate.value } : {});
     if (!response.success) {
       throw new Error(response.message || "获取交接班数据失败");
     }
 
     const data = response.data || {};
+    selectedDate.value = data.displayDate || data.businessDate || selectedDate.value;
     paymentData.value = normalizePaymentData(data.paymentData);
     specialStats.value = data.specialStats || specialStats.value;
     yesterdayRecord.value = data.yesterdayRecord || yesterdayRecord.value;
@@ -435,7 +430,12 @@ async function loadOverview() {
     canComplete.value = data.canComplete !== false;
     completeBlockReasons.value = data.completeBlockReasons || [];
     isCompleted.value = data.isCompleted === true;
+    readOnly.value = data.readOnly !== false;
     vipCards.value = Number(data.paymentData?.vipCards) || 0;
+    if (isCompleted.value) {
+      handoverInfo.value.nextOperator = data.paymentData?.takeoverPerson || "";
+      handoverInfo.value.notes = data.paymentData?.remarks || "";
+    }
   } catch (error) {
     console.error("加载交接班数据失败:", error);
     $q.notify({
@@ -584,10 +584,6 @@ onMounted(loadOverview);
   color: #f97316;
 }
 
-.history-link-btn {
-  color: #1d4ed8;
-  font-weight: 600;
-}
 
 .cash-reserve-dialog {
   width: 560px;

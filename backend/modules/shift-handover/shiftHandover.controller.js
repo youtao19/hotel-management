@@ -9,7 +9,7 @@ function sendValidationError(res, error) {
 
 async function getOverview(req, res) {
   try {
-    const parsed = validator.readDateQuery(req.query);
+    const parsed = validator.readOverviewQuery(req.query);
     if (parsed.error) return sendValidationError(res, parsed.error);
 
     const data = await service.getOverview({
@@ -89,25 +89,6 @@ async function getAdminMemos(req, res) {
   }
 }
 
-async function queryHandoverRecords(_req, res) {
-  try {
-    console.log("开始查询交接班记录");
-    const handoverRecords = await service.listRecords();
-    console.log(`找到 ${handoverRecords.length} 条交接班记录`);
-
-    return res.json({
-      success: true,
-      data: handoverRecords,
-      message: `成功查询到 ${handoverRecords.length} 条交接班记录`
-    });
-  } catch (error) {
-    console.error("查询交接班记录失败:", error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || "查询交接班记录失败"
-    });
-  }
-}
 
 async function completeHandover(req, res) {
   try {
@@ -181,6 +162,5 @@ module.exports = {
   getSourceDetails,
   getOverview,
   getSpecialStats,
-  queryHandoverRecords,
   setDailyCashReserve
 };
