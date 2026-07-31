@@ -262,170 +262,322 @@
       </template>
     </q-table>
 
-    <q-dialog v-model="dialogOpen" persistent>
+    <q-dialog v-model="dialogOpen" persistent class="rate-plan-dialog-wrapper">
       <q-card class="rate-plan-dialog">
+        <!-- 弹窗头部：匹配设计图样式 -->
         <q-card-section class="dialog-heading">
           <div>
-            <div class="text-h6">{{ editingPlan ? '编辑售卖套餐' : '新增售卖套餐' }}</div>
-            <div class="text-caption text-grey-7">本地套餐信息将保存到后端 API。</div>
+            <div class="dialog-title">{{ editingPlan ? '编辑售卖套餐' : '新增售卖套餐' }}</div>
+            <div class="dialog-subtitle">创建后可在套餐列表继续编辑和上下架</div>
           </div>
           <q-btn
             flat
             round
+            dense
             icon="close"
+            class="dialog-close-btn"
             aria-label="关闭弹窗"
             @click="dialogOpen = false"
           />
         </q-card-section>
 
-        <q-separator />
+        <q-separator color="grey-3" />
 
         <q-form ref="formRef" @submit="submitForm">
           <q-card-section class="dialog-body">
-            <div class="form-section-title">基础信息</div>
-            <div class="row q-col-gutter-md">
-              <div class="col-12 col-md-6">
-                <q-select
-                  v-model="form.room_type_code"
-                  :options="roomTypeFormOptions"
-                  label="房型"
-                  emit-value
-                  map-options
-                  outlined
-                  :rules="[requiredRule('请选择房型')]"
-                />
-              </div>
-              <div class="col-12 col-md-6">
-                <q-input
-                  v-model.trim="form.name"
-                  label="套餐名称"
-                  outlined
-                  :rules="[requiredRule('请输入套餐名称')]"
-                />
-              </div>
-              <div class="col-12 col-md-4">
-                <q-input
-                  v-model.number="form.base_price"
-                  label="基础价"
-                  type="number"
-                  prefix="¥"
-                  outlined
-                  :rules="[requiredRule('请输入基础价'), nonNegativeRule]"
-                />
-              </div>
-              <div class="col-12 col-md-4">
-                <q-select
-                  v-model="form.sales_type"
-                  :options="salesTypeOptions"
-                  label="售卖类型"
-                  emit-value
-                  map-options
-                  outlined
-                />
-              </div>
-              <div class="col-12 col-md-4">
-                <q-select
-                  v-model="form.status"
-                  :options="statusOptions"
-                  label="状态"
-                  emit-value
-                  map-options
-                  outlined
-                />
-              </div>
-              <div class="col-12 col-md-4">
-                <q-input
-                  v-model.trim="form.currency"
-                  label="币种"
-                  outlined
-                  maxlength="3"
-                  :rules="[currencyRule]"
-                />
-              </div>
-            </div>
+            <!-- 基础信息板块 -->
+            <div class="form-section">
+              <div class="form-section-title">基础信息</div>
 
-            <div v-if="form.sales_type === 2" class="conditional-panel">
-              <div class="form-section-title">钟点房字段</div>
+              <!-- 第1行：套餐名称 & 关联房型 -->
+              <div class="row q-col-gutter-md q-mb-md">
+                <div class="col-12 col-md-6">
+                  <div class="field-label">套餐名称 <span class="text-negative">*</span></div>
+                  <q-input
+                    v-model.trim="form.name"
+                    placeholder="例如：醉山塘·双人早餐套餐"
+                    outlined
+                    dense
+                    class="custom-input"
+                    :rules="[requiredRule('请输入套餐名称')]"
+                  />
+                </div>
+                <div class="col-12 col-md-6">
+                  <div class="field-label">关联房型 <span class="text-negative">*</span></div>
+                  <q-select
+                    v-model="form.room_type_code"
+                    :options="roomTypeFormOptions"
+                    placeholder="请选择关联房型"
+                    emit-value
+                    map-options
+                    outlined
+                    dense
+                    class="custom-input"
+                    :rules="[requiredRule('请选择房型')]"
+                  />
+                </div>
+              </div>
+
+              <!-- 第2行：售卖类型, 套餐售价, 状态 -->
               <div class="row q-col-gutter-md">
                 <div class="col-12 col-md-4">
-                  <q-input
-                    v-model.trim="form.hourly_earliest_check_in"
-                    label="最早入住"
+                  <div class="field-label">售卖类型 <span class="text-negative">*</span></div>
+                  <q-select
+                    v-model="form.sales_type"
+                    :options="salesTypeOptions"
+                    emit-value
+                    map-options
                     outlined
-                    mask="time"
-                    placeholder="10:00"
-                    :rules="[optionalTimeRule]"
+                    dense
+                    class="custom-input"
                   />
                 </div>
                 <div class="col-12 col-md-4">
+                  <div class="field-label">套餐售价 <span class="text-negative">*</span></div>
                   <q-input
-                    v-model.trim="form.hourly_latest_check_out"
-                    label="最晚离店"
-                    outlined
-                    mask="time"
-                    placeholder="18:00"
-                    :rules="[optionalTimeRule]"
-                  />
-                </div>
-                <div class="col-12 col-md-4">
-                  <q-input
-                    v-model.number="form.hourly_usage_duration"
-                    label="使用时长"
+                    v-model.number="form.base_price"
                     type="number"
-                    suffix="小时"
+                    prefix="¥"
                     outlined
-                    :rules="[optionalRangeRule(1, 23, '使用时长为 1-23 小时')]"
+                    dense
+                    class="custom-input price-input"
+                    :rules="[requiredRule('请输入套餐售价'), nonNegativeRule]"
                   />
+                </div>
+                <div class="col-12 col-md-4">
+                  <div class="field-label">状态 <span class="text-negative">*</span></div>
+                  <q-select
+                    v-model="form.status"
+                    :options="statusOptions"
+                    emit-value
+                    map-options
+                    outlined
+                    dense
+                    class="custom-input"
+                  />
+                </div>
+              </div>
+
+              <!-- 蓝条提示：房型基础价 -->
+              <div class="info-tip-banner q-mt-md">
+                <q-icon name="info" color="primary" size="18px" class="q-mr-xs" />
+                <span class="info-tip-text">
+                  房型基础价：<strong>¥ {{ selectedRoomTypeBasePrice || '260.00' }}</strong>
+                </span>
+              </div>
+            </div>
+
+            <!-- 售卖规则板块 -->
+            <div class="form-section">
+              <div class="form-section-title">售卖规则</div>
+
+              <div class="row q-col-gutter-md">
+                <!-- 售卖有效期 -->
+                <div class="col-12 col-md-4">
+                  <div class="rule-card" @click="toggleRuleDetails('validity')">
+                    <div class="rule-card-icon-wrapper blue-bg">
+                      <q-icon name="event" size="20px" color="primary" />
+                    </div>
+                    <div class="rule-card-content">
+                      <div class="rule-card-title">售卖有效期</div>
+                      <div class="rule-card-desc">{{ validityText }}</div>
+                    </div>
+                    <q-icon name="chevron_right" class="rule-card-arrow" />
+                  </div>
+                </div>
+
+                <!-- 可订日期 -->
+                <div class="col-12 col-md-4">
+                  <div class="rule-card" @click="toggleRuleDetails('bookable')">
+                    <div class="rule-card-icon-wrapper blue-bg">
+                      <q-icon name="calendar_month" size="20px" color="primary" />
+                    </div>
+                    <div class="rule-card-content">
+                      <div class="rule-card-title">可订日期</div>
+                      <div class="rule-card-desc">{{ bookableText }}</div>
+                    </div>
+                    <q-icon name="chevron_right" class="rule-card-arrow" />
+                  </div>
+                </div>
+
+                <!-- 取消规则 -->
+                <div class="col-12 col-md-4">
+                  <div class="rule-card" @click="toggleRuleDetails('cancel')">
+                    <div class="rule-card-icon-wrapper blue-bg">
+                      <q-icon name="shield" size="20px" color="primary" />
+                    </div>
+                    <div class="rule-card-content">
+                      <div class="rule-card-title">取消规则</div>
+                      <div class="rule-card-desc">{{ cancelRuleText }}</div>
+                    </div>
+                    <q-icon name="chevron_right" class="rule-card-arrow" />
+                  </div>
+                </div>
+              </div>
+
+              <!-- 特殊售卖类型 (钟点房 / 凌晨房) 的扩展配置 -->
+              <div v-if="form.sales_type === 2" class="conditional-panel q-mt-sm">
+                <div class="text-subtitle2 text-weight-bold q-mb-sm text-primary">钟点房特有规则</div>
+                <div class="row q-col-gutter-md">
+                  <div class="col-12 col-md-4">
+                    <q-input
+                      v-model.trim="form.hourly_earliest_check_in"
+                      label="最早入住"
+                      outlined
+                      dense
+                      mask="time"
+                      placeholder="10:00"
+                      :rules="[optionalTimeRule]"
+                    />
+                  </div>
+                  <div class="col-12 col-md-4">
+                    <q-input
+                      v-model.trim="form.hourly_latest_check_out"
+                      label="最晚离店"
+                      outlined
+                      dense
+                      mask="time"
+                      placeholder="18:00"
+                      :rules="[optionalTimeRule]"
+                    />
+                  </div>
+                  <div class="col-12 col-md-4">
+                    <q-input
+                      v-model.number="form.hourly_usage_duration"
+                      label="使用时长"
+                      type="number"
+                      suffix="小时"
+                      outlined
+                      dense
+                      :rules="[optionalRangeRule(1, 23, '使用时长为 1-23 小时')]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="form.sales_type === 3" class="conditional-panel q-mt-sm">
+                <div class="text-subtitle2 text-weight-bold q-mb-sm text-primary">凌晨房特有规则</div>
+                <div class="row q-col-gutter-md items-center">
+                  <div class="col-12 col-md-5">
+                    <q-toggle
+                      v-model="form.midnight_enabled"
+                      color="primary"
+                      label="启用凌晨房规则"
+                    />
+                  </div>
+                  <div class="col-12 col-md-7">
+                    <q-input
+                      v-model.number="form.midnight_latest_booking_time"
+                      label="最晚预定时间"
+                      type="number"
+                      suffix="点"
+                      outlined
+                      dense
+                      :rules="[optionalRangeRule(1, 6, '最晚预定时间为 1-6 点')]"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div v-if="form.sales_type === 3" class="conditional-panel">
-              <div class="form-section-title">凌晨房字段</div>
-              <div class="row q-col-gutter-md items-center">
-                <div class="col-12 col-md-5">
+            <!-- 渠道配置板块 -->
+            <div class="form-section">
+              <div class="form-section-title">渠道配置</div>
+
+              <div class="channel-card">
+                <!-- 抖音渠道开关键 -->
+                <div class="channel-row">
+                  <div class="channel-info">
+                    <div class="tiktok-badge">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M19.589 6.686a4.793 4.793 0 0 1-3.77-4.245V2h-3.445v13.672a2.896 2.896 0 1 1-2.896-2.896c.245 0 .484.032.713.09v-3.522a6.376 6.376 0 1 0 5.628 6.328V9.712a8.214 8.214 0 0 0 4.77 1.517V7.784a4.78 4.78 0 0 1-1.000-1.098z" fill="#ffffff"/>
+                      </svg>
+                    </div>
+                    <div>
+                      <div class="channel-name">抖音渠道</div>
+                      <div class="channel-desc">开启后配置渠道专属参数</div>
+                    </div>
+                  </div>
                   <q-toggle
-                    v-model="form.midnight_enabled"
+                    v-model="douyinChannelEnabled"
                     color="primary"
-                    label="启用凌晨房规则"
+                    class="channel-toggle"
                   />
                 </div>
-                <div class="col-12 col-md-7">
-                  <q-input
-                    v-model.number="form.midnight_latest_booking_time"
-                    label="最晚预定时间"
-                    type="number"
-                    suffix="点"
-                    outlined
-                    :rules="[optionalRangeRule(1, 6, '最晚预定时间为 1-6 点')]"
-                  />
+
+                <!-- 高级 JSON 配置 折叠手风琴 -->
+                <div class="json-config-accordion">
+                  <div
+                    class="json-config-header"
+                    @click="showJsonConfig = !showJsonConfig"
+                  >
+                    <div class="json-config-title">
+                      <q-icon name="code" size="18px" class="q-mr-xs text-grey-7" />
+                      <span>高级 JSON 配置</span>
+                    </div>
+                    <q-icon
+                      :name="showJsonConfig ? 'keyboard_arrow_up' : 'keyboard_arrow_down'"
+                      size="20px"
+                      color="grey-6"
+                    />
+                  </div>
+
+                  <q-slide-transition>
+                    <div v-show="showJsonConfig" class="json-config-body q-pt-sm">
+                      <q-input
+                        v-model="form.douyin_config_text"
+                        placeholder="{}"
+                        type="textarea"
+                        outlined
+                        dense
+                        autogrow
+                        class="json-textarea"
+                        :rules="[jsonObjectRule]"
+                      />
+                    </div>
+                  </q-slide-transition>
                 </div>
               </div>
             </div>
-
-            <div class="form-section-title">渠道扩展</div>
-            <q-input
-              v-model="form.douyin_config_text"
-              label="抖音扩展配置 JSON"
-              type="textarea"
-              outlined
-              autogrow
-              :rules="[jsonObjectRule]"
-            />
           </q-card-section>
 
+          <!-- 底部操作按钮 -->
           <q-card-actions align="right" class="dialog-actions">
-            <q-btn flat label="取消" color="grey-8" @click="dialogOpen = false" />
+            <q-btn
+              flat
+              label="取消"
+              class="cancel-btn"
+              @click="dialogOpen = false"
+            />
             <q-btn
               type="submit"
               color="primary"
               label="保存"
-              icon="save"
               unelevated
+              class="save-btn"
               :loading="saving"
             />
           </q-card-actions>
         </q-form>
+      </q-card>
+    </q-dialog>
+
+    <!-- 售卖规则卡片详情子弹窗 -->
+    <q-dialog v-model="ruleDetailDialogOpen">
+      <q-card style="width: 400px; max-width: 90vw; border-radius: 12px;">
+        <q-card-section class="row items-center q-pb-none">
+          <div class="text-h6 text-weight-bold">{{ getRuleDetailTitle() }}</div>
+          <q-space />
+          <q-btn icon="close" flat round dense v-close-popup />
+        </q-card-section>
+        <q-card-section class="q-pt-md">
+          <div class="text-body2 text-grey-8">
+            {{ getRuleDetailContent() }}
+          </div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat label="确定" color="primary" v-close-popup />
+        </q-card-actions>
       </q-card>
     </q-dialog>
 
@@ -517,15 +669,15 @@ const statusOptions = [
 ]
 
 const columns = [
-  { name: 'name', label: '套餐', field: 'name', align: 'left', sortable: true },
-  { name: 'room_type', label: '房型', field: 'room_type_code', align: 'left', sortable: true },
-  { name: 'base_price', label: '基础价', field: 'base_price', align: 'right', sortable: true },
-  { name: 'sales_type', label: '售卖类型', field: 'sales_type', align: 'center', sortable: true },
-  { name: 'status', label: '状态', field: 'status', align: 'center', sortable: true },
-  { name: 'rules', label: '规则摘要', field: 'sales_type', align: 'left' },
-  { name: 'channel', label: '抖音同步', field: 'is_synced', align: 'left', sortable: true },
-  { name: 'updated_at', label: '更新时间', field: 'updated_at', align: 'left', sortable: true },
-  { name: 'actions', label: '操作', field: 'actions', align: 'center' }
+  { name: 'name', label: '套餐', field: 'name', align: 'left', sortable: true, headerStyle: 'width: 13%;' },
+  { name: 'room_type', label: '房型', field: 'room_type_code', align: 'left', sortable: true, headerStyle: 'width: 11%;' },
+  { name: 'base_price', label: '基础价', field: 'base_price', align: 'right', sortable: true, headerStyle: 'width: 7%;' },
+  { name: 'sales_type', label: '售卖类型', field: 'sales_type', align: 'center', sortable: true, headerStyle: 'width: 8%;' },
+  { name: 'status', label: '状态', field: 'status', align: 'center', sortable: true, headerStyle: 'width: 7%;' },
+  { name: 'rules', label: '规则摘要', field: 'sales_type', align: 'left', headerStyle: 'width: 7%;' },
+  { name: 'channel', label: '抖音同步', field: 'is_synced', align: 'left', sortable: true, headerStyle: 'width: 180px;' },
+  { name: 'updated_at', label: '更新时间', field: 'updated_at', align: 'left', sortable: true, headerStyle: 'width: 145px;' },
+  { name: 'actions', label: '操作', field: 'actions', align: 'center', headerStyle: 'width: 155px;' }
 ]
 
 const formRef = ref(null)
@@ -541,6 +693,60 @@ const editingPlan = ref(null)
 const ariNotifyDialogOpen = ref(false)
 const ariNotifySubmitting = ref(false)
 const ariNotifyPlan = ref(null)
+
+// 抖音渠道开关状态及 JSON 面板折叠状态
+const douyinChannelEnabled = ref(true)
+const showJsonConfig = ref(false)
+
+// 规则卡片摘要文案
+const validityText = ref('长期有效')
+const bookableText = ref('长期开放')
+const cancelRuleText = ref('入住前 1 天免费取消')
+
+// 规则卡片详情弹窗控制
+const ruleDetailDialogOpen = ref(false)
+const activeRuleType = ref('validity')
+
+/**
+ * 根据当前选中的房型代码，查找对应的房型基础价展示
+ * 用于“基础信息”板块底部的蓝条提示
+ */
+const selectedRoomTypeBasePrice = computed(() => {
+  if (!form.value.room_type_code) return null
+  const targetRoomType = roomTypes.value.find(rt => rt.type_code === form.value.room_type_code)
+  return targetRoomType ? formatPrice(targetRoomType.base_price) : null
+})
+
+/**
+ * 打开售卖规则卡片对应的详情说明弹窗
+ * @param {string} ruleType - 规则卡片类型: 'validity' | 'bookable' | 'cancel'
+ */
+function toggleRuleDetails(ruleType) {
+  activeRuleType.value = ruleType
+  ruleDetailDialogOpen.value = true
+}
+
+/**
+ * 获取规则详情弹窗的标题
+ */
+function getRuleDetailTitle() {
+  if (activeRuleType.value === 'validity') return '售卖有效期规则'
+  if (activeRuleType.value === 'bookable') return '可订日期规则'
+  return '取消规则说明'
+}
+
+/**
+ * 获取规则详情弹窗的内容文本
+ */
+function getRuleDetailContent() {
+  if (activeRuleType.value === 'validity') {
+    return '当前套餐在售卖渠道中长期有效，如需设置特定上架时间段，可在保存后在套餐列表中管理上下架状态。'
+  }
+  if (activeRuleType.value === 'bookable') {
+    return '客人可预订任意开放日期的房间。如需限制特殊节日或房型价格，可在房态房价日历中做针对性调整。'
+  }
+  return '客人可在预订入住日期前 1 天 24:00 前免费取消订单；逾期取消或未入住将扣除首晚房费。'
+}
 
 const filters = ref({
   roomTypeCode: '',
@@ -797,6 +1003,8 @@ function openDialog(plan = null) {
       }
     : createDefaultForm()
 
+  douyinChannelEnabled.value = Boolean(plan ? plan.is_synced || (plan.douyin_config && Object.keys(plan.douyin_config).length > 0) : true)
+  showJsonConfig.value = false
   dialogOpen.value = true
 }
 
@@ -1034,7 +1242,7 @@ onActivated(refreshAll)
   align-items: center;
   max-width: 1600px;
   margin: 0 auto;
-  padding: 14px;
+  padding: 14px 20px;
   border: 1px solid var(--line);
   border-bottom: 0;
   border-radius: 8px 8px 0 0;
@@ -1042,25 +1250,32 @@ onActivated(refreshAll)
 }
 
 .toolbar-field {
-  width: 220px;
+  width: 150px;
 }
 
 .keyword-field {
-  width: 300px;
+  width: 200px;
 }
 
 .compact-field {
-  width: 160px;
+  width: 120px;
 }
 
-.toolbar-icon-btn,
+.toolbar-icon-btn {
+  min-width: 38px;
+  min-height: 38px;
+}
+
 .table-action-btn {
-  min-width: 44px;
-  min-height: 44px;
+  min-width: 30px;
+  min-height: 30px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
 }
 
 .primary-action {
-  min-height: 44px;
+  min-height: 38px;
   border-radius: 8px;
   background: var(--accent);
 }
@@ -1074,6 +1289,11 @@ onActivated(refreshAll)
   box-shadow: 0 18px 42px rgba(23, 34, 31, 0.08);
 }
 
+.rate-plan-table :deep(.q-table) {
+  table-layout: fixed;
+  width: 100%;
+}
+
 .rate-plan-table :deep(.q-table__top),
 .rate-plan-table :deep(thead tr) {
   background: #f7faf8;
@@ -1083,10 +1303,26 @@ onActivated(refreshAll)
   color: #44524e;
   font-size: 12px;
   font-weight: 700;
+  padding: 10px 4px;
+  white-space: nowrap;
+}
+
+.rate-plan-table :deep(.q-table th:first-child),
+.rate-plan-table :deep(.q-table td:first-child) {
+  padding-left: 16px;
+}
+
+.rate-plan-table :deep(.q-table th:last-child),
+.rate-plan-table :deep(.q-table td:last-child) {
+  padding-right: 14px;
 }
 
 .rate-plan-table :deep(.q-table tbody td) {
-  height: 68px;
+  height: 60px;
+  padding: 10px 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .rate-plan-table :deep(.q-table tbody tr:hover) {
@@ -1096,6 +1332,9 @@ onActivated(refreshAll)
 .plan-title {
   color: var(--ink);
   font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .plan-id,
@@ -1105,6 +1344,9 @@ onActivated(refreshAll)
   color: var(--ink-soft);
   font-size: 12px;
   line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .price-text {
@@ -1115,16 +1357,22 @@ onActivated(refreshAll)
 }
 
 .status-chip {
-  min-width: 76px;
+  min-width: 68px;
   justify-content: center;
 }
 
 .channel-state {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
+  max-width: 100%;
+}
+
+.channel-state span {
+  white-space: nowrap;
+  display: inline-block;
 }
 
 .channel-state.muted {
@@ -1142,47 +1390,269 @@ onActivated(refreshAll)
   color: var(--ink-soft);
 }
 
+.rate-plan-dialog-wrapper :deep(.q-dialog__inner--minimized > div) {
+  max-width: 920px;
+}
+
 .rate-plan-dialog {
   width: min(920px, calc(100vw - 32px));
   max-width: 920px;
-  border-radius: 8px;
-}
-
-.ari-notify-dialog {
-  width: min(560px, calc(100vw - 32px));
-  border-radius: 8px;
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+  background: #ffffff;
 }
 
 .dialog-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  background: #f7faf8;
+  padding: 20px 24px 16px;
+  background: #ffffff;
+}
+
+.dialog-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1.3;
+}
+
+.dialog-subtitle {
+  font-size: 13px;
+  color: #6b7280;
+  margin-top: 4px;
+}
+
+.dialog-close-btn {
+  color: #9ca3af;
+  transition: color 0.2s ease;
+}
+
+.dialog-close-btn:hover {
+  color: #374151;
 }
 
 .dialog-body {
-  display: grid;
-  gap: 18px;
-  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 20px 24px 24px;
+}
+
+.form-section {
+  display: flex;
+  flex-direction: column;
 }
 
 .form-section-title {
-  color: var(--accent-dark);
-  font-size: 13px;
+  color: #111827;
+  font-size: 15px;
   font-weight: 700;
+  margin-bottom: 14px;
+}
+
+.field-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 6px;
+}
+
+.custom-input :deep(.q-field__control) {
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.info-tip-banner {
+  display: flex;
+  align-items: center;
+  background: #f0f5ff;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: #2563eb;
+  font-size: 13px;
+}
+
+.info-tip-text strong {
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+/* 售卖规则卡片 */
+.rule-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.rule-card:hover {
+  border-color: #2563eb;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.08);
+  transform: translateY(-1px);
+}
+
+.rule-card-icon-wrapper {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.rule-card-icon-wrapper.blue-bg {
+  background: #eff6ff;
+}
+
+.rule-card-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.rule-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
+  line-height: 1.3;
+}
+
+.rule-card-desc {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rule-card-arrow {
+  color: #9ca3af;
+  font-size: 18px;
+  transition: transform 0.2s ease;
+}
+
+.rule-card:hover .rule-card-arrow {
+  color: #2563eb;
+  transform: translateX(2px);
+}
+
+/* 渠道配置 */
+.channel-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.channel-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.channel-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tiktok-badge {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #000000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.channel-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+  line-height: 1.3;
+}
+
+.channel-desc {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+.json-config-accordion {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed #e5e7eb;
+}
+
+.json-config-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 0;
+}
+
+.json-config-title {
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 500;
+  color: #4b5563;
+}
+
+.dialog-actions {
+  padding: 16px 24px 20px;
+  background: #ffffff;
+  border-top: 1px solid #f3f4f6;
+  gap: 12px;
+}
+
+.cancel-btn {
+  min-width: 76px;
+  height: 36px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  color: #374151;
+  font-weight: 500;
+  background: #ffffff;
+}
+
+.save-btn {
+  min-width: 76px;
+  height: 36px;
+  border-radius: 6px;
+  background: #165dff !important;
+  color: #ffffff;
+  font-weight: 500;
 }
 
 .conditional-panel {
   padding: 16px;
-  border: 1px solid var(--line);
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
-  background: var(--surface-muted);
+  background: #f9fafb;
 }
 
-.dialog-actions {
-  padding: 16px 22px 22px;
-  background: #fbfcfb;
+.ari-notify-dialog {
+  width: min(560px, calc(100vw - 32px));
+  border-radius: 12px;
+}
+
+.ari-notify-dialog .dialog-heading {
+  background: #ffffff;
 }
 
 @media (max-width: 1024px) {
