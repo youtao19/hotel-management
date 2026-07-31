@@ -674,7 +674,8 @@ curl -X GET 'http://localhost:3000/api/plugin/room-type-mapping?platform=meituan
 - Method: `GET`
 - Path: `/api/douyin/room-type-mapping`
 - 说明：
-  - 返回本地 `room_types`、抖音物理房型缓存 `douyin_physical_rooms` 与当前 `douyin_room_type_mapping`
+  - 返回本地 `room_types`、当前配置的抖音账号和酒店下的物理房型缓存 `douyin_physical_rooms`，以及当前 `douyin_room_type_mapping`
+  - 历史账号或酒店的房型缓存不会出现在 `douyinRooms`，避免同名房型在下拉框重复显示
   - 前端“抖音房型匹配”页面使用该接口展示匹配状态
   - `matchStatus` 取值：
     - `UNMATCHED`：本地房型未匹配抖音房型

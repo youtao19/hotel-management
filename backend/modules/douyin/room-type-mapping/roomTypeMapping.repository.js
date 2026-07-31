@@ -33,7 +33,10 @@ async function listLocalRoomTypesWithMappings(runner = null) {
   return result.rows;
 }
 
-async function listDouyinRoomsWithBindings(runner = null) {
+/**
+ * 查询当前抖音账号和酒店可用于匹配的物理房型，避免历史缓存混入同名候选项。
+ */
+async function listDouyinRoomsWithBindings(accountId, hotelId, runner = null) {
   const result = await runQuery(
     runner,
     `
@@ -58,8 +61,17 @@ async function listDouyinRoomsWithBindings(runner = null) {
         ON drm.douyin_room_id = dpr.room_id
       LEFT JOIN room_types rt
         ON rt.type_code = drm.local_room_type
+      WHERE dpr.account_id = $1
+        AND COALESCE(
+          dpr.raw_payload ->> 'hotel_id',
+          dpr.raw_payload ->> 'poi_id',
+          dpr.raw_payload ->> 'hotelId',
+          dpr.raw_payload ->> 'poiId',
+          dpr.raw_payload -> 'hotel' ->> 'hotel_id'
+        ) = $2
       ORDER BY dpr.room_name NULLS LAST, dpr.room_id
-    `
+    `,
+    [accountId, hotelId]
   );
   return result.rows;
 }

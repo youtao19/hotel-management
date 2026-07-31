@@ -1,5 +1,6 @@
 const roomStaticInfoService = require('../physical-room/physicalRoom.service');
 const repository = require('./roomTypeMapping.repository');
+const { douyinConfig } = require('../../../appSettings/douyin.config');
 
 function createServiceError(message, statusCode = 400) {
   const error = new Error(message);
@@ -58,7 +59,8 @@ function toDouyinRoomItem(row) {
 async function getMappingPageData() {
   const [mappingRows, roomRows] = await Promise.all([
     repository.listLocalRoomTypesWithMappings(),
-    repository.listDouyinRoomsWithBindings()
+    // 历史酒店缓存可能保留同名房型，匹配页面只能展示当前抖音账号和酒店的候选项。
+    repository.listDouyinRoomsWithBindings(douyinConfig.accountId, douyinConfig.poiId)
   ]);
 
   const items = mappingRows.map(toMappingItem);

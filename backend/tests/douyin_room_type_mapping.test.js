@@ -1,6 +1,9 @@
 const express = require('express');
 const request = require('supertest');
 
+process.env.DOUYIN_ACCOUNT_ID = 'DY_ACCOUNT_001';
+process.env.DOUYIN_POI_ID = 'DY_HOTEL_001';
+
 jest.mock('../modules/douyin/token/token.service', () => ({
   getToken: jest.fn()
 }));
@@ -96,6 +99,33 @@ describe('抖音房型匹配管理', () => {
       roomName: '抖音房型A',
       boundLocalRoomType: 'DY_MAP_A'
     });
+  });
+
+  test('查询房型匹配列表不会返回其他账号或酒店的历史房型缓存', async () => {
+    await createDouyinRoom('DY_ROOM_CURRENT', '行云阁');
+    await query(
+      `
+        INSERT INTO douyin_physical_rooms
+          (account_id, room_id, room_name, status, raw_payload, rate_plan_list)
+        VALUES ($1, $2, $3, $4, $5, $6)
+      `,
+      [
+        'DY_ACCOUNT_HISTORY',
+        'DY_ROOM_HISTORY',
+        '行云阁',
+        1,
+        { hotel_id: 'DY_HOTEL_HISTORY', active: true },
+        []
+      ]
+    );
+
+    const response = await request(app).get('/api/douyin/room-type-mapping');
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.data.summary.douyinRoomCount).toBe(1);
+    expect(response.body.data.douyinRooms).toEqual([
+      expect.objectContaining({ roomId: 'DY_ROOM_CURRENT', roomName: '行云阁' })
+    ]);
   });
 
   test('刷新抖音房型会写入物理房型缓存', async () => {
