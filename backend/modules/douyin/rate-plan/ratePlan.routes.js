@@ -3,6 +3,7 @@ const Ajv = require('ajv');
 const addFormats = require('ajv-formats');
 const { query } = require('../../../database/postgreDB/pg');
 const douyinProductService = require('../presale-product/product.service');
+const { douyinConfig } = require('../../../appSettings/douyin.config');
 
 const router = express.Router();
 const ajv = new Ajv({ allErrors: true });
@@ -210,12 +211,45 @@ router.get('/', async (req, res) => {
   try {
     const roomTypeCode = normalizeString(req.query.roomTypeCode || req.query.room_type_code || '');
     const params = [];
-    let whereSql = '';
+    const whereConditions = [];
 
     if (roomTypeCode) {
       params.push(roomTypeCode);
-      whereSql = 'WHERE rp.room_type_code = $1';
+      whereConditions.push(`rp.room_type_code = $${params.length}`);
     }
+
+    if (douyinConfig.poiId) {
+      // 已同步套餐以自身渠道映射为准；未同步套餐才按房型归属判断，避免房型重绑后把旧套餐带入当前酒店。
+      params.push(douyinConfig.poiId);
+      const hotelIdParam = `$${params.length}`;
+      whereConditions.push(`(
+        (
+          ocm.channel_item_id IS NOT NULL
+          AND COALESCE(ocm.channel_config ->> 'hotel_id', ocm.channel_config ->> 'poi_id') = ${hotelIdParam}
+        )
+        OR (
+          ocm.channel_item_id IS NULL
+          AND COALESCE(
+            dpr.raw_payload ->> 'hotel_id',
+            dpr.raw_payload ->> 'poi_id',
+            dpr.raw_payload ->> 'hotelId',
+            dpr.raw_payload ->> 'poiId',
+            dpr.raw_payload -> 'hotel' ->> 'hotel_id'
+          ) = ${hotelIdParam}
+        )
+      )`);
+
+      if (douyinConfig.accountId) {
+        params.push(douyinConfig.accountId);
+        const accountIdParam = `$${params.length}`;
+        whereConditions.push(`(
+          (ocm.channel_item_id IS NOT NULL AND ocm.channel_config ->> 'account_id' = ${accountIdParam})
+          OR (ocm.channel_item_id IS NULL AND dpr.account_id = ${accountIdParam})
+        )`);
+      }
+    }
+
+    const whereSql = whereConditions.length ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
     const result = await query(
       `
@@ -232,6 +266,10 @@ router.get('/', async (req, res) => {
           ON ocm.local_target_type = 'RATE_PLAN'
           AND ocm.local_target_id = rp.id
           AND ocm.channel_code = 'DOUYIN'
+        LEFT JOIN douyin_room_type_mapping drm
+          ON drm.local_room_type = rp.room_type_code
+        LEFT JOIN douyin_physical_rooms dpr
+          ON dpr.room_id = drm.douyin_room_id
         ${whereSql}
         ORDER BY rp.id DESC
       `,

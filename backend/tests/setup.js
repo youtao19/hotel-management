@@ -19,6 +19,7 @@ const tables = [
   'handover_daily_settings',
   'handover_source_snapshot',
   'dashboard_memos',
+  'system_notifications',
   'account'
 ];
 

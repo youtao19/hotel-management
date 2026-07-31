@@ -7,6 +7,7 @@ const webhookService = require('./webhook.service');
 const priceVolumeService = require('../availability/priceVolume.service');
 const bookableCheckService = require('../availability/bookableCheck.service');
 const callbackLogService = require('./callbackLog.service');
+const systemNotificationService = require('../../system-notification/systemNotification.service');
 
 function successResponse() {
   return {
@@ -103,6 +104,21 @@ function createDouyinExternalRouter(options = {}) {
       const msgId = getHeader(req, 'Msg-Id');
       if (!msgId) {
         return res.status(400).json({ message: '缺少 Msg-Id，无法进行 Webhook 幂等去重' });
+      }
+
+      if (payload.event === systemNotificationService.AUDIT_EVENT) {
+        // 审核通知以数据库唯一键去重，避免 Redis 过期后抖音重复投递再次产生铃铛提醒。
+        const notification = await systemNotificationService.recordDouyinPresaleAuditNotification(msgId, payload);
+        await saveCallbackLog({
+          type: 'presale_audit_result',
+          stage: notification.created ? 'processed' : 'duplicate',
+          logId,
+          event: payload.event,
+          msgId,
+          voucherId: notification.voucherId,
+          auditResult: notification.auditResult
+        });
+        return res.status(200).json(successResponse());
       }
 
       const redisClient = await getRedisClient(redisProvider);

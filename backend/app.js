@@ -116,6 +116,9 @@ async function initializeRoutes() {
     const douyinAriNotifyRoute = require("./modules/douyin/availability/ariNotify.routes");
     app.use("/api/douyin/ari-notify", douyinAriNotifyRoute);
 
+    const systemNotificationRoute = require("./modules/system-notification/systemNotification.routes");
+    app.use("/api/notifications", systemNotificationRoute);
+
     const billRoutes = require("./modules/bill/bill.routes");
     app.use("/api/bills", billRoutes);
 

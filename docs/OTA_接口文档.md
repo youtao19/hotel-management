@@ -900,6 +900,11 @@ curl -X GET 'http://localhost:3000/api/plugin/room-type-mapping?platform=meituan
 - 请求体支持创建接口中的任意字段，至少传一个字段
 - 若更新后的 `sales_type=2`，仍必须满足完整钟点房字段
 
+#### 查询套餐
+- Method: `GET`
+- Path: `/api/rate-plans`
+- 说明：已配置 `DOUYIN_POI_ID` 时，已同步套餐按自身抖音渠道映射的酒店过滤，未同步套餐按房型绑定酒店过滤；历史酒店套餐不会出现在售卖套餐页面。
+
 #### 删除套餐
 - Method: `DELETE`
 - Path: `/api/rate-plans/:id`
@@ -968,3 +973,25 @@ curl -X GET 'http://localhost:3000/api/plugin/room-type-mapping?platform=meituan
 - `400 缺少抖音酒店 ID，请传 poiId 或配置 DOUYIN_POI_ID`
 - `400 抖音预售券预定商品暂不支持凌晨房套餐同步`
 - `502 同步售卖套餐到抖音失败`：抖音接口 HTTP 或业务错误，响应 `error` 字段会带上抖音返回的错误描述，`douyin_log_id` 会带上抖音 `logid`
+
+### 抖音预售券审核结果通知
+
+- 官方文档：[预售券审核结果通知](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/hotel-voucher-mgmt/presale-ticket-review)
+- 抖音侧配置：将 Webhook 地址配置为 `POST /douyin/webhooks`，事件为 `life_hotel_presale_audit_result`。
+- 鉴权：请求头 `X-Douyin-Signature` 使用 `sha1(client_secret + 原始消息体)` 校验；请求头 `Msg-Id` 是消息去重键。
+- 推送内容：`content` 包含预售券抖音 ID `id`、本地三方 ID `out_id`、审核结果 `audit_result`（`1` 通过，`2` 未通过）和审核说明 `audit_message`。
+- 本系统行为：验签后将审核结果保存至 `system_notifications`，显示在顶部铃铛；同一个 `Msg-Id` 仅创建一条通知。抖音要求 3 秒内返回 HTTP 200，失败时会按官方规则重试。
+
+#### 获取系统通知
+
+- Method: `GET`
+- Path: `/api/notifications`
+- 鉴权：员工 JWT
+- 响应：返回最近 20 条通知及 `unreadCount`。
+
+#### 标记系统通知已读
+
+- Method: `PATCH`
+- Path: `/api/notifications/read-all`
+- 鉴权：员工 JWT
+- 行为：将当前全局系统通知统一标记为已读。

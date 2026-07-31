@@ -205,6 +205,13 @@ export const douyinRoomMappingApi = {
   deleteMapping: (localRoomType) => api.delete(`/douyin/room-type-mapping/${encodeURIComponent(localRoomType)}`)
 }
 
+// 系统通知由后端汇总外部渠道事件，前端只负责展示和标记已读。
+export const systemNotificationApi = {
+  getNotifications: () => api.get('/notifications'),
+
+  markAllAsRead: () => api.patch('/notifications/read-all')
+}
+
 // 订单相关接口
 export const orderApi = {
   // 获取所有订单

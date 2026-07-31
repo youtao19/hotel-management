@@ -1,6 +1,9 @@
 const express = require('express');
 const request = require('supertest');
 
+process.env.DOUYIN_ACCOUNT_ID = 'DY_RP_ACCOUNT_CURRENT';
+process.env.DOUYIN_POI_ID = 'DY_RP_HOTEL_CURRENT';
+
 jest.mock('../modules/douyin/token/token.service', () => ({
   getToken: jest.fn()
 }));
@@ -77,6 +80,23 @@ describe('售卖套餐本地 CRUD', () => {
 
     const id = createResponse.body.data.id;
 
+    await query(
+      `
+        INSERT INTO douyin_physical_rooms
+          (account_id, room_id, room_name, raw_payload, rate_plan_list)
+        VALUES ($1, $2, $3, $4, $5)
+      `,
+      ['DY_RP_ACCOUNT_CURRENT', 'DY_ROOM_CURRENT', '当前酒店房型', { hotel_id: 'DY_RP_HOTEL_CURRENT' }, []]
+    );
+    await query(
+      `
+        INSERT INTO douyin_room_type_mapping
+          (douyin_room_id, douyin_room_name, local_room_type)
+        VALUES ($1, $2, $3)
+      `,
+      ['DY_ROOM_CURRENT', '当前酒店房型', 'RP_TEST']
+    );
+
     const listResponse = await request(app).get('/api/rate-plans');
     expect(listResponse.statusCode).toBe(200);
     expect(listResponse.body.data).toHaveLength(1);
@@ -104,6 +124,68 @@ describe('售卖套餐本地 CRUD', () => {
 
     const afterDeleteResponse = await request(app).get(`/api/rate-plans/${id}`);
     expect(afterDeleteResponse.statusCode).toBe(404);
+  });
+
+  test('套餐列表不会返回历史抖音酒店房型下的套餐', async () => {
+    await createRoomType('RP_TEST_HISTORY');
+    const currentResponse = await request(app)
+      .post('/api/rate-plans')
+      .send(buildPayload({ name: '当前酒店套餐' }));
+    const historyResponse = await request(app)
+      .post('/api/rate-plans')
+      .send(buildPayload({ room_type_code: 'RP_TEST_HISTORY', name: '历史酒店套餐' }));
+
+    await query(
+      `
+        INSERT INTO douyin_physical_rooms
+          (account_id, room_id, room_name, raw_payload, rate_plan_list)
+        VALUES
+          ($1, $2, $3, $4, $5),
+          ($6, $7, $8, $9, $10)
+      `,
+      [
+        'DY_RP_ACCOUNT_CURRENT', 'DY_ROOM_CURRENT', '当前酒店房型', { hotel_id: 'DY_RP_HOTEL_CURRENT' }, [],
+        'DY_RP_ACCOUNT_HISTORY', 'DY_ROOM_HISTORY', '历史酒店房型', { hotel_id: 'DY_RP_HOTEL_HISTORY' }, []
+      ]
+    );
+    await query(
+      `
+        INSERT INTO douyin_room_type_mapping
+          (douyin_room_id, douyin_room_name, local_room_type)
+        VALUES
+          ($1, $2, $3),
+          ($4, $5, $6)
+      `,
+      [
+        'DY_ROOM_CURRENT', '当前酒店房型', 'RP_TEST',
+        'DY_ROOM_HISTORY', '历史酒店房型', 'RP_TEST_HISTORY'
+      ]
+    );
+    await query(
+      `
+        INSERT INTO ota_channel_mappings
+          (local_target_type, local_target_id, channel_code, channel_item_id, channel_config, sync_status)
+        VALUES
+          ($1, $2, $3, $4, $5, $6),
+          ($7, $8, $9, $10, $11, $12)
+      `,
+      [
+        'RATE_PLAN', currentResponse.body.data.id, 'DOUYIN', 'DY_RATE_PLAN_CURRENT',
+        { hotel_id: 'DY_RP_HOTEL_CURRENT', account_id: 'DY_RP_ACCOUNT_CURRENT' }, 1,
+        'RATE_PLAN', historyResponse.body.data.id, 'DOUYIN', 'DY_RATE_PLAN_HISTORY',
+        { hotel_id: 'DY_RP_HOTEL_HISTORY', account_id: 'DY_RP_ACCOUNT_HISTORY' }, 1
+      ]
+    );
+
+    const response = await request(app).get('/api/rate-plans');
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.data).toEqual([
+      expect.objectContaining({ id: currentResponse.body.data.id, name: '当前酒店套餐' })
+    ]);
+    expect(response.body.data).not.toContainEqual(
+      expect.objectContaining({ id: historyResponse.body.data.id, name: '历史酒店套餐' })
+    );
   });
 
   test('房型不存在时创建返回 400', async () => {

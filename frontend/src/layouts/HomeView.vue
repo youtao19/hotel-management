@@ -21,8 +21,32 @@
         <q-space />
 
         <div class="header-actions q-gutter-sm row items-center">
-          <q-btn round flat icon="notifications" size="12px" class="text-grey-7">
-            <q-badge floating color="red" rounded size="8px" />
+          <q-btn round flat icon="notifications" size="12px" class="text-grey-7" aria-label="系统通知">
+            <q-badge v-if="unreadNotificationCount > 0" floating color="red" rounded size="8px" />
+            <q-menu
+              anchor="bottom right"
+              self="top right"
+              :offset="[0, 8]"
+              @show="markNotificationsAsRead"
+            >
+              <q-list style="min-width: 320px; max-width: 420px;">
+                <q-item-label header>系统通知</q-item-label>
+                <q-separator />
+                <q-item v-for="notification in notifications" :key="notification.id">
+                  <q-item-section avatar top>
+                    <q-icon :name="notification.level === 'warning' ? 'warning_amber' : 'check_circle'" :color="notification.level === 'warning' ? 'warning' : 'positive'" />
+                  </q-item-section>
+                  <q-item-section>
+                    <q-item-label>{{ notification.title }}</q-item-label>
+                    <q-item-label caption lines="2">{{ notification.content }}</q-item-label>
+                    <q-item-label caption>{{ notification.created_at }}</q-item-label>
+                  </q-item-section>
+                </q-item>
+                <q-item v-if="notifications.length === 0">
+                  <q-item-section class="text-center text-grey-6">暂无系统通知</q-item-section>
+                </q-item>
+              </q-list>
+            </q-menu>
           </q-btn>
           
           <div class="header-user q-ml-md">
@@ -204,11 +228,12 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useQuasar } from 'quasar'
 import LogoutConfirmDialog from '../components/LogoutConfirmDialog.vue'
 import { useUserStore } from '../stores/userStore'
+import { systemNotificationApi } from '../api'
 
 const userStore = useUserStore()
 const router = useRouter()
@@ -240,6 +265,8 @@ const loginForm = ref({
   username: '',
   password: ''
 })
+const notifications = ref([])
+const unreadNotificationCount = ref(0)
 
 const isDouyinRoute = computed(() => douyinNavItems.some((item) => route.path === item.to))
 const douyinMenuOpen = ref(isDouyinRoute.value)
@@ -279,6 +306,36 @@ function onLogoutSuccess() {
     timeout: 2000
   })
 }
+
+/**
+ * 读取顶部铃铛数据；通知加载失败不影响酒店后台的其他页面使用。
+ */
+async function fetchNotifications() {
+  try {
+    const response = await systemNotificationApi.getNotifications()
+    notifications.value = response.data?.items || []
+    unreadNotificationCount.value = Number(response.data?.unreadCount || 0)
+  } catch (error) {
+    console.error('获取系统通知失败:', error)
+  }
+}
+
+/**
+ * 用户查看通知后再标记已读，避免后台到达的新审核结果被页面加载时直接消除提示。
+ */
+async function markNotificationsAsRead() {
+  if (unreadNotificationCount.value === 0) return
+
+  try {
+    await systemNotificationApi.markAllAsRead()
+    unreadNotificationCount.value = 0
+    notifications.value = notifications.value.map((notification) => ({ ...notification, is_read: true }))
+  } catch (error) {
+    console.error('标记系统通知已读失败:', error)
+  }
+}
+
+onMounted(fetchNotifications)
 </script>
 
 <style scoped>

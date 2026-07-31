@@ -223,6 +223,7 @@ describe('抖音 Webhooks 与价量态 SPI', () => {
   let logFilePath;
 
   beforeEach(async () => {
+    await query('DELETE FROM system_notifications');
     logFilePath = path.join(os.tmpdir(), `douyin-callback-logid-${process.pid}-${Date.now()}.jsonl`);
     process.env.DOUYIN_CALLBACK_LOG_FILE = logFilePath;
     redisClient = {
@@ -307,6 +308,50 @@ describe('抖音 Webhooks 与价量态 SPI', () => {
         event: 'life_trade_order_notify',
         msgId: 'MSG_001',
         contentAction: 'pay_success'
+      })
+    ]);
+  });
+
+  test('预售券审核结果会创建系统通知，并以 Msg-Id 持久化去重', async () => {
+    const body = JSON.stringify({
+      event: 'life_hotel_presale_audit_result',
+      client_key: 'DY_CLIENT_TEST',
+      content: JSON.stringify({
+        id: 'DY_VOUCHER_001',
+        out_id: 'LOCAL_VOUCHER_001',
+        audit_result: 2,
+        audit_message: '商品图片不符合要求'
+      }),
+      log_id: 'DY_AUDIT_LOG_001'
+    });
+
+    const firstResponse = await request(app)
+      .post('/douyin/webhooks')
+      .set('Content-Type', 'application/json')
+      .set('Msg-Id', 'DY_AUDIT_MSG_001')
+      .set('X-Douyin-Signature', buildWebhookSign(body))
+      .send(body);
+    const duplicateResponse = await request(app)
+      .post('/douyin/webhooks')
+      .set('Content-Type', 'application/json')
+      .set('Msg-Id', 'DY_AUDIT_MSG_001')
+      .set('X-Douyin-Signature', buildWebhookSign(body))
+      .send(body);
+
+    expect(firstResponse.statusCode).toBe(200);
+    expect(duplicateResponse.statusCode).toBe(200);
+    expect(redisClient.set).not.toHaveBeenCalled();
+
+    const notificationResult = await query(
+      'SELECT title, content, level, is_read FROM system_notifications WHERE external_message_id = $1',
+      ['DY_AUDIT_MSG_001']
+    );
+    expect(notificationResult.rows).toEqual([
+      expect.objectContaining({
+        title: '抖音预售券审核未通过',
+        content: '预售券：LOCAL_VOUCHER_001；商品图片不符合要求',
+        level: 'warning',
+        is_read: false
       })
     ]);
   });
