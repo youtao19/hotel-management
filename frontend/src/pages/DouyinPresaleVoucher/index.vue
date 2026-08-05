@@ -600,6 +600,11 @@ async function submit() {
     dialogOpen.value = false
     await load()
   } catch (error) {
+    const voucherId = error?.response?.data?.voucher_id
+    if (!editingVoucher.value && Number.isInteger(voucherId)) {
+      // 首次同步失败后本地草稿已存在，后续保存必须更新该草稿而非重复创建。
+      editingVoucher.value = { id: voucherId }
+    }
     $q.notify({ type: 'negative', message: error?.response?.data?.message || '同步预售券失败' })
   } finally {
     saving.value = false

@@ -134,6 +134,7 @@ describe('抖音预售券创建和更新', () => {
     expect(response.statusCode).toBe(502);
     expect(response.body.message).toBe('应用未获商家授权（抖音日志ID：DY_AUTH_LOG）');
     expect(response.body.douyin_log_id).toBe('DY_AUTH_LOG');
+    expect(response.body.voucher_id).toEqual(expect.any(Number));
   });
 
   test('已同步预售券可调用商品状态接口上线，并保存状态与抖音日志ID', async () => {

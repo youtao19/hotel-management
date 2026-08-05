@@ -64,13 +64,13 @@ async function syncAndRespond(res, id) {
 }
 
 /** 抖音业务失败携带 logid 时直接回显原因，运营可据此完成商家授权或向抖音排障。 */
-function sendSyncError(res, error) {
+function sendSyncError(res, error, voucherId = null) {
   const statusCode = error.statusCode || 500;
   const douyinLogId = error.douyinLogId || null;
   const message = douyinLogId
     ? `${error.message}（抖音日志ID：${douyinLogId}）`
     : statusCode >= 500 ? '同步预售券到抖音失败' : error.message;
-  return res.status(statusCode).json({ message, error: error.message, douyin_log_id: douyinLogId });
+  return res.status(statusCode).json({ message, error: error.message, douyin_log_id: douyinLogId, voucher_id: voucherId });
 }
 
 router.get('/', async (req, res) => {
@@ -84,11 +84,13 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   const message = validatePayload(req.body || {});
   if (message) return res.status(400).json({ message });
+  let voucher;
   try {
-    const voucher = await repository.create(req.body);
+    voucher = await repository.create(req.body);
     return await syncAndRespond(res, voucher.id);
   } catch (error) {
-    return sendSyncError(res, error);
+    // 本地草稿已创建时返回其 ID，前端重试必须改走更新接口。
+    return sendSyncError(res, error, voucher?.id || null);
   }
 });
 
