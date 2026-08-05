@@ -241,16 +241,16 @@
               </q-tooltip>
             </q-btn>
             <q-btn
-              v-if="props.row.douyin_business_type === 'CALENDAR_ROOM'"
+              v-if="['CALENDAR_ROOM', 'PRESALE'].includes(props.row.douyin_business_type)"
               flat
               round
               color="amber-9"
               icon="price_change"
-              aria-label="维护日历房价格"
+              aria-label="维护抖音按日房价"
               class="table-action-btn"
               @click="openCalendarPriceDialog(props.row)"
             >
-              <q-tooltip>维护并推送日历房价格</q-tooltip>
+              <q-tooltip>维护并推送抖音按日房价</q-tooltip>
             </q-btn>
             <q-btn
               flat
@@ -595,10 +595,10 @@
       <q-card class="ari-notify-dialog">
         <q-card-section class="dialog-heading">
           <div>
-            <div class="text-h6">日历房价格</div>
+            <div class="text-h6">抖音按日房价</div>
             <div class="text-caption text-grey-7">{{ calendarPricePlan?.name || '--' }}</div>
           </div>
-          <q-btn flat round icon="close" aria-label="关闭日历房价格弹窗" @click="calendarPriceDialogOpen = false" />
+          <q-btn flat round icon="close" aria-label="关闭抖音按日房价弹窗" @click="calendarPriceDialogOpen = false" />
         </q-card-section>
 
         <q-separator />
@@ -1278,7 +1278,7 @@ function getSyncErrorMessage(error) {
   return getErrorMessage(error, '同步抖音商品失败')
 }
 
-/** 打开日历房价格维护窗口。 */
+/** 打开抖音按日房价维护窗口。 */
 function openCalendarPriceDialog(plan) {
   calendarPricePlan.value = plan
   calendarPriceRows.value = []
@@ -1304,7 +1304,7 @@ function buildCalendarPriceDates(startDate, endDate) {
   return dates
 }
 
-/** 加载指定日期范围的日历房价格。 */
+/** 加载指定日期范围的抖音按日房价。 */
 async function loadCalendarPrices() {
   const dates = buildCalendarPriceDates(calendarPriceRange.value.startDate, calendarPriceRange.value.endDate)
   if (!dates.length || dates.length > 30) {
@@ -1325,26 +1325,26 @@ async function loadCalendarPrices() {
       }
     })
   } catch (error) {
-    $q.notify({ type: 'negative', message: getErrorMessage(error, '加载日历房价格失败') })
+    $q.notify({ type: 'negative', message: getErrorMessage(error, '加载抖音按日房价失败') })
   } finally {
     calendarPriceLoading.value = false
   }
 }
 
-/** 保存当前日期范围的日历房价格。 */
+/** 保存当前日期范围的抖音按日房价。 */
 async function saveCalendarPrices() {
   calendarPriceSaving.value = true
   try {
     await ratePlanApi.saveCalendarRoomPrices(calendarPricePlan.value.id, { prices: calendarPriceRows.value })
-    $q.notify({ type: 'positive', message: '日历房价格保存成功' })
+    $q.notify({ type: 'positive', message: '抖音按日房价保存成功' })
   } catch (error) {
-    $q.notify({ type: 'negative', message: getErrorMessage(error, '保存日历房价格失败') })
+    $q.notify({ type: 'negative', message: getErrorMessage(error, '保存抖音按日房价失败') })
   } finally {
     calendarPriceSaving.value = false
   }
 }
 
-/** 推送当前日期范围的日历房价格。 */
+/** 推送当前日期范围的抖音按日房价。 */
 async function syncCalendarPrices() {
   calendarPriceSyncing.value = true
   try {
@@ -1358,8 +1358,8 @@ async function syncCalendarPrices() {
     $q.notify({
       type: 'negative',
       message: douyinLogId
-        ? `${getErrorMessage(error, '推送日历房价格失败')}，logid：${douyinLogId}`
-        : getErrorMessage(error, '推送日历房价格失败')
+        ? `${getErrorMessage(error, '推送抖音按日房价失败')}，logid：${douyinLogId}`
+        : getErrorMessage(error, '推送抖音按日房价失败')
     })
   } finally {
     calendarPriceSyncing.value = false

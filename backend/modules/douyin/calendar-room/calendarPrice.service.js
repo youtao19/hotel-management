@@ -73,10 +73,12 @@ async function syncPrices(ratePlanId, options = {}) {
 
   const context = await repository.findSyncContext(ratePlanId);
   if (!context) throw createServiceError('售卖套餐不存在', 404);
-  // 只允许日历房套餐推送日历价。
-  if (context.douyin_business_type !== 'CALENDAR_ROOM') throw createServiceError('套餐不是日历房业务，不能推送房价', 400);
-  if (!context.douyin_rate_plan_id || context.channel_config?.business_type !== 'CALENDAR_ROOM') {
-    throw createServiceError('套餐尚未同步为抖音日历房售卖房型，不能推送房价', 400);
+  // 预售券推送的是其绑定的预定商品按日房价，不是预售券券面售价。
+  if (!['CALENDAR_ROOM', 'PRESALE'].includes(context.douyin_business_type)) {
+    throw createServiceError('套餐业务类型不支持推送抖音按日房价', 400);
+  }
+  if (!context.douyin_rate_plan_id) {
+    throw createServiceError('套餐尚未同步为抖音售卖房型，不能推送房价', 400);
   }
 
   const prices = await repository.findPrices(ratePlanId, options.startDate, options.endDate);

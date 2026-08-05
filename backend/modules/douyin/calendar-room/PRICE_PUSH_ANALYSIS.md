@@ -10,7 +10,7 @@
 
 ## 实施结果
 
-系统已调用 `/goodlife/v1/trip/hotel/price/save/`，支持主动推送已保存的日历房按日价格。
+系统已调用 `/goodlife/v1/trip/hotel/price/save/`，支持主动推送日历房和预售券绑定预定商品的按日价格。预售券只使用已同步的类型 13 `rate_plan_id`，不使用类型 12 预售券 `product_id`，也不修改券面售价。
 
 现有 `availability/` 模块提供的是不同方向的能力：
 
@@ -35,7 +35,7 @@
 
 ## 推荐实现结构
 
-所有新代码放在 `backend/modules/douyin/calendar-room/`，不调用预售券模块。
+所有新代码放在 `backend/modules/douyin/calendar-room/`；预售券房价推送仅复用其已保存的套餐映射，不调用预售券商品接口。
 
 ```text
 calendar-room/

@@ -15,6 +15,11 @@ function parseId(value) {
   return Number.isInteger(id) && id > 0 ? id : null;
 }
 
+/** 判断套餐是否可维护抖音按日房价。 */
+function supportsDouyinPrices(context) {
+  return context?.douyin_business_type === 'CALENDAR_ROOM' || context?.douyin_business_type === 'PRESALE';
+}
+
 /** 保存日历房规则。 */
 router.put('/rule', async (req, res) => {
   try {
@@ -54,12 +59,12 @@ router.put('/prices', async (req, res) => {
     if (!ratePlanId) return res.status(400).json({ message: '套餐ID格式错误' });
     const context = await repository.findSyncContext(ratePlanId);
     if (!context) return res.status(404).json({ message: '售卖套餐不存在' });
-    if (context.douyin_business_type !== 'CALENDAR_ROOM') return res.status(400).json({ message: '套餐不是日历房业务，不能保存日历房价格' });
+    if (!supportsDouyinPrices(context)) return res.status(400).json({ message: '套餐业务类型不支持维护抖音按日房价' });
     const message = validatePrices(req.body || {});
     if (message) return res.status(400).json({ message });
     const prices = normalizePrices(req.body || {});
     const saved = await repository.upsertPrices(ratePlanId, prices);
-    return res.status(200).json({ data: saved, message: '日历房价格保存成功' });
+    return res.status(200).json({ data: saved, message: '抖音按日房价保存成功' });
   } catch (error) {
     console.error('保存日历房价格失败:', error);
     return res.status(500).json({ message: '服务器错误', error: error.message });

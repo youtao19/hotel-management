@@ -33,6 +33,21 @@ async function createCalendarPlan(app) {
   return id;
 }
 
+/** 创建已同步预定商品的预售券套餐。 */
+async function createPresalePlan(app) {
+  await query(`INSERT INTO room_types (type_code, type_name, base_price) VALUES ('PRESALE_ROOM', '预售券测试房型', 300)`);
+  const response = await request(app).post('/api/rate-plans').send({
+    room_type_code: 'PRESALE_ROOM', name: '预售券测试套餐', base_price: 399, currency: 'CNY', douyin_business_type: 'PRESALE'
+  });
+  const id = response.body.data.id;
+  await query(
+    `INSERT INTO ota_channel_mappings (local_target_type, local_target_id, channel_code, channel_item_id, channel_config, sync_status)
+     VALUES ('RATE_PLAN', $1, 'DOUYIN', 'DY_PRESALE_BOOKING_RATE_PLAN', $2, 1)`,
+    [id, { out_rate_plan_id: `booking-${id}-v2` }]
+  );
+  return id;
+}
+
 describe('抖音日历房静态规则与同步', () => {
   const app = buildApp();
 
@@ -44,6 +59,7 @@ describe('抖音日历房静态规则与同步', () => {
     await query('DELETE FROM douyin_physical_rooms');
     await query('DELETE FROM rate_plans');
     await query("DELETE FROM room_types WHERE type_code = 'CAL_ROOM'");
+    await query("DELETE FROM room_types WHERE type_code = 'PRESALE_ROOM'");
     tokenService.getToken.mockReset();
     global.fetch = jest.fn();
   });
@@ -124,6 +140,26 @@ describe('抖音日历房静态规则与同步', () => {
     });
     const prices = await query('SELECT last_synced_at FROM douyin_calendar_room_prices WHERE rate_plan_id = $1', [id]);
     expect(prices.rows.every((price) => price.last_synced_at)).toBe(true);
+  });
+
+  test('预售券套餐向绑定的预定商品推送按日房价', async () => {
+    const id = await createPresalePlan(app);
+    await request(app).put(`/api/rate-plans/${id}/douyin/calendar-room/prices`).send({
+      prices: [{ stayDate: '2026-08-05', originalAmount: 398 }]
+    });
+    tokenService.getToken.mockResolvedValue('PRESALE_TOKEN');
+    global.fetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({
+      data: { save_result: [{ rate_plan_id: 'DY_PRESALE_BOOKING_RATE_PLAN', code: 0 }] },
+      extra: { error_code: 0, logid: 'PRESALE_PRICE_LOG_ID' }
+    }) });
+
+    const response = await request(app).post(`/api/rate-plans/${id}/douyin/calendar-room/prices/sync`).send({ startDate: '2026-08-05', endDate: '2026-08-05' });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.data).toMatchObject({ douyinRatePlanId: 'DY_PRESALE_BOOKING_RATE_PLAN', logIds: ['PRESALE_PRICE_LOG_ID'] });
+    expect(JSON.parse(global.fetch.mock.calls[0][1].body).aris).toEqual([
+      { rate_plan_id: 'DY_PRESALE_BOOKING_RATE_PLAN', timerange: { start: '2026-08-05', end: '2026-08-05' }, original_amount: 39800 }
+    ]);
   });
 
   test('缺少任一天日历房价格时拒绝推送', async () => {
