@@ -39,7 +39,8 @@ async function syncVoucher(id) {
   const payload = {
     account_id: accountId,
     presale_info: {
-      category_id: '101',
+      // 已同步物理房型均使用此酒店类目，预售券必须与已上架的酒店商品保持同一酒店类目体系。
+      category_id: '8001001',
       // account_id 按抖音规范传总账户，因此结算必须明确指定总店，避免渠道无法推断资金归属。
       settle_type: 1,
       pre_sale_coupon_info: {

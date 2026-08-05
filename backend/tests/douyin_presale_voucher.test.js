@@ -78,6 +78,7 @@ describe('抖音预售券创建和更新', () => {
     const requestPayload = JSON.parse(global.fetch.mock.calls[0][1].body);
     expect(global.fetch.mock.calls[0][1].headers['Rpc-Transit-Life-Account']).toBe('DY_VOUCHER_ACCOUNT');
     expect(requestPayload.account_id).toBe('DY_VOUCHER_ACCOUNT');
+    expect(requestPayload.presale_info.category_id).toBe('8001001');
     expect(requestPayload.presale_info.settle_type).toBe(1);
     expect(requestPayload.presale_info.pre_sale_coupon_info.bind_rate_plans).toEqual(['DY_RATE_PLAN_001']);
     expect(requestPayload.presale_info.pre_sale_coupon_info.actual_amount).toBe(80000);
