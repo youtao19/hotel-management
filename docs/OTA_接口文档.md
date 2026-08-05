@@ -980,6 +980,7 @@ curl -X GET 'http://localhost:3000/api/plugin/room-type-mapping?platform=meituan
 - Path: `/api/douyin/presale-vouchers`、`/api/douyin/presale-vouchers/:id`
 - 业务规则：一期一张本地预售券只能绑定一个已同步到抖音的本地售卖套餐；编辑后不可换绑套餐。
 - 同步：保存时由后端调用抖音 `POST /goodlife/v1/trip/hotel/savepresale/`。本地券 ID 以 `voucher-<id>` 作为抖音 `out_id`，重复提交会更新同一张抖音券。
+- 酒店类目：当前固定发送 `presale_info.category_id=8001001`（经济型酒店），与本地已同步的抖音物理房型类目保持一致；详细枚举与联调依据见 `backend/modules/douyin/presale-voucher/README.md`。
 - 结算：`account_id` 使用 `DOUYIN_ACCOUNT_ID`，后端固定发送 `presale_info.settle_type=1`，即总店结算。
 - 账户路由：后端同时发送 `Rpc-Transit-Life-Account` 请求头，值与 Body `account_id` 相同，均取 `DOUYIN_ACCOUNT_ID`；若抖音返回“账户id为空”，应核对该环境变量是否已在运行中的后端生效。
 - 金额：接口接收和数据库保存的 `originalAmount`、`actualAmount` 单位为元；后端发送给抖音前转换为分，且划线价不得低于实际售价。
@@ -1030,6 +1031,10 @@ curl -X GET 'http://localhost:3000/api/plugin/room-type-mapping?platform=meituan
 - 鉴权：请求头 `X-Douyin-Signature` 使用 `sha1(client_secret + 原始消息体)` 校验；请求头 `Msg-Id` 是消息去重键。
 - 推送内容：`content` 包含预售券抖音 ID `id`、本地三方 ID `out_id`、审核结果 `audit_result`（`1` 通过，`2` 未通过）和审核说明 `audit_message`。
 - 本系统行为：验签后将审核结果保存至 `system_notifications`，显示在顶部铃铛；同一个 `Msg-Id` 仅创建一条通知。抖音要求 3 秒内返回 HTTP 200，失败时会按官方规则重试。
+
+### 抖音日历房售卖房型静态信息
+
+- 日历房专属接口、字段规则和联调前置条件见 [calendar-room 模块文档](/Users/peach/develop/hotel-management/backend/modules/douyin/calendar-room/README.md)。
 
 #### 获取系统通知
 

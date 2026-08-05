@@ -3,6 +3,7 @@ const Ajv = require('ajv');
 const addFormats = require('ajv-formats');
 const { query } = require('../../../database/postgreDB/pg');
 const douyinProductService = require('../presale-product/product.service');
+const calendarRoomRoute = require('../calendar-room/calendarRoom.routes');
 const { douyinConfig } = require('../../../appSettings/douyin.config');
 
 const router = express.Router();
@@ -24,6 +25,7 @@ const ratePlanProperties = {
   hourly_usage_duration: { type: 'integer', minimum: 1, maximum: 23 },
   midnight_latest_booking_time: { type: 'integer', minimum: 1, maximum: 6 },
   midnight_enabled: { type: 'boolean' },
+  douyin_business_type: { type: 'string', enum: ['CALENDAR_ROOM', 'PRESALE'] },
   douyin_config: { type: 'object', additionalProperties: true }
 };
 
@@ -103,6 +105,7 @@ function buildMergedRatePlan(existing, payload) {
     hourly_usage_duration: payload.hourly_usage_duration ?? existing.hourly_usage_duration,
     midnight_latest_booking_time: payload.midnight_latest_booking_time ?? existing.midnight_latest_booking_time,
     midnight_enabled: payload.midnight_enabled ?? existing.midnight_enabled,
+    douyin_business_type: payload.douyin_business_type ?? existing.douyin_business_type,
     douyin_config: payload.douyin_config ?? existing.douyin_config
   };
 }
@@ -157,6 +160,7 @@ async function findRatePlanById(id) {
         rt.type_name AS room_type_name,
         ocm.channel_item_id AS douyin_rate_plan_id,
         ocm.sync_status AS douyin_sync_status,
+        ocm.channel_config AS douyin_channel_config,
         to_char(rp.created_at, 'YYYY-MM-DD HH24:MI:SS') AS created_at_text,
         to_char(rp.updated_at, 'YYYY-MM-DD HH24:MI:SS') AS updated_at_text
       FROM rate_plans rp
@@ -189,6 +193,7 @@ function toRatePlanResponse(row) {
     hourly_usage_duration: row.hourly_usage_duration,
     midnight_latest_booking_time: row.midnight_latest_booking_time,
     midnight_enabled: row.midnight_enabled,
+    douyin_business_type: row.douyin_business_type,
     douyin_config: row.douyin_config || {},
     douyin_rate_plan_id: row.douyin_rate_plan_id || null,
     douyin_sync_status: row.douyin_sync_status ?? null,
@@ -196,6 +201,16 @@ function toRatePlanResponse(row) {
     created_at: row.created_at_text,
     updated_at: row.updated_at_text
   };
+}
+
+/** 判断套餐是否可以切换抖音业务类型。 */
+async function ensureBusinessTypeCanChange(id, existingType, nextType) {
+  if (existingType === nextType) return true;
+  const result = await query(
+    `SELECT 1 FROM ota_channel_mappings WHERE local_target_type = 'RATE_PLAN' AND local_target_id = $1 AND channel_code = 'DOUYIN' LIMIT 1`,
+    [id]
+  );
+  return result.rows.length === 0;
 }
 
 function getErrorStatusCode(error) {
@@ -308,6 +323,9 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// 挂载日历房专属路由。
+router.use('/:id/douyin/calendar-room', calendarRoomRoute);
+
 router.post('/:id/douyin/sync', async (req, res) => {
   try {
     const id = parseId(req.params.id);
@@ -333,6 +351,12 @@ router.post('/:id/douyin/sync', async (req, res) => {
 
     if (existing.sales_type === 3) {
       return res.status(400).json({ message: '抖音预售券预定商品暂不支持凌晨房套餐同步' });
+    }
+    if (existing.douyin_business_type !== 'PRESALE') {
+      return res.status(400).json({ message: '套餐不是预售券业务，不能同步预售券' });
+    }
+    if (existing.douyin_rate_plan_id && existing.douyin_channel_config?.business_type === 'CALENDAR_ROOM') {
+      return res.status(409).json({ message: '套餐已同步到日历房，不能同步预售券' });
     }
 
     const douyinResult = await douyinProductService.syncProductToDouyin(id, {
@@ -381,6 +405,7 @@ router.post('/', async (req, res) => {
       sales_type: 1,
       currency: 'CNY',
       midnight_enabled: false,
+      douyin_business_type: 'PRESALE',
       douyin_config: {},
       ...payload
     };
@@ -414,9 +439,10 @@ router.post('/', async (req, res) => {
           hourly_usage_duration,
           midnight_latest_booking_time,
           midnight_enabled,
+          douyin_business_type,
           douyin_config
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         RETURNING id
       `,
       [
@@ -431,6 +457,7 @@ router.post('/', async (req, res) => {
         ratePlan.hourly_usage_duration ?? null,
         ratePlan.midnight_latest_booking_time ?? null,
         ratePlan.midnight_enabled,
+        ratePlan.douyin_business_type,
         ratePlan.douyin_config
       ]
     );
@@ -482,6 +509,13 @@ router.patch('/:id', async (req, res) => {
       }
     }
 
+    if (payload.douyin_business_type !== undefined) {
+      const canChange = await ensureBusinessTypeCanChange(id, existing.douyin_business_type, merged.douyin_business_type);
+      if (!canChange) {
+        return res.status(409).json({ message: '套餐已存在抖音渠道映射，不能切换抖音业务类型' });
+      }
+    }
+
     if (payload.room_type_code !== undefined || payload.name !== undefined) {
       const noDuplicate = await ensureNoDuplicateName(merged.room_type_code, merged.name, id);
       if (!noDuplicate) {
@@ -504,9 +538,10 @@ router.patch('/:id', async (req, res) => {
           hourly_usage_duration = $9,
           midnight_latest_booking_time = $10,
           midnight_enabled = $11,
-          douyin_config = $12,
+          douyin_business_type = $12,
+          douyin_config = $13,
           updated_at = CURRENT_TIMESTAMP
-        WHERE id = $13
+        WHERE id = $14
       `,
       [
         merged.room_type_code,
@@ -520,6 +555,7 @@ router.patch('/:id', async (req, res) => {
         merged.hourly_usage_duration ?? null,
         merged.midnight_latest_booking_time ?? null,
         merged.midnight_enabled,
+        merged.douyin_business_type,
         merged.douyin_config || {},
         id
       ]

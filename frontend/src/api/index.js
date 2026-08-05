@@ -189,6 +189,18 @@ export const ratePlanApi = {
 
   syncDouyinRatePlan: (id, payload = {}) => api.post(`/rate-plans/${id}/douyin/sync`, payload),
 
+  getCalendarRoomRule: (id) => api.get(`/rate-plans/${id}/douyin/calendar-room/rule`),
+
+  saveCalendarRoomRule: (id, payload) => api.put(`/rate-plans/${id}/douyin/calendar-room/rule`, payload),
+
+  syncDouyinCalendarRoom: (id, payload = {}) => api.post(`/rate-plans/${id}/douyin/calendar-room/sync`, payload),
+
+  getCalendarRoomPrices: (id, params) => api.get(`/rate-plans/${id}/douyin/calendar-room/prices`, { params }),
+
+  saveCalendarRoomPrices: (id, payload) => api.put(`/rate-plans/${id}/douyin/calendar-room/prices`, payload),
+
+  syncCalendarRoomPrices: (id, payload) => api.post(`/rate-plans/${id}/douyin/calendar-room/prices/sync`, payload),
+
   notifyDouyinAri: (payload) => api.post('/douyin/ari-notify', payload),
 
   deleteRatePlan: (id) => api.delete(`/rate-plans/${id}`)

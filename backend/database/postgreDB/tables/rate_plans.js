@@ -17,6 +17,7 @@ const createQuery = `
     hourly_usage_duration INTEGER,
     midnight_latest_booking_time INTEGER,
     midnight_enabled BOOLEAN NOT NULL DEFAULT false,
+    douyin_business_type VARCHAR(20) NOT NULL DEFAULT 'PRESALE',
     douyin_config JSONB NOT NULL DEFAULT '{}',
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -26,6 +27,7 @@ const createQuery = `
     CONSTRAINT rate_plans_currency_check CHECK (currency ~ '^[A-Z]{3}$'),
     CONSTRAINT rate_plans_hourly_usage_duration_check CHECK (hourly_usage_duration IS NULL OR hourly_usage_duration BETWEEN 1 AND 23),
     CONSTRAINT rate_plans_midnight_booking_time_check CHECK (midnight_latest_booking_time IS NULL OR midnight_latest_booking_time BETWEEN 1 AND 6)
+    , CONSTRAINT rate_plans_douyin_business_type_check CHECK (douyin_business_type IN ('CALENDAR_ROOM', 'PRESALE'))
   );
 `;
 
@@ -39,6 +41,7 @@ const schemaUpdateQueryStrings = [
   `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS midnight_latest_booking_time INTEGER;`,
   `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS midnight_enabled BOOLEAN NOT NULL DEFAULT false;`,
   `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS douyin_config JSONB NOT NULL DEFAULT '{}';`,
+  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS douyin_business_type VARCHAR(20) NOT NULL DEFAULT 'PRESALE';`,
   `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;`,
   `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;`,
   `ALTER TABLE ${tableName} ALTER COLUMN room_id DROP NOT NULL;`,
@@ -46,6 +49,18 @@ const schemaUpdateQueryStrings = [
   `ALTER TABLE ${tableName} ALTER COLUMN status SET DEFAULT 1;`,
   `UPDATE ${tableName} SET status = 1 WHERE status IS NULL;`,
   `ALTER TABLE ${tableName} ALTER COLUMN status SET NOT NULL;`,
+  `
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'rate_plans_douyin_business_type_check'
+      ) THEN
+        ALTER TABLE ${tableName}
+          ADD CONSTRAINT rate_plans_douyin_business_type_check
+          CHECK (douyin_business_type IN ('CALENDAR_ROOM', 'PRESALE')) NOT VALID;
+      END IF;
+    END $$;
+  `,
   `
     UPDATE ${tableName} rp
     SET room_type_code = r.type_code
@@ -150,6 +165,7 @@ const createCommentQueryStrings = [
   `COMMENT ON COLUMN ${tableName}.room_type_code IS '本地房型编码，售卖套餐按房型维护';`,
   `COMMENT ON COLUMN ${tableName}.sales_type IS '抖音售卖形式：1全日房，2钟点房，3凌晨房';`,
   `COMMENT ON COLUMN ${tableName}.douyin_config IS '抖音扩展配置，存放后续不适合频繁拆列的字段';`
+  , `COMMENT ON COLUMN ${tableName}.douyin_business_type IS '抖音发布业务类型：CALENDAR_ROOM 日历房，PRESALE 预售券；已有套餐迁移为 PRESALE 以保持原同步含义';`
 ];
 
 const dropQuery = `DROP TABLE IF EXISTS ${tableName}`;

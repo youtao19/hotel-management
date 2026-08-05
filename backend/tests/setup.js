@@ -9,6 +9,8 @@ const tables = [
   'douyin_orders',
   'douyin_presale_orders',
   'ota_channel_mappings',
+  'douyin_calendar_room_prices',
+  'douyin_calendar_room_rules',
   'rate_plans',
   'rooms',
   'douyin_room_type_mapping',
@@ -49,7 +51,8 @@ function shouldSkipAppBootstrap() {
   return testPath.endsWith('/backend/tests/rate_plan.test.js')
     || testPath.endsWith('/backend/tests/douyin_room_type_mapping.test.js')
     || testPath.endsWith('/backend/tests/douyin_external_route.test.js')
-    || testPath.endsWith('/backend/tests/douyin_ari_notify.test.js');
+    || testPath.endsWith('/backend/tests/douyin_ari_notify.test.js')
+    || testPath.endsWith('/backend/tests/douyin_calendar_room.test.js');
 }
 
 // 全局测试设置

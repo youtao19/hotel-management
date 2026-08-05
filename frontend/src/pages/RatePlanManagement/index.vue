@@ -174,22 +174,10 @@
         </q-td>
       </template>
 
-      <template #body-cell-rules="props">
+      <template #body-cell-douyin_business_type="props">
         <q-td :props="props">
-          <div class="rule-summary">
-            <span v-if="props.row.sales_type === 2">
-              {{ props.row.hourly_earliest_check_in || '--:--' }}
-              -
-              {{ props.row.hourly_latest_check_out || '--:--' }}
-              · {{ props.row.hourly_usage_duration || '-' }}小时
-            </span>
-            <span v-else-if="props.row.sales_type === 3">
-              {{ props.row.midnight_enabled ? '凌晨房已启用' : '凌晨房未启用' }}
-              <template v-if="props.row.midnight_latest_booking_time">
-                · {{ props.row.midnight_latest_booking_time }}点前
-              </template>
-            </span>
-            <span v-else>全日售卖</span>
+          <div class="business-type-summary">
+            {{ getDouyinBusinessTypeLabel(props.row.douyin_business_type) }}
           </div>
         </q-td>
       </template>
@@ -237,6 +225,18 @@
               <q-tooltip>
                 {{ props.row.is_synced ? '通知抖音拉取价量态' : '套餐同步到抖音后才能通知拉取' }}
               </q-tooltip>
+            </q-btn>
+            <q-btn
+              v-if="props.row.douyin_business_type === 'CALENDAR_ROOM'"
+              flat
+              round
+              color="amber-9"
+              icon="price_change"
+              aria-label="维护日历房价格"
+              class="table-action-btn"
+              @click="openCalendarPriceDialog(props.row)"
+            >
+              <q-tooltip>维护并推送日历房价格</q-tooltip>
             </q-btn>
             <q-btn
               flat
@@ -356,6 +356,10 @@
                     class="custom-input"
                   />
                 </div>
+                <div class="col-12 col-md-4">
+                  <div class="field-label">抖音业务类型 <span class="text-negative">*</span></div>
+                  <q-select v-model="form.douyin_business_type" :options="douyinBusinessTypeOptions" emit-value map-options outlined dense class="custom-input" :disable="Boolean(editingPlan?.is_synced)" />
+                </div>
               </div>
 
               <!-- 蓝条提示：房型基础价 -->
@@ -364,6 +368,17 @@
                 <span class="info-tip-text">
                   房型基础价：<strong>¥ {{ selectedRoomTypeBasePrice || '260.00' }}</strong>
                 </span>
+              </div>
+            </div>
+
+            <div v-if="form.douyin_business_type === 'CALENDAR_ROOM'" class="form-section">
+              <div class="form-section-title">抖音日历房规则</div>
+              <div class="row q-col-gutter-md">
+                <div class="col-12 col-md-6"><q-input v-model="form.calendar_validity_start" label="有效期开始" type="date" outlined dense :rules="[requiredRule('请选择有效期开始')]" /></div>
+                <div class="col-12 col-md-6"><q-input v-model="form.calendar_validity_end" label="有效期结束" type="date" outlined dense :rules="[requiredRule('请选择有效期结束'), calendarEndDateRule]" /></div>
+                <div class="col-12 col-md-4"><q-select v-model="form.calendar_cancel_rule" :options="calendarCancelRuleOptions" label="取消规则" emit-value map-options outlined dense /></div>
+                <div class="col-12 col-md-4"><q-input v-model.number="form.calendar_breakfast_number" label="早餐数量" type="number" outlined dense :rules="[optionalRangeRule(0, 99, '早餐数量为 0-99')]" /></div>
+                <div class="col-12 col-md-4"><q-select v-model="form.calendar_refund_type" :options="calendarRefundTypeOptions" label="退款规则" emit-value map-options outlined dense /></div>
               </div>
             </div>
 
@@ -562,6 +577,43 @@
       </q-card>
     </q-dialog>
 
+    <q-dialog v-model="calendarPriceDialogOpen" persistent>
+      <q-card class="ari-notify-dialog">
+        <q-card-section class="dialog-heading">
+          <div>
+            <div class="text-h6">日历房价格</div>
+            <div class="text-caption text-grey-7">{{ calendarPricePlan?.name || '--' }}</div>
+          </div>
+          <q-btn flat round icon="close" aria-label="关闭日历房价格弹窗" @click="calendarPriceDialogOpen = false" />
+        </q-card-section>
+
+        <q-separator />
+
+        <q-card-section class="dialog-body">
+          <div class="row q-col-gutter-md items-end">
+            <div class="col-12 col-md-5"><q-input v-model="calendarPriceRange.startDate" label="开始日期" type="date" outlined /></div>
+            <div class="col-12 col-md-5"><q-input v-model="calendarPriceRange.endDate" label="结束日期" type="date" outlined /></div>
+            <div class="col-12 col-md-2"><q-btn color="primary" label="加载日期" :loading="calendarPriceLoading" @click="loadCalendarPrices" /></div>
+          </div>
+
+          <div v-if="calendarPriceRows.length" class="q-mt-md">
+            <div class="text-caption text-grey-7 q-mb-sm">逐日填写价格，实际售价单位为元，划线价可不填。</div>
+            <div v-for="row in calendarPriceRows" :key="row.stayDate" class="row q-col-gutter-sm q-mb-sm items-center">
+              <div class="col-4">{{ row.stayDate }}</div>
+              <div class="col-4"><q-input v-model.number="row.originalAmount" label="实际售价" type="number" min="0" outlined dense prefix="¥" /></div>
+              <div class="col-4"><q-input v-model.number="row.retailAmount" label="划线价" type="number" min="0" outlined dense prefix="¥" /></div>
+            </div>
+          </div>
+        </q-card-section>
+
+        <q-card-actions align="right" class="dialog-actions">
+          <q-btn flat label="取消" color="grey-8" @click="calendarPriceDialogOpen = false" />
+          <q-btn color="primary" label="保存价格" :disable="!calendarPriceRows.length" :loading="calendarPriceSaving" @click="saveCalendarPrices" />
+          <q-btn color="deep-orange-7" label="推送房价" :disable="!calendarPriceRows.length" :loading="calendarPriceSyncing" @click="syncCalendarPrices" />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
     <!-- 售卖规则卡片详情子弹窗 -->
     <q-dialog v-model="ruleDetailDialogOpen">
       <q-card style="width: 400px; max-width: 90vw; border-radius: 12px;">
@@ -668,13 +720,29 @@ const statusOptions = [
   { label: '停用', value: 0 }
 ]
 
+const douyinBusinessTypeOptions = [
+  { label: '日历房', value: 'CALENDAR_ROOM' },
+  { label: '预售券', value: 'PRESALE' }
+]
+
+const calendarCancelRuleOptions = [
+  { label: '免费取消', value: 1 },
+  { label: '限时取消', value: 2 },
+  { label: '不可取消', value: 3 }
+]
+
+const calendarRefundTypeOptions = [
+  { label: '可退款', value: 1 },
+  { label: '不可退款', value: 2 }
+]
+
 const columns = [
   { name: 'name', label: '套餐', field: 'name', align: 'left', sortable: true, headerStyle: 'width: 13%;' },
   { name: 'room_type', label: '房型', field: 'room_type_code', align: 'left', sortable: true, headerStyle: 'width: 11%;' },
   { name: 'base_price', label: '基础价', field: 'base_price', align: 'right', sortable: true, headerStyle: 'width: 7%;' },
   { name: 'sales_type', label: '售卖类型', field: 'sales_type', align: 'center', sortable: true, headerStyle: 'width: 8%;' },
   { name: 'status', label: '状态', field: 'status', align: 'center', sortable: true, headerStyle: 'width: 7%;' },
-  { name: 'rules', label: '规则摘要', field: 'sales_type', align: 'left', headerStyle: 'width: 7%;' },
+  { name: 'douyin_business_type', label: '抖音业务', field: 'douyin_business_type', align: 'left', headerStyle: 'width: 7%;' },
   { name: 'channel', label: '抖音同步', field: 'is_synced', align: 'left', sortable: true, headerStyle: 'width: 180px;' },
   { name: 'updated_at', label: '更新时间', field: 'updated_at', align: 'left', sortable: true, headerStyle: 'width: 145px;' },
   { name: 'actions', label: '操作', field: 'actions', align: 'center', headerStyle: 'width: 155px;' }
@@ -693,6 +761,13 @@ const editingPlan = ref(null)
 const ariNotifyDialogOpen = ref(false)
 const ariNotifySubmitting = ref(false)
 const ariNotifyPlan = ref(null)
+const calendarPriceDialogOpen = ref(false)
+const calendarPricePlan = ref(null)
+const calendarPriceRows = ref([])
+const calendarPriceLoading = ref(false)
+const calendarPriceSaving = ref(false)
+const calendarPriceSyncing = ref(false)
+const calendarPriceRange = ref({ startDate: '', endDate: '' })
 
 // 抖音渠道开关状态及 JSON 面板折叠状态
 const douyinChannelEnabled = ref(true)
@@ -807,6 +882,12 @@ function createDefaultForm() {
     hourly_usage_duration: null,
     midnight_latest_booking_time: null,
     midnight_enabled: false,
+    douyin_business_type: 'PRESALE',
+    calendar_validity_start: '',
+    calendar_validity_end: '',
+    calendar_cancel_rule: 1,
+    calendar_breakfast_number: 0,
+    calendar_refund_type: 1,
     douyin_config_text: '{}'
   }
 }
@@ -821,6 +902,11 @@ function createDefaultAriNotifyForm() {
 
 function getSalesTypeMeta(value) {
   return salesTypeOptions.find(option => option.value === value) || salesTypeOptions[0]
+}
+
+/** 获取抖音业务类型名称。 */
+function getDouyinBusinessTypeLabel(value) {
+  return value === 'CALENDAR_ROOM' ? '日历房' : '预售券'
 }
 
 function formatPrice(value) {
@@ -876,6 +962,11 @@ function endDateRule(value) {
   return value >= ariNotifyForm.value.startDate || '结束日期不能早于开始日期'
 }
 
+function calendarEndDateRule(value) {
+  if (!value || !form.value.calendar_validity_start) return true
+  return value >= form.value.calendar_validity_start || '结束日期不能早于开始日期'
+}
+
 function parseJsonObject(text) {
   if (!String(text || '').trim()) return {}
   const parsed = JSON.parse(text)
@@ -915,6 +1006,7 @@ function buildPayload() {
     sales_type: Number(form.value.sales_type),
     currency: String(form.value.currency || 'CNY').trim().toUpperCase(),
     midnight_enabled: Boolean(form.value.midnight_enabled),
+    douyin_business_type: form.value.douyin_business_type,
     douyin_config: parseJsonObject(form.value.douyin_config_text)
   }
 
@@ -929,6 +1021,18 @@ function buildPayload() {
   }
 
   return payload
+}
+
+/** 组装日历房规则请求。 */
+function buildCalendarRulePayload() {
+  return {
+    validityStart: form.value.calendar_validity_start,
+    validityEnd: form.value.calendar_validity_end,
+    cancelRule: Number(form.value.calendar_cancel_rule),
+    breakfastNumber: Number(form.value.calendar_breakfast_number),
+    refundType: Number(form.value.calendar_refund_type),
+    status: Number(form.value.status)
+  }
 }
 
 function getErrorMessage(error, fallback) {
@@ -959,6 +1063,7 @@ function setNotifyingPlan(id, notifying) {
 
 function getSyncTooltip(plan) {
   if (plan.sales_type === 3) return '凌晨房暂不支持同步抖音'
+  if (plan.douyin_business_type === 'CALENDAR_ROOM') return plan.is_synced ? '更新抖音日历房' : '同步日历房'
   return plan.is_synced ? '更新抖音预定商品' : '同步到抖音'
 }
 
@@ -984,7 +1089,8 @@ async function refreshAll() {
   }
 }
 
-function openDialog(plan = null) {
+/** 打开套餐编辑窗口。 */
+async function openDialog(plan = null) {
   editingPlan.value = plan
   form.value = plan
     ? {
@@ -999,6 +1105,12 @@ function openDialog(plan = null) {
         hourly_usage_duration: plan.hourly_usage_duration ?? null,
         midnight_latest_booking_time: plan.midnight_latest_booking_time ?? null,
         midnight_enabled: Boolean(plan.midnight_enabled),
+        douyin_business_type: plan.douyin_business_type || 'PRESALE',
+        calendar_validity_start: '',
+        calendar_validity_end: '',
+        calendar_cancel_rule: 1,
+        calendar_breakfast_number: 0,
+        calendar_refund_type: 1,
         douyin_config_text: JSON.stringify(plan.douyin_config || {}, null, 2)
       }
     : createDefaultForm()
@@ -1006,6 +1118,21 @@ function openDialog(plan = null) {
   douyinChannelEnabled.value = Boolean(plan ? plan.is_synced || (plan.douyin_config && Object.keys(plan.douyin_config).length > 0) : true)
   showJsonConfig.value = false
   dialogOpen.value = true
+  if (plan?.douyin_business_type === 'CALENDAR_ROOM') {
+    try {
+      const response = await ratePlanApi.getCalendarRoomRule(plan.id)
+      const rule = response.data
+      if (rule) {
+        form.value.calendar_validity_start = rule.validity_start
+        form.value.calendar_validity_end = rule.validity_end
+        form.value.calendar_cancel_rule = Number(rule.cancel_rule)
+        form.value.calendar_breakfast_number = Number(rule.breakfast_number)
+        form.value.calendar_refund_type = Number(rule.refund_type)
+      }
+    } catch (error) {
+      $q.notify({ type: 'negative', message: getErrorMessage(error, '获取日历房规则失败') })
+    }
+  }
 }
 
 function openAriNotifyDialog(plan) {
@@ -1026,12 +1153,17 @@ async function submitForm() {
     if (!valid) return
 
     const payload = buildPayload()
+    let ratePlanId = editingPlan.value?.id
     if (editingPlan.value) {
-      await ratePlanApi.updateRatePlan(editingPlan.value.id, payload)
+      await ratePlanApi.updateRatePlan(ratePlanId, payload)
       $q.notify({ type: 'positive', message: '售卖套餐已更新', icon: 'check_circle' })
     } else {
-      await ratePlanApi.createRatePlan(payload)
+      const response = await ratePlanApi.createRatePlan(payload)
+      ratePlanId = response.data?.id
       $q.notify({ type: 'positive', message: '售卖套餐已创建', icon: 'check_circle' })
+    }
+    if (payload.douyin_business_type === 'CALENDAR_ROOM') {
+      await ratePlanApi.saveCalendarRoomRule(ratePlanId, buildCalendarRulePayload())
     }
 
     dialogOpen.value = false
@@ -1075,7 +1207,9 @@ function confirmSyncDouyin(plan) {
   }).onOk(async () => {
     setSyncingPlan(plan.id, true)
     try {
-      const response = await ratePlanApi.syncDouyinRatePlan(plan.id)
+      const response = plan.douyin_business_type === 'CALENDAR_ROOM'
+        ? await ratePlanApi.syncDouyinCalendarRoom(plan.id)
+        : await ratePlanApi.syncDouyinRatePlan(plan.id)
       const douyinId = response?.data?.douyin?.douyinId || response?.data?.rate_plan?.douyin_rate_plan_id
       $q.notify({
         type: 'positive',
@@ -1098,6 +1232,94 @@ function getSyncSuccessMessage(douyinId) {
 
 function getSyncErrorMessage(error) {
   return getErrorMessage(error, '同步抖音商品失败')
+}
+
+/** 打开日历房价格维护窗口。 */
+function openCalendarPriceDialog(plan) {
+  calendarPricePlan.value = plan
+  calendarPriceRows.value = []
+  calendarPriceRange.value = { startDate: '', endDate: '' }
+  calendarPriceDialogOpen.value = true
+}
+
+/** 生成日期范围内的本地自然日。 */
+function buildCalendarPriceDates(startDate, endDate) {
+  if (!startDate || !endDate) return []
+  const start = new Date(`${startDate}T00:00:00`)
+  const end = new Date(`${endDate}T00:00:00`)
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return []
+  const dates = []
+  const cursor = new Date(start)
+  while (cursor <= end && dates.length < 30) {
+    const year = cursor.getFullYear()
+    const month = String(cursor.getMonth() + 1).padStart(2, '0')
+    const day = String(cursor.getDate()).padStart(2, '0')
+    dates.push(`${year}-${month}-${day}`)
+    cursor.setDate(cursor.getDate() + 1)
+  }
+  return dates
+}
+
+/** 加载指定日期范围的日历房价格。 */
+async function loadCalendarPrices() {
+  const dates = buildCalendarPriceDates(calendarPriceRange.value.startDate, calendarPriceRange.value.endDate)
+  if (!dates.length || dates.length > 30) {
+    $q.notify({ type: 'negative', message: '请选择最多 30 天的有效日期范围' })
+    return
+  }
+
+  calendarPriceLoading.value = true
+  try {
+    const response = await ratePlanApi.getCalendarRoomPrices(calendarPricePlan.value.id, calendarPriceRange.value)
+    const priceMap = new Map((response?.data || []).map(price => [price.stay_date, price]))
+    calendarPriceRows.value = dates.map(stayDate => {
+      const price = priceMap.get(stayDate)
+      return {
+        stayDate,
+        originalAmount: price ? Number(price.original_amount) : Number(calendarPricePlan.value.base_price),
+        retailAmount: price?.retail_amount === null || price?.retail_amount === undefined ? null : Number(price.retail_amount)
+      }
+    })
+  } catch (error) {
+    $q.notify({ type: 'negative', message: getErrorMessage(error, '加载日历房价格失败') })
+  } finally {
+    calendarPriceLoading.value = false
+  }
+}
+
+/** 保存当前日期范围的日历房价格。 */
+async function saveCalendarPrices() {
+  calendarPriceSaving.value = true
+  try {
+    await ratePlanApi.saveCalendarRoomPrices(calendarPricePlan.value.id, { prices: calendarPriceRows.value })
+    $q.notify({ type: 'positive', message: '日历房价格保存成功' })
+  } catch (error) {
+    $q.notify({ type: 'negative', message: getErrorMessage(error, '保存日历房价格失败') })
+  } finally {
+    calendarPriceSaving.value = false
+  }
+}
+
+/** 推送当前日期范围的日历房价格。 */
+async function syncCalendarPrices() {
+  calendarPriceSyncing.value = true
+  try {
+    // 先保存当前编辑值，避免推送旧价格。
+    await ratePlanApi.saveCalendarRoomPrices(calendarPricePlan.value.id, { prices: calendarPriceRows.value })
+    const response = await ratePlanApi.syncCalendarRoomPrices(calendarPricePlan.value.id, calendarPriceRange.value)
+    const logIds = response?.data?.logIds || []
+    $q.notify({ type: 'positive', message: logIds.length ? `房价推送成功，logid：${logIds.join(', ')}` : '房价推送成功' })
+  } catch (error) {
+    const douyinLogId = error?.response?.data?.douyin_log_id
+    $q.notify({
+      type: 'negative',
+      message: douyinLogId
+        ? `${getErrorMessage(error, '推送日历房价格失败')}，logid：${douyinLogId}`
+        : getErrorMessage(error, '推送日历房价格失败')
+    })
+  } finally {
+    calendarPriceSyncing.value = false
+  }
 }
 
 async function submitAriNotify() {
@@ -1339,7 +1561,7 @@ onActivated(refreshAll)
 
 .plan-id,
 .code-text,
-.rule-summary,
+.business-type-summary,
 .channel-state {
   color: var(--ink-soft);
   font-size: 12px;
