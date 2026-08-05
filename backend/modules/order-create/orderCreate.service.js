@@ -2,6 +2,7 @@ const { formatDate, toAmountNumber } = require('../tools');
 const billService = require('../bill/bill.service');
 const orderCreateRepository = require('./orderCreate.repository');
 const orderManageRepository = require('../order-manage/orderManage.repository');
+const { scheduleRoomTypeStockSync } = require('../douyin/availability/stockPush.service');
 
 const DEFAULT_PAY_WAY = '现金';
 const ALLOWED_SPLIT_PAY_WAYS = new Set(['现金', '微信', '微邮付', '平台']);
@@ -317,6 +318,8 @@ async function createOrder(orderData, client) {
       if (manageTx) {
         await runner.query('COMMIT');
         console.log(`✅ [createOrder] 插入成功 order_id=${orderId}, 共 ${stayDates.length} 条记录`);
+        // 订单提交后才异步推送，不能让抖音网络异常影响本地订单创建。
+        scheduleRoomTypeStockSync(roomType, stayDates[0], stayDates[stayDates.length - 1], 'order_create');
       }
       return { orderId };
     } catch (txnError) {

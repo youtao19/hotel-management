@@ -88,6 +88,34 @@ async function findRatePlanByDouyinId(ratePlanId) {
   return result.rows[0] || null;
 }
 
+/** 查询指定本地房型已同步的抖音售卖套餐。 */
+async function findSyncedRatePlansByRoomType(roomTypeCode) {
+  const result = await db.query(
+    `
+      ${getRatePlanSelectSql()}
+        AND rp.room_type_code = $1
+        AND ocm.channel_item_id IS NOT NULL
+      ORDER BY rp.id
+    `,
+    [roomTypeCode]
+  );
+  return result.rows;
+}
+
+/** 查询一个本地套餐对应的抖音售卖套餐。 */
+async function findSyncedRatePlanByLocalId(localRatePlanId) {
+  const result = await db.query(
+    `
+      ${getRatePlanSelectSql()}
+        AND rp.id = $1
+        AND ocm.channel_item_id IS NOT NULL
+      LIMIT 1
+    `,
+    [localRatePlanId]
+  );
+  return result.rows[0] || null;
+}
+
 async function getInventoryRowsByRoomTypes(roomTypeCodes, dates, activeOrderStatuses) {
   const typeCodes = [...new Set(roomTypeCodes.filter(Boolean))];
   if (!typeCodes.length || !dates.length) {
@@ -192,6 +220,8 @@ async function findAriNotifyRatePlans(localRatePlanIds) {
 module.exports = {
   findAriNotifyRatePlans,
   findRatePlanByDouyinId,
+  findSyncedRatePlansByRoomType,
+  findSyncedRatePlanByLocalId,
   findRatePlansByDouyinIds,
   findRatePlansByHotelIds,
   getInventoryRowsByRoomType,

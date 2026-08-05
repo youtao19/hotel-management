@@ -253,6 +253,18 @@
               <q-tooltip>维护并推送抖音按日房价</q-tooltip>
             </q-btn>
             <q-btn
+              v-if="props.row.is_synced"
+              flat
+              round
+              color="indigo-7"
+              icon="inventory_2"
+              aria-label="手动推送抖音房量房态"
+              class="table-action-btn"
+              @click="openStockSyncDialog(props.row)"
+            >
+              <q-tooltip>手动补推房量房态</q-tooltip>
+            </q-btn>
+            <q-btn
               flat
               round
               color="negative"
@@ -628,6 +640,52 @@
       </q-card>
     </q-dialog>
 
+    <q-dialog v-model="stockSyncDialogOpen" persistent>
+      <q-card class="stock-sync-dialog">
+        <q-card-section class="stock-sync-hero">
+          <div class="stock-sync-hero-icon"><q-icon name="inventory_2" size="26px" /></div>
+          <div>
+            <div class="text-h6">手动补推房量房态</div>
+            <div class="text-caption text-blue-grey-7">重新计算本地库存，并同步到抖音</div>
+          </div>
+          <q-space />
+          <q-btn flat round icon="close" aria-label="关闭房量房态推送弹窗" @click="stockSyncDialogOpen = false" />
+        </q-card-section>
+
+        <q-card-section class="dialog-body q-gutter-y-md">
+          <div class="stock-plan-summary">
+            <q-icon name="hotel" color="indigo-7" size="20px" />
+            <div>
+              <div class="text-weight-bold">{{ stockSyncPlan?.name || '--' }}</div>
+              <div class="text-caption text-grey-7">抖音预定商品：{{ stockSyncPlan?.douyin_rate_plan_id || '--' }}</div>
+            </div>
+          </div>
+
+          <div class="stock-info-banner">
+            <q-icon name="info" size="18px" />
+            <span>将同步每天的可售状态和剩余房量，不会修改房价或预售券券面售价。</span>
+          </div>
+
+          <div class="stock-quick-actions">
+            <span class="text-caption text-grey-7">快捷范围</span>
+            <q-btn outline dense no-caps color="indigo-7" label="未来 7 天" @click="setStockSyncDays(7)" />
+            <q-btn outline dense no-caps color="indigo-7" label="未来 30 天" @click="setStockSyncDays(30)" />
+          </div>
+
+          <div class="row q-col-gutter-md">
+            <div class="col-12 col-sm-6"><q-input v-model="stockSyncRange.startDate" label="开始日期" type="date" outlined /></div>
+            <div class="col-12 col-sm-6"><q-input v-model="stockSyncRange.endDate" label="结束日期" type="date" outlined /></div>
+          </div>
+          <div class="text-caption text-grey-7">一次最多推送 30 个自然日。抖音返回的 logid 会在完成后显示，便于排查。</div>
+        </q-card-section>
+
+        <q-card-actions align="right" class="dialog-actions">
+          <q-btn flat label="取消" color="grey-8" @click="stockSyncDialogOpen = false" />
+          <q-btn color="indigo-7" icon="inventory_2" label="立即推送" :loading="stockSyncSubmitting" @click="submitStockSync" />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
     <!-- 售卖规则卡片详情子弹窗 -->
     <q-dialog v-model="ruleDetailDialogOpen">
       <q-card style="width: 400px; max-width: 90vw; border-radius: 12px;">
@@ -782,6 +840,10 @@ const calendarPriceLoading = ref(false)
 const calendarPriceSaving = ref(false)
 const calendarPriceSyncing = ref(false)
 const calendarPriceRange = ref({ startDate: '', endDate: '' })
+const stockSyncDialogOpen = ref(false)
+const stockSyncSubmitting = ref(false)
+const stockSyncPlan = ref(null)
+const stockSyncRange = ref({ startDate: '', endDate: '' })
 
 // 抖音渠道开关状态及 JSON 面板折叠状态
 const douyinChannelEnabled = ref(true)
@@ -1276,6 +1338,41 @@ function getSyncSuccessMessage(douyinId) {
 
 function getSyncErrorMessage(error) {
   return getErrorMessage(error, '同步抖音商品失败')
+}
+
+/** 打开手动房量房态补推窗口。 */
+function openStockSyncDialog(plan) {
+  stockSyncPlan.value = plan
+  setStockSyncDays(7)
+  stockSyncDialogOpen.value = true
+}
+
+/** 设置房量房态补推的快捷日期范围。 */
+function setStockSyncDays(days) {
+  const start = new Date()
+  const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + days - 1)
+  stockSyncRange.value = { startDate: formatLocalDate(start), endDate: formatLocalDate(end) }
+}
+
+/** 提交手动房量房态补推。 */
+async function submitStockSync() {
+  const dates = buildCalendarPriceDates(stockSyncRange.value.startDate, stockSyncRange.value.endDate)
+  if (!stockSyncPlan.value || !dates.length || dates.length > 30) {
+    $q.notify({ type: 'negative', message: '请选择最多 30 天的有效日期范围' })
+    return
+  }
+  stockSyncSubmitting.value = true
+  try {
+    const response = await ratePlanApi.syncCalendarRoomStock(stockSyncPlan.value.id, stockSyncRange.value)
+    const logId = response?.data?.logId
+    stockSyncDialogOpen.value = false
+    $q.notify({ type: 'positive', message: logId ? `房量房态推送成功，logid：${logId}` : '房量房态推送成功' })
+  } catch (error) {
+    const logId = error?.response?.data?.douyin_log_id
+    $q.notify({ type: 'negative', message: logId ? `房量房态推送失败，logid：${logId}` : getErrorMessage(error, '房量房态推送失败') })
+  } finally {
+    stockSyncSubmitting.value = false
+  }
 }
 
 /** 打开抖音按日房价维护窗口。 */
@@ -1936,6 +2033,61 @@ onActivated(refreshAll)
 
 .ari-notify-dialog .dialog-heading {
   background: #ffffff;
+}
+
+.stock-sync-dialog {
+  width: min(560px, calc(100vw - 32px));
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.stock-sync-hero {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 24px;
+  background: linear-gradient(135deg, #eef2ff 0%, #f8faff 100%);
+}
+
+.stock-sync-hero-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 12px;
+  color: #ffffff;
+  background: #4f46e5;
+  box-shadow: 0 8px 18px rgba(79, 70, 229, 0.22);
+}
+
+.stock-plan-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #e4e7ec;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.stock-info-banner {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  color: #1d4ed8;
+  background: #eff6ff;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.stock-quick-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 @media (max-width: 1024px) {

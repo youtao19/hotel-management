@@ -203,6 +203,8 @@ export const ratePlanApi = {
 
   syncCalendarRoomPrices: (id, payload) => api.post(`/rate-plans/${id}/douyin/calendar-room/prices/sync`, payload),
 
+  syncCalendarRoomStock: (id, payload) => api.post(`/rate-plans/${id}/douyin/calendar-room/stock/sync`, payload),
+
   notifyDouyinAri: (payload) => api.post('/douyin/ari-notify', payload),
 
   deleteRatePlan: (id) => api.delete(`/rate-plans/${id}`)

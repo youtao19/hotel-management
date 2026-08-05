@@ -1,6 +1,7 @@
 const billService = require('../bill/bill.service');
 const orderManageRepository = require('./orderManage.repository');
 const { formatDate, toDecimal, toAmountNumber } = require('../tools');
+const { scheduleRoomTypeStockSync } = require('../douyin/availability/stockPush.service');
 
 const BASIC_UPDATE_FIELDS = ['guest_name', 'phone', 'room_type', 'payment_method', 'remarks'];
 const WITH_BILLS_UPDATE_FIELDS = ['guest_name', 'phone', 'room_type', 'room_number', 'payment_method', 'remarks', 'deposit'];
@@ -21,6 +22,22 @@ function createPaymentSplitError(message, details = null) {
   err.statusCode = 400;
   if (details) err.details = details;
   return err;
+}
+
+/** 按订单日记录安排受影响房型的库存补推。 */
+function scheduleOrderStockSync(rows, source) {
+  const grouped = new Map();
+  for (const row of rows || []) {
+    const date = formatDate(row.stay_date);
+    if (!row.room_type || !date) continue;
+    const dates = grouped.get(row.room_type) || [];
+    dates.push(date);
+    grouped.set(row.room_type, dates);
+  }
+  for (const [roomType, dates] of grouped) {
+    dates.sort();
+    scheduleRoomTypeStockSync(roomType, dates[0], dates[dates.length - 1], source);
+  }
 }
 
 function createOrderChangeRoomError(message, code, statusCode = 400) {
@@ -191,7 +208,10 @@ async function getOrderRowById(id) {
  * 多日订单状态需要同步到同一 order_id 下的所有日记录。
  */
 async function updateOrderStatus(orderNumber, newStatus) {
-  return orderManageRepository.updateOrderStatus(orderNumber, newStatus);
+  const rows = await orderManageRepository.findOrderRowsByOrderId(orderNumber);
+  const updated = await orderManageRepository.updateOrderStatus(orderNumber, newStatus);
+  if (updated) scheduleOrderStockSync(rows, 'order_status');
+  return updated;
 }
 
 /**
@@ -441,6 +461,10 @@ async function changeOrderRoom(orderNumber, oldRoomNumber, newRoomNumber) {
 
     await client.query('COMMIT');
     console.log(`房间更换成功: 订单 ${orderNumber} 已从 ${oldRoomNumber} 换到 ${newRoomNumber}`);
+    scheduleOrderStockSync([
+      { room_type: order.room_type, stay_date: order.check_in_date },
+      { room_type: newRoom.type_code, stay_date: order.check_in_date }
+    ], 'order_change_room');
 
     return {
       success: true,

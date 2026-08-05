@@ -1,4 +1,5 @@
 const roomStatusRepository = require('./roomStatus.repository');
+const { scheduleRoomTypeStockSync } = require('../douyin/availability/stockPush.service');
 
 const DISPLAY_STATUSES = ['available', 'occupied', 'reserved', 'cleaning', 'repair'];
 
@@ -183,7 +184,15 @@ async function getCalendarBoard(filters = {}) {
 async function updateRoomStatus(number, status) {
   // 维修房需要同步关闭，其他状态恢复开放；这个口径会影响可用房查询和渠道库存。
   const isClosed = status === 'repair';
-  return roomStatusRepository.updateRoomStatus(number, status, isClosed);
+  const room = await roomStatusRepository.updateRoomStatus(number, status, isClosed);
+  if (room) {
+    const today = new Date();
+    const formatDate = (value) => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+    const endDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 29);
+    // 房间维修或恢复会影响未来可售库存，异步补推未来 30 个自然日。
+    scheduleRoomTypeStockSync(room.type_code, formatDate(today), formatDate(endDate), 'room_status');
+  }
+  return room;
 }
 
 module.exports = {

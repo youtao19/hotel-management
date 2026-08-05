@@ -6,6 +6,7 @@ const { normalizeRule, validateRule } = require('./calendarRoom.validator');
 const { normalizePrices, validatePrices, buildDateList } = require('./calendarPrice.validator');
 const { syncCalendarRoom } = require('./calendarRoom.service');
 const { syncPrices } = require('./calendarPrice.service');
+const { syncStock } = require('../availability/stockPush.service');
 
 const router = express.Router({ mergeParams: true });
 
@@ -99,6 +100,20 @@ router.post('/prices/sync', async (req, res) => {
     const log = statusCode >= 500 ? console.error : console.warn;
     log('推送日历房价格失败:', error.message);
     if (error.douyinLogId) log('抖音 logid:', error.douyinLogId);
+    return res.status(statusCode).json({ message: error.message, douyin_log_id: error.douyinLogId || null });
+  }
+});
+
+/** 手动推送套餐指定日期的房量房态。 */
+router.post('/stock/sync', async (req, res) => {
+  try {
+    const ratePlanId = parseId(req.params.id);
+    if (!ratePlanId) return res.status(400).json({ message: '套餐ID格式错误' });
+    const result = await syncStock(ratePlanId, req.body || {});
+    return res.status(200).json({ data: result, message: '抖音房量房态推送成功' });
+  } catch (error) {
+    const statusCode = Number(error.statusCode) || 500;
+    if (error.douyinLogId) console.error('推送抖音房量房态失败，logid:', error.douyinLogId);
     return res.status(statusCode).json({ message: error.message, douyin_log_id: error.douyinLogId || null });
   }
 });
