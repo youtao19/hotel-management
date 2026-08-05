@@ -24,6 +24,7 @@ const routes = [
       { path: 'room-management', component: () => import('pages/RoomManagement/index.vue') },
       { path: 'rate-plans', component: () => import('pages/RatePlanManagement/index.vue') },
       { path: 'douyin-room-matching', component: () => import('pages/DouyinRoomMatching/index.vue') },
+      { path: 'douyin-presale-vouchers', component: () => import('pages/DouyinPresaleVoucher/index.vue') },
       { path: 'ViewOrders', component: () => import('pages/OrderManagement/index.vue') },
       { path: 'CreateOrder', component: () => import('pages/CreateOrder/index.vue') },
       { path: 'review-management', component: () => import('pages/ReviewManagement/index.vue') },

@@ -1392,11 +1392,15 @@ onActivated(refreshAll)
 
 .rate-plan-dialog-wrapper :deep(.q-dialog__inner--minimized > div) {
   max-width: 920px;
+  max-height: calc(100vh - 48px);
 }
 
 .rate-plan-dialog {
   width: min(920px, calc(100vw - 32px));
   max-width: 920px;
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
   border-radius: 12px;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
   overflow: hidden;
@@ -1409,6 +1413,7 @@ onActivated(refreshAll)
   justify-content: space-between;
   padding: 20px 24px 16px;
   background: #ffffff;
+  flex-shrink: 0;
 }
 
 .dialog-title {
@@ -1434,10 +1439,21 @@ onActivated(refreshAll)
 }
 
 .dialog-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 24px;
   padding: 20px 24px 24px;
+}
+
+.rate-plan-dialog form {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .form-section {
@@ -1618,6 +1634,7 @@ onActivated(refreshAll)
   background: #ffffff;
   border-top: 1px solid #f3f4f6;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 .cancel-btn {

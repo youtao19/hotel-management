@@ -194,6 +194,12 @@ export const ratePlanApi = {
   deleteRatePlan: (id) => api.delete(`/rate-plans/${id}`)
 }
 
+export const douyinPresaleVoucherApi = {
+  getVouchers: () => api.get('/douyin/presale-vouchers'),
+  createVoucher: (payload) => api.post('/douyin/presale-vouchers', payload),
+  updateVoucher: (id, payload) => api.put(`/douyin/presale-vouchers/${id}`, payload)
+}
+
 // 抖音房型匹配相关接口
 export const douyinRoomMappingApi = {
   getMappings: () => api.get('/douyin/room-type-mapping'),

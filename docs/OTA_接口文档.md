@@ -974,6 +974,55 @@ curl -X GET 'http://localhost:3000/api/plugin/room-type-mapping?platform=meituan
 - `400 抖音预售券预定商品暂不支持凌晨房套餐同步`
 - `502 同步售卖套餐到抖音失败`：抖音接口 HTTP 或业务错误，响应 `error` 字段会带上抖音返回的错误描述，`douyin_log_id` 会带上抖音 `logid`
 
+#### 创建/更新抖音预售券
+
+- Method: `POST` / `PUT`
+- Path: `/api/douyin/presale-vouchers`、`/api/douyin/presale-vouchers/:id`
+- 业务规则：一期一张本地预售券只能绑定一个已同步到抖音的本地售卖套餐；编辑后不可换绑套餐。
+- 同步：保存时由后端调用抖音 `POST /goodlife/v1/trip/hotel/savepresale/`。本地券 ID 以 `voucher-<id>` 作为抖音 `out_id`，重复提交会更新同一张抖音券。
+- 结算：`account_id` 使用 `DOUYIN_ACCOUNT_ID`，后端固定发送 `presale_info.settle_type=1`，即总店结算。
+- 账户路由：后端同时发送 `Rpc-Transit-Life-Account` 请求头，值与 Body `account_id` 相同，均取 `DOUYIN_ACCOUNT_ID`；若抖音返回“账户id为空”，应核对该环境变量是否已在运行中的后端生效。
+- 金额：接口接收和数据库保存的 `originalAmount`、`actualAmount` 单位为元；后端发送给抖音前转换为分，且划线价不得低于实际售价。
+- 图片：`imageUrls` 仅支持抖音可公开访问的 `http/https` URL，单条最多 2048 字符；抖音会拉取该地址，不支持 `data:image/...;base64,...` 内容。
+- 日期时间：`saleStartAt`、`saleEndAt` 使用 `YYYY-MM-DD HH:mm`，`bookStartDate`、`bookEndDate` 使用 `YYYY-MM-DD`；不按 UTC 手动换算。
+- 使用日期：后端会将 `bookStartDate`、`bookEndDate` 同时映射到抖音 `trade_info.customer_can_use_date`，满足抖音对顾客可使用日期的必填要求。
+- 使用时段：一期未提供分时段核销，固定发送 `trade_info.customer_can_use_time.use_time_type=1` 表示全天可用。
+- 购买限制：一期未开放购买数量配置，固定发送 `trade_info.limt_buy_rule.each_person_max=1` 与 `each_person_each_order_max=1`，即同一用户累计和单笔最多各购买一张。
+- 预约规则：一期固定发送官方示例的 `trade_info.book_rule.earliest_book_day=30`；抖音要求该结构必填，最大值不超过 30 天。
+- 取消规则：一期未维护可退时间配置，固定发送 `trade_info.cancel_booking_rule.cancel_type=3`，满足抖音必须配置且仅配置一条取消规则的要求。
+- 发票：当前未接入独立开票服务，固定发送 `trade_info.invoic_info.provider=1`，按抖音预售券示例由商家侧提供发票。
+- 券说明：固定发送 `note_info`，暂定 14:00 入住、12:00 离店、需提前预约、非外宾且不可与优惠叠加。该规则尚未在页面开放配置，运营使用前需确认适用于酒店实际履约规则。
+- 审核：成功提交后状态为 `PENDING`。抖音审核 Webhook 根据 `content.out_id` 回写为 `APPROVED` 或 `REJECTED`，并保留审核说明。
+
+请求示例：
+
+```json
+{
+  "ratePlanId": 101,
+  "name": "双人入住含双早",
+  "originalAmount": 1000,
+  "actualAmount": 800,
+  "inventoryIsLimited": true,
+  "inventoryCount": 100,
+  "saleStartAt": "2026-08-01 00:00",
+  "saleEndAt": "2026-08-31 23:59",
+  "bookStartDate": "2026-08-01",
+  "bookEndDate": "2026-12-31",
+  "imageUrls": [
+    "https://example.com/images/presale-head.jpg",
+    "https://example.com/images/presale-detail.jpg"
+  ]
+}
+```
+
+典型错误：
+
+- `400 绑定套餐尚未同步为抖音预定商品，无法创建预售券`
+- `400 预售券创建后不能更换绑定套餐，请新建预售券`
+- `400 有限库存必须填写库存数量`
+- `502 同步预售券到抖音失败`：响应包含 `douyin_log_id`，可据此向抖音排查。
+- `502 应用未获商家授权（抖音日志ID：...）`：根账户已正确传入但尚未在抖音完成应用与商家的合作授权；前端会直接显示该原因和日志 ID。
+
 ### 抖音预售券审核结果通知
 
 - 官方文档：[预售券审核结果通知](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/hotel-voucher-mgmt/presale-ticket-review)

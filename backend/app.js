@@ -110,6 +110,9 @@ async function initializeRoutes() {
     const ratePlanRoute = require("./modules/douyin/rate-plan/ratePlan.routes");
     app.use("/api/rate-plans", ratePlanRoute);
 
+    const douyinPresaleVoucherRoute = require("./modules/douyin/presale-voucher/presaleVoucher.routes");
+    app.use("/api/douyin/presale-vouchers", douyinPresaleVoucherRoute);
+
     const douyinRoomTypeMappingRoute = require("./modules/douyin/room-type-mapping/roomTypeMapping.routes");
     app.use("/api/douyin/room-type-mapping", douyinRoomTypeMappingRoute);
 

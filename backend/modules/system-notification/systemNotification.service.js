@@ -1,4 +1,5 @@
 const repository = require('./systemNotification.repository');
+const presaleVoucherRepository = require('../douyin/presale-voucher/presaleVoucher.repository');
 
 const AUDIT_EVENT = 'life_hotel_presale_audit_result';
 
@@ -17,6 +18,13 @@ async function recordDouyinPresaleAuditNotification(msgId, payload) {
     error.statusCode = 400;
     throw error;
   }
+
+  // 审核状态以抖音回调为准，避免仅有铃铛通知而运营无法在券列表判断是否可继续更新。
+  await presaleVoucherRepository.markAuditResultByOutId(
+    content.out_id,
+    isApproved ? 'APPROVED' : 'REJECTED',
+    auditMessage
+  );
 
   const created = await repository.createNotification({
     source: 'DOUYIN',

@@ -236,12 +236,12 @@
 #### 8.2.2 创建/更新预售券
 - 链接：[创建/更新预售券](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/hotel-voucher-mgmt/create-update-coupon)
 - 用途：用于创建或更新住宿预售券主体信息，通常与预定商品、售卖规则和有效期配置配套使用。
-- 当前代码关联：当前未实现，后续接入预售券主数据创建与更新时使用。
+- 当前代码关联：`backend/modules/douyin/presale-voucher/`、`backend/database/postgreDB/tables/douyin_presale_voucher.js`、`frontend/src/pages/DouyinPresaleVoucher/index.vue`。本地一张预售券绑定一个已同步预定商品，调用 `POST /goodlife/v1/trip/hotel/savepresale/` 创建或更新。
 
 #### 8.2.3 预售券审核结果通知
 - 链接：[预售券审核结果通知](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/hotel-voucher-mgmt/presale-ticket-review)
 - 用途：用于接收抖音推送的预售券审核结果通知，可根据 `Msg-Id` 做消息去重，并根据审核结果更新本地预售券状态。
-- 当前代码关联：当前未实现，后续接入预售券审核状态回调时使用。
+- 当前代码关联：`backend/modules/douyin/external/external.routes.js` 与 `backend/modules/system-notification/systemNotification.service.js`。回调除了创建通知外，还会根据 `out_id=voucher-<本地ID>` 回写本地券审核状态。
 
 ### 8.3 预售券交易逆向
 

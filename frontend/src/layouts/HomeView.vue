@@ -193,13 +193,15 @@
     </q-drawer>
 
     <q-page-container class="page-container">
-      <transition
-        enter-active-class="animated fadeIn"
-        leave-active-class="animated fadeOut"
-        mode="out-in"
-      >
-        <router-view />
-      </transition>
+      <router-view v-slot="{ Component }">
+        <transition
+          enter-active-class="animated fadeIn"
+          leave-active-class="animated fadeOut"
+          mode="out-in"
+        >
+          <component :is="Component" />
+        </transition>
+      </router-view>
     </q-page-container>
 
     <q-dialog v-model="showLoginDialog">
@@ -254,7 +256,8 @@ const mainNavItems = [
 
 const douyinNavItems = [
   { to: '/douyin-room-matching', label: '房型匹配', icon: 'hotel' },
-  { to: '/rate-plans', label: '售卖套餐', icon: 'sell' }
+  { to: '/rate-plans', label: '售卖套餐', icon: 'sell' },
+  { to: '/douyin-presale-vouchers', label: '预售券', icon: 'confirmation_number' }
 ]
 
 const leftDrawerOpen = ref(false)
