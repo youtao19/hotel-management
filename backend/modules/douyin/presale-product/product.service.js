@@ -20,9 +20,10 @@ class DouyinProductService {
     /**
      * 将本地套餐同步到抖音预售券预定商品。
      * @param {number} localRatePlanId 本地 rate_plans 表的自增 ID
-     * @param {object} options 同步时允许覆盖的抖音账号和酒店 ID
+     * @param {object} options 同步时允许覆盖的抖音账号和酒店 ID，或要求重建预定商品
      * @param {string} [options.accountId] 抖音商家账号 ID
      * @param {string} [options.poiId] 抖音酒店 ID
+     * @param {boolean} [options.rebuild] 是否跳过旧抖音 ID 并创建新的预定商品
      * @returns {Promise<object>} 同步结果
      */
     async syncProductToDouyin(localRatePlanId, options = {}) {
@@ -38,6 +39,7 @@ class DouyinProductService {
 
             const accountId = this._resolveAccountId(localProduct, options);
             const hotelId = this._resolveHotelId(localProduct, options);
+            const outRatePlanId = this._resolveOutRatePlanId(localProduct, options);
 
             if (!accountId) {
                 throw createServiceError('缺少抖音商家 account_id，请传 accountId 或配置 DOUYIN_ACCOUNT_ID', 400);
@@ -54,7 +56,9 @@ class DouyinProductService {
 
             const payload = this._buildRatePlanPayload(localProduct, {
                 accountId,
-                hotelId
+                hotelId,
+                rebuild: options.rebuild === true,
+                outRatePlanId
             });
 
             const token = await douyinTokenService.getToken();
@@ -82,28 +86,32 @@ class DouyinProductService {
             }
 
             this._assertDouyinSuccess(result, logId);
-            const ratePlanMap = this._getSyncedRatePlanMap(result, localRatePlanId);
+            const ratePlanMap = this._getSyncedRatePlanMap(result, outRatePlanId);
             const douyinRatePlanId = ratePlanMap.rate_plan_id;
 
             await this._saveChannelMapping(localProduct, {
                 accountId,
                 hotelId,
                 douyinRatePlanId,
-                logId
+                logId,
+                rebuild: options.rebuild === true,
+                outRatePlanId
             });
             await this._savePhysicalRoomRatePlan(localProduct, {
                 douyinRatePlanId,
-                hotelId
+                hotelId,
+                outRatePlanId
             });
 
             console.log(`[Douyin Sync] 同步成功！抖音商品ID: ${douyinRatePlanId}`);
             return {
                 success: true,
                 douyinId: douyinRatePlanId,
-                outRatePlanId: String(localRatePlanId),
                 roomId: localProduct.douyin_room_id,
                 hotelId,
-                logId
+                logId,
+                rebuilt: options.rebuild === true,
+                outRatePlanId
             };
 
         } catch (error) {
@@ -135,6 +143,12 @@ class DouyinProductService {
             || rawPayload.hotel?.hotel_id
             || this.poiId
             || '';
+    }
+
+    /** 读取稳定外部套餐标识，重建时切换到新的预定商品标识避免更新旧商品。 */
+    _resolveOutRatePlanId(localProduct, options) {
+        if (options.rebuild === true) return `booking-${localProduct.id}-v2`;
+        return localProduct.douyin_channel_config?.out_rate_plan_id || String(localProduct.id);
     }
 
     _validatePhysicalRoomCache(localProduct, context) {
@@ -177,10 +191,11 @@ class DouyinProductService {
             active: Number(localProduct.status) === 1,
             sales_type: salesType,
             rate_plan_name: localProduct.name,
-            out_rate_plan_id: String(localProduct.id)
+            out_rate_plan_id: context.outRatePlanId
         };
 
-        if (localProduct.douyin_rate_plan_id) {
+        // 重建时不传旧 ID，避免把类型错误的历史商品继续更新。
+        if (localProduct.douyin_rate_plan_id && !context.rebuild) {
             ratePlan.rate_plan_id = localProduct.douyin_rate_plan_id;
         }
 
@@ -229,8 +244,7 @@ class DouyinProductService {
         }
     }
 
-    _getSyncedRatePlanMap(result, localRatePlanId) {
-        const outRatePlanId = String(localRatePlanId);
+    _getSyncedRatePlanMap(result, outRatePlanId) {
         const ratePlanMap = Array.isArray(result.data?.rate_plan_map) ? result.data.rate_plan_map : [];
         const matched = ratePlanMap.find((item) => String(item.out_rate_plan_id) === outRatePlanId) || ratePlanMap[0];
 
@@ -243,12 +257,15 @@ class DouyinProductService {
 
     async _saveChannelMapping(localProduct, syncResult) {
         const channelConfig = {
-            out_rate_plan_id: String(localProduct.id),
+            out_rate_plan_id: syncResult.outRatePlanId,
             room_id: localProduct.douyin_room_id,
             hotel_id: syncResult.hotelId,
             account_id: syncResult.accountId,
             log_id: syncResult.logId
         };
+        if (syncResult.rebuild && localProduct.douyin_rate_plan_id) {
+            channelConfig.rebuild_from_rate_plan_id = localProduct.douyin_rate_plan_id;
+        }
 
         await channelMappingRepository.upsertRatePlanMapping({
             localRatePlanId: localProduct.id,
@@ -262,7 +279,8 @@ class DouyinProductService {
         const currentList = Array.isArray(localProduct.douyin_rate_plan_list)
             ? localProduct.douyin_rate_plan_list
             : [];
-        const outRatePlanId = String(localProduct.id);
+        const previousOutRatePlanId = localProduct.douyin_channel_config?.out_rate_plan_id || String(localProduct.id);
+        const outRatePlanId = syncResult.outRatePlanId;
         const nextItem = {
             rate_plan_id: syncResult.douyinRatePlanId,
             out_rate_plan_id: outRatePlanId,
@@ -273,7 +291,9 @@ class DouyinProductService {
             hotel_id: syncResult.hotelId
         };
         const nextList = currentList.filter((item) => {
-            return String(item.out_rate_plan_id) !== outRatePlanId
+            return String(item.out_rate_plan_id) !== previousOutRatePlanId
+                && String(item.out_rate_plan_id) !== outRatePlanId
+                && String(item.rate_plan_id) !== String(localProduct.douyin_rate_plan_id)
                 && String(item.rate_plan_id) !== String(syncResult.douyinRatePlanId);
         });
         nextList.push(nextItem);

@@ -16,10 +16,18 @@
 - `PATCH /api/rate-plans/:id`
 - `DELETE /api/rate-plans/:id`
 - `POST /api/rate-plans/:id/douyin/sync`
+- `GET /api/douyin/presale-vouchers`
+- `POST /api/douyin/presale-vouchers`
+- `PUT /api/douyin/presale-vouchers/:id`
+- `PATCH /api/douyin/presale-vouchers/:id/product-status`
 - `POST /api/douyin/ari-notify`
 - `POST /douyin/webhooks`
 - `POST /douyin/spi/price-volume`
 - `POST /douyin/spi/bookable`
+
+## 通用商品状态能力
+
+- [商品上下架&删除接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/calendar-listing/product-status-interface) 使用 `POST /goodlife/v1/trip/product/operate/` 操作已创建的抖音商品。日历房和预售券商品均可使用；请求必须传对应抖音 `product_id`，不能传本地套餐 ID。
 
 ## 当前阶段
 

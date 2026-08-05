@@ -19,3 +19,16 @@
 {"receivedAt":"2026-08-05 12:24:38","type":"calendar_price_push","stage":"error","logId":"20260805122438AFE9FA6900CCA7B98778","ratePlanId":8,"dates":["2026-08-05","2026-08-06","2026-08-07","2026-08-08","2026-08-09","2026-08-10","2026-08-11"],"error":"hotel_id must have a value"}
 {"receivedAt":"2026-08-05 12:42:49","type":"calendar_price_push","stage":"error","logId":"202608051242491D4FBB187200F1B5FB21","ratePlanId":8,"dates":["2026-08-05","2026-08-06","2026-08-07","2026-08-08","2026-08-09","2026-08-10","2026-08-11"],"error":"餐食信息缺失，请补充"}
 {"receivedAt":"2026-08-05 12:51:34","type":"calendar_price_push","stage":"error","logId":"20260805125134987BA344EECEF2D198B1","ratePlanId":9,"dates":["2026-08-05","2026-08-06","2026-08-07"],"error":"预定规则不能为空"}
+{"receivedAt":"2026-08-05 14:04:27","type":"calendar_price_push","stage":"processed","logId":"PRICE_LOG_ID","ratePlanId":5,"douyinRatePlanId":"DY_CALENDAR_RATE_PLAN","dates":["2026-08-05","2026-08-06"]}
+{"receivedAt":"2026-08-05 14:04:27","type":"calendar_price_push","stage":"error","logId":"MEAL_LOG_ID","ratePlanId":7,"dates":["2026-08-05","2026-08-06"],"error":"餐食信息缺失，请补充"}
+{"receivedAt":"2026-08-05 14:11:00","type":"calendar_price_push","stage":"processed","logId":"PRICE_LOG_ID","ratePlanId":5,"douyinRatePlanId":"DY_CALENDAR_RATE_PLAN","dates":["2026-08-05","2026-08-06"]}
+{"receivedAt":"2026-08-05 14:11:00","type":"calendar_price_push","stage":"error","logId":"MEAL_LOG_ID","ratePlanId":7,"dates":["2026-08-05","2026-08-06"],"error":"餐食信息缺失，请补充"}
+{"receivedAt":"2026-08-05 14:11:31","type":"calendar_price_push","stage":"processed","logId":"PRICE_LOG_ID","ratePlanId":5,"douyinRatePlanId":"DY_CALENDAR_RATE_PLAN","dates":["2026-08-05","2026-08-06"]}
+{"receivedAt":"2026-08-05 14:11:31","type":"calendar_price_push","stage":"error","logId":"MEAL_LOG_ID","ratePlanId":7,"dates":["2026-08-05","2026-08-06"],"error":"餐食信息缺失，请补充"}
+{"receivedAt":"2026-08-05 14:12:40","type":"calendar_price_push","stage":"processed","logId":"PRICE_LOG_ID","ratePlanId":5,"douyinRatePlanId":"DY_CALENDAR_RATE_PLAN","dates":["2026-08-05","2026-08-06"]}
+{"receivedAt":"2026-08-05 14:12:40","type":"calendar_price_push","stage":"error","logId":"MEAL_LOG_ID","ratePlanId":7,"dates":["2026-08-05","2026-08-06"],"error":"餐食信息缺失，请补充"}
+{"receivedAt":"2026-08-05 14:17:39","type":"calendar_price_push","stage":"processed","logId":"PRICE_LOG_ID","ratePlanId":5,"douyinRatePlanId":"DY_CALENDAR_RATE_PLAN","dates":["2026-08-05","2026-08-06"]}
+{"receivedAt":"2026-08-05 14:17:39","type":"calendar_price_push","stage":"error","logId":"MEAL_LOG_ID","ratePlanId":7,"dates":["2026-08-05","2026-08-06"],"error":"餐食信息缺失，请补充"}
+{"receivedAt":"2026-08-05 14:18:05","type":"calendar_price_push","stage":"processed","logId":"PRICE_LOG_ID","ratePlanId":5,"douyinRatePlanId":"DY_CALENDAR_RATE_PLAN","dates":["2026-08-05","2026-08-06"]}
+{"receivedAt":"2026-08-05 14:18:05","type":"calendar_price_push","stage":"error","logId":"MEAL_LOG_ID","ratePlanId":7,"dates":["2026-08-05","2026-08-06"],"error":"餐食信息缺失，请补充"}
+{"receivedAt":"2026-08-05 14:25:15","type":"presale_audit_result","stage":"processed","logId":"021785911114303fdbddc020025051800000000000000228b8a29","event":"life_hotel_presale_audit_result","msgId":"7670429277015328818","voucherId":"voucher-3","auditResult":1}

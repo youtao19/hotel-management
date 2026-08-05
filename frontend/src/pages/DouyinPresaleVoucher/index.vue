@@ -60,10 +60,45 @@
           </q-td>
         </template>
 
+        <template #body-cell-product_status="props">
+          <q-td :props="props">
+            <q-chip dense :color="productStatusColor(props.row.product_status)" text-color="white" class="q-px-sm">
+              {{ productStatusLabel(props.row.product_status) }}
+            </q-chip>
+            <div v-if="props.row.last_product_status_error" class="text-caption text-negative q-mt-xs">
+              {{ props.row.last_product_status_error }}
+            </div>
+          </q-td>
+        </template>
+
         <template #body-cell-actions="props">
           <q-td :props="props">
             <q-btn flat round dense color="primary" icon="edit" @click="openDialog(props.row)">
               <q-tooltip>编辑预售券</q-tooltip>
+            </q-btn>
+            <q-btn
+              v-if="props.row.douyin_voucher_id && props.row.product_status !== 'ONLINE'"
+              flat
+              round
+              dense
+              color="positive"
+              icon="visibility"
+              :loading="statusOperatingId === props.row.id"
+              @click="confirmProductStatus(props.row, 'ONLINE')"
+            >
+              <q-tooltip>上线抖音商品</q-tooltip>
+            </q-btn>
+            <q-btn
+              v-if="props.row.douyin_voucher_id && props.row.product_status === 'ONLINE'"
+              flat
+              round
+              dense
+              color="warning"
+              icon="visibility_off"
+              :loading="statusOperatingId === props.row.id"
+              @click="confirmProductStatus(props.row, 'OFFLINE')"
+            >
+              <q-tooltip>下线抖音商品</q-tooltip>
             </q-btn>
           </q-td>
         </template>
@@ -435,6 +470,7 @@ const vouchers = ref([])
 const ratePlans = ref([])
 const loading = ref(false)
 const saving = ref(false)
+const statusOperatingId = ref(null)
 const dialogOpen = ref(false)
 const editingVoucher = ref(null)
 const formRef = ref(null)
@@ -447,6 +483,7 @@ const columns = [
   { name: 'inventory_count', label: '库存总量', field: row => row.inventory_is_limited ? row.inventory_count : '无限库存', align: 'center' },
   { name: 'book_end_date', label: '可预约至', field: 'book_end_date', align: 'center' },
   { name: 'audit_status', label: '审核状态', field: 'audit_status', align: 'center' },
+  { name: 'product_status', label: '商品状态', field: 'product_status', align: 'center' },
   { name: 'actions', label: '操作', field: 'actions', align: 'center' }
 ]
 
@@ -577,6 +614,39 @@ function auditLabel(status) {
 /** 审核失败突出显示，提醒运营修改后重新提交。 */
 function auditColor(status) {
   return ({ PENDING: 'orange-8', APPROVED: 'positive', REJECTED: 'negative' })[status] || 'grey-7'
+}
+
+/** 返回抖音商品上架状态的运营展示文案。 */
+function productStatusLabel(status) {
+  return ({ ONLINE: '已上线', OFFLINE: '已下线' })[status] || '未操作'
+}
+
+/** 返回抖音商品上架状态的展示颜色。 */
+function productStatusColor(status) {
+  return ({ ONLINE: 'positive', OFFLINE: 'grey-7' })[status] || 'grey-6'
+}
+
+/** 二次确认后调用后端变更抖音商品的上架状态。 */
+function confirmProductStatus(voucher, operation) {
+  const isOnline = operation === 'ONLINE'
+  $q.dialog({
+    title: isOnline ? '上线预售券' : '下线预售券',
+    message: `确认${isOnline ? '上线' : '下线'}「${voucher.name}」的抖音商品？`,
+    cancel: { label: '取消', flat: true, color: 'grey-7' },
+    ok: { label: isOnline ? '上线' : '下线', color: isOnline ? 'positive' : 'warning', icon: isOnline ? 'visibility' : 'visibility_off' },
+    persistent: true
+  }).onOk(async () => {
+    statusOperatingId.value = voucher.id
+    try {
+      await douyinPresaleVoucherApi.updateProductStatus(voucher.id, operation)
+      $q.notify({ type: 'positive', message: isOnline ? '预售券已上线' : '预售券已下线' })
+      await load()
+    } catch (error) {
+      $q.notify({ type: 'negative', message: error?.response?.data?.message || '更新抖音商品状态失败' })
+    } finally {
+      statusOperatingId.value = null
+    }
+  })
 }
 
 onMounted(load)

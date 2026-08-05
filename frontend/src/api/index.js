@@ -189,6 +189,8 @@ export const ratePlanApi = {
 
   syncDouyinRatePlan: (id, payload = {}) => api.post(`/rate-plans/${id}/douyin/sync`, payload),
 
+  rebuildDouyinRatePlan: (id) => api.post(`/rate-plans/${id}/douyin/sync`, { rebuild: true }),
+
   getCalendarRoomRule: (id) => api.get(`/rate-plans/${id}/douyin/calendar-room/rule`),
 
   saveCalendarRoomRule: (id, payload) => api.put(`/rate-plans/${id}/douyin/calendar-room/rule`, payload),
@@ -209,7 +211,8 @@ export const ratePlanApi = {
 export const douyinPresaleVoucherApi = {
   getVouchers: () => api.get('/douyin/presale-vouchers'),
   createVoucher: (payload) => api.post('/douyin/presale-vouchers', payload),
-  updateVoucher: (id, payload) => api.put(`/douyin/presale-vouchers/${id}`, payload)
+  updateVoucher: (id, payload) => api.put(`/douyin/presale-vouchers/${id}`, payload),
+  updateProductStatus: (id, operation) => api.patch(`/douyin/presale-vouchers/${id}/product-status`, { operation })
 }
 
 // 抖音房型匹配相关接口

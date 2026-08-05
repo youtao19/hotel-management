@@ -15,6 +15,8 @@ async function findById(id) {
         to_char(pv.book_start_date, 'YYYY-MM-DD') AS book_start_date,
         to_char(pv.book_end_date, 'YYYY-MM-DD') AS book_end_date, pv.image_urls, pv.douyin_voucher_id,
         pv.audit_status, pv.audit_message, pv.sync_status, pv.last_sync_log_id,
+        pv.product_status, to_char(pv.product_status_updated_at, 'YYYY-MM-DD HH24:MI:SS') AS product_status_updated_at,
+        pv.last_product_status_log_id, pv.last_product_status_error,
         to_char(pv.created_at, 'YYYY-MM-DD HH24:MI:SS') AS created_at,
         to_char(pv.updated_at, 'YYYY-MM-DD HH24:MI:SS') AS updated_at,
         rp.name AS rate_plan_name,
@@ -43,6 +45,8 @@ async function list() {
         to_char(pv.book_start_date, 'YYYY-MM-DD') AS book_start_date,
         to_char(pv.book_end_date, 'YYYY-MM-DD') AS book_end_date, pv.image_urls, pv.douyin_voucher_id,
         pv.audit_status, pv.audit_message, pv.sync_status, pv.last_sync_log_id,
+        pv.product_status, to_char(pv.product_status_updated_at, 'YYYY-MM-DD HH24:MI:SS') AS product_status_updated_at,
+        pv.last_product_status_log_id, pv.last_product_status_error,
         to_char(pv.created_at, 'YYYY-MM-DD HH24:MI:SS') AS created_at,
         to_char(pv.updated_at, 'YYYY-MM-DD HH24:MI:SS') AS updated_at,
         rp.name AS rate_plan_name,
@@ -111,6 +115,23 @@ async function markSyncResult(id, { douyinVoucherId, syncStatus, logId, auditSta
   return findById(id);
 }
 
+/** 保存最近一次商品状态操作结果，失败不覆盖已确认的商品状态。 */
+async function markProductStatusResult(id, { productStatus, logId, errorMessage }) {
+  await query(
+    `
+      UPDATE douyin_presale_vouchers
+      SET product_status = COALESCE($1, product_status),
+          product_status_updated_at = CASE WHEN $1 IS NULL THEN product_status_updated_at ELSE CURRENT_TIMESTAMP END,
+          last_product_status_log_id = $2,
+          last_product_status_error = $3,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = $4
+    `,
+    [productStatus || null, logId || null, errorMessage || null, id]
+  );
+  return findById(id);
+}
+
 /** 抖音审核回调仅信任系统生成的voucher-<id>，不接受任意外部ID更新本地券。 */
 async function markAuditResultByOutId(outId, auditStatus, auditMessage) {
   const id = Number(String(outId).replace(/^voucher-/, ''));
@@ -124,4 +145,4 @@ async function markAuditResultByOutId(outId, auditStatus, auditMessage) {
   return findById(id);
 }
 
-module.exports = { findById, list, create, update, markSyncResult, markAuditResultByOutId };
+module.exports = { findById, list, create, update, markSyncResult, markProductStatusResult, markAuditResultByOutId };

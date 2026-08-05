@@ -378,6 +378,60 @@ describe('售卖套餐本地 CRUD', () => {
     ]);
   });
 
+  test('重建预定商品时不传错误旧ID，成功后才替换渠道映射', async () => {
+    const createResponse = await request(app)
+      .post('/api/rate-plans')
+      .send(buildPayload());
+    const id = createResponse.body.data.id;
+    await query(
+      `INSERT INTO douyin_room_type_mapping (douyin_room_id, douyin_room_name, local_room_type)
+       VALUES ('DY_ROOM_001', '抖音测试房型', 'RP_TEST')`
+    );
+    await query(
+      `INSERT INTO douyin_physical_rooms (account_id, room_id, room_name, raw_payload, rate_plan_list)
+       VALUES ('DY_ACCOUNT_001', 'DY_ROOM_001', '抖音测试房型', $1, '[]')`,
+      [{ hotel_id: 'DY_HOTEL_001' }]
+    );
+    await query(
+      `INSERT INTO ota_channel_mappings
+        (local_target_type, local_target_id, channel_code, channel_item_id, channel_config, sync_status)
+       VALUES ('RATE_PLAN', $1, 'DOUYIN', 'DY_WRONG_TYPE_12', $2, 1)`,
+      [id, { hotel_id: 'DY_HOTEL_001', account_id: 'DY_ACCOUNT_001' }]
+    );
+    douyinTokenService.getToken.mockResolvedValue('TOKEN_001');
+    global.fetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        data: { rate_plan_map: [{ rate_plan_id: 'DY_BOOKING_TYPE_13', out_rate_plan_id: `booking-${id}-v2` }], error_code: 0 },
+        extra: { error_code: 0, logid: 'DY_REBUILD_LOG_001' }
+      })
+    });
+
+    const response = await request(app)
+      .post(`/api/rate-plans/${id}/douyin/sync`)
+      .send({ accountId: 'DY_ACCOUNT_001', poiId: 'DY_HOTEL_001', rebuild: true });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.message).toBe('抖音预定商品重建成功');
+    const requestBody = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(requestBody.rate_plan.rooms[0].rate_plans[0].rate_plan_id).toBeUndefined();
+    expect(requestBody.rate_plan.rooms[0].rate_plans[0].out_rate_plan_id).toBe(`booking-${id}-v2`);
+    const mapping = await query(
+      `SELECT channel_item_id, channel_config FROM ota_channel_mappings
+       WHERE local_target_type = 'RATE_PLAN' AND local_target_id = $1 AND channel_code = 'DOUYIN'`,
+      [id]
+    );
+    expect(mapping.rows[0]).toEqual(expect.objectContaining({
+      channel_item_id: 'DY_BOOKING_TYPE_13',
+      channel_config: expect.objectContaining({
+        rebuild_from_rate_plan_id: 'DY_WRONG_TYPE_12',
+        out_rate_plan_id: `booking-${id}-v2`,
+        log_id: 'DY_REBUILD_LOG_001'
+      })
+    }));
+  });
+
   test('抖音业务失败时返回 logid 便于调试', async () => {
     const createResponse = await request(app)
       .post('/api/rate-plans')

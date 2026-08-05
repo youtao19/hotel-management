@@ -135,4 +135,82 @@ describe('抖音预售券创建和更新', () => {
     expect(response.body.message).toBe('应用未获商家授权（抖音日志ID：DY_AUTH_LOG）');
     expect(response.body.douyin_log_id).toBe('DY_AUTH_LOG');
   });
+
+  test('已同步预售券可调用商品状态接口上线，并保存状态与抖音日志ID', async () => {
+    const created = await request(app).post('/api/douyin/presale-vouchers').send(payload(await createSyncedRatePlan()));
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ product_id: 'DY_VOUCHER_001', code: 0 }], extra: { error_code: 0, logid: 'DY_STATUS_ONLINE_LOG' } })
+    });
+
+    const response = await request(app)
+      .patch(`/api/douyin/presale-vouchers/${created.body.data.id}/product-status`)
+      .send({ operation: 'ONLINE' });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.message).toBe('预售券已上线');
+    expect(response.body.data.product_status).toBe('ONLINE');
+    expect(response.body.data.last_product_status_log_id).toBe('DY_STATUS_ONLINE_LOG');
+    expect(JSON.parse(global.fetch.mock.calls[1][1].body)).toEqual({
+      account_id: 'DY_VOUCHER_ACCOUNT',
+      product_id_list: ['DY_VOUCHER_001'],
+      op_type: 1
+    });
+  });
+
+  test('抖音商品状态失败会保留错误与日志ID，且不改变已确认状态', async () => {
+    const created = await request(app).post('/api/douyin/presale-vouchers').send(payload(await createSyncedRatePlan()));
+    await query(
+      `UPDATE douyin_presale_vouchers SET product_status = 'ONLINE' WHERE id = $1`,
+      [created.body.data.id]
+    );
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ product_id: 'DY_VOUCHER_001', code: 3000001, message: '商品审核中，暂不能下线' }], extra: { error_code: 0, logid: 'DY_STATUS_FAILED_LOG' } })
+    });
+
+    const response = await request(app)
+      .patch(`/api/douyin/presale-vouchers/${created.body.data.id}/product-status`)
+      .send({ operation: 'OFFLINE' });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.body.message).toBe('商品审核中，暂不能下线（抖音日志ID：DY_STATUS_FAILED_LOG）');
+    const saved = await query(
+      'SELECT product_status, last_product_status_log_id, last_product_status_error FROM douyin_presale_vouchers WHERE id = $1',
+      [created.body.data.id]
+    );
+    expect(saved.rows[0]).toEqual(expect.objectContaining({
+      product_status: 'ONLINE',
+      last_product_status_log_id: 'DY_STATUS_FAILED_LOG',
+      last_product_status_error: '商品审核中，暂不能下线'
+    }));
+  });
+
+  test('未同步预售券与不支持的操作类型不能请求抖音商品状态接口', async () => {
+    const unsynced = await query(
+      `INSERT INTO douyin_presale_vouchers
+        (rate_plan_id, name, original_amount, actual_amount, inventory_is_limited, sale_start_at, sale_end_at, book_start_date, book_end_date, image_urls)
+       VALUES ($1, '未同步预售券', 100, 80, false, '2026-08-01 00:00+08', '2026-08-31 23:59+08', '2026-08-01', '2026-12-31', '[]')
+       RETURNING id`,
+      [await createSyncedRatePlan()]
+    );
+
+    const unsyncedResponse = await request(app)
+      .patch(`/api/douyin/presale-vouchers/${unsynced.rows[0].id}/product-status`)
+      .send({ operation: 'ONLINE' });
+
+    expect(unsyncedResponse.statusCode).toBe(400);
+    expect(unsyncedResponse.body.message).toBe('预售券尚未成功同步到抖音，不能修改商品状态');
+    await query(
+      `UPDATE douyin_presale_vouchers SET sync_status = 1, douyin_voucher_id = 'DY_VOUCHER_001' WHERE id = $1`,
+      [unsynced.rows[0].id]
+    );
+    const unsupportedResponse = await request(app)
+      .patch(`/api/douyin/presale-vouchers/${unsynced.rows[0].id}/product-status`)
+      .send({ operation: 'DELETE' });
+
+    expect(unsupportedResponse.statusCode).toBe(400);
+    expect(unsupportedResponse.body.message).toBe('操作类型仅支持 ONLINE 或 OFFLINE');
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
 });

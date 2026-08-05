@@ -110,4 +110,20 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+/** 调用抖音商品状态接口上架或下架预售券。 */
+router.patch('/:id/product-status', async (req, res) => {
+  const id = parseId(req.params.id);
+  if (!id) return res.status(400).json({ message: '预售券ID格式错误' });
+  try {
+    const result = await service.updateVoucherProductStatus(id, req.body?.operation);
+    const message = result.operation === 'ONLINE' ? '预售券已上线' : '预售券已下线';
+    return res.status(200).json({ data: result.voucher, message, douyin_log_id: result.logId || null });
+  } catch (error) {
+    const statusCode = error.statusCode || 500;
+    const douyinLogId = error.douyinLogId || null;
+    const message = douyinLogId ? `${error.message}（抖音日志ID：${douyinLogId}）` : error.message;
+    return res.status(statusCode).json({ message, error: error.message, douyin_log_id: douyinLogId });
+  }
+});
+
 module.exports = router;

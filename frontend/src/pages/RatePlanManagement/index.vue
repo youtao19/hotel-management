@@ -212,6 +212,20 @@
               </q-tooltip>
             </q-btn>
             <q-btn
+              v-if="props.row.douyin_business_type === 'PRESALE' && props.row.is_synced"
+              flat
+              round
+              color="warning"
+              icon="restart_alt"
+              aria-label="重建抖音预定商品"
+              class="table-action-btn"
+              :loading="isSyncingPlan(props.row.id)"
+              :disable="props.row.sales_type === 3 || isSyncingPlan(props.row.id)"
+              @click="confirmRebuildDouyinBookingProduct(props.row)"
+            >
+              <q-tooltip>重建抖音预定商品（修复错误商品类型映射）</q-tooltip>
+            </q-btn>
+            <q-btn
               flat
               round
               color="deep-orange-7"
@@ -1219,6 +1233,36 @@ function confirmSyncDouyin(plan) {
       await refreshAll()
     } catch (error) {
       console.error('同步抖音商品失败:', error)
+      $q.notify({ type: 'negative', message: getSyncErrorMessage(error) })
+    } finally {
+      setSyncingPlan(plan.id, false)
+    }
+  })
+}
+
+/** 重建预定商品时不复用旧抖音 ID，避免继续更新错误类型的历史商品。 */
+function confirmRebuildDouyinBookingProduct(plan) {
+  if (plan.sales_type === 3 || isSyncingPlan(plan.id)) return
+
+  $q.dialog({
+    title: '重建抖音预定商品',
+    message: `将为「${plan.name}」创建新的抖音预定商品，并在成功后替换本地映射。旧抖音商品不会被删除，确认继续？`,
+    cancel: { label: '取消', flat: true, color: 'grey-7' },
+    ok: { label: '重建', color: 'warning', icon: 'restart_alt' },
+    persistent: true
+  }).onOk(async () => {
+    setSyncingPlan(plan.id, true)
+    try {
+      const response = await ratePlanApi.rebuildDouyinRatePlan(plan.id)
+      const douyinId = response?.data?.douyin?.douyinId
+      $q.notify({
+        type: 'positive',
+        message: douyinId ? `抖音预定商品重建成功：${douyinId}` : '抖音预定商品重建成功',
+        icon: 'cloud_done'
+      })
+      await refreshAll()
+    } catch (error) {
+      console.error('重建抖音预定商品失败:', error)
       $q.notify({ type: 'negative', message: getSyncErrorMessage(error) })
     } finally {
       setSyncingPlan(plan.id, false)

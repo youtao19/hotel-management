@@ -22,6 +22,75 @@ function getLogId(result) {
   return result?.extra?.logid || result?.extra?.log_id || null;
 }
 
+/** 将本地预售券状态操作映射为抖音商品操作枚举。 */
+function getProductOperationType(operation) {
+  return { ONLINE: 1, OFFLINE: 2 }[operation] || null;
+}
+
+/** 从抖音响应中读取当前商品的单项处理结果。 */
+function getProductOperationResult(result, productId) {
+  if (!Array.isArray(result?.data)) return result?.data || {};
+  return result.data.find((item) => String(item.product_id) === String(productId)) || result.data[0] || {};
+}
+
+/** 判断抖音顶层或单项响应是否返回了业务失败码。 */
+function hasBusinessError(result, item) {
+  const codes = [result?.extra?.error_code, item?.error_code, item?.code];
+  return codes.some((code) => code !== undefined && code !== null && code !== '' && Number(code) !== 0);
+}
+
+/** 变更已同步预售券的抖音商品上架状态。 */
+async function updateVoucherProductStatus(id, operation) {
+  const voucher = await repository.findById(id);
+  if (!voucher) throw createServiceError('预售券不存在', 404);
+  const opType = getProductOperationType(operation);
+  if (!opType) throw createServiceError('操作类型仅支持 ONLINE 或 OFFLINE', 400);
+  if (Number(voucher.sync_status) !== 1 || !voucher.douyin_voucher_id) {
+    throw createServiceError('预售券尚未成功同步到抖音，不能修改商品状态', 400);
+  }
+  const accountId = douyinConfig.accountId;
+  if (!accountId) throw createServiceError('缺少抖音商家 account_id，请配置 DOUYIN_ACCOUNT_ID', 400);
+
+  const productId = voucher.douyin_voucher_id;
+  let response;
+  try {
+    response = await fetch(`${douyinConfig.openApiBaseUrl}/goodlife/v1/trip/product/operate/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'access-token': await douyinTokenService.getToken(),
+        'Rpc-Transit-Life-Account': accountId
+      },
+      body: JSON.stringify({ account_id: accountId, product_id_list: [productId], op_type: opType })
+    });
+  } catch (error) {
+    console.error('[Douyin Presale Voucher] 商品状态请求失败:', { voucherId: voucher.id, productId, operation, message: error.message });
+    await repository.markProductStatusResult(id, { logId: null, errorMessage: '调用抖音商品状态接口失败' });
+    throw createServiceError('调用抖音商品状态接口失败', 502);
+  }
+
+  const result = await response.json();
+  const logId = getLogId(result);
+  const item = getProductOperationResult(result, productId);
+  const errorMessage = item?.message || item?.description || result?.extra?.sub_description || result?.extra?.description || '抖音商品状态操作失败';
+  console.log('[Douyin Presale Voucher] 商品状态响应:', {
+    voucherId: voucher.id,
+    productId,
+    operation,
+    httpStatus: response.status,
+    errorCode: item?.error_code ?? item?.code ?? result?.extra?.error_code ?? null,
+    douyinLogId: logId || null
+  });
+  if (!response.ok || hasBusinessError(result, item)) {
+    await repository.markProductStatusResult(id, { logId, errorMessage });
+    throw createServiceError(errorMessage, 502, logId);
+  }
+
+  const productStatus = operation === 'ONLINE' ? 'ONLINE' : 'OFFLINE';
+  const updatedVoucher = await repository.markProductStatusResult(id, { productStatus, logId, errorMessage: null });
+  return { voucher: updatedVoucher, operation, logId };
+}
+
 /**
  * 创建或更新预售券；本地ID固定映射为out_id，使重复同步始终覆盖同一张抖音券。
  */
@@ -157,4 +226,4 @@ async function syncVoucher(id) {
   return syncedVoucher;
 }
 
-module.exports = { syncVoucher };
+module.exports = { syncVoucher, updateVoucherProductStatus };

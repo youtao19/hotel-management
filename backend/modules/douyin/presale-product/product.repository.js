@@ -12,7 +12,8 @@ async function findLocalProductDetails(id) {
         dpr.account_id AS douyin_account_id,
         dpr.raw_payload AS douyin_room_payload,
         dpr.rate_plan_list AS douyin_rate_plan_list,
-        ocm.channel_item_id AS douyin_rate_plan_id
+        ocm.channel_item_id AS douyin_rate_plan_id,
+        ocm.channel_config AS douyin_channel_config
       FROM rate_plans rp
       LEFT JOIN room_types rt ON rp.room_type_code = rt.type_code
       LEFT JOIN douyin_room_type_mapping drm ON drm.local_room_type = rp.room_type_code
