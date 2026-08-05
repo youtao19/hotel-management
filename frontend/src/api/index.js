@@ -217,6 +217,10 @@ export const douyinPresaleVoucherApi = {
   updateProductStatus: (id, operation) => api.patch(`/douyin/presale-vouchers/${id}/product-status`, { operation })
 }
 
+export const douyinPresaleOrderApi = {
+  getOrders: () => api.get('/douyin/presale-orders')
+}
+
 // 抖音房型匹配相关接口
 export const douyinRoomMappingApi = {
   getMappings: () => api.get('/douyin/room-type-mapping'),

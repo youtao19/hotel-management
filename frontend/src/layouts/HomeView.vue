@@ -257,7 +257,8 @@ const mainNavItems = [
 const douyinNavItems = [
   { to: '/douyin-room-matching', label: '房型匹配', icon: 'hotel' },
   { to: '/rate-plans', label: '售卖套餐', icon: 'sell' },
-  { to: '/douyin-presale-vouchers', label: '预售券', icon: 'confirmation_number' }
+  { to: '/douyin-presale-vouchers', label: '预售券', icon: 'confirmation_number' },
+  { to: '/douyin-presale-orders', label: '预售订单', icon: 'receipt_long' }
 ]
 
 const leftDrawerOpen = ref(false)

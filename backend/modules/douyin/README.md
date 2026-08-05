@@ -21,6 +21,9 @@
 - `PUT /api/douyin/presale-vouchers/:id`
 - `PATCH /api/douyin/presale-vouchers/:id/product-status`
 - `POST /api/douyin/ari-notify`
+- `POST /douyin/spi/presale-order/create`
+- `POST /douyin/spi/presale-order/payment-notice`
+- `GET /api/douyin/presale-orders`
 - `POST /douyin/webhooks`
 - `POST /douyin/spi/price-volume`
 - `POST /douyin/spi/bookable`

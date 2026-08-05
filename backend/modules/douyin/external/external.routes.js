@@ -6,6 +6,8 @@ const signatureService = require('./signature.service');
 const webhookService = require('./webhook.service');
 const priceVolumeService = require('../availability/priceVolume.service');
 const bookableCheckService = require('../availability/bookableCheck.service');
+const presaleOrderService = require('../presale-order/presaleOrder.service');
+const paymentNoticeService = require('../presale-order/paymentNotice.service');
 const callbackLogService = require('./callbackLog.service');
 const systemNotificationService = require('../../system-notification/systemNotification.service');
 
@@ -43,6 +45,35 @@ function summarizeBookableRequest(payload = {}) {
     checkOutDate: payload.check_out_date || payload.checkOutDate || '',
     numberOfUnits: payload.number_of_units || payload.numberOfUnits || '',
     totalAmount: payload.total_amount || payload.totalAmount || ''
+  };
+}
+
+/** 提取预售创单排障所需字段，避免记录联系人隐私数据。 */
+function summarizePresaleOrderRequest(payload = {}) {
+  const contact = payload.contact_info || {};
+  const encryptedPhone = String(contact.phone || contact.mobile || contact.phone_number || '').trim();
+  return {
+    douyinOrderId: payload.order_id || '',
+    voucherId: payload.pre_sale_coupon_id || '',
+    ratePlanId: payload.rate_plan_id || '',
+    voucherCount: payload.total_coupon_count || '',
+    totalAmount: payload.total_amount || '',
+    contactPhoneMode: !encryptedPhone
+      ? 'MISSING'
+      : encryptedPhone.startsWith('Enc.')
+        ? 'ONLINE_ENC'
+        : 'LOCAL_OR_PLAIN'
+  };
+}
+
+/** 提取预售券支付通知的排障字段，避免记录客人备注等信息。 */
+function summarizePresalePaymentNotice(payload = {}) {
+  return {
+    douyinOrderId: payload.order_id || '',
+    localOrderId: payload.order_out_id || '',
+    bizType: payload.biz_type || '',
+    payTimeUnix: payload.pay_time_unix || '',
+    payAmount: payload.pay_amount || ''
   };
 }
 
@@ -288,6 +319,62 @@ function createDouyinExternalRouter(options = {}) {
           description: '服务器错误'
         }
       });
+    }
+  });
+
+  /** 接收抖音预售券交易正向的创建订单请求。 */
+  router.post('/spi/presale-order/create', async (req, res) => {
+    const logId = getHeader(req, 'x-bytedance-logid');
+    const summary = summarizePresaleOrderRequest(req.body || {});
+    try {
+      if (!signatureService.verifySpiSignature(req)) {
+        console.warn('[Douyin SPI] 预售创单签名校验失败:', { logId, ...summary });
+        await saveCallbackLog({ type: 'spi_presale_order_create', stage: 'signature_failed', logId, ...summary });
+        return res.status(401).json({ message: '抖音 SPI 签名校验失败' });
+      }
+      const result = await presaleOrderService.createOrder(req.body || {}, {
+        logId,
+        accountId: getHeader(req, 'x-life-clientkey')
+      });
+      console.log('[Douyin SPI] 预售订单已创建:', { logId, ...summary, localOrderId: result.localOrderId, duplicate: result.duplicate });
+      await saveCallbackLog({ type: 'spi_presale_order_create', stage: result.duplicate ? 'duplicate' : 'processed', logId, ...summary, localOrderId: result.localOrderId });
+      return res.status(200).json({
+        data: { error_code: 0, description: 'success', order_id: result.douyinOrderId, order_out_id: result.localOrderId }
+      });
+    } catch (error) {
+      const errorCode = Number(error.douyinErrorCode) || 13;
+      console.error('[Douyin SPI] 预售创单失败:', { logId, ...summary, errorCode, error: error.message });
+      await saveCallbackLog({ type: 'spi_presale_order_create', stage: 'error', logId, ...summary, errorCode, error: error.message });
+      return res.status(200).json({
+        data: { error_code: errorCode, description: error.message, order_id: summary.douyinOrderId }
+      });
+    }
+  });
+
+  /** 接收抖音预售券交易正向的支付成功通知。 */
+  router.post('/spi/presale-order/payment-notice', async (req, res) => {
+    const logId = getHeader(req, 'x-bytedance-logid');
+    const summary = summarizePresalePaymentNotice(req.body || {});
+    try {
+      if (!signatureService.verifySpiSignature(req)) {
+        console.warn('[Douyin SPI] 预售支付通知签名校验失败:', { logId, ...summary });
+        await saveCallbackLog({ type: 'spi_presale_payment_notice', stage: 'signature_failed', logId, ...summary });
+        return res.status(401).json({ message: '抖音 SPI 签名校验失败' });
+      }
+      const result = await paymentNoticeService.recordPaymentNotice(req.body || {}, { logId });
+      console.log('[Douyin SPI] 已接收预售支付通知:', { logId, ...summary, orderFound: result.orderFound, duplicate: result.duplicate });
+      await saveCallbackLog({
+        type: 'spi_presale_payment_notice',
+        stage: result.orderFound ? (result.duplicate ? 'duplicate' : 'processed') : 'order_not_found',
+        logId,
+        ...summary
+      });
+      return res.status(200).json(successResponse());
+    } catch (error) {
+      const errorCode = Number(error.douyinErrorCode) || 13;
+      console.error('[Douyin SPI] 预售支付通知处理失败:', { logId, ...summary, errorCode, error: error.message });
+      await saveCallbackLog({ type: 'spi_presale_payment_notice', stage: 'error', logId, ...summary, errorCode, error: error.message });
+      return res.status(200).json({ data: { error_code: errorCode, description: error.message } });
     }
   });
 

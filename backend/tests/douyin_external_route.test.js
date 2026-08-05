@@ -664,4 +664,68 @@ describe('抖音 Webhooks 与价量态 SPI', () => {
       })
     ]);
   });
+
+  test('预售券支付通知验签后更新本地订单，重复通知只确认成功', async () => {
+    const localOrderId = 'DYPS_PAY_NOTICE_TEST_001';
+    const douyinOrderId = 'DY_PAY_NOTICE_TEST_001';
+    await query('DELETE FROM douyin_presale_orders WHERE order_id = $1', [localOrderId]);
+    await query(
+      `INSERT INTO douyin_presale_orders (
+         order_id, ota_order_id, biz_type, order_stage, raw_payload
+       ) VALUES ($1, $2, $3, $4, $5::jsonb)`,
+      [localOrderId, douyinOrderId, 2011, 'CREATED', JSON.stringify({ order_id: douyinOrderId })]
+    );
+
+    try {
+      const body = JSON.stringify({
+        order_id: douyinOrderId,
+        order_out_id: localOrderId,
+        biz_type: 2011,
+        pay_time_unix: 1785561600,
+        currency: 'CNY',
+        pay_amount: 19900
+      });
+      const path = '/douyin/spi/presale-order/payment-notice?client_key=DY_CLIENT_TEST&timestamp=1777000000000';
+
+      const firstResponse = await request(app)
+        .post(path)
+        .set('Content-Type', 'application/json')
+        .set('x-life-clientkey', 'DY_CLIENT_TEST')
+        .set('x-life-sign', buildSpiSign(path, body))
+        .set('x-bytedance-logid', 'DY_SPI_PAY_NOTICE_LOG_001')
+        .send(body);
+      const duplicateResponse = await request(app)
+        .post(path)
+        .set('Content-Type', 'application/json')
+        .set('x-life-clientkey', 'DY_CLIENT_TEST')
+        .set('x-life-sign', buildSpiSign(path, body))
+        .set('x-bytedance-logid', 'DY_SPI_PAY_NOTICE_LOG_002')
+        .send(body);
+
+      expect(firstResponse.statusCode).toBe(200);
+      expect(firstResponse.body).toEqual({ data: { error_code: 0, description: 'success' } });
+      expect(duplicateResponse.statusCode).toBe(200);
+      const orderResult = await query(
+        'SELECT order_stage, douyin_log_id, raw_payload FROM douyin_presale_orders WHERE order_id = $1',
+        [localOrderId]
+      );
+      expect(orderResult.rows[0]).toMatchObject({
+        order_stage: 'PAID',
+        douyin_log_id: 'DY_SPI_PAY_NOTICE_LOG_002',
+        raw_payload: expect.objectContaining({
+          payment_notice: expect.objectContaining({
+            pay_amount: 19900,
+            pay_time_unix: 1785561600
+          })
+        })
+      });
+      const logRecords = await readJsonLines(logFilePath);
+      expect(logRecords).toEqual([
+        expect.objectContaining({ type: 'spi_presale_payment_notice', stage: 'processed', logId: 'DY_SPI_PAY_NOTICE_LOG_001' }),
+        expect.objectContaining({ type: 'spi_presale_payment_notice', stage: 'duplicate', logId: 'DY_SPI_PAY_NOTICE_LOG_002' })
+      ]);
+    } finally {
+      await query('DELETE FROM douyin_presale_orders WHERE order_id = $1', [localOrderId]);
+    }
+  });
 });
