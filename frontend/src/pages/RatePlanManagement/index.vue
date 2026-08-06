@@ -184,96 +184,58 @@
 
       <template #body-cell-actions="props">
         <q-td :props="props">
-          <div class="row no-wrap justify-center q-gutter-xs">
-            <q-btn
-              flat
-              round
-              color="primary"
-              icon="edit"
-              aria-label="编辑售卖套餐"
-              class="table-action-btn"
-              @click="openDialog(props.row)"
-            >
-              <q-tooltip>编辑套餐</q-tooltip>
-            </q-btn>
-            <q-btn
-              flat
-              round
-              :color="props.row.is_synced ? 'positive' : 'teal-8'"
-              icon="cloud_sync"
-              aria-label="同步到抖音"
-              class="table-action-btn"
-              :loading="isSyncingPlan(props.row.id)"
-              :disable="props.row.sales_type === 3 || isSyncingPlan(props.row.id)"
-              @click="confirmSyncDouyin(props.row)"
-            >
-              <q-tooltip>
-                {{ getSyncTooltip(props.row) }}
-              </q-tooltip>
-            </q-btn>
-            <q-btn
-              v-if="props.row.douyin_business_type === 'PRESALE' && props.row.is_synced"
-              flat
-              round
-              color="warning"
-              icon="restart_alt"
-              aria-label="重建抖音预定商品"
-              class="table-action-btn"
-              :loading="isSyncingPlan(props.row.id)"
-              :disable="props.row.sales_type === 3 || isSyncingPlan(props.row.id)"
-              @click="confirmRebuildDouyinBookingProduct(props.row)"
-            >
-              <q-tooltip>重建抖音预定商品（修复错误商品类型映射）</q-tooltip>
-            </q-btn>
-            <q-btn
-              flat
-              round
-              color="deep-orange-7"
-              icon="published_with_changes"
-              aria-label="通知抖音拉取价量态"
-              class="table-action-btn"
-              :loading="isNotifyingPlan(props.row.id)"
-              :disable="!props.row.is_synced || isNotifyingPlan(props.row.id)"
-              @click="openAriNotifyDialog(props.row)"
-            >
-              <q-tooltip>
-                {{ props.row.is_synced ? '通知抖音拉取价量态' : '套餐同步到抖音后才能通知拉取' }}
-              </q-tooltip>
-            </q-btn>
-            <q-btn
-              v-if="['CALENDAR_ROOM', 'PRESALE'].includes(props.row.douyin_business_type)"
-              flat
-              round
-              color="amber-9"
-              icon="price_change"
-              aria-label="维护抖音按日房价"
-              class="table-action-btn"
-              @click="openCalendarPriceDialog(props.row)"
-            >
-              <q-tooltip>维护并推送抖音按日房价</q-tooltip>
-            </q-btn>
-            <q-btn
-              v-if="props.row.is_synced"
-              flat
-              round
-              color="indigo-7"
-              icon="inventory_2"
-              aria-label="手动推送抖音房量房态"
-              class="table-action-btn"
-              @click="openStockSyncDialog(props.row)"
-            >
-              <q-tooltip>手动补推房量房态</q-tooltip>
-            </q-btn>
-            <q-btn
-              flat
-              round
-              color="negative"
-              icon="delete_outline"
-              aria-label="删除售卖套餐"
-              class="table-action-btn"
-              @click="confirmDelete(props.row)"
-            >
-              <q-tooltip>{{ props.row.is_synced ? '已同步套餐由后端限制删除' : '删除套餐' }}</q-tooltip>
+          <div class="row justify-center">
+            <q-btn flat no-caps color="primary" icon="more_horiz" label="更多" class="table-more-btn" aria-label="更多套餐操作">
+              <q-menu auto-close anchor="bottom right" self="top right" :offset="[0, 8]" class="table-action-menu">
+                <q-list padding>
+                  <q-item v-close-popup clickable @click="openDialog(props.row)">
+                    <q-item-section avatar><q-icon name="edit" color="primary" /></q-item-section>
+                    <q-item-section>编辑套餐</q-item-section>
+                  </q-item>
+                  <q-item
+                    v-close-popup
+                    clickable
+                    :disable="props.row.sales_type === 3 || isSyncingPlan(props.row.id)"
+                    @click="confirmSyncDouyin(props.row)"
+                  >
+                    <q-item-section avatar>
+                      <q-spinner v-if="isSyncingPlan(props.row.id)" color="teal-8" size="20px" />
+                      <q-icon v-else name="cloud_sync" :color="props.row.is_synced ? 'positive' : 'teal-8'" />
+                    </q-item-section>
+                    <q-item-section>{{ getSyncTooltip(props.row) }}</q-item-section>
+                  </q-item>
+                  <q-item
+                    v-close-popup
+                    clickable
+                    :disable="!props.row.is_synced || isNotifyingPlan(props.row.id)"
+                    @click="openAriNotifyDialog(props.row)"
+                  >
+                    <q-item-section avatar>
+                      <q-spinner v-if="isNotifyingPlan(props.row.id)" color="deep-orange-7" size="20px" />
+                      <q-icon v-else name="published_with_changes" color="deep-orange-7" />
+                    </q-item-section>
+                    <q-item-section>通知抖音拉取价量态</q-item-section>
+                  </q-item>
+                  <q-item
+                    v-if="['CALENDAR_ROOM', 'PRESALE'].includes(props.row.douyin_business_type)"
+                    v-close-popup
+                    clickable
+                    @click="openCalendarPriceDialog(props.row)"
+                  >
+                    <q-item-section avatar><q-icon name="price_change" color="amber-9" /></q-item-section>
+                    <q-item-section>维护抖音按日房价</q-item-section>
+                  </q-item>
+                  <q-item v-if="props.row.is_synced" v-close-popup clickable @click="openStockSyncDialog(props.row)">
+                    <q-item-section avatar><q-icon name="inventory_2" color="indigo-7" /></q-item-section>
+                    <q-item-section>手动补推房量房态</q-item-section>
+                  </q-item>
+                  <q-separator inset class="q-my-xs" />
+                  <q-item v-close-popup clickable class="action-menu-delete" @click="confirmDelete(props.row)">
+                    <q-item-section avatar><q-icon name="delete_outline" color="negative" /></q-item-section>
+                    <q-item-section>删除套餐</q-item-section>
+                  </q-item>
+                </q-list>
+              </q-menu>
             </q-btn>
           </div>
         </q-td>
@@ -604,38 +566,58 @@
     </q-dialog>
 
     <q-dialog v-model="calendarPriceDialogOpen" persistent>
-      <q-card class="ari-notify-dialog">
-        <q-card-section class="dialog-heading">
+      <q-card class="price-sync-dialog">
+        <q-card-section class="price-sync-hero">
+          <div class="price-sync-hero-icon"><q-icon name="sell" size="26px" /></div>
           <div>
-            <div class="text-h6">抖音按日房价</div>
-            <div class="text-caption text-grey-7">{{ calendarPricePlan?.name || '--' }}</div>
+            <div class="text-h6">推送按日房价</div>
+            <div class="text-caption text-brown-8">维护价格后同步到抖音</div>
           </div>
+          <q-space />
           <q-btn flat round icon="close" aria-label="关闭抖音按日房价弹窗" @click="calendarPriceDialogOpen = false" />
         </q-card-section>
 
-        <q-separator />
-
-        <q-card-section class="dialog-body">
-          <div class="row q-col-gutter-md items-end">
-            <div class="col-12 col-md-5"><q-input v-model="calendarPriceRange.startDate" label="开始日期" type="date" outlined /></div>
-            <div class="col-12 col-md-5"><q-input v-model="calendarPriceRange.endDate" label="结束日期" type="date" outlined /></div>
-            <div class="col-12 col-md-2"><q-btn color="primary" label="加载日期" :loading="calendarPriceLoading" @click="loadCalendarPrices" /></div>
+        <q-card-section class="dialog-body q-gutter-y-md">
+          <div class="price-plan-summary">
+            <q-icon name="hotel" color="deep-orange-8" size="20px" />
+            <div>
+              <div class="text-weight-bold">{{ calendarPricePlan?.name || '--' }}</div>
+              <div class="text-caption text-grey-7">抖音预定商品：{{ calendarPricePlan?.douyin_rate_plan_id || '--' }}</div>
+            </div>
           </div>
 
-          <div v-if="calendarPriceRows.length" class="q-mt-md">
-            <div class="text-caption text-grey-7 q-mb-sm">逐日填写价格，实际售价单位为元，划线价可不填。</div>
-            <div v-for="row in calendarPriceRows" :key="row.stayDate" class="row q-col-gutter-sm q-mb-sm items-center">
-              <div class="col-4">{{ row.stayDate }}</div>
-              <div class="col-4"><q-input v-model.number="row.originalAmount" label="实际售价" type="number" min="0" outlined dense prefix="¥" /></div>
-              <div class="col-4"><q-input v-model.number="row.retailAmount" label="划线价" type="number" min="0" outlined dense prefix="¥" /></div>
+          <div class="price-info-banner">
+            <q-icon name="info" size="18px" />
+            <span>实际售价为客人支付价格，划线价可不填。推送时会先保存当前填写内容。</span>
+          </div>
+
+          <div class="price-quick-actions">
+            <span class="text-caption text-grey-7">快捷范围</span>
+            <q-btn outline dense no-caps color="deep-orange-8" label="未来 7 天" @click="setCalendarPriceDays(7)" />
+            <q-btn outline dense no-caps color="deep-orange-8" label="未来 30 天" @click="setCalendarPriceDays(30)" />
+          </div>
+
+          <div class="row q-col-gutter-md items-end">
+            <div class="col-12 col-sm-5"><q-input v-model="calendarPriceRange.startDate" label="开始日期" type="date" outlined /></div>
+            <div class="col-12 col-sm-5"><q-input v-model="calendarPriceRange.endDate" label="结束日期" type="date" outlined /></div>
+            <div class="col-12 col-sm-2"><q-btn class="full-width" color="deep-orange-8" label="加载日期" :loading="calendarPriceLoading" @click="loadCalendarPrices" /></div>
+          </div>
+          <div class="text-caption text-grey-7">一次最多维护并推送 30 个自然日。抖音返回的 logid 会在完成后显示，便于排查。</div>
+
+          <div v-if="calendarPriceRows.length" class="price-rows">
+            <div class="price-rows-title">按日价格</div>
+            <div v-for="row in calendarPriceRows" :key="row.stayDate" class="price-row">
+              <div class="price-date">{{ row.stayDate }}</div>
+              <q-input v-model.number="row.originalAmount" label="实际售价" type="number" min="0" outlined dense prefix="¥" />
+              <q-input v-model.number="row.retailAmount" label="划线价（选填）" type="number" min="0" outlined dense prefix="¥" />
             </div>
           </div>
         </q-card-section>
 
         <q-card-actions align="right" class="dialog-actions">
           <q-btn flat label="取消" color="grey-8" @click="calendarPriceDialogOpen = false" />
-          <q-btn color="primary" label="保存价格" :disable="!calendarPriceRows.length" :loading="calendarPriceSaving" @click="saveCalendarPrices" />
-          <q-btn color="deep-orange-7" label="推送房价" :disable="!calendarPriceRows.length" :loading="calendarPriceSyncing" @click="syncCalendarPrices" />
+          <q-btn outline color="deep-orange-8" label="保存价格" :disable="!calendarPriceRows.length" :loading="calendarPriceSaving" @click="saveCalendarPrices" />
+          <q-btn color="deep-orange-8" icon="send" label="立即推送" :disable="!calendarPriceRows.length" :loading="calendarPriceSyncing" @click="syncCalendarPrices" />
         </q-card-actions>
       </q-card>
     </q-dialog>
@@ -817,7 +799,7 @@ const columns = [
   { name: 'douyin_business_type', label: '抖音业务', field: 'douyin_business_type', align: 'left', headerStyle: 'width: 7%;' },
   { name: 'channel', label: '抖音同步', field: 'is_synced', align: 'left', sortable: true, headerStyle: 'width: 180px;' },
   { name: 'updated_at', label: '更新时间', field: 'updated_at', align: 'left', sortable: true, headerStyle: 'width: 145px;' },
-  { name: 'actions', label: '操作', field: 'actions', align: 'center', headerStyle: 'width: 155px;' }
+  { name: 'actions', label: '操作', field: 'actions', align: 'center', headerStyle: 'width: 96px;' }
 ]
 
 const formRef = ref(null)
@@ -1302,36 +1284,6 @@ function confirmSyncDouyin(plan) {
   })
 }
 
-/** 重建预定商品时不复用旧抖音 ID，避免继续更新错误类型的历史商品。 */
-function confirmRebuildDouyinBookingProduct(plan) {
-  if (plan.sales_type === 3 || isSyncingPlan(plan.id)) return
-
-  $q.dialog({
-    title: '重建抖音预定商品',
-    message: `将为「${plan.name}」创建新的抖音预定商品，并在成功后替换本地映射。旧抖音商品不会被删除，确认继续？`,
-    cancel: { label: '取消', flat: true, color: 'grey-7' },
-    ok: { label: '重建', color: 'warning', icon: 'restart_alt' },
-    persistent: true
-  }).onOk(async () => {
-    setSyncingPlan(plan.id, true)
-    try {
-      const response = await ratePlanApi.rebuildDouyinRatePlan(plan.id)
-      const douyinId = response?.data?.douyin?.douyinId
-      $q.notify({
-        type: 'positive',
-        message: douyinId ? `抖音预定商品重建成功：${douyinId}` : '抖音预定商品重建成功',
-        icon: 'cloud_done'
-      })
-      await refreshAll()
-    } catch (error) {
-      console.error('重建抖音预定商品失败:', error)
-      $q.notify({ type: 'negative', message: getSyncErrorMessage(error) })
-    } finally {
-      setSyncingPlan(plan.id, false)
-    }
-  })
-}
-
 function getSyncSuccessMessage(douyinId) {
   return douyinId ? `抖音同步成功：${douyinId}` : '抖音同步成功'
 }
@@ -1381,6 +1333,13 @@ function openCalendarPriceDialog(plan) {
   calendarPriceRows.value = []
   calendarPriceRange.value = { startDate: '', endDate: '' }
   calendarPriceDialogOpen.value = true
+}
+
+/** 设置按日房价维护的快捷日期范围。 */
+function setCalendarPriceDays(days) {
+  const start = new Date()
+  const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + days - 1)
+  calendarPriceRange.value = { startDate: formatLocalDate(start), endDate: formatLocalDate(end) }
 }
 
 /** 生成日期范围内的本地自然日。 */
@@ -1629,12 +1588,43 @@ onActivated(refreshAll)
   min-height: 38px;
 }
 
-.table-action-btn {
-  min-width: 30px;
-  min-height: 30px;
-  width: 30px;
-  height: 30px;
-  padding: 0;
+.table-more-btn {
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid #d8e3df;
+  border-radius: 7px;
+  background: #ffffff;
+}
+
+.table-action-menu {
+  min-width: 224px;
+  border: 1px solid #e2e8e5;
+  border-radius: 10px;
+  box-shadow: 0 12px 28px rgba(23, 34, 31, 0.16);
+}
+
+.table-action-menu :deep(.q-item) {
+  min-height: 42px;
+  padding: 0 14px;
+  color: #31403b;
+  font-size: 14px;
+}
+
+.table-action-menu :deep(.q-item__section--avatar) {
+  min-width: 34px;
+}
+
+.table-action-menu :deep(.q-item--active),
+.table-action-menu :deep(.q-item:hover) {
+  background: #f2f8f5;
+}
+
+.table-action-menu :deep(.action-menu-delete) {
+  color: #c10015;
+}
+
+.table-action-menu :deep(.action-menu-delete:hover) {
+  background: #fff4f4;
 }
 
 .primary-action {
@@ -2035,6 +2025,94 @@ onActivated(refreshAll)
   background: #ffffff;
 }
 
+.price-sync-dialog {
+  width: min(720px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.price-sync-hero {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 24px;
+  background: linear-gradient(135deg, #fff7ed 0%, #fffaf5 100%);
+}
+
+.price-sync-hero-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 12px;
+  color: #ffffff;
+  background: #c2410c;
+  box-shadow: 0 8px 18px rgba(194, 65, 12, 0.22);
+}
+
+.price-plan-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #e4e7ec;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.price-info-banner {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  color: #9a3412;
+  background: #fff7ed;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.price-quick-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.price-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.price-rows-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #3f2a1d;
+}
+
+.price-row {
+  display: grid;
+  grid-template-columns: minmax(112px, 0.8fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid #f0e3d8;
+  border-radius: 10px;
+  background: #fffdfa;
+}
+
+.price-date {
+  color: #4b2d1d;
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
 .stock-sync-dialog {
   width: min(560px, calc(100vw - 32px));
   border-radius: 16px;
@@ -2125,6 +2203,14 @@ onActivated(refreshAll)
 
   .primary-action {
     width: 100%;
+  }
+
+  .price-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .price-date {
+    grid-column: 1 / -1;
   }
 }
 </style>

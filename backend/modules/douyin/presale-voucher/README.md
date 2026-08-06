@@ -59,24 +59,6 @@
 
 `GET /api/douyin/presale-orders` 返回已由创单 SPI 写入的预售券主订单。该列表仅用于查看已购买的券订单，不会创建普通入住订单，也不会占用房间库存；无预约日期的订单应等待后续预约单再进入入住订单流程。
 
-## 预售券绑定预定商品排查记录
-
-2026-08-05 抖音官方测试返回：`商品类型(实际值:预售券(12))`，但预售券 `bind_rate_plans` 仅接受 `预售房型/预定(13)`。本地预售券 1 绑定套餐 6 时，当前 `ota_channel_mappings.channel_item_id=1872219399969818` 被抖音识别为类型 12，不能继续作为 `bind_rate_plans` 传入。
-
-处理方式是重新通过“创建/更新预定商品”链路取得类型 13 的抖音预定商品 ID，再覆盖该套餐的渠道映射后重新提交预售券；不能把已创建的预售券 `pre_sale_coupon_id` 回填到套餐映射中。
-
-### 重建接口
-
-`POST /api/rate-plans/:id/douyin/sync`
-
-```json
-{
-  "rebuild": true
-}
-```
-
-仅 `PRESALE` 套餐可用。重建请求不会在抖音请求中传旧 `rate_plan_id`，并使用稳定的新外部 ID `booking-<套餐ID>-v2`，避免抖音按旧 `out_rate_plan_id` 做幂等更新；抖音成功返回新的预定商品 ID 后，后端才覆盖 `ota_channel_mappings.channel_item_id`，并在 `channel_config.rebuild_from_rate_plan_id` 留存旧映射 ID。请求失败时旧映射保持不变。
-
 ## 酒店类目
 
 创建/更新预售券请求固定发送 `presale_info.category_id=8001001`（经济型酒店）。

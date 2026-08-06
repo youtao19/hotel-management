@@ -20,10 +20,9 @@ class DouyinProductService {
     /**
      * 将本地套餐同步到抖音预售券预定商品。
      * @param {number} localRatePlanId 本地 rate_plans 表的自增 ID
-     * @param {object} options 同步时允许覆盖的抖音账号和酒店 ID，或要求重建预定商品
+     * @param {object} options 同步时允许覆盖的抖音账号和酒店 ID
      * @param {string} [options.accountId] 抖音商家账号 ID
      * @param {string} [options.poiId] 抖音酒店 ID
-     * @param {boolean} [options.rebuild] 是否跳过旧抖音 ID 并创建新的预定商品
      * @returns {Promise<object>} 同步结果
      */
     async syncProductToDouyin(localRatePlanId, options = {}) {
@@ -39,7 +38,7 @@ class DouyinProductService {
 
             const accountId = this._resolveAccountId(localProduct, options);
             const hotelId = this._resolveHotelId(localProduct, options);
-            const outRatePlanId = this._resolveOutRatePlanId(localProduct, options);
+            const outRatePlanId = this._resolveOutRatePlanId(localProduct);
 
             if (!accountId) {
                 throw createServiceError('缺少抖音商家 account_id，请传 accountId 或配置 DOUYIN_ACCOUNT_ID', 400);
@@ -57,7 +56,6 @@ class DouyinProductService {
             const payload = this._buildRatePlanPayload(localProduct, {
                 accountId,
                 hotelId,
-                rebuild: options.rebuild === true,
                 outRatePlanId
             });
 
@@ -94,7 +92,6 @@ class DouyinProductService {
                 hotelId,
                 douyinRatePlanId,
                 logId,
-                rebuild: options.rebuild === true,
                 outRatePlanId
             });
             await this._savePhysicalRoomRatePlan(localProduct, {
@@ -110,7 +107,6 @@ class DouyinProductService {
                 roomId: localProduct.douyin_room_id,
                 hotelId,
                 logId,
-                rebuilt: options.rebuild === true,
                 outRatePlanId
             };
 
@@ -145,9 +141,8 @@ class DouyinProductService {
             || '';
     }
 
-    /** 读取稳定外部套餐标识，重建时切换到新的预定商品标识避免更新旧商品。 */
-    _resolveOutRatePlanId(localProduct, options) {
-        if (options.rebuild === true) return `booking-${localProduct.id}-v2`;
+    /** 读取套餐稳定外部标识，保证后续同步更新同一抖音商品。 */
+    _resolveOutRatePlanId(localProduct) {
         return localProduct.douyin_channel_config?.out_rate_plan_id || String(localProduct.id);
     }
 
@@ -194,8 +189,8 @@ class DouyinProductService {
             out_rate_plan_id: context.outRatePlanId
         };
 
-        // 重建时不传旧 ID，避免把类型错误的历史商品继续更新。
-        if (localProduct.douyin_rate_plan_id && !context.rebuild) {
+        // 已同步套餐携带抖音商品 ID，后续请求更新同一商品。
+        if (localProduct.douyin_rate_plan_id) {
             ratePlan.rate_plan_id = localProduct.douyin_rate_plan_id;
         }
 
@@ -263,10 +258,6 @@ class DouyinProductService {
             account_id: syncResult.accountId,
             log_id: syncResult.logId
         };
-        if (syncResult.rebuild && localProduct.douyin_rate_plan_id) {
-            channelConfig.rebuild_from_rate_plan_id = localProduct.douyin_rate_plan_id;
-        }
-
         await channelMappingRepository.upsertRatePlanMapping({
             localRatePlanId: localProduct.id,
             douyinRatePlanId: syncResult.douyinRatePlanId,

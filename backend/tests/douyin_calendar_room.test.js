@@ -43,7 +43,7 @@ async function createPresalePlan(app) {
   await query(
     `INSERT INTO ota_channel_mappings (local_target_type, local_target_id, channel_code, channel_item_id, channel_config, sync_status)
      VALUES ('RATE_PLAN', $1, 'DOUYIN', 'DY_PRESALE_BOOKING_RATE_PLAN', $2, 1)`,
-    [id, { out_rate_plan_id: `booking-${id}-v2` }]
+    [id, { out_rate_plan_id: String(id) }]
   );
   return id;
 }

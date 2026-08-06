@@ -47,8 +47,7 @@ const syncDouyinRatePlanSchema = {
   type: 'object',
   properties: {
     accountId: { type: 'string', minLength: 1, maxLength: 64 },
-    poiId: { type: 'string', minLength: 1, maxLength: 64 },
-    rebuild: { type: 'boolean' }
+    poiId: { type: 'string', minLength: 1, maxLength: 64 }
   },
   additionalProperties: false
 };
@@ -89,8 +88,7 @@ function normalizePayload(payload) {
 function normalizeSyncPayload(payload) {
   return {
     accountId: normalizeString(payload.accountId),
-    poiId: normalizeString(payload.poiId),
-    rebuild: payload.rebuild === true
+    poiId: normalizeString(payload.poiId)
   };
 }
 
@@ -363,8 +361,7 @@ router.post('/:id/douyin/sync', async (req, res) => {
 
     const douyinResult = await douyinProductService.syncProductToDouyin(id, {
       accountId: payload.accountId,
-      poiId: payload.poiId,
-      rebuild: payload.rebuild
+      poiId: payload.poiId
     });
     const updated = await findRatePlanById(id);
 
@@ -373,7 +370,7 @@ router.post('/:id/douyin/sync', async (req, res) => {
         rate_plan: toRatePlanResponse(updated),
         douyin: douyinResult
       },
-      message: payload.rebuild ? '抖音预定商品重建成功' : '售卖套餐同步抖音成功'
+      message: '售卖套餐同步抖音成功'
     });
   } catch (err) {
     const statusCode = getErrorStatusCode(err);

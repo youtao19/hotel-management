@@ -189,8 +189,6 @@ export const ratePlanApi = {
 
   syncDouyinRatePlan: (id, payload = {}) => api.post(`/rate-plans/${id}/douyin/sync`, payload),
 
-  rebuildDouyinRatePlan: (id) => api.post(`/rate-plans/${id}/douyin/sync`, { rebuild: true }),
-
   getCalendarRoomRule: (id) => api.get(`/rate-plans/${id}/douyin/calendar-room/rule`),
 
   saveCalendarRoomRule: (id, payload) => api.put(`/rate-plans/${id}/douyin/calendar-room/rule`, payload),
