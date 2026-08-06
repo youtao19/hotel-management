@@ -5,7 +5,7 @@ const { query } = require('../../../database/postgreDB/pg');
 /** 查询抖音订单号对应的本地预售订单。 */
 async function findByDouyinOrderId(douyinOrderId) {
   const result = await query(
-    `SELECT id, order_id, ota_order_id, order_stage, douyin_log_id
+    `SELECT id, order_id, ota_order_id, order_stage, douyin_log_id, cancel_id, cancel_status
      FROM douyin_presale_orders
      WHERE ota_order_id = $1
      LIMIT 1`,
@@ -17,7 +17,7 @@ async function findByDouyinOrderId(douyinOrderId) {
 /** 查询本地订单号对应的抖音预售订单。 */
 async function findByLocalOrderId(localOrderId) {
   const result = await query(
-    `SELECT id, order_id, ota_order_id, order_stage, douyin_log_id
+    `SELECT id, order_id, ota_order_id, order_stage, douyin_log_id, cancel_id, cancel_status
      FROM douyin_presale_orders
      WHERE order_id = $1
      LIMIT 1`,
@@ -108,4 +108,45 @@ async function markPaid(orderId, paymentNotice, rawPayload, logId) {
   return result.rows[0] || null;
 }
 
-module.exports = { findByDouyinOrderId, findByLocalOrderId, findVoucherByDouyinId, insertOrder, listOrders, markPaid };
+/** 保存预售券取消结果和抖音排障信息。 */
+async function markCancelled(orderId, cancellation, rawPayload, logId) {
+  const result = await query(
+    `UPDATE douyin_presale_orders
+     SET order_stage = 'CANCELLED',
+         cancel_id = $2,
+         cancel_status = 'CANCELLED',
+         cancel_log_id = $3,
+         cancel_payload = $4::jsonb,
+         cancelled_at = NOW(),
+         updated_at = NOW()
+     WHERE id = $1
+     RETURNING order_id, ota_order_id, order_stage, cancel_id, cancel_status`,
+    [orderId, cancellation.cancelId, logId || null, JSON.stringify(rawPayload)]
+  );
+  return result.rows[0] || null;
+}
+
+/** 保存暂不支持的仅退款请求，避免丢失抖音排障依据。 */
+async function markRefundNotSupported(orderId, cancellation, rawPayload, logId) {
+  return query(
+    `UPDATE douyin_presale_orders
+     SET cancel_id = $2,
+         cancel_status = 'REFUND_NOT_SUPPORTED',
+         cancel_log_id = $3,
+         cancel_payload = $4::jsonb,
+         updated_at = NOW()
+     WHERE id = $1`,
+    [orderId, cancellation.cancelId, logId || null, JSON.stringify(rawPayload)]
+  );
+}
+
+module.exports = {
+  findByDouyinOrderId,
+  findByLocalOrderId,
+  findVoucherByDouyinId,
+  insertOrder,
+  listOrders,
+  markPaid,
+  markCancelled,
+  markRefundNotSupported
+};

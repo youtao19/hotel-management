@@ -8,6 +8,7 @@ const priceVolumeService = require('../availability/priceVolume.service');
 const bookableCheckService = require('../availability/bookableCheck.service');
 const presaleOrderService = require('../presale-order/presaleOrder.service');
 const paymentNoticeService = require('../presale-order/paymentNotice.service');
+const cancelOrderService = require('../presale-order/cancelOrder.service');
 const callbackLogService = require('./callbackLog.service');
 const systemNotificationService = require('../../system-notification/systemNotification.service');
 
@@ -74,6 +75,18 @@ function summarizePresalePaymentNotice(payload = {}) {
     bizType: payload.biz_type || '',
     payTimeUnix: payload.pay_time_unix || '',
     payAmount: payload.pay_amount || ''
+  };
+}
+
+/** 提取取消 SPI 的排障字段，避免把退款明细写入运行日志。 */
+function summarizeCancelOrderRequest(payload = {}) {
+  return {
+    douyinOrderId: payload.order_id || '',
+    localOrderId: payload.order_out_id || '',
+    cancelId: payload.cancel_id || '',
+    bizType: payload.biz_type || '',
+    cancelType: payload.cancel_type || '',
+    afterSaleType: payload.after_sale_type || ''
   };
 }
 
@@ -375,6 +388,54 @@ function createDouyinExternalRouter(options = {}) {
       console.error('[Douyin SPI] 预售支付通知处理失败:', { logId, ...summary, errorCode, error: error.message });
       await saveCallbackLog({ type: 'spi_presale_payment_notice', stage: 'error', logId, ...summary, errorCode, error: error.message });
       return res.status(200).json({ data: { error_code: errorCode, description: error.message } });
+    }
+  });
+
+  /** 接收抖音预售券交易逆向的取消订单请求。 */
+  router.post('/spi/order/cancel', async (req, res) => {
+    const logId = getHeader(req, 'x-bytedance-logid');
+    const summary = summarizeCancelOrderRequest(req.body || {});
+    try {
+      if (!signatureService.verifySpiSignature(req)) {
+        console.warn('[Douyin SPI] 取消订单签名校验失败:', { logId, ...summary });
+        await saveCallbackLog({ type: 'spi_order_cancel', stage: 'signature_failed', logId, ...summary });
+        return res.status(401).json({ message: '抖音 SPI 签名校验失败' });
+      }
+
+      // 订单类型由抖音回调决定；当前仅实现预售券取消，其他类型不能伪造成功。
+      if (Number(req.body?.biz_type) !== 2011) {
+        await saveCallbackLog({ type: 'spi_order_cancel', stage: 'biz_type_not_supported', logId, ...summary });
+        return res.status(200).json({
+          data: {
+            error_code: 0,
+            description: 'success',
+            cancel_mode: 1,
+            cancel_result: 2,
+            reason: `暂未实现 biz_type=${summary.bizType} 的取消订单`
+          }
+        });
+      }
+
+      const result = await cancelOrderService.cancelOrder(req.body || {}, { logId });
+      console.log('[Douyin SPI] 预售券取消订单已处理:', { logId, ...summary, ...result });
+      await saveCallbackLog({
+        type: 'spi_order_cancel',
+        stage: result.duplicate ? 'duplicate' : 'processed',
+        logId,
+        ...summary,
+        cancelResult: result.cancelResult,
+        orderFound: result.orderFound
+      });
+      return res.status(200).json({
+        data: { error_code: 0, description: 'success', cancel_mode: 1, cancel_result: result.cancelResult, reason: result.reason }
+      });
+    } catch (error) {
+      const errorCode = Number(error.douyinErrorCode) || 13;
+      console.error('[Douyin SPI] 预售券取消订单处理失败:', { logId, ...summary, errorCode, error: error.message });
+      await saveCallbackLog({ type: 'spi_order_cancel', stage: 'error', logId, ...summary, errorCode, error: error.message });
+      return res.status(200).json({
+        data: { error_code: errorCode, description: error.message, cancel_mode: 2 }
+      });
     }
   });
 

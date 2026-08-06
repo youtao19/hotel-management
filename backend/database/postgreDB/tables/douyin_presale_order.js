@@ -38,6 +38,11 @@ const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
   early_arrival_time VARCHAR(32),
   last_arrival_time VARCHAR(32),
   douyin_log_id VARCHAR(128),
+  cancel_id VARCHAR(64),
+  cancel_status VARCHAR(32),
+  cancel_log_id VARCHAR(128),
+  cancel_payload JSONB,
+  cancelled_at TIMESTAMPTZ,
   raw_payload JSONB NOT NULL,
   mapped_payload JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -56,10 +61,16 @@ const createIndexQueryStrings = [
   `CREATE INDEX IF NOT EXISTS idx_douyin_presale_orders_ota_order_id ON ${tableName}(ota_order_id)`,
   `CREATE INDEX IF NOT EXISTS idx_douyin_presale_orders_source_order_id ON ${tableName}(source_order_id)`,
   `CREATE INDEX IF NOT EXISTS idx_douyin_presale_orders_order_stage ON ${tableName}(order_stage)`,
+  `CREATE INDEX IF NOT EXISTS idx_douyin_presale_orders_cancel_id ON ${tableName}(cancel_id)`,
   `CREATE INDEX IF NOT EXISTS idx_douyin_presale_orders_created_at ON ${tableName}(created_at DESC)`,
 ];
 
 const schemaUpdateQueryStrings = [
+  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS cancel_id VARCHAR(64);`,
+  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS cancel_status VARCHAR(32);`,
+  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS cancel_log_id VARCHAR(128);`,
+  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS cancel_payload JSONB;`,
+  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;`,
   // 预售订单创建/更新时间是业务事件发生点，不能使用无时区 TIMESTAMP。
   `ALTER TABLE ${tableName} ALTER COLUMN created_at TYPE TIMESTAMPTZ;`,
   `ALTER TABLE ${tableName} ALTER COLUMN updated_at TYPE TIMESTAMPTZ;`
@@ -83,6 +94,11 @@ const createCommentQueryStrings = [
   `COMMENT ON COLUMN ${tableName}.each_coupon_amount IS '单张预售券金额';`,
   `COMMENT ON COLUMN ${tableName}.total_amount IS '订单总金额';`,
   `COMMENT ON COLUMN ${tableName}.douyin_log_id IS '抖音请求头 x-bytedance-logid';`,
+  `COMMENT ON COLUMN ${tableName}.cancel_id IS '抖音取消请求唯一标识，用于同一取消请求幂等';`,
+  `COMMENT ON COLUMN ${tableName}.cancel_status IS '取消处理状态：CANCELLED、REFUND_NOT_SUPPORTED 或 REJECTED';`,
+  `COMMENT ON COLUMN ${tableName}.cancel_log_id IS '取消 SPI 请求头 x-bytedance-logid';`,
+  `COMMENT ON COLUMN ${tableName}.cancel_payload IS '抖音取消 SPI 原始请求体';`,
+  `COMMENT ON COLUMN ${tableName}.cancelled_at IS '本地同意取消的处理时间';`,
 ];
 
 module.exports = {

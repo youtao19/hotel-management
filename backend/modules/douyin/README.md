@@ -23,6 +23,7 @@
 - `POST /api/douyin/ari-notify`
 - `POST /douyin/spi/presale-order/create`
 - `POST /douyin/spi/presale-order/payment-notice`
+- `POST /douyin/spi/order/cancel`
 - `GET /api/douyin/presale-orders`
 - `POST /douyin/webhooks`
 - `POST /douyin/spi/price-volume`
@@ -39,6 +40,7 @@ Phase 7: 抖音相关 routes、services 和原 `backend/services` 中的物理�
 ## 目录结构
 
 - `external/`：抖音 Webhook、SPI 入口、签名校验和回调日志。
+- `presale-order/`：预售券主订单、支付通知和取消订单处理。
 - `room-type-mapping/`：前端“抖音房型匹配”页面使用的房型映射接口。
 - `rate-plan/`：本地售卖套餐接口，外部路径仍是 `/api/rate-plans`。
 - `presale-product/`：本地售卖套餐同步成抖音预售券预定商品。

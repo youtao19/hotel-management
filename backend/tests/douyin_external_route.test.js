@@ -728,4 +728,98 @@ describe('抖音 Webhooks 与价量态 SPI', () => {
       await query('DELETE FROM douyin_presale_orders WHERE order_id = $1', [localOrderId]);
     }
   });
+
+  test('预售券取消订单验签后写入取消状态，相同 cancel_id 幂等成功', async () => {
+    const localOrderId = 'DYPS_CANCEL_TEST_001';
+    const douyinOrderId = 'DY_CANCEL_TEST_001';
+    await query('DELETE FROM douyin_presale_orders WHERE order_id = $1', [localOrderId]);
+    await query(
+      `INSERT INTO douyin_presale_orders (
+         order_id, ota_order_id, biz_type, order_stage, raw_payload
+       ) VALUES ($1, $2, $3, $4, $5::jsonb)`,
+      [localOrderId, douyinOrderId, 2011, 'PAID', JSON.stringify({ order_id: douyinOrderId })]
+    );
+
+    try {
+      const body = JSON.stringify({
+        order_id: douyinOrderId,
+        order_out_id: localOrderId,
+        cancel_id: 'DY_CANCEL_REQUEST_001',
+        cancel_type: 2,
+        biz_type: 2011,
+        after_sale_type: 1,
+        refund_type: 11
+      });
+      const path = '/douyin/spi/order/cancel?client_key=DY_CLIENT_TEST&timestamp=1777000000000';
+
+      const firstResponse = await request(app)
+        .post(path)
+        .set('Content-Type', 'application/json')
+        .set('x-life-clientkey', 'DY_CLIENT_TEST')
+        .set('x-life-sign', buildSpiSign(path, body))
+        .set('x-bytedance-logid', 'DY_SPI_CANCEL_LOG_001')
+        .send(body);
+      const duplicateResponse = await request(app)
+        .post(path)
+        .set('Content-Type', 'application/json')
+        .set('x-life-clientkey', 'DY_CLIENT_TEST')
+        .set('x-life-sign', buildSpiSign(path, body))
+        .set('x-bytedance-logid', 'DY_SPI_CANCEL_LOG_002')
+        .send(body);
+
+      expect(firstResponse.statusCode).toBe(200);
+      expect(firstResponse.body).toEqual({
+        data: { error_code: 0, description: 'success', cancel_mode: 1, cancel_result: 1, reason: '' }
+      });
+      expect(duplicateResponse.body.data.cancel_result).toBe(1);
+      const orderResult = await query(
+        'SELECT order_stage, cancel_id, cancel_status, cancel_log_id, cancel_payload FROM douyin_presale_orders WHERE order_id = $1',
+        [localOrderId]
+      );
+      expect(orderResult.rows[0]).toMatchObject({
+        order_stage: 'CANCELLED',
+        cancel_id: 'DY_CANCEL_REQUEST_001',
+        cancel_status: 'CANCELLED',
+        cancel_log_id: 'DY_SPI_CANCEL_LOG_001',
+        cancel_payload: expect.objectContaining({ cancel_id: 'DY_CANCEL_REQUEST_001' })
+      });
+      const logRecords = await readJsonLines(logFilePath);
+      expect(logRecords).toEqual([
+        expect.objectContaining({ type: 'spi_order_cancel', stage: 'processed', logId: 'DY_SPI_CANCEL_LOG_001', cancelResult: 1 }),
+        expect.objectContaining({ type: 'spi_order_cancel', stage: 'duplicate', logId: 'DY_SPI_CANCEL_LOG_002', cancelResult: 1 })
+      ]);
+    } finally {
+      await query('DELETE FROM douyin_presale_orders WHERE order_id = $1', [localOrderId]);
+    }
+  });
+
+  test('非预售券取消订单返回占位拒绝，不伪造取消成功', async () => {
+    const body = JSON.stringify({
+      order_id: 'DY_CALENDAR_CANCEL_001',
+      cancel_id: 'DY_CALENDAR_CANCEL_REQUEST_001',
+      cancel_type: 2,
+      biz_type: 2021,
+      after_sale_type: 1,
+      refund_type: 11
+    });
+    const path = '/douyin/spi/order/cancel?client_key=DY_CLIENT_TEST&timestamp=1777000000000';
+    const response = await request(app)
+      .post(path)
+      .set('Content-Type', 'application/json')
+      .set('x-life-clientkey', 'DY_CLIENT_TEST')
+      .set('x-life-sign', buildSpiSign(path, body))
+      .set('x-bytedance-logid', 'DY_SPI_CANCEL_CALENDAR_LOG_001')
+      .send(body);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toEqual({
+      data: {
+        error_code: 0,
+        description: 'success',
+        cancel_mode: 1,
+        cancel_result: 2,
+        reason: '暂未实现 biz_type=2021 的取消订单'
+      }
+    });
+  });
 });
