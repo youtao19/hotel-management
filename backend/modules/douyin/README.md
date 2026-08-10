@@ -19,6 +19,7 @@
 - `GET /api/douyin/presale-vouchers`
 - `POST /api/douyin/presale-vouchers`
 - `PUT /api/douyin/presale-vouchers/:id`
+- `POST /api/douyin/presale-vouchers/images`
 - `PATCH /api/douyin/presale-vouchers/:id/product-status`
 - `POST /api/douyin/ari-notify`
 - `POST /douyin/spi/presale-order/create`

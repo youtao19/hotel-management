@@ -218,6 +218,11 @@ export const douyinPresaleVoucherApi = {
   getVouchers: () => api.get('/douyin/presale-vouchers'),
   createVoucher: (payload) => api.post('/douyin/presale-vouchers', payload),
   updateVoucher: (id, payload) => api.put(`/douyin/presale-vouchers/${id}`, payload),
+  uploadImages: (files) => {
+    const formData = new FormData()
+    files.forEach(file => formData.append('images', file))
+    return api.post('/douyin/presale-vouchers/images', formData)
+  },
   updateProductStatus: (id, operation) => api.patch(`/douyin/presale-vouchers/${id}/product-status`, { operation })
 }
 

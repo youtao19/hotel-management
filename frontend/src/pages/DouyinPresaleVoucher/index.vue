@@ -397,22 +397,27 @@
                 <q-icon name="collections" color="primary" size="20px" />
                 <span class="form-section-title">展示图集</span>
                 <q-space />
-                <span class="text-caption text-grey-6">每行一个可公开访问的 URL；第 1 张为头图</span>
+                <span class="text-caption text-grey-6">选择本机图片上传；第 1 张为头图</span>
               </div>
 
-              <q-input
-                v-model="form.imageUrlsText"
+              <q-file
+                v-model="selectedImages"
                 outlined
-                type="textarea"
-                rows="3"
-                placeholder="https://example.com/image1.jpg&#10;https://example.com/image2.jpg"
-                :rules="[required, validateImageUrls]"
+                multiple
+                use-chips
+                accept="image/jpeg,image/png,image/webp"
+                label="选择 JPG、PNG 或 WebP 图片"
+                :disable="uploadingImages"
+                :loading="uploadingImages"
+                @update:model-value="uploadImages"
                 class="custom-field q-mb-xs"
               >
                 <template #prepend>
-                  <q-icon name="link" color="primary" />
+                  <q-icon name="add_photo_alternate" color="primary" />
                 </template>
-              </q-input>
+              </q-file>
+              <div class="text-caption text-grey-6 q-mb-sm">单张不超过 5MB；上传后会自动生成 ngrok 公网链接。</div>
+              <q-input v-show="false" :model-value="form.imageUrls.length" :rules="[validateImageUrls]" />
 
               <!-- 实时图片缩略图预览列表 -->
               <div v-if="previewImages.length > 0" class="image-preview-container">
@@ -424,6 +429,18 @@
                     class="preview-thumb-box"
                   >
                     <img :src="img" class="thumb-img" @error="onImgError($event)" />
+                    <q-btn
+                      round
+                      dense
+                      flat
+                      size="sm"
+                      icon="close"
+                      color="negative"
+                      class="thumb-remove-btn"
+                      @click="removeImage(idx)"
+                    >
+                      <q-tooltip>移除图片</q-tooltip>
+                    </q-btn>
                     <q-chip
                       dense
                       size="10px"
@@ -475,6 +492,8 @@ const dialogOpen = ref(false)
 const editingVoucher = ref(null)
 const formRef = ref(null)
 const form = ref(defaultForm())
+const selectedImages = ref([])
+const uploadingImages = ref(false)
 
 const columns = [
   { name: 'name', label: '预售券', field: 'name', align: 'left' },
@@ -501,23 +520,18 @@ const discountInfo = computed(() => {
   return null
 })
 
-/** 解析文本域中的图片链接，剔除空行后作为实时缩略图预览数据源。 */
-const previewImages = computed(() => {
-  if (!form.value.imageUrlsText) return []
-  return form.value.imageUrlsText
-    .split('\n')
-    .map(url => url.trim())
-    .filter(url => url.startsWith('http://') || url.startsWith('https://'))
-})
+/** 返回已由后端生成的公网图片链接，作为券面预览数据源。 */
+const previewImages = computed(() => form.value.imageUrls)
 
 /** 当图片地址加载失败时回退为默认图例 Icon 标记，避免出现破碎裂图。 */
 function onImgError(e) {
+  console.error('[Douyin Presale Voucher] 图片预览加载失败:', e.target.currentSrc || e.target.src)
   e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 0 24 24" fill="%23ccc"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>'
 }
 
 /** 返回新增预售券的默认表单，日期不预填以避免运营误发过期券。 */
 function defaultForm() {
-  return { ratePlanId: null, name: '', originalAmount: null, actualAmount: null, inventoryIsLimited: true, inventoryCount: null, saleStartAt: '', saleEndAt: '', bookStartDate: '', bookEndDate: '', imageUrlsText: '' }
+  return { ratePlanId: null, name: '', originalAmount: null, actualAmount: null, inventoryIsLimited: true, inventoryCount: null, saleStartAt: '', saleEndAt: '', bookStartDate: '', bookEndDate: '', imageUrls: [] }
 }
 
 /** 未输入内容时阻止提交，让后端不用承担纯界面必填提示。 */
@@ -530,12 +544,32 @@ function nonNegative(value) {
   return (value !== null && value !== '' && Number(value) >= 0) || '请输入不小于 0 的数值'
 }
 
-/** 抖音会拉取图片地址，前端提前拦截 Base64，后端仍会做同样校验。 */
+/** 确认至少有一张已由后端生成的公网券面图，后端仍会复核。 */
 function validateImageUrls(value) {
-  const imageUrls = String(value || '').split('\n').map(item => item.trim()).filter(Boolean)
-  if (imageUrls.length === 0) return '请至少填写一张图片 URL'
-  const invalidImageUrl = imageUrls.find(imageUrl => !/^https?:\/\//i.test(imageUrl) || imageUrl.length > 2048)
-  return !invalidImageUrl || '图片必须是抖音可访问的 http/https URL'
+  return Number(value) > 0 || '请至少上传一张图片'
+}
+
+/** 上传新选择的图片，并将后端生成的公网链接追加到券面图集。 */
+async function uploadImages(files) {
+  const images = Array.isArray(files) ? files : files ? [files] : []
+  if (images.length === 0) return
+  uploadingImages.value = true
+  try {
+    const response = await douyinPresaleVoucherApi.uploadImages(images)
+    form.value.imageUrls.push(...response.data)
+    console.log('[Douyin Presale Voucher] 图片上传地址:', response.data)
+    selectedImages.value = []
+    $q.notify({ type: 'positive', message: '图片已上传并生成公网链接' })
+  } catch (error) {
+    $q.notify({ type: 'negative', message: error?.response?.data?.message || '图片上传失败' })
+  } finally {
+    uploadingImages.value = false
+  }
+}
+
+/** 移除不需要提交给抖音的券面图链接，不删除服务器上的历史上传文件。 */
+function removeImage(index) {
+  form.value.imageUrls.splice(index, 1)
 }
 
 /** 查询页面所需数据，套餐下拉只显示已得到抖音商品ID的记录。 */
@@ -555,6 +589,7 @@ async function load() {
 /** 编辑时兼容标准化日期时间格式（兼容带 T 或空格隔开的格式），避免界面显示和日期组件错位。 */
 function openDialog(voucher = null) {
   editingVoucher.value = voucher
+  selectedImages.value = []
   form.value = voucher ? {
     ratePlanId: voucher.rate_plan_id,
     name: voucher.name,
@@ -566,14 +601,14 @@ function openDialog(voucher = null) {
     saleEndAt: voucher.sale_end_at ? voucher.sale_end_at.replace('T', ' ').slice(0, 16) : '',
     bookStartDate: voucher.book_start_date || '',
     bookEndDate: voucher.book_end_date || '',
-    imageUrlsText: (voucher.image_urls || []).join('\n')
+    imageUrls: voucher.image_urls || []
   } : defaultForm()
   dialogOpen.value = true
 }
 
 /** 把多行图片和浏览器控件的本地日期时间转成后端约定的 YYYY-MM-DD HH:mm 格式。 */
 function buildPayload() {
-  const { imageUrlsText, ...payload } = form.value
+  const payload = form.value
   return {
     ...payload,
     ratePlanId: Number(payload.ratePlanId),
@@ -584,7 +619,7 @@ function buildPayload() {
     saleEndAt: payload.saleEndAt ? payload.saleEndAt.replace(/[T/]/g, match => match === 'T' ? ' ' : '-') : '',
     bookStartDate: payload.bookStartDate ? payload.bookStartDate.replaceAll('/', '-') : '',
     bookEndDate: payload.bookEndDate ? payload.bookEndDate.replaceAll('/', '-') : '',
-    imageUrls: imageUrlsText.split('\n').map(item => item.trim()).filter(Boolean)
+    imageUrls: payload.imageUrls
   }
 }
 
@@ -788,6 +823,13 @@ onMounted(load)
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.thumb-remove-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: rgba(255, 255, 255, 0.82);
 }
 
 .thumb-badge {

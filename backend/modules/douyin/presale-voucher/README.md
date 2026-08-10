@@ -1,5 +1,11 @@
 # 抖音预售券联调说明
 
+## 本地券面图上传
+
+`POST /api/douyin/presale-vouchers/images` 接收 multipart 字段 `images`，员工可从本机选择 JPG、PNG 或 WebP 图片。后端将文件保存到 `backend/modules/douyin/presale-voucher/uploads/`，并返回 `/uploads/presale-vouchers/:filename` 的完整公网 URL；该静态路径无需 JWT，供抖音审核服务拉取图片。
+
+上传前须把 `dev.env` 的 `APP_URL` 设置为 ngrok 暴露后端服务端口后的公网 `http/https` 根地址，例如 `https://example.ngrok-free.app`。`localhost`、`127.0.0.1` 和非 HTTP(S) 地址会被拒绝，避免提交抖音无法访问的券面图。单张图片最大 5MB，一次最多 9 张。
+
 ## 商品状态接口标识
 
 已在 2026-08-05 的真实预售券同步日志中确认：`savepresale` 响应的 `pre_sale_coupon_id` 会保存到 `douyin_presale_vouchers.douyin_voucher_id`，其值可直接作为 `POST /goodlife/v1/trip/product/operate/` 的 `product_id_list` 项，用于该预售券的上架、下架等商品状态操作。

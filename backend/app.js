@@ -5,10 +5,14 @@ const posgreDB = require("./database/postgreDB/pg");
 const authtication = require("./modules/auth/auth.middleware");
 const RedisDb = require('./database/redis/redis');
 const path = require("path");
+const { uploadDirectory } = require('./modules/douyin/presale-voucher/presaleVoucherUpload.routes');
 
 let app = express();
 
 app.disable('x-powered-by');
+
+// 券面图需由抖音主动拉取，不能受员工 JWT 鉴权保护。
+app.use('/uploads/presale-vouchers', express.static(uploadDirectory, { fallthrough: false }));
 
 /**
  * 保留原始请求体，供渠道签名校验使用。
@@ -112,6 +116,9 @@ async function initializeRoutes() {
 
     const douyinPresaleVoucherRoute = require("./modules/douyin/presale-voucher/presaleVoucher.routes");
     app.use("/api/douyin/presale-vouchers", douyinPresaleVoucherRoute);
+
+    const douyinPresaleVoucherUploadRoute = require("./modules/douyin/presale-voucher/presaleVoucherUpload.routes");
+    app.use("/api/douyin/presale-vouchers", douyinPresaleVoucherUploadRoute.router);
 
     const douyinPresaleOrderRoute = require("./modules/douyin/presale-order/presaleOrder.routes");
     app.use("/api/douyin/presale-orders", douyinPresaleOrderRoute);

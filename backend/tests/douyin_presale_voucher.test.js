@@ -1,14 +1,18 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const request = require('supertest');
 
 process.env.DOUYIN_ACCOUNT_ID = 'DY_VOUCHER_ACCOUNT';
 process.env.DOUYIN_OPENAPI_BASE_URL = 'https://open.douyin.com';
+process.env.APP_URL = 'https://voucher-test.ngrok-free.app';
 
 jest.mock('../modules/douyin/token/token.service', () => ({ getToken: jest.fn() }));
 
 const { query } = require('../database/postgreDB/pg');
 const douyinTokenService = require('../modules/douyin/token/token.service');
 const voucherRoute = require('../modules/douyin/presale-voucher/presaleVoucher.routes');
+const { router: voucherUploadRoute, uploadDirectory } = require('../modules/douyin/presale-voucher/presaleVoucherUpload.routes');
 
 const originalFetch = global.fetch;
 
@@ -16,6 +20,7 @@ function buildApp() {
   const app = express();
   app.use(express.json());
   app.use('/api/douyin/presale-vouchers', voucherRoute);
+  app.use('/api/douyin/presale-vouchers', voucherUploadRoute);
   return app;
 }
 
@@ -67,7 +72,33 @@ describe('抖音预售券创建和更新', () => {
     });
   });
 
-  afterAll(() => { global.fetch = originalFetch; });
+  afterAll(() => {
+    global.fetch = originalFetch;
+    fs.rmSync(uploadDirectory, { recursive: true, force: true });
+  });
+
+  test('本地券面图上传后返回 ngrok 公网链接', async () => {
+    const response = await request(app)
+      .post('/api/douyin/presale-vouchers/images')
+      .attach('images', Buffer.from([0xff, 0xd8, 0xff]), { filename: 'head.jpg', contentType: 'image/jpeg' });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0]).toMatch(/^https:\/\/voucher-test\.ngrok-free\.app\/uploads\/presale-vouchers\/.+\.jpg$/);
+    expect(fs.existsSync(path.join(uploadDirectory, path.basename(response.body.data[0])))).toBe(true);
+  });
+
+  test('本地地址不能生成会提交给抖音的券面图链接', async () => {
+    process.env.APP_URL = 'http://localhost:3000';
+
+    const response = await request(app)
+      .post('/api/douyin/presale-vouchers/images')
+      .attach('images', Buffer.from([0xff, 0xd8, 0xff]), { filename: 'head.jpg', contentType: 'image/jpeg' });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.body.message).toContain('APP_URL');
+    process.env.APP_URL = 'https://voucher-test.ngrok-free.app';
+  });
 
   test('创建预售券会绑定已同步套餐、调用抖音并保存券ID', async () => {
     const response = await request(app).post('/api/douyin/presale-vouchers').send(payload(await createSyncedRatePlan()));
