@@ -79,7 +79,7 @@ async function insertOrder(order) {
        $14::date, $15::date, $16, $17::jsonb, $18::jsonb
      ) RETURNING order_id, ota_order_id`,
     [
-      order.localOrderId, order.douyinOrderId, order.accountId, order.bizType, 'CREATED',
+      order.localOrderId, order.douyinOrderId, order.accountId, order.bizType, order.orderStage,
       order.voucherId, order.ratePlanId, order.contactName, order.contactPhone,
       order.voucherCount, order.eachCouponAmount, order.totalAmount, order.currency,
       order.checkInDate, order.checkOutDate, order.logId, JSON.stringify(order.rawPayload), JSON.stringify(order.mappedPayload)

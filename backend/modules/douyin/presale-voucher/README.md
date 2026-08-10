@@ -34,7 +34,7 @@
 
 ## 创建预售订单 SPI
 
-官方[创建预售订单 SPI](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/accommodation-voucher-trade/create-pre-sale-order)由抖音调用第三方，不是酒店主动创建订单。抖音支付或下单后会携带 `order_id`、`pre_sale_coupon_id`、券数量、金额、联系人和预约相关字段，请求头包含 `X-Bytedance-Logid`、`x-life-clientkey`、`X-life-sign`。
+官方[创建预售订单 SPI](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/accommodation-voucher-trade/create-pre-sale-order)由抖音调用第三方，不是酒店主动创建订单。请求会携带 `order_id`、`pre_sale_coupon_id`、券数量、金额、联系人和预约相关字段，请求头包含 `X-Bytedance-Logid`、`x-life-clientkey`、`X-life-sign`。
 
 接入时必须按抖音 `order_id` 做创单幂等：抖音超时会重试；若订单已创建，仍须返回成功和原 `order_out_id`。官方将 `contact_info.phone` 定义为选填，因此未传电话时允许创单；实际传入电话时，字段可能为加密值，需要按官方旧版本地 AES-256-CBC 规则解密后再保存：`client_secret` 对齐到 32 位后作为 Key，右侧 16 位作为 IV，密文先 Base64 解码并按 PKCS5Padding 解密。系统兼容明文手机号、带 `+86` 区号、加密后得到的 JSON 字符串或对象。成功响应 `data.error_code=0`、回传抖音 `order_id` 与本地 `order_out_id`。
 
@@ -44,11 +44,13 @@
 
 本系统入口为 `POST /douyin/spi/presale-order/create`。后端复用 `x-life-sign` 验签，按 `ota_order_id=order_id` 幂等；重复请求返回已创建的本地 `order_id`。日志只保留订单号、券 ID、金额和 `X-Bytedance-Logid`，不记录联系人明文。
 
+创单模式由抖音后台配置：支付后创单的请求会携带 `pay_info`，抖音不会再调用支付通知 SPI，后端直接将订单保存为 `PAID` 并在映射数据中保留支付时间；未携带 `pay_info` 的两步创单订单先保存为 `CREATED`，等待支付通知更新。
+
 ## 支付结果通知 SPI
 
 官方[支付结果通知 SPI](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/accommodation-voucher-trade/paynotice)与创单 SPI 是两个独立回调，不能配置为同一个地址。本系统支付通知入口为 `POST /douyin/spi/presale-order/payment-notice`。
 
-该接口仅接收 `biz_type=2011` 的预售券支付通知，验签后始终按预售券“无需接单”的规则处理。请求能匹配到本地订单时，后端将订单阶段更新为 `PAID`，保存本次 `X-Bytedance-Logid` 和支付通知数据；同一订单重复通知只重复确认，不会新建订单。未匹配到本地订单时保留排障日志并返回成功确认，避免抖音因支付通知重试阻塞。
+该接口仅接收未携带 `pay_info` 的两步创单预售券支付通知，验签后始终按预售券“无需接单”的规则处理。请求能匹配到本地订单时，后端将订单阶段更新为 `PAID`，保存本次 `X-Bytedance-Logid` 和支付通知数据；同一订单重复通知只重复确认，不会新建订单。未匹配到本地订单时保留排障日志并返回成功确认，避免抖音因支付通知重试阻塞。
 
 抖音后台应分别配置：
 

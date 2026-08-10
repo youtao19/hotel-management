@@ -33,10 +33,14 @@ function normalizePayload(payload = {}) {
   const ratePlanId = String(payload.rate_plan_id || '').trim();
   const checkInDate = String(payload.check_in_date || '').trim();
   const checkOutDate = String(payload.check_out_date || '').trim();
+  const paymentInfo = payload.pay_info;
   if ((checkInDate || checkOutDate) && (!ratePlanId || !checkInDate || !checkOutDate)) {
     throw createOrderError('预约信息不完整', 5);
   }
-  return { orderId, voucherId, voucherCount, eachCouponAmount, totalAmount, bizType, ratePlanId, checkInDate, checkOutDate };
+  if (paymentInfo !== undefined && (!paymentInfo || typeof paymentInfo !== 'object' || Array.isArray(paymentInfo))) {
+    throw createOrderError('pay_info 格式错误', 13);
+  }
+  return { orderId, voucherId, voucherCount, eachCouponAmount, totalAmount, bizType, ratePlanId, checkInDate, checkOutDate, paymentInfo: paymentInfo || null };
 }
 
 /** 按抖音旧版本地解密 SDK 将 client_secret 对齐为 32 位。 */
@@ -135,10 +139,13 @@ async function createOrder(payload, options = {}) {
   const contact = resolveContact(payload);
   const localOrderId = `DYPS${Date.now()}${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
   try {
+    // 支付后创单不会再收到支付通知，必须在创单时确认已付款。
+    const orderStage = order.paymentInfo ? 'PAID' : 'CREATED';
     const created = await repository.insertOrder({
       localOrderId,
       douyinOrderId: order.orderId,
       accountId: options.accountId || '',
+      orderStage,
       voucherId: order.voucherId,
       voucherCount: order.voucherCount,
       eachCouponAmount: order.eachCouponAmount,
@@ -152,7 +159,12 @@ async function createOrder(payload, options = {}) {
       currency: String(payload.currency || 'CNY'),
       logId: options.logId || null,
       rawPayload: payload,
-      mappedPayload: { voucherLocalId: voucher.id, contactName: contact.name || '', contactPhone: contact.phone }
+      mappedPayload: {
+        voucherLocalId: voucher.id,
+        contactName: contact.name || '',
+        contactPhone: contact.phone,
+        paymentInfo: order.paymentInfo ? { payTimeUnix: order.paymentInfo.pay_time_unix ?? null } : null
+      }
     });
     return { douyinOrderId: created.ota_order_id, localOrderId: created.order_id, duplicate: false };
   } catch (error) {
