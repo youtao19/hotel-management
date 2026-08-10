@@ -37,6 +37,14 @@
 - `biz_type=2011` 是预售券购买主订单；即使创单请求携带 `pay_info`，本系统也只保存为 `PAID` 并成功 ACK，不能调用确认接单接口。
 - 确认接单仅适用于后续创建预约产生的 `biz_type=2012` 预约订单；该订单的 `order_id` 由创建预约订单接口返回。系统只会将该预约订单发送到确认接单接口，不会把 2011 订单误发出去。
 
+## 入住/离店状态同步
+
+- 官方文档：[订单入住审核接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/check-in-out-sync/order-check-in-audit)；后端调用 `POST /goodlife/v1/trip/trade/hotel/booking/audit/notify/`，通知抖音预约订单实际履约状态。
+- 仅 `biz_type=2012` 的预约订单可同步：抖音 `order_id` 取 `douyin_presale_booking_orders.ota_order_id`，三方 `order_out_id` 取同表 `order_id`，不会把 `2011` 预售券主订单或普通前台订单发给抖音。
+- 本地办理入住事务提交后异步发送 `accommodation_status=1`；正常或提前退房提交为已离店后异步发送 `accommodation_status=3`。网络或抖音业务失败不回滚本地订单、账单和房态。
+- 每种状态的请求结果保存到 `douyin_presale_booking_accommodation_syncs`，包括重试次数、抖音 `extra.logid`、错误码、错误原因和原始响应；HTTP 200 仍会校验 `extra.error_code`。
+- 后台可调用 `POST /api/douyin/presale-orders/:orderId/accommodation-sync/:status/retry` 重试，`:status` 仅接受 `1`（已入住）或 `3`（已离店）。成功记录幂等返回，不重复发送。
+
 ## 取消订单 SPI
 
 - 回调地址：`POST /douyin/spi/order/cancel`

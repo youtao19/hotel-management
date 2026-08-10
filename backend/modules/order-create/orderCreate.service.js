@@ -3,6 +3,7 @@ const billService = require('../bill/bill.service');
 const orderCreateRepository = require('./orderCreate.repository');
 const orderManageRepository = require('../order-manage/orderManage.repository');
 const { scheduleRoomTypeStockSync } = require('../douyin/availability/stockPush.service');
+const { ACCOMMODATION_STATUS, scheduleAccommodationSync } = require('../douyin/presale-order/accommodationSync.service');
 
 const DEFAULT_PAY_WAY = '现金';
 const ALLOWED_SPLIT_PAY_WAYS = new Set(['现金', '微信', '微邮付', '平台']);
@@ -471,6 +472,10 @@ async function checkIn(orderId, depositAmount, clientOrPaymentSplitPayload, paym
     if (manageTx) {
       await runner.query('COMMIT');
       console.log('✅ [check-in] 事务提交成功');
+      // 仅预售券预约单在本地入住提交后通知抖音，外部异常不能回滚本地账务和房态。
+      if (firstOrder.order_source === 'douyin_presale') {
+        scheduleAccommodationSync(orderId, ACCOMMODATION_STATUS.CHECKED_IN);
+      }
     }
 
     return createdBills;
@@ -532,6 +537,10 @@ async function fastCheckIn(orderData, createdBy = 'system') {
       });
 
       await client.query('COMMIT');
+      // 快速入住复用外部事务，预售券预约单提交后由外层补发履约通知。
+      if (normalized.orderSource === 'douyin_presale') {
+        scheduleAccommodationSync(normalized.orderId, ACCOMMODATION_STATUS.CHECKED_IN);
+      }
 
       const aggregatedOrder = await orderManageRepository.findOrderRowsByOrderId(normalized.orderId);
       const createdBills = await orderCreateRepository.listBillsByOrderId(normalized.orderId);

@@ -2,6 +2,7 @@ const billService = require('../bill/bill.service');
 const orderManageRepository = require('./orderManage.repository');
 const { formatDate, toDecimal, toAmountNumber } = require('../tools');
 const { scheduleRoomTypeStockSync } = require('../douyin/availability/stockPush.service');
+const { ACCOMMODATION_STATUS, scheduleAccommodationSync } = require('../douyin/presale-order/accommodationSync.service');
 
 const BASIC_UPDATE_FIELDS = ['guest_name', 'phone', 'room_type', 'payment_method', 'remarks'];
 const WITH_BILLS_UPDATE_FIELDS = ['guest_name', 'phone', 'room_type', 'room_number', 'payment_method', 'remarks', 'deposit'];
@@ -979,6 +980,10 @@ async function earlyCheckout(orderNumber, body = {}, user) {
 
     await orderManageRepository.markRoomCleaning(client, firstRow.room_number);
     await client.query('COMMIT');
+    // 预售券预约单提前退房已提交为已离店后再通知抖音，退款和网络结果不能互相影响。
+    if (firstRow.order_source === 'douyin_presale') {
+      scheduleAccommodationSync(orderNumber, ACCOMMODATION_STATUS.CHECKED_OUT);
+    }
 
     const refundedStayDates = refundableRows.map(row => formatDate(row.stay_date));
     const changeDetails = {
@@ -1109,6 +1114,10 @@ async function checkOut(orderId, client) {
 
     if (manageTx) {
       await runner.query('COMMIT');
+      // 仅预售券预约单在本地退房提交后异步同步，避免抖音网络故障阻塞前台退房。
+      if (orderRows.some((row) => row.order_source === 'douyin_presale')) {
+        scheduleAccommodationSync(orderId, ACCOMMODATION_STATUS.CHECKED_OUT);
+      }
     }
 
     return orderManageRepository.findOrderRowsByOrderId(orderId);
