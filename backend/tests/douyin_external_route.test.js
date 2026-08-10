@@ -32,7 +32,7 @@ function captureRawBody(req, _res, buf) {
   req.rawBody = buf && buf.length ? buf.toString('utf8') : '';
 }
 
-function buildTestApp(redisClient) {
+function buildTestApp(redisClient, options = {}) {
   const app = express();
   app.use(express.json({
     strict: false,
@@ -41,7 +41,9 @@ function buildTestApp(redisClient) {
   app.use('/douyin', createDouyinExternalRouter({
     redisProvider: {
       getClient: () => redisClient
-    }
+    },
+    scheduleBookingConfirmation: options.scheduleBookingConfirmation,
+    autoConfirmEnabled: options.autoConfirmEnabled
   }));
   return app;
 }
@@ -224,6 +226,7 @@ describe('抖音 Webhooks 与价量态 SPI', () => {
   let redisClient;
   let app;
   let logFilePath;
+  let scheduleBookingConfirmation;
 
   beforeEach(async () => {
     await query('DELETE FROM system_notifications');
@@ -232,7 +235,8 @@ describe('抖音 Webhooks 与价量态 SPI', () => {
     redisClient = {
       set: jest.fn(async () => 'OK')
     };
-    app = buildTestApp(redisClient);
+    scheduleBookingConfirmation = jest.fn();
+    app = buildTestApp(redisClient, { scheduleBookingConfirmation });
     jest.spyOn(console, 'log').mockImplementation(() => {});
     jest.spyOn(console, 'warn').mockImplementation(() => {});
     jest.spyOn(console, 'error').mockImplementation(() => {});
@@ -793,6 +797,195 @@ describe('抖音 Webhooks 与价量态 SPI', () => {
     }
   });
 
+  test('创建预约单验签后返回异步接单，并写入本地占房记录', async () => {
+    const sourceOrderId = 'DY_PRESALE_BOOKING_SOURCE_001';
+    const bookingOrderId = 'DY_BOOKING_CREATE_001';
+    await seedBookableData();
+    await query('DELETE FROM douyin_presale_booking_orders WHERE ota_order_id = $1', [bookingOrderId]);
+    await query('DELETE FROM douyin_presale_orders WHERE ota_order_id = $1', [sourceOrderId]);
+    await query(
+      `INSERT INTO douyin_presale_orders (
+         order_id, ota_order_id, biz_type, order_stage, raw_payload
+       ) VALUES ($1, $2, 2011, 'PAID', $3::jsonb)`,
+      ['DYPS_BOOKING_SOURCE_001', sourceOrderId, JSON.stringify({ order_id: sourceOrderId })]
+    );
+
+    try {
+      const body = JSON.stringify({
+        order_id: bookingOrderId,
+        source_order_id: sourceOrderId,
+        rate_plan_id: 'DY_RATE_BK_001',
+        hotel_id: 'DY_HOTEL_BK_001',
+        room_id: 'DY_ROOM_BK_001',
+        biz_type: 2012,
+        check_in_date: '2026-04-24',
+        check_out_date: '2026-04-25',
+        number_of_units: 1,
+        number_of_guests: 1,
+        total_amount: 39900,
+        currency: 'CNY',
+        daily_rates: [{
+          period_start_date: '2026-04-24',
+          period_end_date: '2026-04-25',
+          original_amount: 39900
+        }]
+      });
+      const path = '/douyin/spi/presale-order/booking?client_key=DY_CLIENT_TEST&timestamp=1777000000000';
+      const response = await request(app)
+        .post(path)
+        .set('Content-Type', 'application/json')
+        .set('x-life-clientkey', 'DY_CLIENT_TEST')
+        .set('x-life-sign', buildSpiSign(path, body))
+        .set('x-bytedance-logid', 'DY_SPI_BOOKING_CREATE_LOG_001')
+        .send(body);
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body.data).toEqual(expect.objectContaining({
+        error_code: 0,
+        order_id: bookingOrderId,
+        confirm_info: expect.objectContaining({ confirm_mode: 2 })
+      }));
+      expect(scheduleBookingConfirmation).toHaveBeenCalledWith(response.body.data.order_out_id);
+      const bookingResult = await query(
+        `SELECT source_order_id, booking_status, confirm_status, create_log_id, assigned_rooms
+         FROM douyin_presale_booking_orders
+         WHERE ota_order_id = $1`,
+        [bookingOrderId]
+      );
+      expect(bookingResult.rows[0]).toMatchObject({
+        source_order_id: sourceOrderId,
+        booking_status: 'CREATED',
+        confirm_status: 'PENDING',
+        create_log_id: 'DY_SPI_BOOKING_CREATE_LOG_001',
+        assigned_rooms: ['BK102']
+      });
+      const localOrderResult = await query(
+        `SELECT room_number, status, order_source
+         FROM orders
+         WHERE id_source = $1 AND order_source = 'douyin_presale'`,
+        [bookingOrderId]
+      );
+      expect(localOrderResult.rows).toEqual([
+        expect.objectContaining({ room_number: 'BK102', status: 'pending', order_source: 'douyin_presale' })
+      ]);
+
+      const refundBody = JSON.stringify({
+        order_id: bookingOrderId,
+        order_out_id: response.body.data.order_out_id,
+        refund_total_amount: 0,
+        refund_amount: 0,
+        user_refund_amount: 0,
+        biz_type: 2012,
+        refund_type: 11
+      });
+      const refundPath = '/douyin/spi/presale-order/refund-result?client_key=DY_CLIENT_TEST&timestamp=1777000000000';
+      const refundResponse = await request(app)
+        .post(refundPath)
+        .set('Content-Type', 'application/json')
+        .set('x-life-clientkey', 'DY_CLIENT_TEST')
+        .set('x-life-sign', buildSpiSign(refundPath, refundBody))
+        .set('x-bytedance-logid', 'DY_SPI_BOOKING_REFUND_RESULT_LOG_001')
+        .send(refundBody);
+
+      expect(refundResponse.body).toEqual({ data: { error_code: 0, description: 'success' } });
+      const refundedBookingResult = await query(
+        `SELECT booking_status, refund_status, refund_log_id
+         FROM douyin_presale_booking_orders
+         WHERE ota_order_id = $1`,
+        [bookingOrderId]
+      );
+      expect(refundedBookingResult.rows[0]).toEqual(expect.objectContaining({
+        booking_status: 'REFUNDED',
+        refund_status: 'COMPLETED',
+        refund_log_id: 'DY_SPI_BOOKING_REFUND_RESULT_LOG_001'
+      }));
+      const refundedLocalOrderResult = await query(
+        `SELECT status FROM orders
+         WHERE id_source = $1 AND order_source = 'douyin_presale'`,
+        [bookingOrderId]
+      );
+      expect(refundedLocalOrderResult.rows).toEqual([{ status: 'cancelled' }]);
+      const notificationResult = await query(
+        `SELECT booking_order_id, refund_amount, user_refund_amount, match_status, douyin_log_id
+         FROM douyin_presale_refund_notifications
+         WHERE ota_order_id = $1`,
+        [bookingOrderId]
+      );
+      expect(notificationResult.rows).toEqual([expect.objectContaining({
+        booking_order_id: expect.any(Number),
+        refund_amount: 0,
+        user_refund_amount: 0,
+        match_status: 'MATCHED',
+        douyin_log_id: 'DY_SPI_BOOKING_REFUND_RESULT_LOG_001'
+      })]);
+    } finally {
+      await query('DELETE FROM douyin_presale_refund_notifications WHERE ota_order_id = $1', [bookingOrderId]);
+      await query("DELETE FROM orders WHERE id_source = $1 AND order_source = 'douyin_presale'", [bookingOrderId]);
+      await query('DELETE FROM douyin_presale_booking_orders WHERE ota_order_id = $1', [bookingOrderId]);
+      await query('DELETE FROM douyin_presale_orders WHERE ota_order_id = $1', [sourceOrderId]);
+    }
+  });
+
+  test('关闭自动确认时创建预约单不会调用确认接单接口', async () => {
+    const sourceOrderId = 'DY_PRESALE_BOOKING_TIMEOUT_SOURCE_001';
+    const bookingOrderId = 'DY_BOOKING_TIMEOUT_001';
+    const noConfirmScheduler = jest.fn();
+    const noConfirmApp = buildTestApp(redisClient, {
+      scheduleBookingConfirmation: noConfirmScheduler,
+      autoConfirmEnabled: false
+    });
+    await seedBookableData();
+    await query('DELETE FROM douyin_presale_booking_orders WHERE ota_order_id = $1', [bookingOrderId]);
+    await query('DELETE FROM douyin_presale_orders WHERE ota_order_id = $1', [sourceOrderId]);
+    await query(
+      `INSERT INTO douyin_presale_orders (order_id, ota_order_id, biz_type, order_stage, raw_payload)
+       VALUES ($1, $2, 2011, 'PAID', $3::jsonb)`,
+      ['DYPS_BOOKING_TIMEOUT_SOURCE_001', sourceOrderId, JSON.stringify({ order_id: sourceOrderId })]
+    );
+
+    try {
+      const body = JSON.stringify({
+        order_id: bookingOrderId,
+        source_order_id: sourceOrderId,
+        rate_plan_id: 'DY_RATE_BK_001',
+        hotel_id: 'DY_HOTEL_BK_001',
+        room_id: 'DY_ROOM_BK_001',
+        biz_type: 2012,
+        check_in_date: '2026-04-24',
+        check_out_date: '2026-04-25',
+        number_of_units: 1,
+        number_of_guests: 1,
+        total_amount: 39900,
+        daily_rates: [{ period_start_date: '2026-04-24', period_end_date: '2026-04-25', original_amount: 39900 }]
+      });
+      const requestPath = '/douyin/spi/presale-order/booking?client_key=DY_CLIENT_TEST&timestamp=1777000000001';
+      const response = await request(noConfirmApp)
+        .post(requestPath)
+        .set('Content-Type', 'application/json')
+        .set('x-life-clientkey', 'DY_CLIENT_TEST')
+        .set('x-life-sign', buildSpiSign(requestPath, body))
+        .set('x-bytedance-logid', 'DY_SPI_BOOKING_TIMEOUT_LOG_001')
+        .send(body);
+
+      expect(response.body.data.confirm_info.confirm_mode).toBe(2);
+      expect(noConfirmScheduler).not.toHaveBeenCalled();
+      const bookingResult = await query(
+        `SELECT booking_status, confirm_status, confirm_log_id
+         FROM douyin_presale_booking_orders WHERE ota_order_id = $1`,
+        [bookingOrderId]
+      );
+      expect(bookingResult.rows[0]).toEqual(expect.objectContaining({
+        booking_status: 'CREATED',
+        confirm_status: 'PENDING',
+        confirm_log_id: null
+      }));
+    } finally {
+      await query("DELETE FROM orders WHERE id_source = $1 AND order_source = 'douyin_presale'", [bookingOrderId]);
+      await query('DELETE FROM douyin_presale_booking_orders WHERE ota_order_id = $1', [bookingOrderId]);
+      await query('DELETE FROM douyin_presale_orders WHERE ota_order_id = $1', [sourceOrderId]);
+    }
+  });
+
   test('预售券取消订单验签后写入取消状态，相同 cancel_id 幂等成功', async () => {
     const localOrderId = 'DYPS_CANCEL_TEST_001';
     const douyinOrderId = 'DY_CANCEL_TEST_001';
@@ -954,6 +1147,47 @@ describe('抖音 Webhooks 与价量态 SPI', () => {
     } finally {
       await query('DELETE FROM douyin_presale_refund_notifications WHERE ota_order_id = $1', [douyinOrderId]);
       await query('DELETE FROM douyin_presale_orders WHERE order_id = $1', [localOrderId]);
+    }
+  });
+
+  test('预约单零金额退款未匹配本地订单时仍记录通知并成功响应', async () => {
+    const douyinOrderId = 'DY_BOOKING_REFUND_UNMATCHED_001';
+    await query('DELETE FROM douyin_presale_refund_notifications WHERE ota_order_id = $1', [douyinOrderId]);
+
+    try {
+      const body = JSON.stringify({
+        order_id: douyinOrderId,
+        refund_total_amount: 0,
+        refund_amount: 0,
+        user_refund_amount: 0,
+        biz_type: 2012,
+        refund_type: 11
+      });
+      const path = '/douyin/spi/presale-order/refund-result?client_key=DY_CLIENT_TEST&timestamp=1777000000000';
+      const response = await request(app)
+        .post(path)
+        .set('Content-Type', 'application/json')
+        .set('x-life-clientkey', 'DY_CLIENT_TEST')
+        .set('x-life-sign', buildSpiSign(path, body))
+        .set('x-bytedance-logid', 'DY_SPI_BOOKING_REFUND_UNMATCHED_LOG_001')
+        .send(body);
+
+      expect(response.body).toEqual({ data: { error_code: 0, description: 'success' } });
+      const notificationResult = await query(
+        `SELECT booking_order_id, refund_amount, user_refund_amount, match_status, douyin_log_id
+         FROM douyin_presale_refund_notifications
+         WHERE ota_order_id = $1`,
+        [douyinOrderId]
+      );
+      expect(notificationResult.rows).toEqual([expect.objectContaining({
+        booking_order_id: null,
+        refund_amount: 0,
+        user_refund_amount: 0,
+        match_status: 'ORDER_NOT_FOUND',
+        douyin_log_id: 'DY_SPI_BOOKING_REFUND_UNMATCHED_LOG_001'
+      })]);
+    } finally {
+      await query('DELETE FROM douyin_presale_refund_notifications WHERE ota_order_id = $1', [douyinOrderId]);
     }
   });
 

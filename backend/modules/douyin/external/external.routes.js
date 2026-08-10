@@ -7,6 +7,9 @@ const webhookService = require('./webhook.service');
 const priceVolumeService = require('../availability/priceVolume.service');
 const bookableCheckService = require('../availability/bookableCheck.service');
 const presaleOrderService = require('../presale-order/presaleOrder.service');
+const bookingOrderService = require('../presale-order/bookingOrder.service');
+const bookingConfirmService = require('../presale-order/bookingConfirm.service');
+const { douyinConfig } = require('../../../appSettings/douyin.config');
 const paymentNoticeService = require('../presale-order/paymentNotice.service');
 const cancelOrderService = require('../presale-order/cancelOrder.service');
 const refundResultService = require('../presale-order/refundResult.service');
@@ -79,6 +82,21 @@ function summarizePresalePaymentNotice(payload = {}) {
   };
 }
 
+/** 提取创建预约排障字段，不把联系人和入住人信息写入运行日志。 */
+function summarizePresaleBookingRequest(payload = {}) {
+  return {
+    douyinOrderId: payload.order_id || '',
+    sourceOrderId: payload.source_order_id || '',
+    ratePlanId: payload.rate_plan_id || '',
+    roomId: payload.room_id || '',
+    bizType: payload.biz_type || '',
+    checkInDate: payload.check_in_date || '',
+    checkOutDate: payload.check_out_date || '',
+    numberOfUnits: payload.number_of_units || '',
+    totalAmount: payload.total_amount || ''
+  };
+}
+
 /** 提取预售券退款结果排障字段，避免记录退款原因和间夜明细。 */
 function summarizePresaleRefundResult(payload = {}) {
   return {
@@ -127,6 +145,8 @@ async function getRedisClient(redisProvider) {
 function createDouyinExternalRouter(options = {}) {
   const router = express.Router();
   const redisProvider = options.redisProvider || redisDb;
+  const scheduleBookingConfirmation = options.scheduleBookingConfirmation || bookingConfirmService.scheduleBookingConfirmation;
+  const autoConfirmEnabled = options.autoConfirmEnabled ?? douyinConfig.autoConfirmEnabled;
 
   router.post('/webhooks', async (req, res) => {
     const headerLogId = getHeader(req, 'x-bytedance-logid');
@@ -371,6 +391,76 @@ function createDouyinExternalRouter(options = {}) {
       const errorCode = Number(error.douyinErrorCode) || 13;
       console.error('[Douyin SPI] 预售创单失败:', { logId, ...summary, errorCode, error: error.message });
       await saveCallbackLog({ type: 'spi_presale_order_create', stage: 'error', logId, ...summary, errorCode, error: error.message });
+      return res.status(200).json({
+        data: { error_code: errorCode, description: error.message, order_id: summary.douyinOrderId }
+      });
+    }
+  });
+
+  /** 接收抖音预售券预约单创建请求，并按异步接单模式返回。 */
+  router.post('/spi/presale-order/booking', async (req, res) => {
+    const logId = getHeader(req, 'x-bytedance-logid');
+    const summary = summarizePresaleBookingRequest(req.body || {});
+    try {
+      if (!signatureService.verifySpiSignature(req)) {
+        console.warn('[Douyin SPI] 预售预约创单签名校验失败:', { logId, ...summary });
+        await saveCallbackLog({ type: 'spi_presale_booking_create', stage: 'signature_failed', logId, ...summary });
+        return res.status(401).json({ message: '抖音 SPI 签名校验失败' });
+      }
+      const result = await bookingOrderService.createBooking(req.body || {}, {
+        logId,
+        accountId: getHeader(req, 'x-life-clientkey')
+      });
+      console.log('[Douyin SPI] 预售预约订单已创建，等待确认接单:', {
+        logId,
+        ...summary,
+        localOrderId: result.localOrderId,
+        duplicate: result.duplicate
+      });
+      await saveCallbackLog({
+        type: 'spi_presale_booking_create',
+        stage: result.duplicate ? 'duplicate' : 'processed',
+        logId,
+        ...summary,
+        localOrderId: result.localOrderId
+      });
+      res.status(200).json({
+        data: {
+          error_code: 0,
+          description: 'success',
+          order_id: result.douyinOrderId,
+          order_out_id: result.localOrderId,
+          confirm_info: {
+            hotel_confirm_number: result.confirmNumber,
+            confirm_mode: 2
+          }
+        }
+      });
+
+      // 响应成功后再确认接单，抖音才能将预约单保持在待接单状态。
+      if (result.needsConfirmation) {
+        if (autoConfirmEnabled) {
+          scheduleBookingConfirmation(result.localOrderId);
+        } else {
+          console.warn('[Douyin Presale Booking] 已跳过确认接单（超时联调）:', {
+            logId,
+            douyinOrderId: result.douyinOrderId,
+            localOrderId: result.localOrderId,
+            confirmNumber: result.confirmNumber
+          });
+          await saveCallbackLog({
+            type: 'spi_presale_booking_create',
+            stage: 'confirm_skipped_for_timeout_test',
+            logId,
+            ...summary,
+            localOrderId: result.localOrderId
+          });
+        }
+      }
+    } catch (error) {
+      const errorCode = Number(error.douyinErrorCode) || 13;
+      console.error('[Douyin SPI] 预售预约创单失败:', { logId, ...summary, errorCode, error: error.message });
+      await saveCallbackLog({ type: 'spi_presale_booking_create', stage: 'error', logId, ...summary, errorCode, error: error.message });
       return res.status(200).json({
         data: { error_code: errorCode, description: error.message, order_id: summary.douyinOrderId }
       });

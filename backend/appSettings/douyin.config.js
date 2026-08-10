@@ -5,7 +5,8 @@ const douyinConfig = {
   accountId: process.env.DOUYIN_ACCOUNT_ID || '',
   openApiBaseUrl: process.env.DOUYIN_OPENAPI_BASE_URL || 'https://open.douyin.com',
   tokenPath: '/oauth/client_token/',
-  autoConfirmEnabled: process.env.DOUYIN_AUTO_CONFIRM_ENABLED === 'true',
+  // 默认自动确认；仅联调超时未接单时显式设置为 false。
+  autoConfirmEnabled: process.env.DOUYIN_AUTO_CONFIRM_ENABLED !== 'false',
   poiId: process.env.DOUYIN_POI_ID || '',
 }
 

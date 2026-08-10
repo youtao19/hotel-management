@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const { getClient } = require('../../../database/postgreDB/pg');
 const repository = require('./presaleOrder.repository');
+const bookingRepository = require('./bookingOrder.repository');
 
 /** 创建预售券退款结果通知业务错误。 */
 function createRefundResultError(message) {
@@ -40,7 +41,7 @@ function stableSerialize(value) {
 function normalizeRefundResult(payload = {}) {
   const bizType = Number(payload.biz_type);
   const refundType = Number(payload.refund_type);
-  if (bizType !== 2011 || ![11, 12, 21, 22].includes(refundType)) {
+  if (![2011, 2012].includes(bizType) || ![11, 12, 21, 22].includes(refundType)) {
     throw createRefundResultError('预售券退款结果通知参数不合法');
   }
 
@@ -54,6 +55,7 @@ function normalizeRefundResult(payload = {}) {
   }
 
   return {
+    bizType,
     douyinOrderId: String(payload.order_id || '').trim(),
     localOrderId: String(payload.order_out_id || '').trim(),
     refundTotalAmount: normalizeOptionalCents(payload.refund_total_amount, 'refund_total_amount'),
@@ -79,8 +81,9 @@ async function recordRefundResult(payload, options = {}) {
   try {
     client = await getClient();
     await client.query('BEGIN');
-    const byDouyinOrderId = notice.douyinOrderId ? await repository.findByDouyinOrderId(notice.douyinOrderId, client) : null;
-    const byLocalOrderId = notice.localOrderId ? await repository.findByLocalOrderId(notice.localOrderId, client) : null;
+    const orderRepository = notice.bizType === 2012 ? bookingRepository : repository;
+    const byDouyinOrderId = notice.douyinOrderId ? await orderRepository.findByDouyinOrderId(notice.douyinOrderId, client) : null;
+    const byLocalOrderId = notice.localOrderId ? await orderRepository.findByLocalOrderId(notice.localOrderId, client) : null;
     const orderConflict = byDouyinOrderId && byLocalOrderId && byDouyinOrderId.id !== byLocalOrderId.id;
     const order = orderConflict ? null : (byDouyinOrderId || byLocalOrderId);
     const matchStatus = orderConflict ? 'ORDER_CONFLICT' : (order ? 'MATCHED' : 'ORDER_NOT_FOUND');
@@ -88,12 +91,20 @@ async function recordRefundResult(payload, options = {}) {
       ...notice,
       logId: options.logId || null,
       rawPayload: payload,
-      presaleOrderId: order?.id || null,
+      presaleOrderId: notice.bizType === 2011 ? order?.id || null : null,
+      bookingOrderId: notice.bizType === 2012 ? order?.id || null : null,
       matchStatus
     }, client);
 
     // 只有首次、且定位无冲突的通知能推进订单退款状态。
-    if (inserted && order) await repository.markRefundCompleted(order.id, options.logId || null, client);
+    if (inserted && order) {
+      if (notice.bizType === 2012) {
+        const isFullRefund = [11, 21].includes(notice.refundType);
+        await bookingRepository.markRefundCompleted(order, options.logId || null, isFullRefund, client);
+      } else {
+        await repository.markRefundCompleted(order.id, options.logId || null, client);
+      }
+    }
 
     await client.query('COMMIT');
     return { ...notice, orderFound: Boolean(order), orderConflict, duplicate: !inserted, matchStatus };

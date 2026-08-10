@@ -8,6 +8,7 @@ const tables = [
   'plugin_room_type_mapping',
   'douyin_orders',
   'douyin_presale_refund_notifications',
+  'douyin_presale_booking_orders',
   'douyin_presale_orders',
   'ota_channel_mappings',
   'douyin_calendar_room_prices',

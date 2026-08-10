@@ -65,15 +65,14 @@ function normalizeClientSecret(secret) {
 function decryptValue(value) {
   const encrypted = String(value || '').trim();
   if (!encrypted) return '';
-  if (encrypted.startsWith('Enc.')) {
-    throw createOrderError('联系人信息为 Enc. 密文，本地解密不支持', 6);
-  }
+  // 抖音在线加密字段会带 Enc. 前缀，AES 解密只使用其后的 Base64 密文。
+  const cipherText = encrypted.startsWith('Enc.') ? encrypted.slice(4) : encrypted;
   const secret = String(process.env.DOUYIN_CLIENT_SECRET || '');
   if (!secret) throw createOrderError('未配置抖音 client_secret，无法解密联系人信息', 13);
   const key = normalizeClientSecret(secret);
   try {
     const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(key, 'utf8'), Buffer.from(key.slice(-16), 'utf8'));
-    return Buffer.concat([decipher.update(Buffer.from(encrypted, 'base64')), decipher.final()]).toString('utf8');
+    return Buffer.concat([decipher.update(Buffer.from(cipherText, 'base64')), decipher.final()]).toString('utf8');
   } catch (error) {
     throw createOrderError('联系人信息解密失败', 6);
   }

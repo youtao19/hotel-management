@@ -148,21 +148,21 @@ async function markRefundPending(orderId, cancellation, rawPayload, logId) {
 async function insertRefundNotification(notification, client) {
   const result = await client.query(
     `INSERT INTO douyin_presale_refund_notifications (
-       presale_order_id, ota_order_id, order_out_id,
+       presale_order_id, booking_order_id, ota_order_id, order_out_id,
        refund_total_amount, refund_amount, user_refund_amount, refund_time_unix,
        currency, refund_type, audit_user_type, applicant_type, need_third_cancel,
        refund_reason, refund_order_detail, payload_hash, douyin_log_id,
        match_status, raw_payload
      ) VALUES (
-       $1, $2, $3,
-       $4, $5, $6, $7,
-       $8, $9, $10, $11, $12,
-       $13, $14::jsonb, $15, $16,
-       $17, $18::jsonb
+       $1, $2, $3, $4,
+       $5, $6, $7, $8,
+       $9, $10, $11, $12, $13,
+       $14, $15::jsonb, $16, $17,
+       $18, $19::jsonb
      ) ON CONFLICT (payload_hash) DO NOTHING
      RETURNING id`,
     [
-      notification.presaleOrderId, notification.douyinOrderId || null, notification.localOrderId || null,
+      notification.presaleOrderId, notification.bookingOrderId, notification.douyinOrderId || null, notification.localOrderId || null,
       notification.refundTotalAmount, notification.refundAmount, notification.userRefundAmount, notification.refundTimeUnix,
       notification.currency, notification.refundType, notification.auditUserType, notification.applicantType, notification.needThirdCancel,
       notification.refundReason, JSON.stringify(notification.refundOrderDetail), notification.payloadHash, notification.logId,
