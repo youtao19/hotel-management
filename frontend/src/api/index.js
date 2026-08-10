@@ -203,6 +203,12 @@ export const ratePlanApi = {
 
   syncCalendarRoomStock: (id, payload) => api.post(`/rate-plans/${id}/douyin/calendar-room/stock/sync`, payload),
 
+  closeStayDate: (id, payload) => api.post(`/rate-plans/${id}/douyin/stay-date-closures`, payload),
+
+  getStayDateClosures: (id) => api.get(`/rate-plans/${id}/douyin/stay-date-closures`),
+
+  openStayDate: (id, stayDate) => api.delete(`/rate-plans/${id}/douyin/stay-date-closures/${stayDate}`),
+
   notifyDouyinAri: (payload) => api.post('/douyin/ari-notify', payload),
 
   deleteRatePlan: (id) => api.delete(`/rate-plans/${id}`)

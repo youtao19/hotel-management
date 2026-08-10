@@ -229,6 +229,10 @@
                     <q-item-section avatar><q-icon name="inventory_2" color="indigo-7" /></q-item-section>
                     <q-item-section>手动补推房量房态</q-item-section>
                   </q-item>
+                  <q-item v-if="props.row.is_synced" v-close-popup clickable @click="promptCloseStayDate(props.row)">
+                    <q-item-section avatar><q-icon name="event_busy" color="negative" /></q-item-section>
+                    <q-item-section>管理指定日期房态</q-item-section>
+                  </q-item>
                   <q-separator inset class="q-my-xs" />
                   <q-item v-close-popup clickable class="action-menu-delete" @click="confirmDelete(props.row)">
                     <q-item-section avatar><q-icon name="delete_outline" color="negative" /></q-item-section>
@@ -668,6 +672,36 @@
       </q-card>
     </q-dialog>
 
+    <q-dialog v-model="stayDateClosureDialogOpen" persistent>
+      <q-card class="stay-date-closure-dialog">
+        <q-card-section class="closure-hero">
+          <div class="closure-hero-icon"><q-icon name="event_busy" size="25px" /></div>
+          <div>
+            <div class="text-h6">指定日期关房</div>
+            <div class="text-caption">只影响所选入住日期，不会停用整个套餐</div>
+          </div>
+          <q-space />
+          <q-btn flat round icon="close" aria-label="关闭日期房态管理窗口" @click="stayDateClosureDialogOpen = false" />
+        </q-card-section>
+        <q-card-section class="dialog-body q-gutter-y-md">
+          <div class="closure-plan-name">{{ stayDateClosurePlan?.name || '--' }}</div>
+          <div class="closure-tip"><q-icon name="info" size="18px" /> 手机预约命中关房日期时，抖音可订检查会返回错误码 18。</div>
+          <div class="row q-col-gutter-sm items-end">
+            <div class="col"><q-input v-model="stayDateToClose" type="date" label="入住日期" outlined dense /></div>
+            <div class="col-auto"><q-btn color="negative" icon="event_busy" label="关闭当天" :loading="stayDateClosureSaving" @click="closeStayDate" /></div>
+          </div>
+          <div>
+            <div class="text-caption text-grey-7 q-mb-sm">已关闭日期</div>
+            <div v-if="stayDateClosures.length" class="closure-chip-list">
+              <q-chip v-for="stayDate in stayDateClosures" :key="stayDate" removable color="red-1" text-color="red-9" remove-icon="restart_alt" @remove="openStayDate(stayDate)">{{ stayDate }}</q-chip>
+            </div>
+            <div v-else class="closure-empty">暂无主动关房日期</div>
+          </div>
+        </q-card-section>
+        <q-card-actions align="right"><q-btn flat label="完成" color="grey-8" @click="stayDateClosureDialogOpen = false" /></q-card-actions>
+      </q-card>
+    </q-dialog>
+
     <!-- 售卖规则卡片详情子弹窗 -->
     <q-dialog v-model="ruleDetailDialogOpen">
       <q-card style="width: 400px; max-width: 90vw; border-radius: 12px;">
@@ -826,6 +860,11 @@ const stockSyncDialogOpen = ref(false)
 const stockSyncSubmitting = ref(false)
 const stockSyncPlan = ref(null)
 const stockSyncRange = ref({ startDate: '', endDate: '' })
+const stayDateClosureDialogOpen = ref(false)
+const stayDateClosurePlan = ref(null)
+const stayDateToClose = ref('')
+const stayDateClosures = ref([])
+const stayDateClosureSaving = ref(false)
 
 // 抖音渠道开关状态及 JSON 面板折叠状态
 const douyinChannelEnabled = ref(true)
@@ -1299,6 +1338,50 @@ function openStockSyncDialog(plan) {
   stockSyncDialogOpen.value = true
 }
 
+/** 关闭套餐指定入住日期，供抖音可订检查返回房态关闭。 */
+function promptCloseStayDate(plan) {
+  stayDateClosurePlan.value = plan
+  stayDateToClose.value = formatLocalDate(new Date())
+  stayDateClosures.value = []
+  stayDateClosureDialogOpen.value = true
+  loadStayDateClosures()
+}
+
+/** 读取当前套餐已关闭的日期。 */
+async function loadStayDateClosures() {
+  if (!stayDateClosurePlan.value) return
+  try {
+    const response = await ratePlanApi.getStayDateClosures(stayDateClosurePlan.value.id)
+    stayDateClosures.value = response.data || []
+  } catch (error) {
+    $q.notify({ type: 'negative', message: getErrorMessage(error, '读取关房日期失败') })
+  }
+}
+
+/** 关闭选定房晚。 */
+async function closeStayDate() {
+  if (!stayDateToClose.value || !stayDateClosurePlan.value) return
+  stayDateClosureSaving.value = true
+  try {
+    await ratePlanApi.closeStayDate(stayDateClosurePlan.value.id, { stayDate: stayDateToClose.value })
+    await loadStayDateClosures()
+    $q.notify({ type: 'positive', message: `${stayDateToClose.value} 已关房` })
+  } catch (error) {
+    $q.notify({ type: 'negative', message: getErrorMessage(error, '关闭日期房态失败') })
+  } finally { stayDateClosureSaving.value = false }
+}
+
+/** 恢复指定房晚的可售状态。 */
+async function openStayDate(stayDate) {
+  try {
+    await ratePlanApi.openStayDate(stayDateClosurePlan.value.id, stayDate)
+    await loadStayDateClosures()
+    $q.notify({ type: 'positive', message: `${stayDate} 已恢复可售` })
+  } catch (error) {
+    $q.notify({ type: 'negative', message: getErrorMessage(error, '恢复日期房态失败') })
+  }
+}
+
 /** 设置房量房态补推的快捷日期范围。 */
 function setStockSyncDays(days) {
   const start = new Date()
@@ -1473,6 +1556,13 @@ onActivated(refreshAll)
 </script>
 
 <style scoped>
+.stay-date-closure-dialog { width: 520px; max-width: 94vw; border-radius: 16px; overflow: hidden; }
+.closure-hero { display: flex; align-items: center; gap: 12px; color: #fff; background: linear-gradient(135deg, #b42318, #ef4444); }
+.closure-hero-icon { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 12px; background: rgba(255,255,255,.18); }
+.closure-plan-name { font-weight: 700; color: #1f2937; }
+.closure-tip { display: flex; gap: 8px; align-items: center; padding: 10px 12px; border-radius: 8px; color: #9f1239; background: #fff1f2; font-size: 13px; }
+.closure-chip-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.closure-empty { padding: 14px; border: 1px dashed #d1d5db; border-radius: 8px; color: #9ca3af; text-align: center; font-size: 13px; }
 .rate-plan-page {
   --surface: #ffffff;
   --surface-muted: #f4f7f6;

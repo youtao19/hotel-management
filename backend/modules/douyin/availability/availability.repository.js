@@ -88,6 +88,40 @@ async function findRatePlanByDouyinId(ratePlanId) {
   return result.rows[0] || null;
 }
 
+/** 查询套餐在指定房晚的日历房最新价格。 */
+async function findCalendarRoomPrices(ratePlanId, dates) {
+  if (!ratePlanId || !dates.length) {
+    return [];
+  }
+
+  const result = await db.query(
+    `
+      SELECT
+        to_char(stay_date, 'YYYY-MM-DD') AS stay_date,
+        original_amount
+      FROM douyin_calendar_room_prices
+      WHERE rate_plan_id = $1
+        AND stay_date = ANY($2::date[])
+      ORDER BY stay_date
+    `,
+    [ratePlanId, dates]
+  );
+
+  return result.rows;
+}
+
+/** 查询套餐指定房晚是否被主动关房。 */
+async function findClosedStayDates(ratePlanId, dates) {
+  if (!ratePlanId || !dates.length) return [];
+  const result = await db.query(
+    `SELECT to_char(stay_date, 'YYYY-MM-DD') AS stay_date
+     FROM douyin_rate_plan_closures
+     WHERE rate_plan_id = $1 AND stay_date = ANY($2::date[])`,
+    [ratePlanId, dates]
+  );
+  return result.rows.map((row) => row.stay_date);
+}
+
 /** 查询指定本地房型已同步的抖音售卖套餐。 */
 async function findSyncedRatePlansByRoomType(roomTypeCode) {
   const result = await db.query(
@@ -218,6 +252,8 @@ async function findAriNotifyRatePlans(localRatePlanIds) {
 }
 
 module.exports = {
+  findCalendarRoomPrices,
+  findClosedStayDates,
   findAriNotifyRatePlans,
   findRatePlanByDouyinId,
   findSyncedRatePlansByRoomType,

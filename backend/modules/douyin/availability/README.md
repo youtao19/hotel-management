@@ -1,5 +1,18 @@
 # 抖音价量态能力
 
+## 可订检查 SPI
+
+`POST /douyin/spi/bookable` 根据抖音官方定义的 `biz_type` 动态校验价格和库存：
+
+- `biz_type=2011`：预售券，按本地套餐 `base_price` 校验整单金额。
+- `biz_type=2012`：酒店预约单，按本地套餐 `base_price` 校验整单金额。
+- `biz_type=2021`：日历房，按 `douyin_calendar_room_prices` 中入住期间每晚的最新 `original_amount` 累加校验整单金额；任一房晚未维护价格时返回 `error_code=13`，不使用套餐基础价替代。
+- 其他值返回 `error_code=13`，不会把未知业务类型按任一既有规则放行。
+
+价格与抖音传入 `total_amount`（单位分）不一致时，返回 `error_code=8`，并在 `data.ari.stock_and_amount[]` 回传对应房晚的最新 `original_amount`（单位分）。库存不足返回 `error_code=4`，同样回传最新价量态。
+
+`POST /api/rate-plans/:id/douyin/stay-date-closures` 传入 `{ "stayDate": "YYYY-MM-DD" }` 可主动关闭该套餐指定房晚。套餐仍有效但命中关房日期时，可订检查返回 `error_code=18` 并回传 `available=false`；取消关房使用 `DELETE /api/rate-plans/:id/douyin/stay-date-closures/:stayDate`。
+
 ## 房量房态主动推送
 
 - 官方接口：[房量房态推送接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/housing-updates/room-status-api)

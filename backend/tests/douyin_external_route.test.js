@@ -152,6 +152,7 @@ async function seedPriceVolumeData() {
 async function seedBookableData() {
   await query("DELETE FROM orders WHERE room_type = 'BK_TEST'");
   await query("DELETE FROM ota_channel_mappings WHERE channel_item_id LIKE 'DY_RATE_BK_%'");
+  await query("DELETE FROM douyin_calendar_room_prices WHERE rate_plan_id IN (SELECT id FROM rate_plans WHERE room_type_code = 'BK_TEST')");
   await query("DELETE FROM rate_plans WHERE room_type_code = 'BK_TEST'");
   await query("DELETE FROM douyin_room_type_mapping WHERE local_room_type = 'BK_TEST'");
   await query("DELETE FROM douyin_physical_rooms WHERE room_id = 'DY_ROOM_BK_001'");
@@ -215,6 +216,8 @@ async function seedBookableData() {
     `,
     ['BK_ORDER_001', 'manual', '可订检查客人', 'BK_TEST', 'BK101', '2026-04-24', '2026-04-25', '2026-04-24', 'pending', 399]
   );
+
+  return ratePlanResult.rows[0].id;
 }
 
 describe('抖音 Webhooks 与价量态 SPI', () => {
@@ -630,6 +633,67 @@ describe('抖音 Webhooks 与价量态 SPI', () => {
       room_id: 'DY_ROOM_BK_001',
       rate_plan_id: 'DY_RATE_BK_001',
       original_amount: 39900,
+      available: true,
+      inventory: 1
+    });
+  });
+
+  test('酒店预约单可订检查按套餐价格返回 error_code 8', async () => {
+    await seedBookableData();
+
+    const body = JSON.stringify({
+      rate_plan_id: 'DY_RATE_BK_001',
+      biz_type: 2012,
+      check_in_date: '2026-04-24',
+      check_out_date: '2026-04-25',
+      number_of_units: 1,
+      total_amount: 39800
+    });
+    const path = '/douyin/spi/bookable?client_key=DY_CLIENT_TEST&timestamp=1777000000000';
+
+    const response = await request(app)
+      .post(path)
+      .set('Content-Type', 'application/json')
+      .set('x-life-clientkey', 'DY_CLIENT_TEST')
+      .set('x-life-sign', buildSpiSign(path, body))
+      .send(body);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.data.error_code).toBe(8);
+    expect(response.body.data.ari.stock_and_amount[0]).toMatchObject({ original_amount: 39900 });
+  });
+
+  test('日历房可订检查按最新日历房价返回 error_code 8', async () => {
+    const localRatePlanId = await seedBookableData();
+    await query(
+      `
+        INSERT INTO douyin_calendar_room_prices (rate_plan_id, stay_date, original_amount)
+        VALUES ($1, $2, $3)
+      `,
+      [localRatePlanId, '2026-04-24', 398]
+    );
+
+    const body = JSON.stringify({
+      rate_plan_id: 'DY_RATE_BK_001',
+      biz_type: 2021,
+      check_in_date: '2026-04-24',
+      check_out_date: '2026-04-25',
+      number_of_units: 1,
+      total_amount: 39700
+    });
+    const path = '/douyin/spi/bookable?client_key=DY_CLIENT_TEST&timestamp=1777000000000';
+
+    const response = await request(app)
+      .post(path)
+      .set('Content-Type', 'application/json')
+      .set('x-life-clientkey', 'DY_CLIENT_TEST')
+      .set('x-life-sign', buildSpiSign(path, body))
+      .send(body);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.data.error_code).toBe(8);
+    expect(response.body.data.ari.stock_and_amount[0]).toMatchObject({
+      original_amount: 39800,
       available: true,
       inventory: 1
     });

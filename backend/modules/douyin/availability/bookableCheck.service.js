@@ -4,19 +4,32 @@ const availabilityRepository = require('./availability.repository');
 
 const ACTIVE_ORDER_STATUSES = ['pending', 'reserved', 'checked-in', 'occupied'];
 const MAX_STAY_NIGHTS = 366;
+const PRESALE_BIZ_TYPE = '2011';
+const RESERVATION_BIZ_TYPE = '2012';
+const CALENDAR_ROOM_BIZ_TYPE = '2021';
 
-function createBusinessError(message, errorCode = 13, row = null, dates = [], inventoryMap = new Map()) {
+function createBusinessError(message, errorCode = 13, row = null, dates = [], inventoryMap = new Map(), amountMap = new Map(), closedDates = new Set()) {
   const error = new Error(message);
   // 失败时仍要带回当前价量态，方便抖音侧同步修正库存或价格，不能只返回错误码。
   error.douyinErrorCode = errorCode;
   error.row = row;
   error.dates = dates;
   error.inventoryMap = inventoryMap;
+  error.amountMap = amountMap;
+  error.closedDates = closedDates;
   return error;
 }
 
 function normalizeString(value) {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+/** 兼容抖音以数字或字符串传入业务类型。 */
+function normalizeBizType(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value);
+  }
+  return normalizeString(value);
 }
 
 function normalizePositiveInteger(value, fallback = 0) {
@@ -96,7 +109,7 @@ function amountYuanToCents(value) {
 
 function normalizeRequest(payload = {}) {
   const ratePlanId = normalizeString(payload.rate_plan_id || payload.ratePlanId);
-  const bizType = normalizeString(payload.biz_type || payload.bizType);
+  const bizType = normalizeBizType(payload.biz_type || payload.bizType);
   const checkInDate = normalizeString(payload.check_in_date || payload.checkInDate);
   const checkOutDate = normalizeString(payload.check_out_date || payload.checkOutDate);
   const numberOfUnits = normalizePositiveInteger(payload.number_of_units || payload.numberOfUnits, 1);
@@ -106,18 +119,13 @@ function normalizeRequest(payload = {}) {
     throw createBusinessError('缺少售卖计划ID', 13);
   }
 
-  if (bizType && bizType !== '2011') {
-    // 当前只验收预售券提单页可订检查，其他住宿交易类型先明确拒绝，避免误放行。
-    throw createBusinessError('当前仅支持预售券可订检查 biz_type=2011', 13);
-  }
-
   if (!Number.isFinite(totalAmount) || totalAmount < 0) {
     throw createBusinessError('发单价格格式错误', 13);
   }
 
   return {
     ratePlanId,
-    bizType: bizType || '2011',
+    bizType: bizType || PRESALE_BIZ_TYPE,
     checkInDate,
     checkOutDate,
     numberOfUnits,
@@ -152,12 +160,35 @@ async function getInventoryMap(roomTypeCode, dates) {
   return inventoryMap;
 }
 
-function buildStockAndAmount(row, dates, inventoryMap) {
+/** 按抖音业务类型读取本次可订检查应回传的最新房价。 */
+async function getAmountMap(row, request) {
+  if ([PRESALE_BIZ_TYPE, RESERVATION_BIZ_TYPE].includes(request.bizType)) {
+    return new Map(request.dates.map((date) => [date.start, amountYuanToCents(row.base_price)]));
+  }
+
+  if (request.bizType !== CALENDAR_ROOM_BIZ_TYPE) {
+    throw createBusinessError(`不支持的抖音业务类型 biz_type=${request.bizType}`, 13, row, request.dates);
+  }
+
+  const prices = await availabilityRepository.findCalendarRoomPrices(
+    row.local_rate_plan_id,
+    request.dates.map((date) => date.start)
+  );
+  const amountMap = new Map(prices.map((price) => [price.stay_date, amountYuanToCents(price.original_amount)]));
+  const missingDate = request.dates.find((date) => !amountMap.has(date.start));
+  if (missingDate) {
+    throw createBusinessError(`缺少 ${missingDate.start} 的最新日历房价格`, 13, row, request.dates);
+  }
+
+  return amountMap;
+}
+
+/** 组装失败时必须回传给抖音的最新价量态。 */
+function buildStockAndAmount(row, dates, inventoryMap, amountMap, closedDates = new Set()) {
   if (!row) {
     return [];
   }
 
-  const amount = amountYuanToCents(row.base_price);
   // 可订失败时返回的是抖音物理房型和售卖计划，不暴露本地 rooms.room_id。
   const isActive = Number(row.rate_plan_status) === 1
     && !row.room_type_closed
@@ -174,16 +205,22 @@ function buildStockAndAmount(row, dates, inventoryMap) {
         start: date.start,
         end: date.end
       },
-      original_amount: amount,
+      original_amount: amountMap.get(date.start) || 0,
       currency: row.currency || 'CNY',
-      available: isActive && inventory > 0,
+      available: isActive && !closedDates.has(date.start) && inventory > 0,
       inventory
     };
   });
 }
 
 function buildFailureResponse(error) {
-  const stockAndAmount = buildStockAndAmount(error.row, error.dates || [], error.inventoryMap || new Map());
+  const stockAndAmount = buildStockAndAmount(
+    error.row,
+    error.dates || [],
+    error.inventoryMap || new Map(),
+    error.amountMap || new Map(),
+    error.closedDates || new Set()
+  );
 
   const response = {
     error_code: Number(error.douyinErrorCode || 13),
@@ -216,17 +253,28 @@ async function buildBookableCheckResponse(payload = {}) {
     }
 
     const inventoryMap = await getInventoryMap(row.room_type_code, request.dates);
-    const stockAndAmount = buildStockAndAmount(row, request.dates, inventoryMap);
+    const amountMap = await getAmountMap(row, request);
+    const closedDates = new Set(await availabilityRepository.findClosedStayDates(
+      row.local_rate_plan_id,
+      request.dates.map((date) => date.start)
+    ));
+    const stockAndAmount = buildStockAndAmount(row, request.dates, inventoryMap, amountMap, closedDates);
+    if (closedDates.size) {
+      throw createBusinessError('入住日期房态已关闭', 18, row, request.dates, inventoryMap, amountMap, closedDates);
+    }
     const hasEnoughInventory = stockAndAmount.every((item) => item.inventory >= request.numberOfUnits && item.available);
 
     if (!hasEnoughInventory) {
-      throw createBusinessError('入住时期内已满', 4, row, request.dates, inventoryMap);
+      throw createBusinessError('入住时期内已满', 4, row, request.dates, inventoryMap, amountMap);
     }
 
-    // 抖音传的是整单金额（分），这里按房晚数和间数校验，避免多晚/多间订单只比单价。
-    const expectedTotalAmount = amountYuanToCents(row.base_price) * request.dates.length * request.numberOfUnits;
+    // 抖音传的是整单金额（分）；日历房累加逐日价，预售券和预约单使用套餐价格。
+    const expectedTotalAmount = request.dates.reduce(
+      (total, date) => total + amountMap.get(date.start),
+      0
+    ) * request.numberOfUnits;
     if (expectedTotalAmount !== request.totalAmount) {
-      throw createBusinessError('价格与酒店实际价格不一致', 8, row, request.dates, inventoryMap);
+      throw createBusinessError('价格与酒店实际价格不一致', 8, row, request.dates, inventoryMap, amountMap);
     }
 
     return {

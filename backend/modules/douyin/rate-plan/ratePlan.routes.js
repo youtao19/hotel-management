@@ -52,9 +52,17 @@ const syncDouyinRatePlanSchema = {
   additionalProperties: false
 };
 
+const stayDateSchema = {
+  type: 'object',
+  properties: { stayDate: { type: 'string', format: 'date' } },
+  required: ['stayDate'],
+  additionalProperties: false
+};
+
 const validateCreateRatePlan = ajv.compile(createRatePlanSchema);
 const validateUpdateRatePlan = ajv.compile(updateRatePlanSchema);
 const validateSyncDouyinRatePlan = ajv.compile(syncDouyinRatePlanSchema);
+const validateStayDate = ajv.compile(stayDateSchema);
 
 function getValidationMessage(errors) {
   return (errors || [])
@@ -325,6 +333,41 @@ router.get('/:id', async (req, res) => {
 
 // 挂载日历房专属路由。
 router.use('/:id/douyin/calendar-room', calendarRoomRoute);
+
+/** 查询套餐已主动关闭的入住日期。 */
+router.get('/:id/douyin/stay-date-closures', async (req, res) => {
+  const id = parseId(req.params.id);
+  if (!id) return res.status(400).json({ message: '套餐ID格式错误' });
+  const result = await query(
+    `SELECT to_char(stay_date, 'YYYY-MM-DD') AS stay_date
+     FROM douyin_rate_plan_closures WHERE rate_plan_id = $1 ORDER BY stay_date`,
+    [id]
+  );
+  res.status(200).json({ data: result.rows.map((row) => row.stay_date) });
+});
+
+/** 主动关闭套餐指定房晚，供抖音可订检查返回日历房态关闭。 */
+router.post('/:id/douyin/stay-date-closures', async (req, res) => {
+  const id = parseId(req.params.id);
+  if (!id || !validateStayDate(req.body || {})) return res.status(400).json({ message: '入住日期必须为 YYYY-MM-DD' });
+  const plan = await findRatePlanById(id);
+  if (!plan) return res.status(404).json({ message: '售卖套餐不存在' });
+  await query(
+    `INSERT INTO douyin_rate_plan_closures (rate_plan_id, stay_date) VALUES ($1, $2)
+     ON CONFLICT (rate_plan_id, stay_date) DO NOTHING`,
+    [id, req.body.stayDate]
+  );
+  res.status(200).json({ data: { ratePlanId: id, stayDate: req.body.stayDate, closed: true }, message: '指定日期已关房' });
+});
+
+/** 取消套餐指定房晚的主动关房。 */
+router.delete('/:id/douyin/stay-date-closures/:stayDate', async (req, res) => {
+  const id = parseId(req.params.id);
+  const payload = { stayDate: req.params.stayDate };
+  if (!id || !validateStayDate(payload)) return res.status(400).json({ message: '入住日期必须为 YYYY-MM-DD' });
+  await query('DELETE FROM douyin_rate_plan_closures WHERE rate_plan_id = $1 AND stay_date = $2', [id, payload.stayDate]);
+  res.status(200).json({ data: { ratePlanId: id, stayDate: payload.stayDate, closed: false }, message: '指定日期已开房' });
+});
 
 router.post('/:id/douyin/sync', async (req, res) => {
   try {
