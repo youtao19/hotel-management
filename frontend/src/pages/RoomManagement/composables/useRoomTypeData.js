@@ -30,11 +30,16 @@ export function useRoomTypeData() {
     showRoomTypeDialog.value = true
   }
 
+  /**
+   * 保存房型，并仅提交房型接口允许的字段。
+   */
   const handleSaveRoomType = async (formData) => {
     try {
       const payload = {
-        ...formData,
-        base_price: Number(formData.base_price)
+        type_code: formData.type_code,
+        type_name: formData.type_name,
+        base_price: Number(formData.base_price),
+        description: formData.description
       }
 
       if (currentRoomType.value) {
