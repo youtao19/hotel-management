@@ -2,6 +2,8 @@
 
 const express = require('express');
 const repository = require('./presaleOrder.repository');
+const cancelAuditRepository = require('./cancelAudit.repository');
+const cancelAuditService = require('./cancelAudit.service');
 const accommodationSyncService = require('./accommodationSync.service');
 
 const router = express.Router();
@@ -14,6 +16,41 @@ router.get('/', async (_req, res) => {
   } catch (error) {
     console.error('[Douyin Presale Order] 获取订单列表失败:', { error: error.message });
     return res.status(500).json({ message: '获取抖音预售订单失败' });
+  }
+});
+
+/** 返回待处理或已回传的抖音取消人工审核记录。 */
+router.get('/cancel-audits', async (req, res) => {
+  const status = String(req.query.status || '').trim().toUpperCase();
+  if (status && !['PENDING', 'CALLBACK_PENDING', 'APPROVED', 'REJECTED', 'CALLBACK_FAILED'].includes(status)) {
+    return res.status(400).json({ message: '审核状态筛选值不合法' });
+  }
+  try {
+    const audits = await cancelAuditRepository.listAudits(status || null);
+    return res.status(200).json({ data: audits, message: '取消人工审核列表获取成功' });
+  } catch (error) {
+    console.error('[Douyin Presale Cancel Audit] 获取审核列表失败:', { error: error.message });
+    return res.status(500).json({ message: '获取取消人工审核列表失败' });
+  }
+});
+
+/** 提交员工审核结论并同步回传抖音。 */
+router.post('/cancel-audits/:cancelId/decision', async (req, res) => {
+  const cancelId = String(req.params.cancelId || '').trim();
+  if (!cancelId) return res.status(400).json({ message: '取消编号不能为空' });
+  try {
+    const result = await cancelAuditService.reviewCancelAudit(cancelId, req.body || {}, req.account || {});
+    return res.status(200).json({
+      data: result.audit,
+      message: result.duplicate ? '取消申请已完成审核回传' : '取消审核结果已回传抖音',
+      douyin_log_id: result.audit.callback_log_id || null
+    });
+  } catch (error) {
+    const statusCode = error.statusCode || 500;
+    const douyinLogId = error.douyinLogId || null;
+    const message = douyinLogId ? `${error.message}（抖音日志ID：${douyinLogId}）` : error.message;
+    console.error('[Douyin Presale Cancel Audit] 审核回传失败:', { cancelId, douyinLogId, error: error.message });
+    return res.status(statusCode).json({ message, douyin_log_id: douyinLogId });
   }
 });
 

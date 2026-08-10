@@ -54,6 +54,26 @@ async function markRefundCompleted(bookingOrder, logId, shouldReleaseInventory, 
   );
 }
 
+/** 取消预约并释放尚未入住的本地占房。 */
+async function markCancelled(bookingOrder, client) {
+  await client.query(
+    `UPDATE douyin_presale_booking_orders
+     SET booking_status = 'CANCELLED',
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = $1
+       AND booking_status IN ('CREATED', 'CONFIRMED', 'CONFIRM_FAILED', 'CANCELLED')`,
+    [bookingOrder.id]
+  );
+  await client.query(
+    `UPDATE orders
+     SET status = 'cancelled'
+     WHERE order_id = $1
+       AND order_source = 'douyin_presale'
+       AND status IN ('pending', 'reserved')`,
+    [bookingOrder.order_id]
+  );
+}
+
 /** 查询已支付的预售券主订单，作为预约订单来源。 */
 async function findPaidSourceOrder(sourceOrderId, client) {
   const result = await client.query(
@@ -187,6 +207,7 @@ module.exports = {
   insertBookingOrderDays,
   lockAvailableRooms,
   markRefundCompleted,
+  markCancelled,
   markConfirmFailed,
   markConfirmSucceeded
 };

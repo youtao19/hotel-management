@@ -56,6 +56,13 @@
 - `after_sale_type=3` 的仅退款同步同意，但不改变订单阶段；取消状态写为 `REFUND_PENDING`，等待退款结果通知确认。
 - 请求 logid 持久化到 `douyin_presale_orders.cancel_log_id`，完整请求体持久化到 `cancel_payload`。
 
+## 人工取消审核
+
+- 当取消 SPI 的 `need_audit=true` 时，`POST /douyin/spi/order/cancel` 不直接变更订单，写入 `douyin_presale_cancel_audits` 并返回 `cancel_mode=2`。
+- 后台员工通过 `GET /api/douyin/presale-orders/cancel-audits?status=PENDING` 查看申请，再调用 `POST /api/douyin/presale-orders/cancel-audits/:cancelId/decision`，请求体为 `{ "cancelResult": 1|2, "reason": "" }`；拒绝时 `reason` 必填。
+- 后端使用 `cancel_Id`（官方字段大小写）调用 `/goodlife/v1/trip/trade/hotel/cancel/audit/` 回传结论。回传成功后才完成本地状态流转；抖音响应 `extra.logid`、完整响应和失败原因都保存到审核记录，可用同一结论重试失败回传。
+- `biz_type=2011` 只处理预售券主订单的取消/退款状态；`biz_type=2012` 的同意取消会释放未入住的预约占房。日历房 `2021` 仍不在本模块范围内。
+
 ## 退款结果通知 SPI
 
 - 回调地址：`POST /douyin/spi/presale-order/refund-result`

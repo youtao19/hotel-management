@@ -111,8 +111,9 @@ async function markPaid(orderId, paymentNotice, rawPayload, logId) {
 }
 
 /** 保存预售券取消结果和抖音排障信息。 */
-async function markCancelled(orderId, cancellation, rawPayload, logId) {
-  const result = await query(
+async function markCancelled(orderId, cancellation, rawPayload, logId, client) {
+  const queryRunner = client || { query };
+  const result = await queryRunner.query(
     `UPDATE douyin_presale_orders
      SET order_stage = 'CANCELLED',
          cancel_id = $2,
@@ -130,8 +131,9 @@ async function markCancelled(orderId, cancellation, rawPayload, logId) {
 }
 
 /** 保存已同意的仅退款请求，等待抖音退款结果通知确认。 */
-async function markRefundPending(orderId, cancellation, rawPayload, logId) {
-  return query(
+async function markRefundPending(orderId, cancellation, rawPayload, logId, client) {
+  const queryRunner = client || { query };
+  return queryRunner.query(
     `UPDATE douyin_presale_orders
      SET cancel_id = $2,
          cancel_status = 'REFUND_PENDING',

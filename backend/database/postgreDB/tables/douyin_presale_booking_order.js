@@ -64,7 +64,7 @@ const createCommentQueryStrings = [
   `COMMENT ON COLUMN ${tableName}.ota_order_id IS '抖音预约订单号 order_id，用于回调幂等和确认接单';`,
   `COMMENT ON COLUMN ${tableName}.source_order_id IS '来源抖音预售券订单号，必须关联已支付的 biz_type=2011 订单';`,
   `COMMENT ON COLUMN ${tableName}.biz_type IS '抖音业务类型，预约订单固定为 2012';`,
-  `COMMENT ON COLUMN ${tableName}.booking_status IS '本地预约状态：CREATED、CONFIRMED、CONFIRM_FAILED 或 REFUNDED';`,
+  `COMMENT ON COLUMN ${tableName}.booking_status IS '本地预约状态：CREATED、CONFIRMED、CONFIRM_FAILED、CANCELLED 或 REFUNDED';`,
   `COMMENT ON COLUMN ${tableName}.confirm_status IS '确认接单状态：PENDING、CONFIRMED 或 FAILED';`,
   `COMMENT ON COLUMN ${tableName}.confirm_number IS '本地酒店确认号，发送至抖音确认接单接口';`,
   `COMMENT ON COLUMN ${tableName}.create_log_id IS '创建预约 SPI 请求头 X-Bytedance-Logid';`,

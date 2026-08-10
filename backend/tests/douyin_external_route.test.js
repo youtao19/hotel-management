@@ -1050,6 +1050,62 @@ describe('抖音 Webhooks 与价量态 SPI', () => {
     }
   });
 
+  test('需要人工审核的预售券取消申请异步返回并按 cancel_id 幂等入库', async () => {
+    const localOrderId = 'DYPS_CANCEL_AUDIT_TEST_001';
+    const douyinOrderId = 'DY_CANCEL_AUDIT_TEST_001';
+    const cancelId = 'DY_CANCEL_AUDIT_REQUEST_001';
+    await query('DELETE FROM douyin_presale_cancel_audits WHERE cancel_id = $1', [cancelId]);
+    await query('DELETE FROM douyin_presale_orders WHERE order_id = $1', [localOrderId]);
+    await query(
+      `INSERT INTO douyin_presale_orders (
+         order_id, ota_order_id, biz_type, order_stage, raw_payload
+       ) VALUES ($1, $2, $3, $4, $5::jsonb)`,
+      [localOrderId, douyinOrderId, 2011, 'PAID', JSON.stringify({ order_id: douyinOrderId })]
+    );
+
+    try {
+      const body = JSON.stringify({
+        order_id: douyinOrderId,
+        order_out_id: localOrderId,
+        cancel_id: cancelId,
+        cancel_type: 2,
+        biz_type: 2011,
+        after_sale_type: 1,
+        refund_type: 11,
+        need_audit: true
+      });
+      const requestPath = '/douyin/spi/order/cancel?client_key=DY_CLIENT_TEST&timestamp=1777000000000';
+      const sendCancelAudit = (logId) => request(app)
+        .post(requestPath)
+        .set('Content-Type', 'application/json')
+        .set('x-life-clientkey', 'DY_CLIENT_TEST')
+        .set('x-life-sign', buildSpiSign(requestPath, body))
+        .set('x-bytedance-logid', logId)
+        .send(body);
+
+      const firstResponse = await sendCancelAudit('DY_SPI_CANCEL_AUDIT_LOG_001');
+      const duplicateResponse = await sendCancelAudit('DY_SPI_CANCEL_AUDIT_LOG_002');
+
+      expect(firstResponse.body).toEqual({ data: { error_code: 0, description: 'success', cancel_mode: 2 } });
+      expect(duplicateResponse.body).toEqual({ data: { error_code: 0, description: 'success', cancel_mode: 2 } });
+      const auditResult = await query(
+        `SELECT biz_type, ota_order_id, order_out_id, audit_status, request_log_id
+         FROM douyin_presale_cancel_audits WHERE cancel_id = $1`,
+        [cancelId]
+      );
+      expect(auditResult.rows).toEqual([expect.objectContaining({
+        biz_type: 2011,
+        ota_order_id: douyinOrderId,
+        order_out_id: localOrderId,
+        audit_status: 'PENDING',
+        request_log_id: 'DY_SPI_CANCEL_AUDIT_LOG_001'
+      })]);
+    } finally {
+      await query('DELETE FROM douyin_presale_cancel_audits WHERE cancel_id = $1', [cancelId]);
+      await query('DELETE FROM douyin_presale_orders WHERE order_id = $1', [localOrderId]);
+    }
+  });
+
   test('预售券仅退款受理后由退款结果通知确认，重复通知不重复落库', async () => {
     const localOrderId = 'DYPS_REFUND_RESULT_TEST_001';
     const douyinOrderId = 'DY_REFUND_RESULT_TEST_001';

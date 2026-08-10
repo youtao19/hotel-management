@@ -8,6 +8,7 @@ const tables = [
   'plugin_room_type_mapping',
   'douyin_orders',
   'douyin_presale_refund_notifications',
+  'douyin_presale_cancel_audits',
   'douyin_presale_booking_accommodation_syncs',
   'douyin_presale_booking_orders',
   'douyin_presale_orders',

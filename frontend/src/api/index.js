@@ -222,7 +222,9 @@ export const douyinPresaleVoucherApi = {
 }
 
 export const douyinPresaleOrderApi = {
-  getOrders: () => api.get('/douyin/presale-orders')
+  getOrders: () => api.get('/douyin/presale-orders'),
+  getCancelAudits: (status = 'PENDING') => api.get('/douyin/presale-orders/cancel-audits', { params: { status } }),
+  decideCancelAudit: (cancelId, payload) => api.post(`/douyin/presale-orders/cancel-audits/${encodeURIComponent(cancelId)}/decision`, payload)
 }
 
 // 抖音房型匹配相关接口

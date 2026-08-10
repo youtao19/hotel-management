@@ -26,6 +26,8 @@
 - `POST /douyin/spi/presale-order/refund-result`
 - `POST /douyin/spi/order/cancel`
 - `GET /api/douyin/presale-orders`
+- `GET /api/douyin/presale-orders/cancel-audits`（详见 [预售券订单说明](presale-order/README.md#人工取消审核)）
+- `POST /api/douyin/presale-orders/cancel-audits/:cancelId/decision`（详见 [预售券订单说明](presale-order/README.md#人工取消审核)）
 - `POST /douyin/webhooks`
 - `POST /douyin/spi/price-volume`
 - `POST /douyin/spi/bookable`

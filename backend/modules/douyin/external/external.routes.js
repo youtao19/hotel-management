@@ -12,6 +12,7 @@ const bookingConfirmService = require('../presale-order/bookingConfirm.service')
 const { douyinConfig } = require('../../../appSettings/douyin.config');
 const paymentNoticeService = require('../presale-order/paymentNotice.service');
 const cancelOrderService = require('../presale-order/cancelOrder.service');
+const cancelAuditService = require('../presale-order/cancelAudit.service');
 const refundResultService = require('../presale-order/refundResult.service');
 const callbackLogService = require('./callbackLog.service');
 const systemNotificationService = require('../../system-notification/systemNotification.service');
@@ -537,6 +538,21 @@ function createDouyinExternalRouter(options = {}) {
         console.warn('[Douyin SPI] 取消订单签名校验失败:', { logId, ...summary });
         await saveCallbackLog({ type: 'spi_order_cancel', stage: 'signature_failed', logId, ...summary });
         return res.status(401).json({ message: '抖音 SPI 签名校验失败' });
+      }
+
+      // 平台明确要求审核时，先入库等待员工决定，不能在 SPI 内直接同意或拒绝。
+      if (req.body?.need_audit === true) {
+        const result = await cancelAuditService.receiveCancelAudit(req.body || {}, { logId });
+        console.log('[Douyin SPI] 已接收待人工审核的取消申请:', { logId, ...summary, duplicate: result.duplicate });
+        await saveCallbackLog({
+          type: 'spi_order_cancel',
+          stage: result.duplicate ? 'audit_duplicate' : 'audit_pending',
+          logId,
+          ...summary
+        });
+        return res.status(200).json({
+          data: { error_code: 0, description: 'success', cancel_mode: 2 }
+        });
       }
 
       // 订单类型由抖音回调决定；当前仅实现预售券取消，其他类型不能伪造成功。
