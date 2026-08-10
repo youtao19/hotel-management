@@ -48,13 +48,14 @@ async function cancelOrder(payload, options = {}) {
   }
 
   if (order.cancel_id === cancellation.cancelId) {
-    return { cancelResult: order.cancel_status === 'CANCELLED' ? 1 : 2, reason: '', orderFound: true, duplicate: true };
+    const accepted = ['CANCELLED', 'REFUND_PENDING'].includes(order.cancel_status);
+    return { cancelResult: accepted ? 1 : 2, reason: '', orderFound: true, duplicate: true };
   }
 
-  // 仅退款不会注销预售券订单，留待退款通知 SPI 单独实现。
+  // 仅退款保留主订单阶段，等待抖音退款完成通知确认资金结果。
   if (cancellation.afterSaleType === 3) {
-    await repository.markRefundNotSupported(order.id, cancellation, payload, options.logId);
-    return { cancelResult: 2, reason: '仅退款订单暂未接入', orderFound: true, duplicate: false };
+    await repository.markRefundPending(order.id, cancellation, payload, options.logId);
+    return { cancelResult: 1, reason: '', orderFound: true, duplicate: false };
   }
 
   if (['CREATED', 'PAID', 'CANCELLED'].includes(order.order_stage)) {

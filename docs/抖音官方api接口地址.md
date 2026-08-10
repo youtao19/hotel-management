@@ -100,10 +100,10 @@
 - 用途：用于三方向抖音回传逆向售后审核结果、同意/拒绝取消等处理结果。
 - 当前代码关联：当前未实现，需与“酒店取消订单SPI”配套接入。
 
-### 4.3 通知退款结果
-- 链接：[通知退款结果](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/calendar-trading-reverse/refund-result-api)
-- 用途：用于接收或回传退款结果，是退款逆向闭环的重要一环。
-- 当前代码关联：当前未实现抖音退款结果通知。
+### 4.3 订单退款结果通知 SPI
+- 链接：[订单退款结果通知 SPI](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/calendar-trading-reverse/hotel-refund-result)
+- 用途：抖音实际退款完成后通知第三方；请求按 `biz_type` 区分预售券 `2011`、预约单 `2012` 和日历房 `2021`。
+- 当前代码关联：预售券 `2011` 接收入口为 `POST /douyin/spi/presale-order/refund-result`，详细处理规则见 `backend/modules/douyin/presale-order/README.md`；预约单和日历房尚未接入。
 
 ## 5. 房型与静态信息
 

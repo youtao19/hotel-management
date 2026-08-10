@@ -43,6 +43,9 @@ const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
   cancel_log_id VARCHAR(128),
   cancel_payload JSONB,
   cancelled_at TIMESTAMPTZ,
+  refund_status VARCHAR(32),
+  refund_log_id VARCHAR(128),
+  refund_received_at TIMESTAMPTZ,
   raw_payload JSONB NOT NULL,
   mapped_payload JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -71,6 +74,9 @@ const schemaUpdateQueryStrings = [
   `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS cancel_log_id VARCHAR(128);`,
   `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS cancel_payload JSONB;`,
   `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;`,
+  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS refund_status VARCHAR(32);`,
+  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS refund_log_id VARCHAR(128);`,
+  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS refund_received_at TIMESTAMPTZ;`,
   // 预售订单创建/更新时间是业务事件发生点，不能使用无时区 TIMESTAMP。
   `ALTER TABLE ${tableName} ALTER COLUMN created_at TYPE TIMESTAMPTZ;`,
   `ALTER TABLE ${tableName} ALTER COLUMN updated_at TYPE TIMESTAMPTZ;`
@@ -99,6 +105,9 @@ const createCommentQueryStrings = [
   `COMMENT ON COLUMN ${tableName}.cancel_log_id IS '取消 SPI 请求头 x-bytedance-logid';`,
   `COMMENT ON COLUMN ${tableName}.cancel_payload IS '抖音取消 SPI 原始请求体';`,
   `COMMENT ON COLUMN ${tableName}.cancelled_at IS '本地同意取消的处理时间';`,
+  `COMMENT ON COLUMN ${tableName}.refund_status IS '退款状态：PENDING 等待抖音退款结果通知，COMPLETED 表示抖音已完成退款';`,
+  `COMMENT ON COLUMN ${tableName}.refund_log_id IS '最新退款结果通知的 X-Bytedance-Logid';`,
+  `COMMENT ON COLUMN ${tableName}.refund_received_at IS '最新退款结果通知接收时间，由数据库时区处理';`,
 ];
 
 module.exports = {

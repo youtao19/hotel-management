@@ -3,9 +3,10 @@
 const { query } = require('../../../database/postgreDB/pg');
 
 /** 查询抖音订单号对应的本地预售订单。 */
-async function findByDouyinOrderId(douyinOrderId) {
-  const result = await query(
-    `SELECT id, order_id, ota_order_id, order_stage, douyin_log_id, cancel_id, cancel_status
+async function findByDouyinOrderId(douyinOrderId, client) {
+  const queryRunner = client || { query };
+  const result = await queryRunner.query(
+    `SELECT id, order_id, ota_order_id, order_stage, douyin_log_id, cancel_id, cancel_status, refund_status
      FROM douyin_presale_orders
      WHERE ota_order_id = $1
      LIMIT 1`,
@@ -15,9 +16,10 @@ async function findByDouyinOrderId(douyinOrderId) {
 }
 
 /** 查询本地订单号对应的抖音预售订单。 */
-async function findByLocalOrderId(localOrderId) {
-  const result = await query(
-    `SELECT id, order_id, ota_order_id, order_stage, douyin_log_id, cancel_id, cancel_status
+async function findByLocalOrderId(localOrderId, client) {
+  const queryRunner = client || { query };
+  const result = await queryRunner.query(
+    `SELECT id, order_id, ota_order_id, order_stage, douyin_log_id, cancel_id, cancel_status, refund_status
      FROM douyin_presale_orders
      WHERE order_id = $1
      LIMIT 1`,
@@ -95,9 +97,9 @@ async function markPaid(orderId, paymentNotice, rawPayload, logId) {
          raw_payload = jsonb_set(raw_payload, '{payment_notice}', $3::jsonb, true),
          mapped_payload = COALESCE(mapped_payload, '{}'::jsonb) || jsonb_build_object(
            'paymentNotice', jsonb_build_object(
-             'payTimeUnix', $4,
-             'payAmount', $5,
-             'currency', $6
+             'payTimeUnix', $4::BIGINT,
+             'payAmount', $5::INTEGER,
+             'currency', $6::TEXT
            )
          ),
          updated_at = NOW()
@@ -117,6 +119,7 @@ async function markCancelled(orderId, cancellation, rawPayload, logId) {
          cancel_status = 'CANCELLED',
          cancel_log_id = $3,
          cancel_payload = $4::jsonb,
+         refund_status = 'PENDING',
          cancelled_at = NOW(),
          updated_at = NOW()
      WHERE id = $1
@@ -126,17 +129,59 @@ async function markCancelled(orderId, cancellation, rawPayload, logId) {
   return result.rows[0] || null;
 }
 
-/** 保存暂不支持的仅退款请求，避免丢失抖音排障依据。 */
-async function markRefundNotSupported(orderId, cancellation, rawPayload, logId) {
+/** 保存已同意的仅退款请求，等待抖音退款结果通知确认。 */
+async function markRefundPending(orderId, cancellation, rawPayload, logId) {
   return query(
     `UPDATE douyin_presale_orders
      SET cancel_id = $2,
-         cancel_status = 'REFUND_NOT_SUPPORTED',
+         cancel_status = 'REFUND_PENDING',
          cancel_log_id = $3,
          cancel_payload = $4::jsonb,
+         refund_status = 'PENDING',
          updated_at = NOW()
      WHERE id = $1`,
     [orderId, cancellation.cancelId, logId || null, JSON.stringify(rawPayload)]
+  );
+}
+
+/** 写入一条退款结果通知，并以请求摘要保证重复投递幂等。 */
+async function insertRefundNotification(notification, client) {
+  const result = await client.query(
+    `INSERT INTO douyin_presale_refund_notifications (
+       presale_order_id, ota_order_id, order_out_id,
+       refund_total_amount, refund_amount, user_refund_amount, refund_time_unix,
+       currency, refund_type, audit_user_type, applicant_type, need_third_cancel,
+       refund_reason, refund_order_detail, payload_hash, douyin_log_id,
+       match_status, raw_payload
+     ) VALUES (
+       $1, $2, $3,
+       $4, $5, $6, $7,
+       $8, $9, $10, $11, $12,
+       $13, $14::jsonb, $15, $16,
+       $17, $18::jsonb
+     ) ON CONFLICT (payload_hash) DO NOTHING
+     RETURNING id`,
+    [
+      notification.presaleOrderId, notification.douyinOrderId || null, notification.localOrderId || null,
+      notification.refundTotalAmount, notification.refundAmount, notification.userRefundAmount, notification.refundTimeUnix,
+      notification.currency, notification.refundType, notification.auditUserType, notification.applicantType, notification.needThirdCancel,
+      notification.refundReason, JSON.stringify(notification.refundOrderDetail), notification.payloadHash, notification.logId,
+      notification.matchStatus, JSON.stringify(notification.rawPayload)
+    ]
+  );
+  return result.rows[0] || null;
+}
+
+/** 标记已匹配预售订单的退款已由抖音完成。 */
+async function markRefundCompleted(orderId, logId, client) {
+  await client.query(
+    `UPDATE douyin_presale_orders
+     SET refund_status = 'COMPLETED',
+         refund_log_id = $2,
+         refund_received_at = CURRENT_TIMESTAMP,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = $1`,
+    [orderId, logId]
   );
 }
 
@@ -148,5 +193,7 @@ module.exports = {
   listOrders,
   markPaid,
   markCancelled,
-  markRefundNotSupported
+  markRefundPending,
+  insertRefundNotification,
+  markRefundCompleted
 };

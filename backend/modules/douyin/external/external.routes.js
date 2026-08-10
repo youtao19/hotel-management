@@ -9,6 +9,7 @@ const bookableCheckService = require('../availability/bookableCheck.service');
 const presaleOrderService = require('../presale-order/presaleOrder.service');
 const paymentNoticeService = require('../presale-order/paymentNotice.service');
 const cancelOrderService = require('../presale-order/cancelOrder.service');
+const refundResultService = require('../presale-order/refundResult.service');
 const callbackLogService = require('./callbackLog.service');
 const systemNotificationService = require('../../system-notification/systemNotification.service');
 
@@ -75,6 +76,18 @@ function summarizePresalePaymentNotice(payload = {}) {
     bizType: payload.biz_type || '',
     payTimeUnix: payload.pay_time_unix || '',
     payAmount: payload.pay_amount || ''
+  };
+}
+
+/** 提取预售券退款结果排障字段，避免记录退款原因和间夜明细。 */
+function summarizePresaleRefundResult(payload = {}) {
+  return {
+    douyinOrderId: payload.order_id || '',
+    localOrderId: payload.order_out_id || '',
+    bizType: payload.biz_type || '',
+    refundType: payload.refund_type || '',
+    refundAmount: payload.refund_amount ?? '',
+    userRefundAmount: payload.user_refund_amount ?? ''
   };
 }
 
@@ -389,6 +402,40 @@ function createDouyinExternalRouter(options = {}) {
       await saveCallbackLog({ type: 'spi_presale_payment_notice', stage: 'error', logId, ...summary, errorCode, error: error.message });
       return res.status(200).json({ data: { error_code: errorCode, description: error.message } });
     }
+  });
+
+  /** 接收抖音预售券退款完成后的结果通知。 */
+  router.post('/spi/presale-order/refund-result', async (req, res) => {
+    const logId = getHeader(req, 'x-bytedance-logid');
+    const summary = summarizePresaleRefundResult(req.body || {});
+    try {
+      if (!signatureService.verifySpiSignature(req)) {
+        console.warn('[Douyin SPI] 预售券退款结果签名校验失败:', { logId, ...summary });
+        await saveCallbackLog({ type: 'spi_presale_refund_result', stage: 'signature_failed', logId, ...summary });
+        return res.status(401).json({ message: '抖音 SPI 签名校验失败' });
+      }
+
+      const result = await refundResultService.recordRefundResult(req.body || {}, { logId });
+      console.log('[Douyin SPI] 已接收预售券退款结果:', {
+        logId,
+        ...summary,
+        orderFound: result.orderFound,
+        duplicate: result.duplicate,
+        matchStatus: result.matchStatus
+      });
+      await saveCallbackLog({
+        type: 'spi_presale_refund_result',
+        stage: result.duplicate ? 'duplicate' : result.matchStatus.toLowerCase(),
+        logId,
+        ...summary
+      });
+    } catch (error) {
+      // 退款已经由抖音完成，通知处理异常不能反向影响退款结果或触发无意义重试。
+      console.error('[Douyin SPI] 预售券退款结果处理失败:', { logId, ...summary, error: error.message });
+      await saveCallbackLog({ type: 'spi_presale_refund_result', stage: 'error', logId, ...summary, error: error.message });
+    }
+
+    return res.status(200).json(successResponse());
   });
 
   /** 接收抖音预售券交易逆向的取消订单请求。 */

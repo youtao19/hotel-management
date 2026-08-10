@@ -857,6 +857,106 @@ describe('抖音 Webhooks 与价量态 SPI', () => {
     }
   });
 
+  test('预售券仅退款受理后由退款结果通知确认，重复通知不重复落库', async () => {
+    const localOrderId = 'DYPS_REFUND_RESULT_TEST_001';
+    const douyinOrderId = 'DY_REFUND_RESULT_TEST_001';
+    await query('DELETE FROM douyin_presale_refund_notifications WHERE ota_order_id = $1', [douyinOrderId]);
+    await query('DELETE FROM douyin_presale_orders WHERE order_id = $1', [localOrderId]);
+    await query(
+      `INSERT INTO douyin_presale_orders (
+         order_id, ota_order_id, biz_type, order_stage, raw_payload
+       ) VALUES ($1, $2, $3, $4, $5::jsonb)`,
+      [localOrderId, douyinOrderId, 2011, 'PAID', JSON.stringify({ order_id: douyinOrderId })]
+    );
+
+    try {
+      const cancelBody = JSON.stringify({
+        order_id: douyinOrderId,
+        order_out_id: localOrderId,
+        cancel_id: 'DY_REFUND_CANCEL_REQUEST_001',
+        cancel_type: 2,
+        biz_type: 2011,
+        after_sale_type: 3,
+        refund_type: 12
+      });
+      const cancelPath = '/douyin/spi/order/cancel?client_key=DY_CLIENT_TEST&timestamp=1777000000000';
+      const cancelResponse = await request(app)
+        .post(cancelPath)
+        .set('Content-Type', 'application/json')
+        .set('x-life-clientkey', 'DY_CLIENT_TEST')
+        .set('x-life-sign', buildSpiSign(cancelPath, cancelBody))
+        .set('x-bytedance-logid', 'DY_SPI_REFUND_CANCEL_LOG_001')
+        .send(cancelBody);
+
+      const refundBody = JSON.stringify({
+        order_id: douyinOrderId,
+        order_out_id: localOrderId,
+        refund_total_amount: 20000,
+        refund_amount: 19900,
+        user_refund_amount: 18900,
+        refund_time_unix: 1785561600,
+        currency: 'CNY',
+        biz_type: 2011,
+        refund_type: 12,
+        audit_user_type: 1,
+        applicant_type: 1,
+        refund_reason: '用户申请部分退款',
+        refund_order_detail: [{ rate_plan_id: 'DY_RATE_001', daily_refund_amount: 19900, period_start_date: '2026-08-10' }]
+      });
+      const refundPath = '/douyin/spi/presale-order/refund-result?client_key=DY_CLIENT_TEST&timestamp=1777000000000';
+      const firstResponse = await request(app)
+        .post(refundPath)
+        .set('Content-Type', 'application/json')
+        .set('x-life-clientkey', 'DY_CLIENT_TEST')
+        .set('x-life-sign', buildSpiSign(refundPath, refundBody))
+        .set('x-bytedance-logid', 'DY_SPI_REFUND_RESULT_LOG_001')
+        .send(refundBody);
+      const duplicateResponse = await request(app)
+        .post(refundPath)
+        .set('Content-Type', 'application/json')
+        .set('x-life-clientkey', 'DY_CLIENT_TEST')
+        .set('x-life-sign', buildSpiSign(refundPath, refundBody))
+        .set('x-bytedance-logid', 'DY_SPI_REFUND_RESULT_LOG_002')
+        .send(refundBody);
+
+      expect(cancelResponse.body.data.cancel_result).toBe(1);
+      expect(firstResponse.body).toEqual({ data: { error_code: 0, description: 'success' } });
+      expect(duplicateResponse.body).toEqual({ data: { error_code: 0, description: 'success' } });
+      const orderResult = await query(
+        'SELECT order_stage, cancel_status, refund_status, refund_log_id FROM douyin_presale_orders WHERE order_id = $1',
+        [localOrderId]
+      );
+      expect(orderResult.rows[0]).toEqual(expect.objectContaining({
+        order_stage: 'PAID',
+        cancel_status: 'REFUND_PENDING',
+        refund_status: 'COMPLETED',
+        refund_log_id: 'DY_SPI_REFUND_RESULT_LOG_001'
+      }));
+      const notificationResult = await query(
+        `SELECT refund_amount, user_refund_amount, refund_type, match_status, douyin_log_id, refund_order_detail
+         FROM douyin_presale_refund_notifications WHERE ota_order_id = $1`,
+        [douyinOrderId]
+      );
+      expect(notificationResult.rows).toEqual([expect.objectContaining({
+        refund_amount: 19900,
+        user_refund_amount: 18900,
+        refund_type: 12,
+        match_status: 'MATCHED',
+        douyin_log_id: 'DY_SPI_REFUND_RESULT_LOG_001',
+        refund_order_detail: expect.arrayContaining([expect.objectContaining({ rate_plan_id: 'DY_RATE_001' })])
+      })]);
+      const logRecords = await readJsonLines(logFilePath);
+      expect(logRecords).toEqual(expect.arrayContaining([
+        expect.objectContaining({ type: 'spi_order_cancel', stage: 'processed', logId: 'DY_SPI_REFUND_CANCEL_LOG_001', cancelResult: 1 }),
+        expect.objectContaining({ type: 'spi_presale_refund_result', stage: 'matched', logId: 'DY_SPI_REFUND_RESULT_LOG_001' }),
+        expect.objectContaining({ type: 'spi_presale_refund_result', stage: 'duplicate', logId: 'DY_SPI_REFUND_RESULT_LOG_002' })
+      ]));
+    } finally {
+      await query('DELETE FROM douyin_presale_refund_notifications WHERE ota_order_id = $1', [douyinOrderId]);
+      await query('DELETE FROM douyin_presale_orders WHERE order_id = $1', [localOrderId]);
+    }
+  });
+
   test('非预售券取消订单返回占位拒绝，不伪造取消成功', async () => {
     const body = JSON.stringify({
       order_id: 'DY_CALENDAR_CANCEL_001',
