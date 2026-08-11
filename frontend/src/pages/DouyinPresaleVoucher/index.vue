@@ -294,7 +294,7 @@
               </div>
 
               <div class="q-mt-md">
-                <div class="field-label">退款规则 <span class="text-negative">*</span></div>
+                <div class="field-label">取消预约规则 <span class="text-negative">*</span></div>
                 <q-select
                   v-model="form.cancelBookingType"
                   :options="cancelBookingTypeOptions"
@@ -309,7 +309,36 @@
                     <q-icon name="published_with_changes" color="primary" />
                   </template>
                 </q-select>
-                <div class="text-caption text-grey-6 q-mt-xs">“未使用自动退”会向抖音同步为“可取消”。</div>
+                <div v-if="form.cancelBookingType === 2" class="row q-col-gutter-md q-mt-sm">
+                  <div class="col-12 col-md-6">
+                    <div class="field-label">入住前（天） <span class="text-negative">*</span></div>
+                    <q-input
+                      v-model.number="form.cancelBookingOffsetDays"
+                      outlined
+                      dense
+                      type="number"
+                      min="1"
+                      step="1"
+                      :rules="[positiveInteger]"
+                      class="custom-field"
+                    />
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <div class="field-label">入住前（小时） <span class="text-negative">*</span></div>
+                    <q-input
+                      v-model.number="form.cancelBookingOffsetHours"
+                      outlined
+                      dense
+                      type="number"
+                      min="0"
+                      max="23"
+                      step="1"
+                      :rules="[cancelOffsetHours]"
+                      class="custom-field"
+                    />
+                  </div>
+                </div>
+                <div v-if="form.cancelBookingType === 2" class="text-caption text-grey-6 q-mt-xs">顾客可在入住前指定时间免费取消；超过截止时间不可取消。</div>
               </div>
             </div>
 
@@ -642,7 +671,7 @@ const columns = [
 ]
 
 const cancelBookingTypeOptions = [
-  { label: '未使用自动退', value: 1 },
+  { label: '限时取消', value: 2 },
   { label: '不可取消', value: 3 }
 ]
 
@@ -681,7 +710,7 @@ function onImgError(e) {
 
 /** 返回新增预售券的默认表单，售卖开始时间由后端按北京时间生成。 */
 function defaultForm(saleStartAt = '') {
-  return { ratePlanId: null, name: '', originalAmount: null, actualAmount: null, inventoryIsLimited: true, inventoryCount: null, eachPersonMax: 1, eachPersonEachOrderMax: 1, cancelBookingType: 1, saleStartAt, saleEndAt: '', bookStartDate: '', bookEndDate: '', markupRules: [], imageUrls: [] }
+  return { ratePlanId: null, name: '', originalAmount: null, actualAmount: null, inventoryIsLimited: true, inventoryCount: null, eachPersonMax: 1, eachPersonEachOrderMax: 1, cancelBookingType: 3, cancelBookingOffsetDays: null, cancelBookingOffsetHours: 0, saleStartAt, saleEndAt: '', bookStartDate: '', bookEndDate: '', markupRules: [], imageUrls: [] }
 }
 
 /** 新增一条默认覆盖全部星期的预约加价规则，方便运营只改日期和金额。 */
@@ -762,6 +791,11 @@ function positiveInteger(value) {
   return (Number.isInteger(Number(value)) && Number(value) > 0) || '请输入大于 0 的整数'
 }
 
+/** 校验限时取消的小时偏移在抖音允许范围内。 */
+function cancelOffsetHours(value) {
+  return (Number.isInteger(Number(value)) && Number(value) >= 0 && Number(value) <= 23) || '请输入 0 到 23 的整数'
+}
+
 /** 保证单笔购买数量不超过该用户在售卖期内的累计上限。 */
 function eachOrderLimit(value) {
   return Number(value) <= Number(form.value.eachPersonMax) || '单笔限购不能大于单用户累计限购'
@@ -834,6 +868,8 @@ async function openDialog(voucher = null) {
       eachPersonMax: voucher.each_person_max,
       eachPersonEachOrderMax: voucher.each_person_each_order_max,
       cancelBookingType: Number(voucher.cancel_booking_type || 3),
+      cancelBookingOffsetDays: voucher.cancel_booking_offset_days,
+      cancelBookingOffsetHours: voucher.cancel_booking_offset_hours ?? 0,
       saleStartAt: voucher.sale_start_at ? voucher.sale_start_at.replace('T', ' ').slice(0, 16) : '',
       saleEndAt: voucher.sale_end_at ? voucher.sale_end_at.replace('T', ' ').slice(0, 16) : '',
       bookStartDate: voucher.book_start_date || '',
@@ -862,6 +898,8 @@ function buildPayload() {
     eachPersonMax: Number(payload.eachPersonMax),
     eachPersonEachOrderMax: Number(payload.eachPersonEachOrderMax),
     cancelBookingType: Number(payload.cancelBookingType),
+    cancelBookingOffsetDays: Number(payload.cancelBookingType) === 2 ? Number(payload.cancelBookingOffsetDays) : undefined,
+    cancelBookingOffsetHours: Number(payload.cancelBookingType) === 2 ? Number(payload.cancelBookingOffsetHours) : undefined,
     saleStartAt: payload.saleStartAt ? payload.saleStartAt.replace(/[T/]/g, match => match === 'T' ? ' ' : '-') : '',
     saleEndAt: payload.saleEndAt ? payload.saleEndAt.replace(/[T/]/g, match => match === 'T' ? ' ' : '-') : '',
     bookStartDate: payload.bookStartDate ? payload.bookStartDate.replaceAll('/', '-') : '',

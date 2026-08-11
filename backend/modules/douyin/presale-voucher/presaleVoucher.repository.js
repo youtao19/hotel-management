@@ -10,7 +10,8 @@ async function findById(id) {
     `
       SELECT
         pv.id, pv.rate_plan_id, pv.name, pv.original_amount, pv.actual_amount, pv.inventory_is_limited,
-        pv.inventory_count, pv.each_person_max, pv.each_person_each_order_max, pv.cancel_booking_type, pv.markup_rules,
+        pv.inventory_count, pv.each_person_max, pv.each_person_each_order_max, pv.cancel_booking_type,
+        pv.cancel_booking_offset_days, pv.cancel_booking_offset_hours, pv.markup_rules,
         to_char(pv.sale_start_at, 'YYYY-MM-DD HH24:MI') AS sale_start_at,
         to_char(pv.sale_end_at, 'YYYY-MM-DD HH24:MI') AS sale_end_at,
         to_char(pv.book_start_date, 'YYYY-MM-DD') AS book_start_date,
@@ -41,7 +42,8 @@ async function list() {
     `
       SELECT
         pv.id, pv.rate_plan_id, pv.name, pv.original_amount, pv.actual_amount, pv.inventory_is_limited,
-        pv.inventory_count, pv.each_person_max, pv.each_person_each_order_max, pv.cancel_booking_type, pv.markup_rules,
+        pv.inventory_count, pv.each_person_max, pv.each_person_each_order_max, pv.cancel_booking_type,
+        pv.cancel_booking_offset_days, pv.cancel_booking_offset_hours, pv.markup_rules,
         to_char(pv.sale_start_at, 'YYYY-MM-DD HH24:MI') AS sale_start_at,
         to_char(pv.sale_end_at, 'YYYY-MM-DD HH24:MI') AS sale_end_at,
         to_char(pv.book_start_date, 'YYYY-MM-DD') AS book_start_date,
@@ -71,13 +73,15 @@ async function create(data) {
     `
       INSERT INTO douyin_presale_vouchers
         (rate_plan_id, name, original_amount, actual_amount, inventory_is_limited, inventory_count,
-         each_person_max, each_person_each_order_max, cancel_booking_type, markup_rules, sale_start_at, sale_end_at, book_start_date, book_end_date, image_urls)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13, $14, $15::jsonb)
+         each_person_max, each_person_each_order_max, cancel_booking_type, cancel_booking_offset_days,
+         cancel_booking_offset_hours, markup_rules, sale_start_at, sale_end_at, book_start_date, book_end_date, image_urls)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13, $14, $15, $16, $17::jsonb)
       RETURNING id
     `,
     [
       data.ratePlanId, data.name, data.originalAmount, data.actualAmount, data.inventoryIsLimited,
-      data.inventoryCount, data.eachPersonMax, data.eachPersonEachOrderMax, data.cancelBookingType, JSON.stringify(data.markupRules), data.saleStartAt,
+      data.inventoryCount, data.eachPersonMax, data.eachPersonEachOrderMax, data.cancelBookingType,
+      data.cancelBookingOffsetDays, data.cancelBookingOffsetHours, JSON.stringify(data.markupRules), data.saleStartAt,
       data.saleEndAt, data.bookStartDate, data.bookEndDate, JSON.stringify(data.imageUrls)
     ]
   );
@@ -91,13 +95,15 @@ async function update(id, data) {
       UPDATE douyin_presale_vouchers
       SET name = $1, original_amount = $2, actual_amount = $3, inventory_is_limited = $4,
           inventory_count = $5, each_person_max = $6, each_person_each_order_max = $7,
-          cancel_booking_type = $8, markup_rules = $9::jsonb, sale_start_at = $10, sale_end_at = $11, book_start_date = $12,
-          book_end_date = $13, image_urls = $14::jsonb, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $15
+          cancel_booking_type = $8, cancel_booking_offset_days = $9, cancel_booking_offset_hours = $10,
+          markup_rules = $11::jsonb, sale_start_at = $12, sale_end_at = $13, book_start_date = $14,
+          book_end_date = $15, image_urls = $16::jsonb, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $17
     `,
     [
       data.name, data.originalAmount, data.actualAmount, data.inventoryIsLimited, data.inventoryCount,
-      data.eachPersonMax, data.eachPersonEachOrderMax, data.cancelBookingType, JSON.stringify(data.markupRules), data.saleStartAt,
+      data.eachPersonMax, data.eachPersonEachOrderMax, data.cancelBookingType,
+      data.cancelBookingOffsetDays, data.cancelBookingOffsetHours, JSON.stringify(data.markupRules), data.saleStartAt,
       data.saleEndAt, data.bookStartDate, data.bookEndDate, JSON.stringify(data.imageUrls), id
     ]
   );

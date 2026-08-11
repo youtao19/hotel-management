@@ -27,6 +27,30 @@ function buildMarkupInfo(markupRules = []) {
   }));
 }
 
+/** 组装抖音限时取消或不可取消规则。 */
+function buildCancelBookingRule(voucher) {
+  if (Number(voucher.cancel_booking_type) === 3) {
+    return { cancel_type: 3 };
+  }
+  if (Number(voucher.cancel_booking_type) !== 2) {
+    throw createServiceError('取消预约类型只支持限时取消或不可取消', 400);
+  }
+
+  return {
+    cancel_type: 2,
+    cancel_time_type: 2,
+    // 当前抖音仅支持按入住时间计算，并要求免费取消规则固定传百分比0。
+    cancel_offset: [{
+      time_offset: {
+        day: voucher.cancel_booking_offset_days,
+        hour: voucher.cancel_booking_offset_hours
+      },
+      cut_type: 1,
+      cut_value: 0
+    }]
+  };
+}
+
 /** 兼容抖音常见的logid字段位置，保证失败信息可回溯。 */
 function getLogId(result) {
   return result?.extra?.logid || result?.extra?.log_id || null;
@@ -161,8 +185,7 @@ async function syncVoucher(id) {
         },
         // 抖音要求提前预约天数为正数且不超过30天，一期采用官方示例的30天规则。
         book_rule: { earliest_book_day: 30 },
-        // 可取消对应抖音的未使用自动退；限时与阶梯价取消另需时间或扣费配置。
-        cancel_booking_rule: { cancel_type: voucher.cancel_booking_type },
+        cancel_booking_rule: buildCancelBookingRule(voucher),
         // 当前未接入独立开票服务，按抖音预售券接口示例声明由商家侧提供发票。
         invoic_info: { provider: 1 }
       },
@@ -248,4 +271,4 @@ async function syncVoucher(id) {
   return syncedVoucher;
 }
 
-module.exports = { buildMarkupInfo, syncVoucher, updateVoucherProductStatus };
+module.exports = { buildCancelBookingRule, buildMarkupInfo, syncVoucher, updateVoucherProductStatus };

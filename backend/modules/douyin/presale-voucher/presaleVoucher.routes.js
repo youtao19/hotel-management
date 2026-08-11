@@ -30,7 +30,9 @@ const voucherSchema = {
     inventoryCount: { type: 'integer', minimum: 0 },
     eachPersonMax: { type: 'integer', minimum: 1 },
     eachPersonEachOrderMax: { type: 'integer', minimum: 1 },
-    cancelBookingType: { type: 'integer', enum: [1, 3] },
+    cancelBookingType: { type: 'integer', enum: [2, 3] },
+    cancelBookingOffsetDays: { type: ['integer', 'null'], minimum: 1 },
+    cancelBookingOffsetHours: { type: ['integer', 'null'], minimum: 0, maximum: 23 },
     markupRules: {
       type: 'array',
       maxItems: 50,
@@ -67,6 +69,8 @@ function normalizeVoucherPayload(payload = {}, defaultCancelBookingType = 3) {
   return {
     ...payload,
     cancelBookingType: payload.cancelBookingType === undefined ? defaultCancelBookingType : payload.cancelBookingType,
+    cancelBookingOffsetDays: payload.cancelBookingType === 2 ? payload.cancelBookingOffsetDays : null,
+    cancelBookingOffsetHours: payload.cancelBookingType === 2 ? payload.cancelBookingOffsetHours : null,
     markupRules: Array.isArray(payload.markupRules) ? payload.markupRules : []
   };
 }
@@ -103,6 +107,9 @@ function validatePayload(payload, requireFutureSaleStart = false) {
   if (payload.inventoryIsLimited && payload.inventoryCount === undefined) return '有限库存必须填写库存数量';
   if (payload.eachPersonEachOrderMax > payload.eachPersonMax) return '单笔限购不能大于单用户累计限购';
   if (payload.originalAmount < payload.actualAmount) return '划线价不能低于实际售价';
+  if (payload.cancelBookingType === 2 && (payload.cancelBookingOffsetDays === undefined || payload.cancelBookingOffsetHours === undefined)) {
+    return '限时取消必须填写入住前的天数和小时数';
+  }
   // 以服务端北京时间为准，避免浏览器时间偏差导致抖音拒绝过期售卖时间。
   if (requireFutureSaleStart) {
     const currentBeijingTime = formatBeijingDateTime();
