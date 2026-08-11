@@ -35,6 +35,26 @@ async function createRoomType(typeCode = 'RP_TEST') {
   );
 }
 
+/** 为测试房型建立当前抖音门店的有效关联。 */
+async function connectRoomType(typeCode = 'RP_TEST', roomId = `DY_ROOM_${typeCode}`) {
+  await query(
+    `
+      INSERT INTO douyin_physical_rooms
+        (account_id, room_id, room_name, raw_payload, rate_plan_list)
+      VALUES ($1, $2, $3, $4, $5)
+    `,
+    ['DY_RP_ACCOUNT_CURRENT', roomId, `抖音房型-${typeCode}`, { hotel_id: 'DY_RP_HOTEL_CURRENT' }, []]
+  );
+  await query(
+    `
+      INSERT INTO douyin_room_type_mapping
+        (douyin_room_id, douyin_room_name, local_room_type)
+      VALUES ($1, $2, $3)
+    `,
+    [roomId, `抖音房型-${typeCode}`, typeCode]
+  );
+}
+
 function buildPayload(overrides = {}) {
   return {
     room_type_code: 'RP_TEST',
@@ -69,6 +89,7 @@ describe('售卖套餐本地 CRUD', () => {
   });
 
   test('创建、查询、更新、删除售卖套餐', async () => {
+    await connectRoomType();
     const createResponse = await request(app)
       .post('/api/rate-plans')
       .send(buildPayload());
@@ -79,23 +100,6 @@ describe('售卖套餐本地 CRUD', () => {
     expect(createResponse.body.data.base_price).toBe(399);
 
     const id = createResponse.body.data.id;
-
-    await query(
-      `
-        INSERT INTO douyin_physical_rooms
-          (account_id, room_id, room_name, raw_payload, rate_plan_list)
-        VALUES ($1, $2, $3, $4, $5)
-      `,
-      ['DY_RP_ACCOUNT_CURRENT', 'DY_ROOM_CURRENT', '当前酒店房型', { hotel_id: 'DY_RP_HOTEL_CURRENT' }, []]
-    );
-    await query(
-      `
-        INSERT INTO douyin_room_type_mapping
-          (douyin_room_id, douyin_room_name, local_room_type)
-        VALUES ($1, $2, $3)
-      `,
-      ['DY_ROOM_CURRENT', '当前酒店房型', 'RP_TEST']
-    );
 
     const listResponse = await request(app).get('/api/rate-plans');
     expect(listResponse.statusCode).toBe(200);
@@ -128,6 +132,8 @@ describe('售卖套餐本地 CRUD', () => {
 
   test('套餐列表不会返回历史抖音酒店房型下的套餐', async () => {
     await createRoomType('RP_TEST_HISTORY');
+    await connectRoomType();
+    await connectRoomType('RP_TEST_HISTORY');
     const currentResponse = await request(app)
       .post('/api/rate-plans')
       .send(buildPayload({ name: '当前酒店套餐' }));
@@ -135,6 +141,8 @@ describe('售卖套餐本地 CRUD', () => {
       .post('/api/rate-plans')
       .send(buildPayload({ room_type_code: 'RP_TEST_HISTORY', name: '历史酒店套餐' }));
 
+    await query('DELETE FROM douyin_room_type_mapping');
+    await query('DELETE FROM douyin_physical_rooms');
     await query(
       `
         INSERT INTO douyin_physical_rooms
@@ -188,6 +196,39 @@ describe('售卖套餐本地 CRUD', () => {
     );
   });
 
+  test('新增套餐房型候选只返回当前抖音门店的有效关联', async () => {
+    await connectRoomType();
+    await createRoomType('RP_TEST_HISTORY');
+    await query(
+      `
+        INSERT INTO douyin_physical_rooms
+          (account_id, room_id, room_name, raw_payload, rate_plan_list)
+        VALUES ($1, $2, $3, $4, $5)
+      `,
+      ['DY_RP_ACCOUNT_HISTORY', 'DY_ROOM_HISTORY', '历史酒店房型', { hotel_id: 'DY_RP_HOTEL_HISTORY' }, []]
+    );
+    await query(
+      `
+        INSERT INTO douyin_room_type_mapping
+          (douyin_room_id, douyin_room_name, local_room_type)
+        VALUES ($1, $2, $3)
+      `,
+      ['DY_ROOM_HISTORY', '历史酒店房型', 'RP_TEST_HISTORY']
+    );
+
+    const optionsResponse = await request(app).get('/api/rate-plans/room-type-options');
+    const createResponse = await request(app)
+      .post('/api/rate-plans')
+      .send(buildPayload({ room_type_code: 'RP_TEST_HISTORY' }));
+
+    expect(optionsResponse.statusCode).toBe(200);
+    expect(optionsResponse.body.data).toEqual([
+      expect.objectContaining({ type_code: 'RP_TEST' })
+    ]);
+    expect(createResponse.statusCode).toBe(400);
+    expect(createResponse.body.message).toBe('房型未关联当前抖音门店，无法创建售卖套餐');
+  });
+
   test('房型不存在时创建返回 400', async () => {
     const response = await request(app)
       .post('/api/rate-plans')
@@ -198,6 +239,7 @@ describe('售卖套餐本地 CRUD', () => {
   });
 
   test('钟点房缺少明细字段时返回 400', async () => {
+    await connectRoomType();
     const response = await request(app)
       .post('/api/rate-plans')
       .send(buildPayload({ sales_type: 2 }));
@@ -223,6 +265,7 @@ describe('售卖套餐本地 CRUD', () => {
   });
 
   test('已同步到渠道的套餐不能删除', async () => {
+    await connectRoomType();
     const createResponse = await request(app)
       .post('/api/rate-plans')
       .send(buildPayload());
@@ -244,11 +287,14 @@ describe('售卖套餐本地 CRUD', () => {
   });
 
   test('同步抖音预定商品成功后写入渠道映射', async () => {
+    await connectRoomType();
     const createResponse = await request(app)
       .post('/api/rate-plans')
       .send(buildPayload());
     const id = createResponse.body.data.id;
 
+    await query('DELETE FROM douyin_room_type_mapping');
+    await query('DELETE FROM douyin_physical_rooms');
     await query(
       `
         INSERT INTO douyin_room_type_mapping
@@ -379,11 +425,14 @@ describe('售卖套餐本地 CRUD', () => {
   });
 
   test('抖音业务失败时返回 logid 便于调试', async () => {
+    await connectRoomType();
     const createResponse = await request(app)
       .post('/api/rate-plans')
       .send(buildPayload());
     const id = createResponse.body.data.id;
 
+    await query('DELETE FROM douyin_room_type_mapping');
+    await query('DELETE FROM douyin_physical_rooms');
     await query(
       `
         INSERT INTO douyin_room_type_mapping
@@ -437,11 +486,13 @@ describe('售卖套餐本地 CRUD', () => {
   });
 
   test('同步抖音时未绑定物理房型返回 400', async () => {
+    await connectRoomType();
     const createResponse = await request(app)
       .post('/api/rate-plans')
       .send(buildPayload());
     const id = createResponse.body.data.id;
 
+    await query('DELETE FROM douyin_room_type_mapping');
     const response = await request(app)
       .post(`/api/rate-plans/${id}/douyin/sync`)
       .send({
@@ -455,11 +506,14 @@ describe('售卖套餐本地 CRUD', () => {
   });
 
   test('同步抖音时物理房型缓存缺失返回 400', async () => {
+    await connectRoomType();
     const createResponse = await request(app)
       .post('/api/rate-plans')
       .send(buildPayload());
     const id = createResponse.body.data.id;
 
+    await query('DELETE FROM douyin_room_type_mapping');
+    await query('DELETE FROM douyin_physical_rooms');
     await query(
       `
         INSERT INTO douyin_room_type_mapping
@@ -482,6 +536,7 @@ describe('售卖套餐本地 CRUD', () => {
   });
 
   test('凌晨房套餐同步抖音返回 400', async () => {
+    await connectRoomType();
     const createResponse = await request(app)
       .post('/api/rate-plans')
       .send(buildPayload({

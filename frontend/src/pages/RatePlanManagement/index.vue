@@ -840,6 +840,7 @@ const formRef = ref(null)
 const ariNotifyFormRef = ref(null)
 const ratePlans = ref([])
 const roomTypes = ref([])
+const connectedRoomTypes = ref([])
 const loading = ref(false)
 const saving = ref(false)
 const syncingPlanIds = ref([])
@@ -937,7 +938,13 @@ const roomTypeFilterOptions = computed(() => {
   }))
 })
 
-const roomTypeFormOptions = computed(() => roomTypeFilterOptions.value)
+const roomTypeFormOptions = computed(() => {
+  const source = editingPlan.value ? roomTypes.value : connectedRoomTypes.value
+  return source.map(roomType => ({
+    label: `${roomType.type_name} (${roomType.type_code})`,
+    value: roomType.type_code
+  }))
+})
 
 const statusFilterOptions = computed(() => statusOptions)
 const salesTypeFilterOptions = computed(() => salesTypeOptions)
@@ -1174,6 +1181,12 @@ async function fetchRoomTypes() {
   roomTypes.value = response.data || []
 }
 
+/** 查询新增套餐可选择的抖音已关联房型。 */
+async function fetchConnectedRoomTypes() {
+  const response = await ratePlanApi.getConnectedRoomTypes()
+  connectedRoomTypes.value = response.data || []
+}
+
 async function refreshAll() {
   loading.value = true
   try {
@@ -1188,6 +1201,15 @@ async function refreshAll() {
 
 /** 打开套餐编辑窗口。 */
 async function openDialog(plan = null) {
+  if (!plan) {
+    try {
+      await fetchConnectedRoomTypes()
+    } catch (error) {
+      $q.notify({ type: 'negative', message: getErrorMessage(error, '获取抖音已关联房型失败') })
+      return
+    }
+  }
+
   editingPlan.value = plan
   form.value = plan
     ? {

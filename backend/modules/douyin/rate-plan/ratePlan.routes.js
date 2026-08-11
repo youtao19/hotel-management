@@ -147,6 +147,42 @@ async function ensureRoomTypeExists(roomTypeCode) {
   return result.rows.length > 0;
 }
 
+/** 查询当前抖音账号和门店下已关联的本地房型。 */
+async function listConnectedRoomTypes() {
+  const result = await query(
+    `
+      SELECT
+        rt.type_code,
+        rt.type_name,
+        rt.base_price
+      FROM room_types rt
+      INNER JOIN douyin_room_type_mapping drm
+        ON drm.local_room_type = rt.type_code
+      INNER JOIN douyin_physical_rooms dpr
+        ON dpr.room_id = drm.douyin_room_id
+      WHERE ($1 = '' OR dpr.account_id = $1)
+        AND ($2 = '' OR COALESCE(
+          dpr.raw_payload ->> 'hotel_id',
+          dpr.raw_payload ->> 'poi_id',
+          dpr.raw_payload ->> 'hotelId',
+          dpr.raw_payload ->> 'poiId',
+          dpr.raw_payload -> 'hotel' ->> 'hotel_id'
+        ) = $2)
+        AND COALESCE(dpr.status, 1) <> 0
+        AND COALESCE(dpr.raw_payload ->> 'active', 'true') <> 'false'
+      ORDER BY rt.type_code
+    `,
+    [douyinConfig.accountId || '', douyinConfig.poiId || '']
+  );
+  return result.rows;
+}
+
+/** 判断本地房型是否仍关联当前抖音账号和门店。 */
+async function ensureRoomTypeConnectedToDouyin(roomTypeCode) {
+  const roomTypes = await listConnectedRoomTypes();
+  return roomTypes.some((roomType) => roomType.type_code === roomTypeCode);
+}
+
 async function ensureNoDuplicateName(roomTypeCode, name, excludedId = null) {
   const params = [roomTypeCode, name];
   let sql = 'SELECT id FROM rate_plans WHERE room_type_code = $1 AND name = $2';
@@ -309,6 +345,20 @@ router.get('/', async (req, res) => {
   }
 });
 
+/** 查询新增套餐可选择的抖音已关联房型。 */
+router.get('/room-type-options', async (_req, res) => {
+  try {
+    const roomTypes = await listConnectedRoomTypes();
+    return res.status(200).json({
+      data: roomTypes,
+      message: '抖音已关联房型获取成功'
+    });
+  } catch (err) {
+    console.error('获取抖音已关联房型失败:', err);
+    return res.status(500).json({ message: '服务器错误', error: err.message });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const id = parseId(req.params.id);
@@ -461,6 +511,11 @@ router.post('/', async (req, res) => {
     const roomTypeExists = await ensureRoomTypeExists(ratePlan.room_type_code);
     if (!roomTypeExists) {
       return res.status(400).json({ message: '房型不存在，无法创建售卖套餐' });
+    }
+
+    const roomTypeConnected = await ensureRoomTypeConnectedToDouyin(ratePlan.room_type_code);
+    if (!roomTypeConnected) {
+      return res.status(400).json({ message: '房型未关联当前抖音门店，无法创建售卖套餐' });
     }
 
     const noDuplicate = await ensureNoDuplicateName(ratePlan.room_type_code, ratePlan.name);

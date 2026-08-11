@@ -11,6 +11,7 @@
 - `POST /api/douyin/room-type-mapping`
 - `DELETE /api/douyin/room-type-mapping/:localRoomType`
 - `GET /api/rate-plans`
+- `GET /api/rate-plans/room-type-options`
 - `GET /api/rate-plans/:id`
 - `POST /api/rate-plans`
 - `PATCH /api/rate-plans/:id`
@@ -46,7 +47,7 @@ Phase 7: 抖音相关 routes、services 和原 `backend/services` 中的物理�
 - `external/`：抖音 Webhook、SPI 入口、签名校验和回调日志。
 - `presale-order/`：预售券主订单、支付通知、取消订单和退款结果通知处理。
 - `room-type-mapping/`：前端“抖音房型匹配”页面使用的房型映射接口。
-- `rate-plan/`：本地售卖套餐接口，外部路径仍是 `/api/rate-plans`。
+- `rate-plan/`：本地售卖套餐接口，外部路径仍是 `/api/rate-plans`，详见 [套餐接口说明](rate-plan/README.md)。
 - `presale-product/`：本地售卖套餐同步成抖音预售券预定商品。
 - `availability/`：抖音价量 SPI、可订检查和 ARI 变更通知。
 - `channel-mapping/`：本地资源与抖音渠道资源的映射写入。

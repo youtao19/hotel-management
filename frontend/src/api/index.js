@@ -181,6 +181,8 @@ export const roomApi = {
 export const ratePlanApi = {
   getRatePlans: (params = {}) => api.get('/rate-plans', { params }),
 
+  getConnectedRoomTypes: () => api.get('/rate-plans/room-type-options'),
+
   getRatePlan: (id) => api.get(`/rate-plans/${id}`),
 
   createRatePlan: (payload) => api.post('/rate-plans', payload),
