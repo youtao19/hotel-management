@@ -62,6 +62,9 @@ function normalizeDailyRates(value, stayDates, numberOfUnits, totalAmount) {
     const periodStartDate = normalizeDate(item?.period_start_date, 'daily_rates.period_start_date');
     const periodEndDate = normalizeDate(item?.period_end_date, 'daily_rates.period_end_date');
     const originalAmount = normalizeCents(item?.original_amount, 'daily_rates.original_amount');
+    const dailyAddAmount = item?.daily_add_amount === undefined || item?.daily_add_amount === null
+      ? 0
+      : normalizeCents(item.daily_add_amount, 'daily_rates.daily_add_amount');
     if (!expectedDates.delete(periodStartDate)) {
       throw createBookingError('daily_rates 日期重复或不属于入住区间', 8);
     }
@@ -69,7 +72,7 @@ function normalizeDailyRates(value, stayDates, numberOfUnits, totalAmount) {
     if (expectedEndDate.length !== 1) {
       throw createBookingError('daily_rates 必须按单日单间传入', 8);
     }
-    return { periodStartDate, periodEndDate, originalAmount };
+    return { periodStartDate, periodEndDate, originalAmount, dailyAddAmount };
   }).sort((left, right) => left.periodStartDate.localeCompare(right.periodStartDate));
 
   if (expectedDates.size || rates.some((rate, index) => rate.periodStartDate !== stayDates[index])) {
@@ -80,6 +83,26 @@ function normalizeDailyRates(value, stayDates, numberOfUnits, totalAmount) {
     throw createBookingError('订单金额与 daily_rates 不一致', 8);
   }
   return rates;
+}
+
+/** 规范支付后创单模式携带的预约加价支付信息。 */
+function normalizePayInfo(value, expectedAddAmount) {
+  if (value === undefined || value === null) return null;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw createBookingError('pay_info 格式错误', 13);
+  }
+  const addAmount = value.add_amount === undefined || value.add_amount === null
+    ? expectedAddAmount
+    : normalizeCents(value.add_amount, 'pay_info.add_amount');
+  if (addAmount !== expectedAddAmount) {
+    throw createBookingError('pay_info.add_amount 与每日加价不一致', 8);
+  }
+  return {
+    originAmount: value.origin_amount === undefined || value.origin_amount === null ? null : normalizeCents(value.origin_amount, 'pay_info.origin_amount'),
+    addAmount,
+    payAmount: value.pay_amount === undefined || value.pay_amount === null ? null : normalizeCents(value.pay_amount, 'pay_info.pay_amount'),
+    payTimeUnix: value.pay_time_unix === undefined || value.pay_time_unix === null ? null : Number(value.pay_time_unix)
+  };
 }
 
 /** 从联系人或入住人中提取写入本地订单表的客人信息。 */
@@ -113,6 +136,9 @@ function normalizeBookingPayload(payload = {}) {
     throw createBookingError('入住间数或入住人数格式错误', 13);
   }
   const stayDates = buildStayDates(checkInDate, checkOutDate);
+  const dailyRates = normalizeDailyRates(payload.daily_rates, stayDates, numberOfUnits, totalAmount);
+  const addAmount = dailyRates.reduce((sum, rate) => sum + rate.dailyAddAmount, 0) * numberOfUnits;
+  const payInfo = normalizePayInfo(payload.pay_info, addAmount);
   return {
     orderId,
     sourceOrderId,
@@ -125,7 +151,10 @@ function normalizeBookingPayload(payload = {}) {
     checkInDate,
     checkOutDate,
     currency: String(payload.currency || 'CNY').trim() || 'CNY',
-    dailyRates: normalizeDailyRates(payload.daily_rates, stayDates, numberOfUnits, totalAmount)
+    dailyRates,
+    addAmount,
+    payInfo,
+    paymentStatus: addAmount === 0 ? 'NOT_REQUIRED' : payInfo ? 'PAID' : 'PENDING'
   };
 }
 
@@ -236,5 +265,6 @@ module.exports = {
   createBooking,
   createBookingError,
   normalizeBookingPayload,
-  normalizeDailyRates
+  normalizeDailyRates,
+  normalizePayInfo
 };

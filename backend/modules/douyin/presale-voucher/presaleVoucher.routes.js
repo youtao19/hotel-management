@@ -31,6 +31,21 @@ const voucherSchema = {
     eachPersonMax: { type: 'integer', minimum: 1 },
     eachPersonEachOrderMax: { type: 'integer', minimum: 1 },
     cancelBookingType: { type: 'integer', enum: [1, 3] },
+    markupRules: {
+      type: 'array',
+      maxItems: 50,
+      items: {
+        type: 'object',
+        required: ['amount', 'startDate', 'endDate'],
+        properties: {
+          amount: { type: 'number', exclusiveMinimum: 0 },
+          startDate: { type: 'string', pattern: datePattern },
+          endDate: { type: 'string', pattern: datePattern },
+          weekdays: { type: 'array', uniqueItems: true, items: { type: 'integer', minimum: 1, maximum: 7 } }
+        },
+        additionalProperties: false
+      }
+    },
     saleStartAt: { type: 'string', pattern: dateTimePattern },
     saleEndAt: { type: 'string', pattern: dateTimePattern },
     bookStartDate: { type: 'string', pattern: datePattern },
@@ -51,8 +66,17 @@ function parseId(value) {
 function normalizeVoucherPayload(payload = {}, defaultCancelBookingType = 3) {
   return {
     ...payload,
-    cancelBookingType: payload.cancelBookingType === undefined ? defaultCancelBookingType : payload.cancelBookingType
+    cancelBookingType: payload.cancelBookingType === undefined ? defaultCancelBookingType : payload.cancelBookingType,
+    markupRules: Array.isArray(payload.markupRules) ? payload.markupRules : []
   };
+}
+
+/** 校验加价规则中的日期确实是自然日，避免把错误日期传给抖音。 */
+function isValidDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
 
 /** 将指定时刻格式化为北京时间的售卖时间字段格式。 */
@@ -86,6 +110,14 @@ function validatePayload(payload, requireFutureSaleStart = false) {
   }
   if (payload.saleEndAt <= payload.saleStartAt) return '售卖结束时间必须晚于开始时间';
   if (payload.bookEndDate < payload.bookStartDate) return '可预约结束日期不能早于开始日期';
+  for (const [index, rule] of payload.markupRules.entries()) {
+    if (!isValidDate(rule.startDate) || !isValidDate(rule.endDate) || rule.endDate < rule.startDate) {
+      return `第 ${index + 1} 条加价规则的日期范围不合法`;
+    }
+    if (rule.startDate < payload.bookStartDate || rule.endDate > payload.bookEndDate) {
+      return `第 ${index + 1} 条加价规则必须在可预约日期范围内`;
+    }
+  }
   return null;
 }
 

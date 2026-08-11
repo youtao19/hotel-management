@@ -168,7 +168,7 @@ async function applyApprovedCancellation(audit, client) {
   if (!booking && audit.cancel_type === 3) return;
   if (!booking) throw createCancelAuditError('审核回传成功，但本地预约订单不存在', 100, 409);
   if ([1, 2].includes(audit.after_sale_type)) {
-    await bookingRepository.markCancelled(booking, client);
+    await bookingRepository.markCancelled(booking, { cancelId: audit.cancel_id, logId: audit.request_log_id, rawPayload: audit.request_payload }, client);
   }
 }
 

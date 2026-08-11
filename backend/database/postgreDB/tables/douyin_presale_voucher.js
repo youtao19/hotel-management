@@ -14,6 +14,7 @@ const createQuery = `
     each_person_max INTEGER NOT NULL DEFAULT 1,
     each_person_each_order_max INTEGER NOT NULL DEFAULT 1,
     cancel_booking_type INTEGER NOT NULL DEFAULT 3,
+    markup_rules JSONB NOT NULL DEFAULT '[]',
     sale_start_at TIMESTAMPTZ NOT NULL,
     sale_end_at TIMESTAMPTZ NOT NULL,
     book_start_date DATE NOT NULL,
@@ -51,7 +52,8 @@ const schemaUpdateQueryStrings = [
   `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS last_product_status_error TEXT;`,
   `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS each_person_max INTEGER NOT NULL DEFAULT 1;`,
   `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS each_person_each_order_max INTEGER NOT NULL DEFAULT 1;`,
-  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS cancel_booking_type INTEGER NOT NULL DEFAULT 3;`
+  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS cancel_booking_type INTEGER NOT NULL DEFAULT 3;`,
+  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS markup_rules JSONB NOT NULL DEFAULT '[]';`
 ];
 
 const createCommentQueryStrings = [
@@ -63,6 +65,7 @@ const createCommentQueryStrings = [
   `COMMENT ON COLUMN ${tableName}.each_person_max IS '单个抖音用户在本券售卖期内累计可购买的最大张数，必须大于0';`,
   `COMMENT ON COLUMN ${tableName}.each_person_each_order_max IS '单个抖音用户每笔订单可购买的最大张数，必须大于0';`,
   `COMMENT ON COLUMN ${tableName}.cancel_booking_type IS '抖音取消预约类型：1可取消即未使用自动退，3不可取消；当前不支持需额外时间或扣费规则的2和4';`,
+  `COMMENT ON COLUMN ${tableName}.markup_rules IS '预约加价规则数组：每项包含指定日期或节假日、适用范围、星期和每晚加价金额（元）；同步抖音时转换为分';`,
   `COMMENT ON COLUMN ${tableName}.image_urls IS '券图片URL数组，首张作为头图，其余作为详情图';`,
   `COMMENT ON COLUMN ${tableName}.audit_status IS '抖音审核状态：PENDING待审核、APPROVED通过、REJECTED未通过';`,
   `COMMENT ON COLUMN ${tableName}.sync_status IS '同步状态：1成功、0待同步、-1同步失败';`,

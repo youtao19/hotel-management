@@ -986,6 +986,94 @@ describe('抖音 Webhooks 与价量态 SPI', () => {
     }
   });
 
+  test('加价预约未支付超时取消时释放占房，并按 cancel_id 幂等', async () => {
+    const sourceOrderId = 'DY_PRESALE_MARKUP_SOURCE_001';
+    const bookingOrderId = 'DY_BOOKING_MARKUP_TIMEOUT_001';
+    const cancelId = 'DY_BOOKING_MARKUP_CANCEL_001';
+    const noConfirmScheduler = jest.fn();
+    const noConfirmApp = buildTestApp(redisClient, { scheduleBookingConfirmation: noConfirmScheduler, autoConfirmEnabled: false });
+    await seedBookableData();
+    await query('DELETE FROM douyin_presale_booking_orders WHERE ota_order_id = $1', [bookingOrderId]);
+    await query('DELETE FROM douyin_presale_orders WHERE ota_order_id = $1', [sourceOrderId]);
+    await query(
+      `INSERT INTO douyin_presale_orders (order_id, ota_order_id, biz_type, order_stage, raw_payload)
+       VALUES ($1, $2, 2011, 'PAID', $3::jsonb)`,
+      ['DYPS_MARKUP_SOURCE_001', sourceOrderId, JSON.stringify({ order_id: sourceOrderId })]
+    );
+
+    try {
+      const bookingBody = JSON.stringify({
+        order_id: bookingOrderId,
+        source_order_id: sourceOrderId,
+        rate_plan_id: 'DY_RATE_BK_001',
+        hotel_id: 'DY_HOTEL_BK_001',
+        room_id: 'DY_ROOM_BK_001',
+        biz_type: 2012,
+        check_in_date: '2026-04-24',
+        check_out_date: '2026-04-25',
+        number_of_units: 1,
+        number_of_guests: 1,
+        total_amount: 39900,
+        daily_rates: [{ period_start_date: '2026-04-24', period_end_date: '2026-04-25', original_amount: 39900, daily_add_amount: 1200 }]
+      });
+      const bookingPath = '/douyin/spi/presale-order/booking?client_key=DY_CLIENT_TEST&timestamp=1777000000002';
+      const bookingResponse = await request(noConfirmApp)
+        .post(bookingPath)
+        .set('Content-Type', 'application/json')
+        .set('x-life-clientkey', 'DY_CLIENT_TEST')
+        .set('x-life-sign', buildSpiSign(bookingPath, bookingBody))
+        .set('x-bytedance-logid', 'DY_SPI_BOOKING_MARKUP_LOG_001')
+        .send(bookingBody);
+      const localOrderId = bookingResponse.body.data.order_out_id;
+
+      const cancelBody = JSON.stringify({
+        order_id: bookingOrderId,
+        order_out_id: localOrderId,
+        cancel_id: cancelId,
+        cancel_type: 2,
+        biz_type: 2012,
+        after_sale_type: 2,
+        refund_type: 11
+      });
+      const cancelPath = '/douyin/spi/order/cancel?client_key=DY_CLIENT_TEST&timestamp=1777000000002';
+      const firstResponse = await request(noConfirmApp)
+        .post(cancelPath)
+        .set('Content-Type', 'application/json')
+        .set('x-life-clientkey', 'DY_CLIENT_TEST')
+        .set('x-life-sign', buildSpiSign(cancelPath, cancelBody))
+        .set('x-bytedance-logid', 'DY_SPI_BOOKING_MARKUP_CANCEL_LOG_001')
+        .send(cancelBody);
+      const duplicateResponse = await request(noConfirmApp)
+        .post(cancelPath)
+        .set('Content-Type', 'application/json')
+        .set('x-life-clientkey', 'DY_CLIENT_TEST')
+        .set('x-life-sign', buildSpiSign(cancelPath, cancelBody))
+        .set('x-bytedance-logid', 'DY_SPI_BOOKING_MARKUP_CANCEL_LOG_002')
+        .send(cancelBody);
+
+      expect(firstResponse.body.data.cancel_result).toBe(1);
+      expect(duplicateResponse.body.data.cancel_result).toBe(1);
+      const bookingResult = await query(
+        `SELECT booking_status, payment_status, add_amount, cancel_id, cancel_status, cancel_log_id
+         FROM douyin_presale_booking_orders WHERE ota_order_id = $1`,
+        [bookingOrderId]
+      );
+      expect(bookingResult.rows[0]).toEqual(expect.objectContaining({
+        booking_status: 'CANCELLED', payment_status: 'CANCELLED', add_amount: '1200',
+        cancel_id: cancelId, cancel_status: 'CANCELLED', cancel_log_id: 'DY_SPI_BOOKING_MARKUP_CANCEL_LOG_001'
+      }));
+      const localOrderResult = await query(
+        `SELECT status FROM orders WHERE id_source = $1 AND order_source = 'douyin_presale'`,
+        [bookingOrderId]
+      );
+      expect(localOrderResult.rows).toEqual([{ status: 'cancelled' }]);
+    } finally {
+      await query("DELETE FROM orders WHERE id_source = $1 AND order_source = 'douyin_presale'", [bookingOrderId]);
+      await query('DELETE FROM douyin_presale_booking_orders WHERE ota_order_id = $1', [bookingOrderId]);
+      await query('DELETE FROM douyin_presale_orders WHERE ota_order_id = $1', [sourceOrderId]);
+    }
+  });
+
   test('预售券取消订单验签后写入取消状态，相同 cancel_id 幂等成功', async () => {
     const localOrderId = 'DYPS_CANCEL_TEST_001';
     const douyinOrderId = 'DY_CANCEL_TEST_001';

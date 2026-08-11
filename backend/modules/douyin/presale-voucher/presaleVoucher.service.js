@@ -17,6 +17,16 @@ function toCents(amount) {
   return Math.round(Number(amount) * 100);
 }
 
+/** 将运营按元配置的指定日期加价规则映射为抖音按分的契约。 */
+function buildMarkupInfo(markupRules = []) {
+  return markupRules.map((rule) => ({
+    markup_amount: toCents(rule.amount),
+    markup_date_type: 1,
+    markup_days: { from: rule.startDate, to: rule.endDate },
+    ...(Array.isArray(rule.weekdays) && rule.weekdays.length ? { markup_days_of_week: rule.weekdays } : {})
+  }));
+}
+
 /** 兼容抖音常见的logid字段位置，保证失败信息可回溯。 */
 function getLogId(result) {
   return result?.extra?.logid || result?.extra?.log_id || null;
@@ -105,6 +115,7 @@ async function syncVoucher(id) {
   if (!accountId) throw createServiceError('缺少抖音商家 account_id，请配置 DOUYIN_ACCOUNT_ID', 400);
 
   const imageUrls = Array.isArray(voucher.image_urls) ? voucher.image_urls : [];
+  const markupRules = Array.isArray(voucher.markup_rules) ? voucher.markup_rules : [];
   const payload = {
     account_id: accountId,
     presale_info: {
@@ -122,6 +133,9 @@ async function syncVoucher(id) {
         imange_list: imageUrls.map((imageUrl, index) => ({ image_type: index === 0 ? 1 : 2, image_url: imageUrl })),
         original_amount: toCents(voucher.original_amount),
         actual_amount: toCents(voucher.actual_amount),
+        // 固定按天加价是预售券创建时声明的模式；空规则数组用于清除已同步的历史加价日期。
+        markup_type: 1,
+        markup_info: buildMarkupInfo(markupRules),
         sales_type: 1,
         coupon_separate: false
       },
@@ -176,6 +190,7 @@ async function syncVoucher(id) {
     douyinVoucherId: voucher.douyin_voucher_id || null,
     actualAmount: payload.presale_info.pre_sale_coupon_info.actual_amount,
     cancelBookingType: payload.presale_info.trade_info.cancel_booking_rule.cancel_type,
+    markupRuleCount: markupRules.length,
     inventoryIsLimited: voucher.inventory_is_limited,
     imageCount: imageUrls.length
   });
@@ -233,4 +248,4 @@ async function syncVoucher(id) {
   return syncedVoucher;
 }
 
-module.exports = { syncVoucher, updateVoucherProductStatus };
+module.exports = { buildMarkupInfo, syncVoucher, updateVoucherProductStatus };

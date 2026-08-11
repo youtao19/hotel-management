@@ -80,14 +80,20 @@ async function markRefundCompleted(bookingOrder, logId, shouldReleaseInventory, 
 }
 
 /** 取消预约并释放尚未入住的本地占房。 */
-async function markCancelled(bookingOrder, client) {
+async function markCancelled(bookingOrder, cancellation = {}, client) {
   await client.query(
     `UPDATE douyin_presale_booking_orders
      SET booking_status = 'CANCELLED',
+         payment_status = CASE WHEN payment_status = 'PENDING' THEN 'CANCELLED' ELSE payment_status END,
+         cancel_id = COALESCE($2, cancel_id),
+         cancel_status = 'CANCELLED',
+         cancel_log_id = COALESCE($3, cancel_log_id),
+         cancel_payload = COALESCE($4::jsonb, cancel_payload),
+         cancelled_at = NOW(),
          updated_at = CURRENT_TIMESTAMP
      WHERE id = $1
        AND booking_status IN ('CREATED', 'CONFIRMED', 'CONFIRM_FAILED', 'CANCELLED')`,
-    [bookingOrder.id]
+    [bookingOrder.id, cancellation.cancelId || null, cancellation.logId || null, cancellation.rawPayload ? JSON.stringify(cancellation.rawPayload) : null]
   );
   await client.query(
     `UPDATE orders
@@ -145,25 +151,41 @@ async function insertBooking(client, booking) {
        hotel_id, rate_plan_id, room_id, biz_type,
        booking_status, confirm_status, confirm_number, create_log_id,
        check_in_date, check_out_date, number_of_units, number_of_guests,
-       total_amount, currency, assigned_rooms, daily_rates, occupancies,
+       total_amount, add_amount, payment_status, currency, assigned_rooms, daily_rates, occupancies,
        contact_info, raw_payload
      ) VALUES (
        $1, $2, $3, $4,
        $5, $6, $7, 2012,
        'CREATED', 'PENDING', $8, $9,
        $10::date, $11::date, $12, $13,
-       $14, $15, $16::jsonb, $17::jsonb, $18::jsonb,
-       $19::jsonb, $20::jsonb
+       $14, $15, $16, $17, $18::jsonb, $19::jsonb, $20::jsonb,
+       $21::jsonb, $22::jsonb
      ) RETURNING *`,
     [
       booking.localOrderId, booking.douyinOrderId, booking.sourceOrderId, booking.accountId || null,
       booking.hotelId, booking.ratePlanId, booking.roomId, booking.confirmNumber, booking.logId || null,
       booking.checkInDate, booking.checkOutDate, booking.numberOfUnits, booking.numberOfGuests,
-      booking.totalAmount, booking.currency, JSON.stringify(booking.assignedRooms), JSON.stringify(booking.dailyRates), JSON.stringify(booking.occupancies),
+      booking.totalAmount, booking.addAmount, booking.paymentStatus, booking.currency, JSON.stringify(booking.assignedRooms), JSON.stringify(booking.dailyRates), JSON.stringify(booking.occupancies),
       JSON.stringify(booking.contactInfo), JSON.stringify(booking.rawPayload)
     ]
   );
   return result.rows[0];
+}
+
+/** 记录预约加价支付成功，保留通知原文和抖音排障标识。 */
+async function markPaid(bookingOrderId, paymentNotice, rawPayload, logId) {
+  const result = await query(
+    `UPDATE douyin_presale_booking_orders
+     SET payment_status = 'PAID',
+         payment_log_id = $2,
+         raw_payload = jsonb_set(raw_payload, '{payment_notice}', $3::jsonb, true),
+         updated_at = NOW()
+     WHERE id = $1
+       AND booking_status <> 'CANCELLED'
+     RETURNING order_id, ota_order_id, payment_status`,
+    [bookingOrderId, logId || null, JSON.stringify(rawPayload)]
+  );
+  return result.rows[0] || null;
 }
 
 /** 将预约对应的每间夜写入现有订单表以占用库存。 */
@@ -268,7 +290,7 @@ async function markConfirmFailed(localOrderId, result) {
 /** 返回运营人员可处理的抖音预约订单。 */
 async function listBookings() {
   const result = await query(
-    `SELECT order_id, ota_order_id, source_order_id, booking_status, confirm_status,
+    `SELECT order_id, ota_order_id, source_order_id, booking_status, confirm_status, payment_status, add_amount, cancel_status,
             reject_code, reject_reason, confirm_error, create_log_id, confirm_log_id,
             check_in_date::text AS check_in_date, check_out_date::text AS check_out_date,
             number_of_units, number_of_guests, assigned_rooms,
@@ -291,6 +313,7 @@ module.exports = {
   lockAvailableRooms,
   markRefundCompleted,
   markCancelled,
+  markPaid,
   markConfirmFailed,
   markConfirmRejected,
   markConfirmSucceeded,

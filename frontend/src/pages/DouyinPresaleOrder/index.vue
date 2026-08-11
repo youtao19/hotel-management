@@ -126,6 +126,15 @@
           </q-td>
         </template>
 
+        <template #body-cell-payment_status="props">
+          <q-td :props="props">
+            <q-chip dense :color="paymentStatusMeta(props.row.payment_status).color" text-color="white">
+              {{ paymentStatusMeta(props.row.payment_status).label }}
+            </q-chip>
+            <div v-if="Number(props.row.add_amount) > 0" class="text-caption text-grey-6 q-mt-xs">加价：{{ formatAmount(props.row.add_amount) }}</div>
+          </q-td>
+        </template>
+
         <template #body-cell-action="props">
           <q-td :props="props" class="text-right">
             <template v-if="canManuallyProcess(props.row)">
@@ -266,6 +275,7 @@ const auditColumns = [
 const bookingColumns = [
   { name: 'order', label: '预约订单号', field: 'ota_order_id', align: 'left' },
   { name: 'stay', label: '入住信息', field: 'check_in_date', align: 'left' },
+  { name: 'payment_status', label: '加价支付', field: 'payment_status', align: 'center' },
   { name: 'confirm_status', label: '接单状态', field: 'confirm_status', align: 'center' },
   { name: 'created_at', label: '创建时间', field: 'created_at', align: 'left' },
   { name: 'action', label: '操作', field: 'order_id', align: 'right' }
@@ -306,6 +316,16 @@ function confirmStatusMeta(status) {
     REJECTED: { label: '已拒单', color: 'negative' },
     FAILED: { label: '回传失败', color: 'negative' }
   })[status] || { label: '未知', color: 'grey-7' }
+}
+
+/** 返回预约加价支付状态的运营展示样式。 */
+function paymentStatusMeta(status) {
+  return ({
+    NOT_REQUIRED: { label: '无需加价', color: 'grey-7' },
+    PENDING: { label: '待支付', color: 'orange-7' },
+    PAID: { label: '已支付', color: 'positive' },
+    CANCELLED: { label: '已超时取消', color: 'negative' }
+  })[status] || { label: '待确认', color: 'grey-7' }
 }
 
 /** 仅允许在人工接单模式处理尚未有最终结果的预约单。 */

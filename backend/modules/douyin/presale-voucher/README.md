@@ -61,6 +61,18 @@
 
 预售券必须先存在已同步的类型 13 预定商品映射；后端从 `ota_channel_mappings.channel_item_id` 读取该 `rate_plan_id` 并写入 `aris[]`。该功能不调用预售券商品状态接口，也不使用或修改类型 12 的 `douyin_voucher_id`、券面售价。详细参数和日期范围限制见 [日历房价格模块说明](../calendar-room/README.md)。
 
+## 预约加价日期
+
+预售券编辑弹窗可配置多条“预约加价日期”规则。每条规则包含：
+
+- `amount`：每晚加价金额，单位元，必须大于 0；
+- `startDate`、`endDate`：加价日期范围，必须落在该券的可预约日期内；
+- `weekdays`：可选的星期数组，`1` 至 `7` 分别表示周一至周日；全选即日期范围内每天生效。
+
+本地接口 `POST /api/douyin/presale-vouchers` 和 `PUT /api/douyin/presale-vouchers/:id` 使用 `markupRules` 传递规则，数据库保存为 `douyin_presale_vouchers.markup_rules`。同步时后端将金额转换为分，并在 `savepresale` 的 `presale_info.pre_sale_coupon_info` 中发送 `markup_type=1` 和 `markup_info[]`。
+
+加价规则只影响用户后续预约时的应付加价，不改变预售券的券面售价。用户预约命中规则时，抖音会在创建预约 SPI 的 `daily_rates[].daily_add_amount` 下发每晚加价金额。
+
 ## 创建预售订单 SPI
 
 官方[创建预售订单 SPI](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/accommodation-voucher-trade/create-pre-sale-order)由抖音调用第三方，不是酒店主动创建订单。请求会携带 `order_id`、`pre_sale_coupon_id`、券数量、金额、联系人和预约相关字段，请求头包含 `X-Bytedance-Logid`、`x-life-clientkey`、`X-life-sign`。
@@ -79,7 +91,7 @@
 
 官方[支付结果通知 SPI](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/accommodation-voucher-trade/paynotice)与创单 SPI 是两个独立回调，不能配置为同一个地址。本系统支付通知入口为 `POST /douyin/spi/presale-order/payment-notice`。
 
-该接口仅接收未携带 `pay_info` 的两步创单预售券支付通知，验签后始终按预售券“无需接单”的规则处理。请求能匹配到本地订单时，后端将订单阶段更新为 `PAID`，保存本次 `X-Bytedance-Logid` 和支付通知数据；同一订单重复通知只重复确认，不会新建订单。未匹配到本地订单时保留排障日志并返回成功确认，避免抖音因支付通知重试阻塞。
+该接口接收未携带 `pay_info` 的两步创单支付通知。`biz_type=2011` 匹配预售券主订单后更新为 `PAID`；`biz_type=2012` 匹配存在加价的预约订单后更新其 `payment_status=PAID`，保存本次 `X-Bytedance-Logid` 和支付通知数据。同一订单重复通知只重复确认，不会新建订单。未匹配到本地订单时保留排障日志并返回成功确认，避免抖音因支付通知重试阻塞。
 
 抖音后台应分别配置：
 

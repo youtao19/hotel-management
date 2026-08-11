@@ -22,7 +22,8 @@
         row-key="id"
         :loading="loading"
         flat
-        class="custom-table"
+        table-style="table-layout: fixed; width: 100%"
+        class="custom-table presale-voucher-table"
       >
         <template #body-cell-name="props">
           <q-td :props="props">
@@ -31,16 +32,12 @@
               <div>
                 <div class="text-weight-bold text-grey-9">{{ props.row.name }}</div>
                 <div class="text-caption text-grey-6">ID: {{ props.row.id }}</div>
+                <div class="text-caption text-grey-7 ellipsis">套餐：{{ props.row.rate_plan_name || '未绑定套餐' }}</div>
+                <q-chip dense square color="blue-1" text-color="primary" class="q-mt-xs q-ml-none">
+                  {{ props.row.markup_rules?.length ? `${props.row.markup_rules.length} 条加价规则` : '无加价规则' }}
+                </q-chip>
               </div>
             </div>
-          </q-td>
-        </template>
-
-        <template #body-cell-rate_plan_name="props">
-          <q-td :props="props">
-            <q-chip dense color="grey-2" text-color="grey-9" icon="inventory_2" class="q-px-xs">
-              {{ props.row.rate_plan_name || '未绑定套餐' }}
-            </q-chip>
           </q-td>
         </template>
 
@@ -48,6 +45,13 @@
           <q-td :props="props">
             <div class="text-weight-bold text-primary font-money">¥{{ props.row.actual_amount }}</div>
             <div class="text-caption text-grey-5 text-strike font-money">¥{{ props.row.original_amount }}</div>
+          </q-td>
+        </template>
+
+        <template #body-cell-stock_limit="props">
+          <q-td :props="props">
+            <div>{{ props.row.inventory_is_limited ? `库存 ${props.row.inventory_count}` : '无限库存' }}</div>
+            <div class="text-caption text-grey-6">累计 {{ props.row.each_person_max }} 张 / 单笔 {{ props.row.each_person_each_order_max }} 张</div>
           </q-td>
         </template>
 
@@ -454,7 +458,75 @@
               </div>
             </div>
 
-            <!-- 模块 4：展示图集 -->
+            <!-- 模块 4：预约加价规则 -->
+            <div class="form-section">
+              <div class="form-section-header">
+                <q-icon name="add_card" color="primary" size="20px" />
+                <span class="form-section-title">预约加价日期</span>
+                <q-space />
+                <q-btn flat dense color="primary" icon="add" label="新增加价规则" @click="addMarkupRule" />
+              </div>
+              <div class="text-caption text-grey-7 q-mb-md">
+                用户预约命中规则时按每晚收取加价；可一次设置日期范围，并按星期筛选。未添加规则时，全部日期按券面价格预约。
+              </div>
+
+              <q-banner v-if="form.markupRules.length === 0" rounded class="bg-blue-1 text-primary q-mb-sm">
+                暂无加价日期。点击“新增加价规则”即可配置周末、节假日前后的日期范围加价。
+              </q-banner>
+
+              <q-card v-for="(rule, index) in form.markupRules" :key="index" flat bordered class="q-mb-sm markup-rule-card">
+                <q-card-section class="q-pa-md">
+                  <div class="row items-center q-mb-sm">
+                    <div class="text-weight-bold">规则 {{ index + 1 }}</div>
+                    <q-space />
+                    <q-btn flat round dense color="negative" icon="delete_outline" aria-label="删除加价规则" @click="removeMarkupRule(index)">
+                      <q-tooltip>删除此规则</q-tooltip>
+                    </q-btn>
+                  </div>
+                  <div class="row q-col-gutter-md">
+                    <div class="col-12 col-md-4">
+                      <div class="field-label">每晚加价 (元) <span class="text-negative">*</span></div>
+                      <q-input v-model.number="rule.amount" outlined dense type="number" min="0.01" step="0.01" prefix="¥" :rules="[positiveAmount]" class="custom-field" />
+                    </div>
+                    <div class="col-12 col-md-4">
+                      <div class="field-label">开始日期 <span class="text-negative">*</span></div>
+                      <q-input v-model="rule.startDate" outlined dense placeholder="YYYY-MM-DD" :rules="[required]" class="custom-field">
+                        <template #append>
+                          <q-icon name="event" class="cursor-pointer">
+                            <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+                              <q-date v-model="rule.startDate" mask="YYYY-MM-DD" :options="date => markupDateOptions(date, rule, 'start')">
+                                <div class="row items-center justify-end"><q-btn v-close-popup label="确定" color="primary" flat /></div>
+                              </q-date>
+                            </q-popup-proxy>
+                          </q-icon>
+                        </template>
+                      </q-input>
+                    </div>
+                    <div class="col-12 col-md-4">
+                      <div class="field-label">结束日期 <span class="text-negative">*</span></div>
+                      <q-input v-model="rule.endDate" outlined dense placeholder="YYYY-MM-DD" :rules="[required]" class="custom-field">
+                        <template #append>
+                          <q-icon name="event" class="cursor-pointer">
+                            <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+                              <q-date v-model="rule.endDate" mask="YYYY-MM-DD" :options="date => markupDateOptions(date, rule, 'end')">
+                                <div class="row items-center justify-end"><q-btn v-close-popup label="确定" color="primary" flat /></div>
+                              </q-date>
+                            </q-popup-proxy>
+                          </q-icon>
+                        </template>
+                      </q-input>
+                    </div>
+                    <div class="col-12">
+                      <div class="field-label">适用星期</div>
+                      <q-option-group v-model="rule.weekdays" :options="weekdayOptions" type="checkbox" inline color="primary" />
+                      <div class="text-caption text-grey-6 q-mt-xs">全选表示日期范围内每天加价；取消某个星期可快速排除工作日或周末。</div>
+                    </div>
+                  </div>
+                </q-card-section>
+              </q-card>
+            </div>
+
+            <!-- 模块 5：展示图集 -->
             <div class="form-section">
               <div class="form-section-header">
                 <q-icon name="collections" color="primary" size="20px" />
@@ -560,20 +632,28 @@ const uploadingImages = ref(false)
 const minimumSaleStartAt = ref('')
 
 const columns = [
-  { name: 'name', label: '预售券', field: 'name', align: 'left' },
-  { name: 'rate_plan_name', label: '绑定套餐', field: 'rate_plan_name', align: 'left' },
-  { name: 'price', label: '实际价 / 划线价', field: 'actual_amount', align: 'right' },
-  { name: 'inventory_count', label: '库存总量', field: row => row.inventory_is_limited ? row.inventory_count : '无限库存', align: 'center' },
-  { name: 'purchase_limit', label: '限购', field: row => `累计 ${row.each_person_max} 张 / 单笔 ${row.each_person_each_order_max} 张`, align: 'center' },
-  { name: 'book_end_date', label: '可预约至', field: 'book_end_date', align: 'center' },
-  { name: 'audit_status', label: '审核状态', field: 'audit_status', align: 'center' },
-  { name: 'product_status', label: '商品状态', field: 'product_status', align: 'center' },
-  { name: 'actions', label: '操作', field: 'actions', align: 'center' }
+  { name: 'name', label: '预售券 / 套餐 / 加价', field: 'name', align: 'left', style: 'width: 23%' },
+  { name: 'price', label: '实际价 / 划线价', field: 'actual_amount', align: 'right', style: 'width: 12%' },
+  { name: 'stock_limit', label: '库存 / 限购', field: 'inventory_count', align: 'left', style: 'width: 16%' },
+  { name: 'book_end_date', label: '可预约至', field: 'book_end_date', align: 'center', style: 'width: 12%' },
+  { name: 'audit_status', label: '审核状态', field: 'audit_status', align: 'center', style: 'width: 15%' },
+  { name: 'product_status', label: '商品状态', field: 'product_status', align: 'center', style: 'width: 12%' },
+  { name: 'actions', label: '操作', field: 'actions', align: 'center', style: 'width: 10%' }
 ]
 
 const cancelBookingTypeOptions = [
   { label: '未使用自动退', value: 1 },
   { label: '不可取消', value: 3 }
+]
+
+const weekdayOptions = [
+  { label: '周一', value: 1 },
+  { label: '周二', value: 2 },
+  { label: '周三', value: 3 },
+  { label: '周四', value: 4 },
+  { label: '周五', value: 5 },
+  { label: '周六', value: 6 },
+  { label: '周日', value: 7 }
 ]
 
 const ratePlanOptions = computed(() => ratePlans.value.filter(plan => plan.is_synced).map(plan => ({ label: `${plan.name}（${plan.douyin_rate_plan_id}）`, value: plan.id })))
@@ -601,7 +681,30 @@ function onImgError(e) {
 
 /** 返回新增预售券的默认表单，售卖开始时间由后端按北京时间生成。 */
 function defaultForm(saleStartAt = '') {
-  return { ratePlanId: null, name: '', originalAmount: null, actualAmount: null, inventoryIsLimited: true, inventoryCount: null, eachPersonMax: 1, eachPersonEachOrderMax: 1, cancelBookingType: 1, saleStartAt, saleEndAt: '', bookStartDate: '', bookEndDate: '', imageUrls: [] }
+  return { ratePlanId: null, name: '', originalAmount: null, actualAmount: null, inventoryIsLimited: true, inventoryCount: null, eachPersonMax: 1, eachPersonEachOrderMax: 1, cancelBookingType: 1, saleStartAt, saleEndAt: '', bookStartDate: '', bookEndDate: '', markupRules: [], imageUrls: [] }
+}
+
+/** 新增一条默认覆盖全部星期的预约加价规则，方便运营只改日期和金额。 */
+function addMarkupRule() {
+  form.value.markupRules.push({
+    amount: null,
+    startDate: form.value.bookStartDate || '',
+    endDate: form.value.bookEndDate || form.value.bookStartDate || '',
+    weekdays: [1, 2, 3, 4, 5, 6, 7]
+  })
+}
+
+/** 删除不再适用的预约加价规则。 */
+function removeMarkupRule(index) {
+  form.value.markupRules.splice(index, 1)
+}
+
+/** 限制加价日期在可预约范围内，并保持结束日期不早于开始日期。 */
+function markupDateOptions(date, rule, field) {
+  const normalizedDate = date.replaceAll('/', '-')
+  if (form.value.bookStartDate && normalizedDate < form.value.bookStartDate) return false
+  if (form.value.bookEndDate && normalizedDate > form.value.bookEndDate) return false
+  return field !== 'end' || !rule.startDate || normalizedDate >= rule.startDate
 }
 
 /** 判断日期是否不早于服务器给出的最早售卖日期。 */
@@ -647,6 +750,11 @@ function required(value) {
 /** 价格和库存均不允许负数，最终业务校验仍由后端执行。 */
 function nonNegative(value) {
   return (value !== null && value !== '' && Number(value) >= 0) || '请输入不小于 0 的数值'
+}
+
+/** 加价金额必须大于零，零金额规则没有业务意义。 */
+function positiveAmount(value) {
+  return Number(value) > 0 || '请输入大于 0 的加价金额'
 }
 
 /** 校验限购数量必须是大于零的整数，最终仍由后端保护业务约束。 */
@@ -730,6 +838,12 @@ async function openDialog(voucher = null) {
       saleEndAt: voucher.sale_end_at ? voucher.sale_end_at.replace('T', ' ').slice(0, 16) : '',
       bookStartDate: voucher.book_start_date || '',
       bookEndDate: voucher.book_end_date || '',
+      markupRules: Array.isArray(voucher.markup_rules) ? voucher.markup_rules.map(rule => ({
+        amount: Number(rule.amount),
+        startDate: rule.startDate,
+        endDate: rule.endDate,
+        weekdays: Array.isArray(rule.weekdays) && rule.weekdays.length ? rule.weekdays : [1, 2, 3, 4, 5, 6, 7]
+      })) : [],
       imageUrls: voucher.image_urls || []
     }
   }
@@ -752,6 +866,12 @@ function buildPayload() {
     saleEndAt: payload.saleEndAt ? payload.saleEndAt.replace(/[T/]/g, match => match === 'T' ? ' ' : '-') : '',
     bookStartDate: payload.bookStartDate ? payload.bookStartDate.replaceAll('/', '-') : '',
     bookEndDate: payload.bookEndDate ? payload.bookEndDate.replaceAll('/', '-') : '',
+    markupRules: payload.markupRules.map(rule => ({
+      amount: Number(rule.amount),
+      startDate: rule.startDate.replaceAll('/', '-'),
+      endDate: rule.endDate.replaceAll('/', '-'),
+      weekdays: [...rule.weekdays].sort((left, right) => left - right)
+    })),
     imageUrls: payload.imageUrls
   }
 }

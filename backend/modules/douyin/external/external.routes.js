@@ -13,6 +13,7 @@ const douyinSettingsService = require('../settings/douyinSettings.service');
 const { douyinConfig } = require('../../../appSettings/douyin.config');
 const paymentNoticeService = require('../presale-order/paymentNotice.service');
 const cancelOrderService = require('../presale-order/cancelOrder.service');
+const bookingCancelService = require('../presale-order/bookingCancel.service');
 const cancelAuditService = require('../presale-order/cancelAudit.service');
 const refundResultService = require('../presale-order/refundResult.service');
 const callbackLogService = require('./callbackLog.service');
@@ -559,8 +560,9 @@ function createDouyinExternalRouter(options = {}) {
         });
       }
 
-      // 订单类型由抖音回调决定；当前仅实现预售券取消，其他类型不能伪造成功。
-      if (Number(req.body?.biz_type) !== 2011) {
+      // 预售券主订单和预约加价单分开处理，避免取消预约时误改来源券状态。
+      const bizType = Number(req.body?.biz_type);
+      if (![2011, 2012].includes(bizType)) {
         await saveCallbackLog({ type: 'spi_order_cancel', stage: 'biz_type_not_supported', logId, ...summary });
         return res.status(200).json({
           data: {
@@ -573,8 +575,10 @@ function createDouyinExternalRouter(options = {}) {
         });
       }
 
-      const result = await cancelOrderService.cancelOrder(req.body || {}, { logId });
-      console.log('[Douyin SPI] 预售券取消订单已处理:', { logId, ...summary, ...result });
+      const result = bizType === 2012
+        ? await bookingCancelService.cancelBooking(req.body || {}, { logId })
+        : await cancelOrderService.cancelOrder(req.body || {}, { logId });
+      console.log('[Douyin SPI] 抖音取消订单已处理:', { logId, ...summary, ...result });
       await saveCallbackLog({
         type: 'spi_order_cancel',
         stage: result.duplicate ? 'duplicate' : 'processed',

@@ -26,7 +26,8 @@
 - 回调地址：`POST /douyin/spi/presale-order/booking`
 - 鉴权：`x-life-clientkey` 和 `x-life-sign`，复用 `external/signature.service.js`；`X-Bytedance-Logid` 保存为预约单的 `create_log_id`。
 - 仅接收 `biz_type=2012`；`source_order_id` 必须是本系统中已支付的 `biz_type=2011` 抖音预售券订单号。
-- 必填校验：`order_id`、`source_order_id`、`hotel_id`、`rate_plan_id`、`room_id`、入住离店日期、入住间数、入住人数、`total_amount`、`daily_rates`。单日单间金额之和乘以间数必须等于 `total_amount`。
+- 必填校验：`order_id`、`source_order_id`、`hotel_id`、`rate_plan_id`、`room_id`、入住离店日期、入住间数、入住人数、`total_amount`、`daily_rates`。单日单间原始金额之和乘以间数必须等于 `total_amount`。
+- `daily_rates[].daily_add_amount` 为可选的每晚加价金额，单位分。后端汇总为 `add_amount`；有加价且创单未携带 `pay_info` 时，预约单标记为 `payment_status=PENDING`，等待支付通知或超时取消。无加价为 `NOT_REQUIRED`，携带 `pay_info` 为 `PAID`。
 - 同一抖音 `order_id` 重复回调返回同一个 `order_out_id`，不重复占房；确认未成功时会重新触发异步确认接单。
 - 成功响应包含 `order_out_id`、`hotel_confirm_number` 和 `confirm_mode=2`。本地预约先标记为 `PENDING`；自动接单模式随后调用确认接单接口，人工模式保留待处理。接单成功为 `CONFIRMED`，拒单成功为 `REJECTED`，接口失败为 `FAILED` 并保留抖音响应 `logid`。
 - 首次尚未保存后台设置时，`DOUYIN_AUTO_CONFIRM_ENABLED` 未配置或为 `true` 时自动确认接单。员工保存“抖音支持设置”后，数据库中的设置立即生效；关闭时预约单保留 `PENDING` 状态，等待人工处理。
@@ -59,12 +60,13 @@
 
 - 回调地址：`POST /douyin/spi/order/cancel`
 - 鉴权：`x-life-clientkey` 和 `x-life-sign`，复用 `external/signature.service.js`。
-- 当前只处理抖音请求体 `biz_type=2011` 的预售券订单；`2012` 和 `2021` 同步返回拒绝取消，不会被误判为已取消或进入异步自动同意。
-- 使用 `order_id` 主定位预售券订单，`order_out_id` 作为辅助定位；两者同时存在但指向不同订单时拒绝处理。
+- 处理 `biz_type=2011` 的预售券主订单，以及 `biz_type=2012` 的预约订单；日历房 `2021` 仍同步返回拒绝，不能伪造取消成功。
+- 使用 `order_id` 主定位对应业务订单，`order_out_id` 作为辅助定位；两者同时存在但指向不同订单时拒绝处理。
 - 相同 `cancel_id` 重复回调按已处理结果返回，避免重复变更订单状态。
 - `after_sale_type=1` 时，`CREATED`、`PAID` 和已取消订单可同步同意取消，订单阶段写为 `CANCELLED`。
-- `after_sale_type=3` 的仅退款同步同意，但不改变订单阶段；取消状态写为 `REFUND_PENDING`，等待退款结果通知确认。
-- 请求 logid 持久化到 `douyin_presale_orders.cancel_log_id`，完整请求体持久化到 `cancel_payload`。
+- `2011` 的 `after_sale_type=3` 仅退款同步同意，但不改变订单阶段；取消状态写为 `REFUND_PENDING`，等待退款结果通知确认。`2012` 的仅退款不释放预约占房，仍由退款结果通知推进。
+- `2012` 的 `after_sale_type=1/2` 会以 `cancel_id` 幂等标记预约为 `CANCELLED`，将待支付加价状态更新为 `CANCELLED`，并释放尚未入住的本地占房；用于用户预约加价后未支付超时的取消场景。
+- 请求 logid 和原始请求体分别持久化到对应订单的取消字段。
 
 ## 人工取消审核
 

@@ -31,6 +31,14 @@ const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
   number_of_units INTEGER NOT NULL,
   number_of_guests INTEGER NOT NULL,
   total_amount BIGINT NOT NULL,
+  add_amount BIGINT NOT NULL DEFAULT 0,
+  payment_status VARCHAR(32) NOT NULL DEFAULT 'NOT_REQUIRED',
+  payment_log_id VARCHAR(128),
+  cancel_id VARCHAR(128),
+  cancel_status VARCHAR(32),
+  cancel_log_id VARCHAR(128),
+  cancel_payload JSONB,
+  cancelled_at TIMESTAMPTZ,
   currency VARCHAR(16) NOT NULL DEFAULT 'CNY',
   assigned_rooms JSONB NOT NULL,
   daily_rates JSONB NOT NULL,
@@ -51,13 +59,22 @@ const schemaUpdateQueryStrings = [
   `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS refund_log_id VARCHAR(128);`,
   `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS refund_received_at TIMESTAMPTZ;`,
   `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS reject_code INTEGER;`,
-  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS reject_reason VARCHAR(512);`
+  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS reject_reason VARCHAR(512);`,
+  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS add_amount BIGINT NOT NULL DEFAULT 0;`,
+  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS payment_status VARCHAR(32) NOT NULL DEFAULT 'NOT_REQUIRED';`,
+  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS payment_log_id VARCHAR(128);`,
+  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS cancel_id VARCHAR(128);`,
+  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS cancel_status VARCHAR(32);`,
+  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS cancel_log_id VARCHAR(128);`,
+  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS cancel_payload JSONB;`,
+  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;`
 ];
 
 /** 创建预约订单查询索引。 */
 const createIndexQueryStrings = [
   `CREATE INDEX IF NOT EXISTS idx_douyin_presale_booking_orders_source_order_id ON ${tableName}(source_order_id)`,
   `CREATE INDEX IF NOT EXISTS idx_douyin_presale_booking_orders_confirm_status ON ${tableName}(confirm_status)`,
+  `CREATE INDEX IF NOT EXISTS idx_douyin_presale_booking_orders_cancel_id ON ${tableName}(cancel_id)`,
   `CREATE INDEX IF NOT EXISTS idx_douyin_presale_booking_orders_created_at ON ${tableName}(created_at DESC)`
 ];
 
@@ -80,6 +97,14 @@ const createCommentQueryStrings = [
   `COMMENT ON COLUMN ${tableName}.refund_log_id IS '预约单退款结果通知的 X-Bytedance-Logid';`,
   `COMMENT ON COLUMN ${tableName}.refund_received_at IS '预约单退款结果通知接收时间，由数据库时区处理';`,
   `COMMENT ON COLUMN ${tableName}.total_amount IS '预约订单原始总金额，单位分';`,
+  `COMMENT ON COLUMN ${tableName}.add_amount IS '预约订单应付加价总额，按 daily_rates.daily_add_amount 汇总，单位分';`,
+  `COMMENT ON COLUMN ${tableName}.payment_status IS '预约加价支付状态：NOT_REQUIRED无需加价、PENDING待支付、PAID已支付或 CANCELLED超时取消';`,
+  `COMMENT ON COLUMN ${tableName}.payment_log_id IS '预约加价支付通知的 X-Bytedance-Logid';`,
+  `COMMENT ON COLUMN ${tableName}.cancel_id IS '抖音取消预约请求唯一标识，用于幂等处理';`,
+  `COMMENT ON COLUMN ${tableName}.cancel_status IS '预约取消处理状态：CANCELLED 或 REFUND_PENDING';`,
+  `COMMENT ON COLUMN ${tableName}.cancel_log_id IS '预约取消 SPI 请求头 X-Bytedance-Logid';`,
+  `COMMENT ON COLUMN ${tableName}.cancel_payload IS '抖音预约取消 SPI 原始请求体';`,
+  `COMMENT ON COLUMN ${tableName}.cancelled_at IS '本地同意取消预约的处理时间，由数据库时区处理';`,
   `COMMENT ON COLUMN ${tableName}.assigned_rooms IS '已分配的本地房间号数组；每个房间在入住区间占用库存';`,
   `COMMENT ON COLUMN ${tableName}.daily_rates IS '抖音请求的单日单间价格明细，金额单位分';`,
   `COMMENT ON COLUMN ${tableName}.confirmed_at IS '接单或拒单结果成功回传时间，由数据库时区处理';`

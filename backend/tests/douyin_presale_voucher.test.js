@@ -157,6 +157,42 @@ describe('抖音预售券创建和更新', () => {
     expect(requestPayload.presale_info.out_id).toBe(`voucher-${response.body.data.id}`);
   });
 
+  test('创建预售券会保存指定日期加价规则并按分同步到抖音', async () => {
+    const requestPayload = payload(await createSyncedRatePlan());
+    requestPayload.markupRules = [{
+      amount: 88.5,
+      startDate: '2099-10-01',
+      endDate: '2099-10-07',
+      weekdays: [5, 6, 7]
+    }];
+
+    const response = await request(app).post('/api/douyin/presale-vouchers').send(requestPayload);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.data.markup_rules).toEqual(requestPayload.markupRules);
+    const douyinPayload = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(douyinPayload.presale_info.pre_sale_coupon_info).toMatchObject({
+      markup_type: 1,
+      markup_info: [{
+        markup_amount: 8850,
+        markup_date_type: 1,
+        markup_days: { from: '2099-10-01', to: '2099-10-07' },
+        markup_days_of_week: [5, 6, 7]
+      }]
+    });
+  });
+
+  test('加价日期超出可预约范围时在调用抖音前拒绝', async () => {
+    const requestPayload = payload(1);
+    requestPayload.markupRules = [{ amount: 100, startDate: '2099-07-31', endDate: '2099-08-02', weekdays: [1, 2, 3, 4, 5, 6, 7] }];
+
+    const response = await request(app).post('/api/douyin/presale-vouchers').send(requestPayload);
+
+    expect(response.statusCode).toBe(400);
+    expect(response.body.message).toContain('必须在可预约日期范围内');
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   test('旧调用方未传退款规则时保持不可取消默认值', async () => {
     const requestPayload = payload(await createSyncedRatePlan());
     delete requestPayload.cancelBookingType;
@@ -182,6 +218,7 @@ describe('抖音预售券创建和更新', () => {
     const requestPayload = JSON.parse(global.fetch.mock.calls[1][1].body);
     expect(requestPayload.presale_info.pre_sale_coupon_id).toBe('DY_VOUCHER_001');
     expect(requestPayload.presale_info.trade_info.limt_buy_rule).toEqual({ each_person_max: 5, each_person_each_order_max: 3 });
+    expect(requestPayload.presale_info.pre_sale_coupon_info).toMatchObject({ markup_type: 1, markup_info: [] });
   });
 
   test('单笔限购大于累计限购时拒绝同步', async () => {

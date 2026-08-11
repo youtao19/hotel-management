@@ -88,6 +88,18 @@ describe('抖音预售券创建预约订单', () => {
     expect(client.release).toHaveBeenCalledTimes(1);
   });
 
+  test('加价预约未携带 pay_info 时保存待支付加价金额', async () => {
+    await createBooking(buildPayload({
+      daily_rates: [{ period_start_date: '2026-08-20', period_end_date: '2026-08-21', original_amount: 39900, daily_add_amount: 1200 }]
+    }));
+
+    expect(repository.insertBooking).toHaveBeenCalledWith(client, expect.objectContaining({
+      addAmount: 1200,
+      paymentStatus: 'PENDING',
+      dailyRates: [expect.objectContaining({ dailyAddAmount: 1200 })]
+    }));
+  });
+
   test('来源预售券未支付时拒绝创建预约单', async () => {
     repository.findPaidSourceOrder.mockResolvedValue(null);
 

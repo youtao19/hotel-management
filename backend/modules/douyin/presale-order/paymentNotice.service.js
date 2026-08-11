@@ -1,6 +1,8 @@
 "use strict";
 
 const repository = require('./presaleOrder.repository');
+const bookingRepository = require('./bookingOrder.repository');
+const { query } = require('../../../database/postgreDB/pg');
 
 /** 创建支付通知业务错误。 */
 function createPaymentNoticeError(message, errorCode = 13) {
@@ -22,8 +24,8 @@ function normalizeOptionalCents(value, fieldName) {
 /** 校验并整理抖音预售券支付通知。 */
 function normalizePaymentNotice(payload = {}) {
   const bizType = Number(payload.biz_type);
-  if (bizType !== 2011) {
-    throw createPaymentNoticeError('该支付通知不是预售券订单');
+  if (![2011, 2012].includes(bizType)) {
+    throw createPaymentNoticeError('该支付通知不是预售券或预约订单');
   }
 
   const payTimeUnix = payload.pay_time_unix === undefined || payload.pay_time_unix === null || payload.pay_time_unix === ''
@@ -49,6 +51,24 @@ function normalizePaymentNotice(payload = {}) {
 /** 保存支付成功状态，并允许抖音对同一订单重复通知。 */
 async function recordPaymentNotice(payload, options = {}) {
   const notice = normalizePaymentNotice(payload);
+  if (notice.bizType === 2012) {
+    const byDouyinOrderId = notice.douyinOrderId ? await bookingRepository.findByDouyinOrderId(notice.douyinOrderId, { query }) : null;
+    const byLocalOrderId = notice.localOrderId ? await bookingRepository.findByLocalOrderId(notice.localOrderId) : null;
+    if (byDouyinOrderId && byLocalOrderId && byDouyinOrderId.id !== byLocalOrderId.id) {
+      throw createPaymentNoticeError('抖音订单号与第三方订单号不匹配');
+    }
+    const booking = byDouyinOrderId || byLocalOrderId;
+    if (!booking) return { ...notice, orderFound: false, duplicate: false };
+    const updated = await bookingRepository.markPaid(booking.id, notice, payload, options.logId);
+    if (!updated) return { ...notice, orderFound: true, duplicate: true };
+    return {
+      ...notice,
+      douyinOrderId: updated.ota_order_id,
+      localOrderId: updated.order_id,
+      orderFound: true,
+      duplicate: booking.payment_status === 'PAID'
+    };
+  }
   const byDouyinOrderId = notice.douyinOrderId ? await repository.findByDouyinOrderId(notice.douyinOrderId) : null;
   const byLocalOrderId = notice.localOrderId ? await repository.findByLocalOrderId(notice.localOrderId) : null;
 
