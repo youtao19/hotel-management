@@ -228,8 +228,15 @@ export const douyinPresaleVoucherApi = {
 
 export const douyinPresaleOrderApi = {
   getOrders: () => api.get('/douyin/presale-orders'),
+  getBookings: () => api.get('/douyin/presale-orders/bookings'),
+  confirmBooking: (orderId, payload) => api.post(`/douyin/presale-orders/bookings/${encodeURIComponent(orderId)}/confirmation`, payload),
   getCancelAudits: (status = 'PENDING') => api.get('/douyin/presale-orders/cancel-audits', { params: { status } }),
   decideCancelAudit: (cancelId, payload) => api.post(`/douyin/presale-orders/cancel-audits/${encodeURIComponent(cancelId)}/decision`, payload)
+}
+
+export const douyinSettingsApi = {
+  getSettings: () => api.get('/douyin/settings'),
+  updateSettings: (payload) => api.patch('/douyin/settings', payload)
 }
 
 // 抖音房型匹配相关接口

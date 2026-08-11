@@ -123,6 +123,9 @@ async function initializeRoutes() {
     const douyinPresaleOrderRoute = require("./modules/douyin/presale-order/presaleOrder.routes");
     app.use("/api/douyin/presale-orders", douyinPresaleOrderRoute);
 
+    const douyinSettingsRoute = require("./modules/douyin/settings/douyinSettings.routes");
+    app.use("/api/douyin/settings", douyinSettingsRoute);
+
     const douyinRoomTypeMappingRoute = require("./modules/douyin/room-type-mapping/roomTypeMapping.routes");
     app.use("/api/douyin/room-type-mapping", douyinRoomTypeMappingRoute);
 

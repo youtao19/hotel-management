@@ -27,14 +27,57 @@ function createConfirmError(message, booking, logId = null) {
   return error;
 }
 
-/** 调用抖音确认接单接口，确认已创建的预约订单。 */
+/** 组装抖音确认接单或拒单的请求结果。 */
+function buildConfirmResult(booking, options) {
+  const confirmResult = Number(options.confirmResult ?? 1);
+  if (![1, 2].includes(confirmResult)) {
+    const error = new Error('确认结果仅支持接单或拒单');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (confirmResult === 1) {
+    return { confirm_result: 1, confirm_number: booking.confirm_number };
+  }
+  const rejectReason = String(options.rejectReason || '酒店暂不可接单').trim();
+  if (!rejectReason || rejectReason.length > 512) {
+    const error = new Error('拒单原因不能为空且不能超过512个字符');
+    error.statusCode = 400;
+    throw error;
+  }
+  const rejectCode = options.rejectCode === undefined ? 1 : Number(options.rejectCode);
+  if (!Number.isInteger(rejectCode) || rejectCode <= 0) {
+    const error = new Error('拒单原因码必须是正整数');
+    error.statusCode = 400;
+    throw error;
+  }
+  return {
+    confirm_result: 2,
+    reject_code: rejectCode,
+    reject_reason: rejectReason
+  };
+}
+
+/** 调用抖音确认接单接口，回传预约订单的接单或拒单结果。 */
 async function confirmBooking(localOrderId, options = {}) {
   const booking = await repository.findByLocalOrderId(localOrderId);
   if (!booking) {
-    throw new Error(`预约订单不存在: ${localOrderId}`);
+    const error = new Error(`预约订单不存在: ${localOrderId}`);
+    error.statusCode = 404;
+    throw error;
   }
+  const confirmResult = buildConfirmResult(booking, options);
   if (booking.confirm_status === 'CONFIRMED') {
-    return { duplicate: true, logId: booking.confirm_log_id || null };
+    if (confirmResult.confirm_result === 1) {
+      return { duplicate: true, logId: booking.confirm_log_id || null };
+    }
+    const error = createConfirmError('预约订单已接单，不能再拒单', booking, booking.confirm_log_id || null);
+    error.statusCode = 409;
+    throw error;
+  }
+  if (booking.confirm_status === 'REJECTED') {
+    const error = createConfirmError('预约订单已拒单，不能重复处理', booking, booking.confirm_log_id || null);
+    error.statusCode = 409;
+    throw error;
   }
   const accountId = douyinConfig.accountId;
   if (!accountId) {
@@ -45,10 +88,7 @@ async function confirmBooking(localOrderId, options = {}) {
 
   const payload = {
     order_id: booking.ota_order_id,
-    confirm_result: {
-      confirm_result: 1,
-      confirm_number: booking.confirm_number
-    }
+    confirm_result: confirmResult
   };
   let response;
   let result;
@@ -64,23 +104,45 @@ async function confirmBooking(localOrderId, options = {}) {
     });
     result = await response.json();
   } catch (error) {
-    await repository.markConfirmFailed(localOrderId, { errorMessage: `调用确认接单接口失败: ${error.message}`, logId: null, response: {} });
+    await repository.markConfirmFailed(localOrderId, {
+      errorMessage: `调用确认接单接口失败: ${error.message}`,
+      logId: null,
+      response: {},
+      rejectCode: confirmResult.reject_code,
+      rejectReason: confirmResult.reject_reason
+    });
     throw createConfirmError(`调用确认接单接口失败: ${error.message}`, booking);
   }
 
   const logId = getLogId(result);
   const errorMessage = !response.ok ? `确认接单接口 HTTP ${response.status}` : getDouyinErrorMessage(result);
   if (errorMessage) {
-    await repository.markConfirmFailed(localOrderId, { errorMessage, logId, response: result });
+    await repository.markConfirmFailed(localOrderId, {
+      errorMessage,
+      logId,
+      response: result,
+      rejectCode: confirmResult.reject_code,
+      rejectReason: confirmResult.reject_reason
+    });
     throw createConfirmError(errorMessage, booking, logId);
   }
 
-  await repository.markConfirmSucceeded(localOrderId, { logId, response: result });
-  console.log('[Douyin Presale Booking] 确认接单成功:', {
+  if (confirmResult.confirm_result === 2) {
+    await repository.markConfirmRejected(localOrderId, {
+      logId,
+      response: result,
+      rejectCode: confirmResult.reject_code,
+      rejectReason: confirmResult.reject_reason
+    });
+  } else {
+    await repository.markConfirmSucceeded(localOrderId, { logId, response: result });
+  }
+  console.log(`[Douyin Presale Booking] ${confirmResult.confirm_result === 1 ? '确认接单' : '确认拒单'}成功:`, {
     interface: CONFIRM_ENDPOINT,
     douyinOrderId: booking.ota_order_id,
     localOrderId,
-    confirmNumber: booking.confirm_number,
+    confirmNumber: confirmResult.confirm_number || null,
+    rejectCode: confirmResult.reject_code || null,
     confirmOrderLogId: logId
   });
   return { duplicate: false, logId };
@@ -106,6 +168,7 @@ module.exports = {
   CONFIRM_ENDPOINT,
   confirmBooking,
   createConfirmError,
+  buildConfirmResult,
   getDouyinErrorMessage,
   getLogId,
   scheduleBookingConfirmation

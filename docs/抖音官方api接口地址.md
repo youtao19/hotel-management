@@ -202,7 +202,7 @@
 #### 8.1.4 确认接单接口
 - 链接：[确认接单接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/accommodation-voucher-trade/order-confirmation-api)
 - 用途：用于预售券场景下回传接单结果。
-- 当前代码关联：当前未实现，后续预售券接单结果回传需要接入。
+- 当前代码关联：已实现 `biz_type=2012` 预约单的自动接单和手动接单/拒单；详细接口与状态说明见 [预售券订单模块说明](/Users/peach/develop/hotel-management/backend/modules/douyin/presale-order/README.md)。
 
 #### 8.1.5 创建预售订单 SPI
 - 链接：[创建预售订单 SPI](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/accommodation-voucher-trade/create-pre-sale-order)

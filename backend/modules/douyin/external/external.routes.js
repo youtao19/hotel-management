@@ -9,6 +9,7 @@ const bookableCheckService = require('../availability/bookableCheck.service');
 const presaleOrderService = require('../presale-order/presaleOrder.service');
 const bookingOrderService = require('../presale-order/bookingOrder.service');
 const bookingConfirmService = require('../presale-order/bookingConfirm.service');
+const douyinSettingsService = require('../settings/douyinSettings.service');
 const { douyinConfig } = require('../../../appSettings/douyin.config');
 const paymentNoticeService = require('../presale-order/paymentNotice.service');
 const cancelOrderService = require('../presale-order/cancelOrder.service');
@@ -147,7 +148,7 @@ function createDouyinExternalRouter(options = {}) {
   const router = express.Router();
   const redisProvider = options.redisProvider || redisDb;
   const scheduleBookingConfirmation = options.scheduleBookingConfirmation || bookingConfirmService.scheduleBookingConfirmation;
-  const autoConfirmEnabled = options.autoConfirmEnabled ?? douyinConfig.autoConfirmEnabled;
+  const autoConfirmEnabled = options.autoConfirmEnabled;
 
   router.post('/webhooks', async (req, res) => {
     const headerLogId = getHeader(req, 'x-bytedance-logid');
@@ -412,6 +413,9 @@ function createDouyinExternalRouter(options = {}) {
         logId,
         accountId: getHeader(req, 'x-life-clientkey')
       });
+      const shouldAutoConfirm = typeof autoConfirmEnabled === 'boolean'
+        ? autoConfirmEnabled
+        : await douyinSettingsService.isAutoConfirmEnabled();
       console.log('[Douyin SPI] 预售预约订单已创建，等待确认接单:', {
         logId,
         ...summary,
@@ -440,7 +444,7 @@ function createDouyinExternalRouter(options = {}) {
 
       // 响应成功后再确认接单，抖音才能将预约单保持在待接单状态。
       if (result.needsConfirmation) {
-        if (autoConfirmEnabled) {
+        if (shouldAutoConfirm) {
           scheduleBookingConfirmation(result.localOrderId);
         } else {
           console.warn('[Douyin Presale Booking] 已跳过确认接单（超时联调）:', {

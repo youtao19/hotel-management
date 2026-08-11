@@ -84,6 +84,68 @@
     </q-card>
 
     <q-card flat bordered class="table-card q-mt-lg">
+      <q-card-section class="row items-center justify-between q-col-gutter-md">
+        <div class="col-12 col-sm">
+          <div class="text-subtitle1 text-weight-bold">待确认预约订单</div>
+          <div class="text-caption text-grey-7 q-mt-xs">预约单（biz_type=2012）才需要接单。{{ autoConfirmEnabled ? '当前已开启自动接单，系统会自动处理。' : '当前已关闭自动接单，请逐笔确认接单或拒单。' }}</div>
+        </div>
+        <div class="col-12 col-sm-auto">
+          <q-btn flat color="primary" icon="settings" label="接单设置" to="/douyin-settings" />
+        </div>
+      </q-card-section>
+      <q-separator />
+      <q-table
+        :rows="bookings"
+        :columns="bookingColumns"
+        row-key="order_id"
+        :loading="bookingLoading"
+        :pagination="{ rowsPerPage: 10 }"
+        flat
+      >
+        <template #body-cell-order="props">
+          <q-td :props="props">
+            <div class="text-weight-medium">{{ props.row.ota_order_id }}</div>
+            <div class="text-caption text-grey-6">本地：{{ props.row.order_id }}</div>
+          </q-td>
+        </template>
+
+        <template #body-cell-stay="props">
+          <q-td :props="props">
+            <div>{{ props.row.check_in_date }} 至 {{ props.row.check_out_date }}</div>
+            <div class="text-caption text-grey-6">{{ props.row.number_of_units }} 间 / {{ props.row.number_of_guests }} 人</div>
+          </q-td>
+        </template>
+
+        <template #body-cell-confirm_status="props">
+          <q-td :props="props">
+            <q-chip dense :color="confirmStatusMeta(props.row.confirm_status).color" text-color="white">
+              {{ confirmStatusMeta(props.row.confirm_status).label }}
+            </q-chip>
+            <div v-if="props.row.reject_reason" class="text-caption text-negative q-mt-xs">拒单原因：{{ props.row.reject_reason }}</div>
+            <div v-else-if="props.row.confirm_error" class="text-caption text-negative q-mt-xs">失败原因：{{ props.row.confirm_error }}</div>
+          </q-td>
+        </template>
+
+        <template #body-cell-action="props">
+          <q-td :props="props" class="text-right">
+            <template v-if="canManuallyProcess(props.row)">
+              <q-btn flat dense color="primary" label="接单" :loading="bookingOperatingId === props.row.order_id" @click="confirmBooking(props.row)" />
+              <q-btn flat dense color="negative" label="拒单" :disable="bookingOperatingId === props.row.order_id" @click="openRejectDialog(props.row)" />
+            </template>
+            <span v-else class="text-caption text-grey-6">{{ autoConfirmEnabled ? '自动处理' : '无需处理' }}</span>
+          </q-td>
+        </template>
+
+        <template #no-data>
+          <div class="full-width row flex-center q-gutter-sm q-pa-xl text-grey-7">
+            <q-icon size="30px" name="event_available" />
+            <span>暂无抖音预约订单。</span>
+          </div>
+        </template>
+      </q-table>
+    </q-card>
+
+    <q-card flat bordered class="table-card q-mt-lg">
       <q-card-section class="row items-center justify-between">
         <div>
           <div class="text-subtitle1 text-weight-bold">待人工审核的取消申请</div>
@@ -143,19 +205,42 @@
         </q-card-actions>
       </q-card>
     </q-dialog>
+
+    <q-dialog v-model="rejectDialogOpen" persistent>
+      <q-card style="min-width: 380px">
+        <q-card-section>
+          <div class="text-h6">拒绝接单</div>
+          <div class="text-caption text-grey-7 q-mt-sm">预约订单：{{ selectedBooking?.ota_order_id }}</div>
+        </q-card-section>
+        <q-card-section class="q-pt-none">
+          <q-input v-model.trim="rejectReason" type="textarea" autogrow outlined label="拒单原因" :rules="[value => Boolean(value) || '请填写拒单原因']" />
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat label="取消" :disable="bookingOperatingId" v-close-popup />
+          <q-btn unelevated color="negative" label="确认拒单" :loading="Boolean(bookingOperatingId)" @click="rejectBooking" />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useQuasar } from 'quasar'
-import { douyinPresaleOrderApi } from 'src/api'
+import { douyinPresaleOrderApi, douyinSettingsApi } from 'src/api'
 
 const $q = useQuasar()
 const orders = ref([])
 const loading = ref(false)
 const audits = ref([])
 const auditLoading = ref(false)
+const bookings = ref([])
+const bookingLoading = ref(false)
+const autoConfirmEnabled = ref(true)
+const bookingOperatingId = ref(null)
+const rejectDialogOpen = ref(false)
+const selectedBooking = ref(null)
+const rejectReason = ref('')
 const auditDialogOpen = ref(false)
 const auditSubmitting = ref(false)
 const selectedAudit = ref(null)
@@ -176,6 +261,14 @@ const auditColumns = [
   { name: 'sale', label: '售后方式', field: 'after_sale_type', align: 'left' },
   { name: 'created_at', label: '申请时间', field: 'created_at', align: 'left' },
   { name: 'action', label: '操作', field: 'cancel_id', align: 'right' }
+]
+
+const bookingColumns = [
+  { name: 'order', label: '预约订单号', field: 'ota_order_id', align: 'left' },
+  { name: 'stay', label: '入住信息', field: 'check_in_date', align: 'left' },
+  { name: 'confirm_status', label: '接单状态', field: 'confirm_status', align: 'center' },
+  { name: 'created_at', label: '创建时间', field: 'created_at', align: 'left' },
+  { name: 'action', label: '操作', field: 'order_id', align: 'right' }
 ]
 
 /** 汇总页面顶部的订单数量，帮助运营快速判断待处理量。 */
@@ -205,6 +298,21 @@ function afterSaleLabel(type) {
   return labels[type] || '-'
 }
 
+/** 返回预约订单确认状态的运营展示样式。 */
+function confirmStatusMeta(status) {
+  return ({
+    PENDING: { label: '待确认', color: 'orange-7' },
+    CONFIRMED: { label: '已接单', color: 'positive' },
+    REJECTED: { label: '已拒单', color: 'negative' },
+    FAILED: { label: '回传失败', color: 'negative' }
+  })[status] || { label: '未知', color: 'grey-7' }
+}
+
+/** 仅允许在人工接单模式处理尚未有最终结果的预约单。 */
+function canManuallyProcess(booking) {
+  return !autoConfirmEnabled.value && ['PENDING', 'FAILED'].includes(booking.confirm_status)
+}
+
 /** 加载抖音创单 SPI 已落库的预售券主订单。 */
 async function loadOrders() {
   loading.value = true
@@ -231,9 +339,73 @@ async function loadAudits() {
   }
 }
 
+/** 加载预约订单与当前接单模式，确保页面状态来自后端。 */
+async function loadBookings() {
+  bookingLoading.value = true
+  try {
+    const [bookingResponse, settingsResponse] = await Promise.all([
+      douyinPresaleOrderApi.getBookings(),
+      douyinSettingsApi.getSettings()
+    ])
+    bookings.value = bookingResponse.data || []
+    autoConfirmEnabled.value = settingsResponse.data?.auto_confirm_enabled === true
+  } catch (error) {
+    $q.notify({ type: 'negative', message: error?.response?.data?.message || '获取预约订单失败' })
+  } finally {
+    bookingLoading.value = false
+  }
+}
+
 /** 同步刷新预售订单和待人工审核取消申请。 */
 async function loadData() {
-  await Promise.all([loadOrders(), loadAudits()])
+  await Promise.all([loadOrders(), loadAudits(), loadBookings()])
+}
+
+/** 二次确认后向后端提交手动接单结果。 */
+function confirmBooking(booking) {
+  $q.dialog({
+    title: '确认接单',
+    message: `确认接收预约订单「${booking.ota_order_id}」？`,
+    cancel: { label: '取消', flat: true, color: 'grey-7' },
+    ok: { label: '确认接单', color: 'primary' }
+  }).onOk(async () => {
+    await submitBookingConfirmation(booking, { confirmResult: 1 })
+  })
+}
+
+/** 打开预约订单拒单窗口，要求员工说明实际原因。 */
+function openRejectDialog(booking) {
+  selectedBooking.value = booking
+  rejectReason.value = ''
+  rejectDialogOpen.value = true
+}
+
+/** 提交预约订单拒单结果。 */
+async function rejectBooking() {
+  if (!selectedBooking.value || !rejectReason.value) {
+    $q.notify({ type: 'warning', message: '请填写拒单原因' })
+    return
+  }
+  await submitBookingConfirmation(selectedBooking.value, {
+    confirmResult: 2,
+    rejectCode: 1,
+    rejectReason: rejectReason.value
+  })
+  rejectDialogOpen.value = false
+}
+
+/** 调用后端确认接口并刷新预约单状态。 */
+async function submitBookingConfirmation(booking, payload) {
+  bookingOperatingId.value = booking.order_id
+  try {
+    const response = await douyinPresaleOrderApi.confirmBooking(booking.order_id, payload)
+    $q.notify({ type: 'positive', message: response.message || '预约订单处理成功' })
+    await loadBookings()
+  } catch (error) {
+    $q.notify({ type: 'negative', message: error?.response?.data?.message || '预约订单处理失败' })
+  } finally {
+    bookingOperatingId.value = null
+  }
 }
 
 /** 打开选中取消申请的人工审核窗口。 */

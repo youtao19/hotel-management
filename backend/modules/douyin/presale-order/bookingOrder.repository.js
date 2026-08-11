@@ -175,12 +175,52 @@ async function markConfirmSucceeded(localOrderId, result) {
          confirm_status = 'CONFIRMED',
          confirm_log_id = $2,
          confirm_error = NULL,
+         reject_code = NULL,
+         reject_reason = NULL,
          confirm_response = $3::jsonb,
          confirmed_at = NOW(),
          updated_at = NOW()
      WHERE order_id = $1`,
     [localOrderId, result.logId || null, JSON.stringify(result.response)]
   );
+}
+
+/** 保存拒单成功结果及抖音排障 logid。 */
+async function markConfirmRejected(localOrderId, result) {
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `UPDATE douyin_presale_booking_orders
+       SET booking_status = 'REJECTED',
+           confirm_status = 'REJECTED',
+           confirm_log_id = $2,
+           confirm_error = NULL,
+           reject_code = $3,
+           reject_reason = $4,
+           confirm_response = $5::jsonb,
+           confirmed_at = NOW(),
+           updated_at = NOW()
+       WHERE order_id = $1`,
+      [localOrderId, result.logId || null, result.rejectCode || null, result.rejectReason || null, JSON.stringify(result.response)]
+    );
+
+    // 拒单已在抖音侧成立，必须立即释放创建预约时占用的本地库存。
+    await client.query(
+      `UPDATE orders
+       SET status = 'cancelled'
+       WHERE order_id = $1
+         AND order_source = 'douyin_presale'
+         AND status IN ('pending', 'reserved')`,
+      [localOrderId]
+    );
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 /** 保存确认接单失败结果，供重复回调或人工重试排查。 */
@@ -191,11 +231,28 @@ async function markConfirmFailed(localOrderId, result) {
          confirm_status = 'FAILED',
          confirm_log_id = $2,
          confirm_error = $3,
+         reject_code = $5,
+         reject_reason = $6,
          confirm_response = $4::jsonb,
          updated_at = NOW()
      WHERE order_id = $1`,
-    [localOrderId, result.logId || null, result.errorMessage, JSON.stringify(result.response || {})]
+    [localOrderId, result.logId || null, result.errorMessage, JSON.stringify(result.response || {}), result.rejectCode || null, result.rejectReason || null]
   );
+}
+
+/** 返回运营人员可处理的抖音预约订单。 */
+async function listBookings() {
+  const result = await query(
+    `SELECT order_id, ota_order_id, source_order_id, booking_status, confirm_status,
+            reject_code, reject_reason, confirm_error, create_log_id, confirm_log_id,
+            check_in_date::text AS check_in_date, check_out_date::text AS check_out_date,
+            number_of_units, number_of_guests, assigned_rooms,
+            to_char(created_at, 'YYYY-MM-DD HH24:MI:SS') AS created_at,
+            to_char(confirmed_at, 'YYYY-MM-DD HH24:MI:SS') AS confirmed_at
+     FROM douyin_presale_booking_orders
+     ORDER BY created_at DESC`
+  );
+  return result.rows;
 }
 
 module.exports = {
@@ -209,5 +266,7 @@ module.exports = {
   markRefundCompleted,
   markCancelled,
   markConfirmFailed,
-  markConfirmSucceeded
+  markConfirmRejected,
+  markConfirmSucceeded,
+  listBookings
 };

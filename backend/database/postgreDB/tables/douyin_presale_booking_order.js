@@ -17,6 +17,8 @@ const createQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (
   booking_status VARCHAR(32) NOT NULL,
   confirm_status VARCHAR(32) NOT NULL,
   confirm_number VARCHAR(64),
+  reject_code INTEGER,
+  reject_reason VARCHAR(512),
   create_log_id VARCHAR(128),
   confirm_log_id VARCHAR(128),
   confirm_error VARCHAR(512),
@@ -47,7 +49,9 @@ const dropQuery = `DROP TABLE IF EXISTS ${tableName}`;
 const schemaUpdateQueryStrings = [
   `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS refund_status VARCHAR(32);`,
   `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS refund_log_id VARCHAR(128);`,
-  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS refund_received_at TIMESTAMPTZ;`
+  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS refund_received_at TIMESTAMPTZ;`,
+  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS reject_code INTEGER;`,
+  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS reject_reason VARCHAR(512);`
 ];
 
 /** 创建预约订单查询索引。 */
@@ -64,9 +68,11 @@ const createCommentQueryStrings = [
   `COMMENT ON COLUMN ${tableName}.ota_order_id IS '抖音预约订单号 order_id，用于回调幂等和确认接单';`,
   `COMMENT ON COLUMN ${tableName}.source_order_id IS '来源抖音预售券订单号，必须关联已支付的 biz_type=2011 订单';`,
   `COMMENT ON COLUMN ${tableName}.biz_type IS '抖音业务类型，预约订单固定为 2012';`,
-  `COMMENT ON COLUMN ${tableName}.booking_status IS '本地预约状态：CREATED、CONFIRMED、CONFIRM_FAILED、CANCELLED 或 REFUNDED';`,
-  `COMMENT ON COLUMN ${tableName}.confirm_status IS '确认接单状态：PENDING、CONFIRMED 或 FAILED';`,
+  `COMMENT ON COLUMN ${tableName}.booking_status IS '本地预约状态：CREATED、CONFIRMED、REJECTED、CONFIRM_FAILED、CANCELLED 或 REFUNDED';`,
+  `COMMENT ON COLUMN ${tableName}.confirm_status IS '确认接单状态：PENDING、CONFIRMED、REJECTED 或 FAILED';`,
   `COMMENT ON COLUMN ${tableName}.confirm_number IS '本地酒店确认号，发送至抖音确认接单接口';`,
+  `COMMENT ON COLUMN ${tableName}.reject_code IS '员工手动拒单时发送给抖音的拒单原因码';`,
+  `COMMENT ON COLUMN ${tableName}.reject_reason IS '员工手动拒单时发送给抖音的拒单原因';`,
   `COMMENT ON COLUMN ${tableName}.create_log_id IS '创建预约 SPI 请求头 X-Bytedance-Logid';`,
   `COMMENT ON COLUMN ${tableName}.confirm_log_id IS '确认接单接口响应 extra.logid';`,
   `COMMENT ON COLUMN ${tableName}.confirm_error IS '确认接单失败原因；网络失败时不含抖音 logid';`,
@@ -76,7 +82,7 @@ const createCommentQueryStrings = [
   `COMMENT ON COLUMN ${tableName}.total_amount IS '预约订单原始总金额，单位分';`,
   `COMMENT ON COLUMN ${tableName}.assigned_rooms IS '已分配的本地房间号数组；每个房间在入住区间占用库存';`,
   `COMMENT ON COLUMN ${tableName}.daily_rates IS '抖音请求的单日单间价格明细，金额单位分';`,
-  `COMMENT ON COLUMN ${tableName}.confirmed_at IS '确认接单成功时间，由数据库时区处理';`
+  `COMMENT ON COLUMN ${tableName}.confirmed_at IS '接单或拒单结果成功回传时间，由数据库时区处理';`
 ];
 
 module.exports = {

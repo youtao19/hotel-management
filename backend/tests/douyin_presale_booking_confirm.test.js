@@ -12,6 +12,7 @@ jest.mock('../modules/douyin/token/token.service', () => ({
 jest.mock('../modules/douyin/presale-order/bookingOrder.repository', () => ({
   findByLocalOrderId: jest.fn(),
   markConfirmFailed: jest.fn(),
+  markConfirmRejected: jest.fn(),
   markConfirmSucceeded: jest.fn()
 }));
 
@@ -77,5 +78,36 @@ describe('抖音预售券预约确认接单', () => {
       logId: 'CONFIRM_LOG_002',
       errorMessage: '参数不合法'
     }));
+  });
+
+  test('手动拒单时发送拒单结果并保存原因和抖音 logid', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ extra: { error_code: 0, logid: 'REJECT_LOG_001' }, data: { error_code: 0 } })
+    });
+
+    const result = await confirmBooking('DYBK_001', {
+      fetchImpl,
+      confirmResult: 2,
+      rejectCode: 9,
+      rejectReason: '库存不足'
+    });
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://open.douyin.test/goodlife/v1/trip/trade/hotel/order/confirm/',
+      expect.objectContaining({
+        body: JSON.stringify({
+          order_id: 'DY_BOOKING_001',
+          confirm_result: { confirm_result: 2, reject_code: 9, reject_reason: '库存不足' }
+        })
+      })
+    );
+    expect(repository.markConfirmRejected).toHaveBeenCalledWith('DYBK_001', expect.objectContaining({
+      logId: 'REJECT_LOG_001',
+      rejectCode: 9,
+      rejectReason: '库存不足'
+    }));
+    expect(result).toEqual({ duplicate: false, logId: 'REJECT_LOG_001' });
   });
 });

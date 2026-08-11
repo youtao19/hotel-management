@@ -18,7 +18,7 @@
 
 - 已实现：`POST /douyin/spi/presale-order/create` 创建 `2011` 预售券订单，以及 `POST /douyin/spi/presale-order/payment-notice` 接收其支付结果；两者验签、按抖音订单号幂等，并记录回调 `X-Bytedance-Logid`。
 - 已实现：`POST /douyin/spi/presale-order/booking` 创建 `2012` 预约订单；校验已支付的来源 `2011` 订单、抖音酒店/房型映射、可订价量态和 `daily_rates`，在事务内锁房并写入本地库存订单。
-- 已实现：预约 SPI 始终返回 `confirm_mode=2`。响应发送后异步调用确认接单接口，确认请求和响应的 `logid`、失败原因及状态持久化到 `douyin_presale_booking_orders`。
+- 已实现：预约 SPI 始终返回 `confirm_mode=2`。开启自动接单时，响应发送后异步调用确认接单接口；关闭时由员工在预约订单列表中手动接单或拒单。确认请求和响应的 `logid`、失败原因及状态持久化到 `douyin_presale_booking_orders`。
 - 尚待产品规则配置：可订检查和预约创单当前只校验入住人数为正数，尚未配置每房最大入住人数、会员校验、餐食、钟点房等额外限制。
 
 ## 创建预约 SPI
@@ -28,8 +28,16 @@
 - 仅接收 `biz_type=2012`；`source_order_id` 必须是本系统中已支付的 `biz_type=2011` 抖音预售券订单号。
 - 必填校验：`order_id`、`source_order_id`、`hotel_id`、`rate_plan_id`、`room_id`、入住离店日期、入住间数、入住人数、`total_amount`、`daily_rates`。单日单间金额之和乘以间数必须等于 `total_amount`。
 - 同一抖音 `order_id` 重复回调返回同一个 `order_out_id`，不重复占房；确认未成功时会重新触发异步确认接单。
-- 成功响应包含 `order_out_id`、`hotel_confirm_number` 和 `confirm_mode=2`。本地预约先标记为 `PENDING`，随后调用抖音确认接单接口；成功为 `CONFIRMED`，失败为 `FAILED` 并保留抖音响应 `logid`。
-- `DOUYIN_AUTO_CONFIRM_ENABLED` 未配置或为 `true` 时自动确认接单；仅在开发环境做“超时未接单”联调时设为 `false`，此时保留 `PENDING` 状态并记录 `confirm_skipped_for_timeout_test`，绝不能用于生产环境。
+- 成功响应包含 `order_out_id`、`hotel_confirm_number` 和 `confirm_mode=2`。本地预约先标记为 `PENDING`；自动接单模式随后调用确认接单接口，人工模式保留待处理。接单成功为 `CONFIRMED`，拒单成功为 `REJECTED`，接口失败为 `FAILED` 并保留抖音响应 `logid`。
+- 首次尚未保存后台设置时，`DOUYIN_AUTO_CONFIRM_ENABLED` 未配置或为 `true` 时自动确认接单。员工保存“抖音支持设置”后，数据库中的设置立即生效；关闭时预约单保留 `PENDING` 状态，等待人工处理。
+
+## 手动接单与拒单
+
+- 列表：`GET /api/douyin/presale-orders/bookings`
+- 操作：`POST /api/douyin/presale-orders/bookings/:orderId/confirmation`
+- 请求体：接单为 `{ "confirmResult": 1 }`；拒单为 `{ "confirmResult": 2, "rejectCode": 1, "rejectReason": "库存不足" }`。
+- 仅在“抖音支持设置”关闭自动接单时允许调用；后端再次校验，前端按钮禁用不作为业务保障。
+- 仅处理 `biz_type=2012` 预约订单。接单成功写入 `CONFIRMED`，拒单成功写入 `REJECTED` 并在同一事务释放本地未入住占房；接口失败写入 `FAILED`，同时保存抖音响应 `logid`、错误与拒单信息供重试排查。
 
 ## 确认接单接口边界
 

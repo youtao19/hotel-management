@@ -145,6 +145,7 @@ const douyin_presale_booking_order = require("./tables/douyin_presale_booking_or
 const douyin_presale_booking_accommodation_sync = require("./tables/douyin_presale_booking_accommodation_sync");
 const douyin_presale_cancel_audit = require("./tables/douyin_presale_cancel_audit");
 const douyin_presale_refund_notification = require("./tables/douyin_presale_refund_notification");
+const douyin_support_settings = require("./tables/douyin_support_settings");
 const douyin_presale_voucher = require("./tables/douyin_presale_voucher");
 const rate_plans = require("./tables/rate_plans");
 const douyin_calendar_room_rules = require("./tables/douyin_calendar_room_rules");
@@ -176,6 +177,7 @@ tables.push(douyin_presale_booking_order);
 tables.push(douyin_presale_booking_accommodation_sync);
 tables.push(douyin_presale_cancel_audit);
 tables.push(douyin_presale_refund_notification);
+tables.push(douyin_support_settings);
 tables.push(douyin_presale_voucher);
 tables.push(handover);
 tables.push(handoverDailySettings);
