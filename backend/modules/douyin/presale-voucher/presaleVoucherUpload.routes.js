@@ -68,6 +68,7 @@ router.post('/images', (req, res) => {
     }
     if (!req.files?.length) return res.status(400).json({ message: '请至少选择一张图片' });
     const urls = req.files.map(file => `${publicBaseUrl}/uploads/presale-vouchers/${file.filename}`);
+    console.log('[Douyin Presale Voucher] 图片上传成功:', { urls });
     return res.status(201).json({ data: urls, message: '图片上传成功' });
   });
 });
