@@ -602,8 +602,44 @@
           </div>
 
           <div class="row q-col-gutter-md items-end">
-            <div class="col-12 col-sm-5"><q-input v-model="calendarPriceRange.startDate" label="开始日期" type="date" outlined /></div>
-            <div class="col-12 col-sm-5"><q-input v-model="calendarPriceRange.endDate" label="结束日期" type="date" outlined /></div>
+            <div class="col-12 col-sm-5">
+              <q-input :model-value="formatDateForPicker(calendarPriceRange.startDate)" label="开始日期" outlined readonly>
+                <template #append>
+                  <q-icon name="event" class="cursor-pointer">
+                    <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+                      <q-date
+                        :model-value="formatDateForPicker(calendarPriceRange.startDate)"
+                        mask="YYYY/MM/DD"
+                        @update:model-value="updateCalendarPriceStartDate"
+                      >
+                        <div class="row items-center justify-end">
+                          <q-btn v-close-popup label="确定" color="primary" flat />
+                        </div>
+                      </q-date>
+                    </q-popup-proxy>
+                  </q-icon>
+                </template>
+              </q-input>
+            </div>
+            <div class="col-12 col-sm-5">
+              <q-input :model-value="formatDateForPicker(calendarPriceRange.endDate)" label="结束日期" outlined readonly>
+                <template #append>
+                  <q-icon name="event" class="cursor-pointer">
+                    <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+                      <q-date
+                        :model-value="formatDateForPicker(calendarPriceRange.endDate)"
+                        mask="YYYY/MM/DD"
+                        @update:model-value="updateCalendarPriceEndDate"
+                      >
+                        <div class="row items-center justify-end">
+                          <q-btn v-close-popup label="确定" color="primary" flat />
+                        </div>
+                      </q-date>
+                    </q-popup-proxy>
+                  </q-icon>
+                </template>
+              </q-input>
+            </div>
             <div class="col-12 col-sm-2"><q-btn class="full-width" color="deep-orange-8" label="加载日期" :loading="calendarPriceLoading" @click="loadCalendarPrices" /></div>
           </div>
           <div class="text-caption text-grey-7">一次最多维护并推送 30 个自然日。抖音返回的 logid 会在完成后显示，便于排查。</div>
@@ -659,8 +695,44 @@
           </div>
 
           <div class="row q-col-gutter-md">
-            <div class="col-12 col-sm-6"><q-input v-model="stockSyncRange.startDate" label="开始日期" type="date" outlined /></div>
-            <div class="col-12 col-sm-6"><q-input v-model="stockSyncRange.endDate" label="结束日期" type="date" outlined /></div>
+            <div class="col-12 col-sm-6">
+              <q-input :model-value="formatDateForPicker(stockSyncRange.startDate)" label="开始日期" outlined readonly>
+                <template #append>
+                  <q-icon name="event" class="cursor-pointer">
+                    <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+                      <q-date
+                        :model-value="formatDateForPicker(stockSyncRange.startDate)"
+                        mask="YYYY/MM/DD"
+                        @update:model-value="updateStockSyncStartDate"
+                      >
+                        <div class="row items-center justify-end">
+                          <q-btn v-close-popup label="确定" color="primary" flat />
+                        </div>
+                      </q-date>
+                    </q-popup-proxy>
+                  </q-icon>
+                </template>
+              </q-input>
+            </div>
+            <div class="col-12 col-sm-6">
+              <q-input :model-value="formatDateForPicker(stockSyncRange.endDate)" label="结束日期" outlined readonly>
+                <template #append>
+                  <q-icon name="event" class="cursor-pointer">
+                    <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+                      <q-date
+                        :model-value="formatDateForPicker(stockSyncRange.endDate)"
+                        mask="YYYY/MM/DD"
+                        @update:model-value="updateStockSyncEndDate"
+                      >
+                        <div class="row items-center justify-end">
+                          <q-btn v-close-popup label="确定" color="primary" flat />
+                        </div>
+                      </q-date>
+                    </q-popup-proxy>
+                  </q-icon>
+                </template>
+              </q-input>
+            </div>
           </div>
           <div class="text-caption text-grey-7">一次最多推送 30 个自然日。抖音返回的 logid 会在完成后显示，便于排查。</div>
         </q-card-section>
@@ -687,7 +759,25 @@
           <div class="closure-plan-name">{{ stayDateClosurePlan?.name || '--' }}</div>
           <div class="closure-tip"><q-icon name="info" size="18px" /> 手机预约命中关房日期时，抖音可订检查会返回错误码 18。</div>
           <div class="row q-col-gutter-sm items-end">
-            <div class="col"><q-input v-model="stayDateToClose" type="date" label="入住日期" outlined dense /></div>
+            <div class="col">
+              <q-input :model-value="formatDateForPicker(stayDateToClose)" label="入住日期" outlined dense readonly>
+                <template #append>
+                  <q-icon name="event" class="cursor-pointer">
+                    <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+                      <q-date
+                        :model-value="formatDateForPicker(stayDateToClose)"
+                        mask="YYYY/MM/DD"
+                        @update:model-value="updateStayDateToClose"
+                      >
+                        <div class="row items-center justify-end">
+                          <q-btn v-close-popup label="确定" color="primary" flat />
+                        </div>
+                      </q-date>
+                    </q-popup-proxy>
+                  </q-icon>
+                </template>
+              </q-input>
+            </div>
             <div class="col-auto"><q-btn color="negative" icon="event_busy" label="关闭当天" :loading="stayDateClosureSaving" @click="closeStayDate" /></div>
           </div>
           <div>
@@ -723,13 +813,13 @@
 
     <q-dialog v-model="ariNotifyDialogOpen" persistent>
       <q-card class="ari-notify-dialog">
-        <q-card-section class="dialog-heading">
+        <q-card-section class="ari-notify-hero">
+          <div class="ari-notify-hero-icon"><q-icon name="sync" size="26px" /></div>
           <div>
             <div class="text-h6">通知抖音拉取价量态</div>
-            <div class="text-caption text-grey-7">
-              当前套餐：{{ ariNotifyPlan?.name || '--' }}
-            </div>
+            <div class="text-caption text-blue-grey-7">通知抖音按日期读取本地最新价量态</div>
           </div>
+          <q-space />
           <q-btn
             flat
             round
@@ -739,38 +829,80 @@
           />
         </q-card-section>
 
-        <q-separator />
-
         <q-form ref="ariNotifyFormRef" @submit="submitAriNotify">
-          <q-card-section class="dialog-body">
+          <q-card-section class="dialog-body q-gutter-y-md">
+            <div class="ari-notify-plan-summary">
+              <q-icon name="hotel" color="primary" size="20px" />
+              <div>
+                <div class="text-weight-bold">{{ ariNotifyPlan?.name || '--' }}</div>
+                <div class="text-caption text-grey-7">抖音预定商品：{{ ariNotifyPlan?.douyin_rate_plan_id || '--' }}</div>
+              </div>
+            </div>
+
+            <div class="ari-notify-info-banner">
+              <q-icon name="info" size="18px" />
+              <span>抖音会回调本系统读取所选日期的价格、可售状态和剩余房量。</span>
+            </div>
+
+            <div class="ari-notify-quick-actions">
+              <span class="text-caption text-grey-7">快捷范围</span>
+              <q-btn outline dense no-caps color="primary" label="未来 7 天" @click="setAriNotifyDays(7)" />
+              <q-btn outline dense no-caps color="primary" label="未来 30 天" @click="setAriNotifyDays(30)" />
+            </div>
+
             <div class="row q-col-gutter-md">
               <div class="col-12 col-md-6">
                 <q-input
-                  v-model="ariNotifyForm.startDate"
+                  :model-value="formatDateForPicker(ariNotifyForm.startDate)"
                   label="开始日期"
-                  type="date"
                   outlined
+                  readonly
                   :rules="[requiredRule('请选择开始日期')]"
-                />
+                >
+                  <template #append>
+                    <q-icon name="event" class="cursor-pointer">
+                      <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+                        <q-date
+                          :model-value="formatDateForPicker(ariNotifyForm.startDate)"
+                          mask="YYYY/MM/DD"
+                          @update:model-value="updateAriNotifyStartDate"
+                        >
+                          <div class="row items-center justify-end">
+                            <q-btn v-close-popup label="确定" color="primary" flat />
+                          </div>
+                        </q-date>
+                      </q-popup-proxy>
+                    </q-icon>
+                  </template>
+                </q-input>
               </div>
               <div class="col-12 col-md-6">
                 <q-input
-                  v-model="ariNotifyForm.endDate"
+                  :model-value="formatDateForPicker(ariNotifyForm.endDate)"
                   label="结束日期"
-                  type="date"
                   outlined
+                  readonly
                   :rules="[requiredRule('请选择结束日期'), endDateRule]"
-                />
-              </div>
-              <div class="col-12">
-                <q-input
-                  v-model.trim="ariNotifyForm.accountId"
-                  label="抖音 account_id（可选）"
-                  outlined
-                  hint="不填时使用后端配置的 DOUYIN_ACCOUNT_ID"
-                />
+                >
+                  <template #append>
+                    <q-icon name="event" class="cursor-pointer">
+                      <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+                        <q-date
+                          :model-value="formatDateForPicker(ariNotifyForm.endDate)"
+                          mask="YYYY/MM/DD"
+                          @update:model-value="updateAriNotifyEndDate"
+                        >
+                          <div class="row items-center justify-end">
+                            <q-btn v-close-popup label="确定" color="primary" flat />
+                          </div>
+                        </q-date>
+                      </q-popup-proxy>
+                    </q-icon>
+                  </template>
+                </q-input>
               </div>
             </div>
+            <div class="text-caption text-grey-7">一次最多通知 30 个自然日。抖音返回的 logid 会在完成后显示，便于排查。</div>
           </q-card-section>
 
           <q-card-actions align="right" class="dialog-actions">
@@ -996,11 +1128,11 @@ function createDefaultForm() {
   }
 }
 
+/** 创建价量态通知表单的初始值。 */
 function createDefaultAriNotifyForm() {
   return {
     startDate: '',
-    endDate: '',
-    accountId: ''
+    endDate: ''
   }
 }
 
@@ -1050,6 +1182,52 @@ function formatLocalDate(date) {
   return `${year}-${month}-${day}`
 }
 
+/** 将接口自然日转换为日期选择器的展示格式。 */
+function formatDateForPicker(date) {
+  return date.replaceAll('-', '/')
+}
+
+/** 将日期选择器的展示值还原为接口使用的自然日字符串。 */
+function formatDateFromPicker(date) {
+  return date.replaceAll('/', '-')
+}
+
+/** 将日期选择器的展示值还原为接口使用的自然日字符串。 */
+function updateStayDateToClose(stayDate) {
+  stayDateToClose.value = formatDateFromPicker(stayDate)
+}
+
+/** 更新房量房态补推的开始自然日。 */
+function updateStockSyncStartDate(startDate) {
+  stockSyncRange.value.startDate = formatDateFromPicker(startDate)
+}
+
+/** 更新房量房态补推的结束自然日。 */
+function updateStockSyncEndDate(endDate) {
+  stockSyncRange.value.endDate = formatDateFromPicker(endDate)
+}
+
+/** 更新按日房价维护的开始自然日。 */
+function updateCalendarPriceStartDate(startDate) {
+  calendarPriceRange.value.startDate = formatDateFromPicker(startDate)
+}
+
+/** 更新按日房价维护的结束自然日。 */
+function updateCalendarPriceEndDate(endDate) {
+  calendarPriceRange.value.endDate = formatDateFromPicker(endDate)
+}
+
+/** 更新价量态通知的开始自然日。 */
+function updateAriNotifyStartDate(startDate) {
+  ariNotifyForm.value.startDate = formatDateFromPicker(startDate)
+}
+
+/** 更新价量态通知的结束自然日。 */
+function updateAriNotifyEndDate(endDate) {
+  ariNotifyForm.value.endDate = formatDateFromPicker(endDate)
+}
+
+/** 获取通知抖音拉取价量态的默认日期范围。 */
 function getDefaultAriDateRange() {
   const startDate = new Date()
   const endDate = new Date()
@@ -1061,9 +1239,17 @@ function getDefaultAriDateRange() {
   }
 }
 
+/** 设置价量态通知的快捷日期范围。 */
+function setAriNotifyDays(days) {
+  const start = new Date()
+  const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + days - 1)
+  ariNotifyForm.value = { startDate: formatLocalDate(start), endDate: formatLocalDate(end) }
+}
+
+/** 校验通知结束日期不早于开始日期。 */
 function endDateRule(value) {
   if (!value || !ariNotifyForm.value.startDate) return true
-  return value >= ariNotifyForm.value.startDate || '结束日期不能早于开始日期'
+  return formatDateFromPicker(value) >= ariNotifyForm.value.startDate || '结束日期不能早于开始日期'
 }
 
 function calendarEndDateRule(value) {
@@ -1254,6 +1440,7 @@ async function openDialog(plan = null) {
   }
 }
 
+/** 打开当前套餐的价量态通知窗口。 */
 function openAriNotifyDialog(plan) {
   if (!plan?.is_synced || isNotifyingPlan(plan.id)) return
 
@@ -1527,6 +1714,7 @@ async function syncCalendarPrices() {
   }
 }
 
+/** 通知抖音按选定日期拉取当前套餐的价量态。 */
 async function submitAriNotify() {
   if (!ariNotifyPlan.value) return
 
@@ -1541,10 +1729,6 @@ async function submitAriNotify() {
       localRatePlanIds: [ariNotifyPlan.value.id],
       startDate: ariNotifyForm.value.startDate,
       endDate: ariNotifyForm.value.endDate
-    }
-
-    if (ariNotifyForm.value.accountId) {
-      payload.accountId = ariNotifyForm.value.accountId
     }
 
     const response = await ratePlanApi.notifyDouyinAri(payload)
@@ -2130,11 +2314,57 @@ onActivated(refreshAll)
 
 .ari-notify-dialog {
   width: min(560px, calc(100vw - 32px));
-  border-radius: 12px;
+  border-radius: 16px;
+  overflow: hidden;
 }
 
-.ari-notify-dialog .dialog-heading {
+.ari-notify-hero {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 24px;
+  background: linear-gradient(135deg, #eff6ff 0%, #f8fbff 100%);
+}
+
+.ari-notify-hero-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 12px;
+  color: #ffffff;
+  background: #2563eb;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22);
+}
+
+.ari-notify-plan-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #e4e7ec;
+  border-radius: 10px;
   background: #ffffff;
+}
+
+.ari-notify-info-banner {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  color: #1d4ed8;
+  background: #eff6ff;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.ari-notify-quick-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .price-sync-dialog {
