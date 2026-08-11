@@ -24,6 +24,15 @@ function createCheckInSplitError(message, details = null) {
   return err;
 }
 
+/** 创建办理入住时预留房间不可用的业务错误。 */
+function createCheckInRoomUnavailableError(unavailableRooms) {
+  const err = new Error('订单存在维修、关闭或不存在的预留房间，无法办理入住');
+  err.code = 'CHECK_IN_ROOM_UNAVAILABLE';
+  err.statusCode = 409;
+  err.details = unavailableRooms;
+  return err;
+}
+
 function normalizePayWay(method, fallback = DEFAULT_PAY_WAY) {
   const normalized = String(method || '').trim();
   if (!normalized) return fallback;
@@ -367,6 +376,12 @@ async function checkIn(orderId, depositAmount, clientOrPaymentSplitPayload, paym
   const hasDeposit = parsedDeposit > 0;
 
   try {
+    if (manageTx) {
+      await runner.query('BEGIN');
+      txStarted = true;
+      console.log('✅ [check-in] 事务开始');
+    }
+
     const orderRows = await orderCreateRepository.listOrderRowsForCheckIn(runner, orderId);
     console.log('📝 [check-in] 获取订单:', orderId, orderRows.length ? '找到订单' : '订单不存在');
 
@@ -386,12 +401,17 @@ async function checkIn(orderId, depositAmount, clientOrPaymentSplitPayload, paym
       throw err;
     }
 
-    console.log('✅ [check-in] 获取数据库连接成功');
-    if (manageTx) {
-      await runner.query('BEGIN');
-      txStarted = true;
-      console.log('✅ [check-in] 事务开始');
+    const roomNumbers = [...new Set(orderRows.map((order) => String(order.room_number || '').trim()).filter(Boolean))];
+    const lockedRooms = await orderCreateRepository.lockRoomsForCheckIn(runner, roomNumbers);
+    const lockedRoomMap = new Map(lockedRooms.map((room) => [room.room_number, room]));
+    const unavailableRooms = roomNumbers
+      .map((roomNumber) => lockedRoomMap.get(roomNumber) || { room_number: roomNumber, status: null, is_closed: null })
+      .filter((room) => !room.room_number || room.is_closed || room.status === 'repair');
+    if (unavailableRooms.length) {
+      throw createCheckInRoomUnavailableError(unavailableRooms);
     }
+
+    console.log('✅ [check-in] 已锁定并确认预留房间可入住');
 
     const roomFeeSplitsByDay = normalizeRoomFeePaymentSplits(
       orderRows,

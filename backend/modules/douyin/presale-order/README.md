@@ -18,7 +18,7 @@
 
 - 已实现：`POST /douyin/spi/presale-order/create` 创建 `2011` 预售券订单，以及 `POST /douyin/spi/presale-order/payment-notice` 接收其支付结果；两者验签、按抖音订单号幂等，并记录回调 `X-Bytedance-Logid`。
 - 已实现：`POST /douyin/spi/presale-order/booking` 创建 `2012` 预约订单；校验已支付的来源 `2011` 订单、抖音酒店/房型映射、可订价量态和 `daily_rates`，在事务内锁房并写入本地库存订单。
-- 已实现：预约 SPI 始终返回 `confirm_mode=2`。开启自动接单时，响应发送后异步调用确认接单接口；关闭时由员工在预约订单列表中手动接单或拒单。确认请求和响应的 `logid`、失败原因及状态持久化到 `douyin_presale_booking_orders`。
+- 已实现：预约 SPI 始终返回 `confirm_mode=2`。开启自动接单时，响应发送后异步调用确认接单接口；关闭时由员工在预约订单列表中手动接单或拒单。接单前会再次校验已分配房间未维修且未关闭：人工接单直接拦截，自动接单会向抖音回传拒单。确认请求和响应的 `logid`、失败原因及状态持久化到 `douyin_presale_booking_orders`。
 - 尚待产品规则配置：可订检查和预约创单当前只校验入住人数为正数，尚未配置每房最大入住人数、会员校验、餐食、钟点房等额外限制。
 
 ## 创建预约 SPI
@@ -37,6 +37,7 @@
 - 操作：`POST /api/douyin/presale-orders/bookings/:orderId/confirmation`
 - 请求体：接单为 `{ "confirmResult": 1 }`；拒单为 `{ "confirmResult": 2, "rejectCode": 1, "rejectReason": "库存不足" }`。
 - 仅在“抖音支持设置”关闭自动接单时允许调用；后端再次校验，前端按钮禁用不作为业务保障。
+- 手动接单前后端会重验 `assigned_rooms`。任一房间已维修、关闭或不存在时返回 `409` 和 `BOOKING_ROOM_UNAVAILABLE`，不调用抖音确认接单接口；员工可恢复房态后重试，或改为拒单。
 - 仅处理 `biz_type=2012` 预约订单。接单成功写入 `CONFIRMED`，拒单成功写入 `REJECTED` 并在同一事务释放本地未入住占房；接口失败写入 `FAILED`，同时保存抖音响应 `logid`、错误与拒单信息供重试排查。
 
 ## 确认接单接口边界
@@ -50,6 +51,7 @@
 - 官方文档：[订单入住审核接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/check-in-out-sync/order-check-in-audit)；后端调用 `POST /goodlife/v1/trip/trade/hotel/booking/audit/notify/`，通知抖音预约订单实际履约状态。
 - 仅 `biz_type=2012` 的预约订单可同步：抖音 `order_id` 取 `douyin_presale_booking_orders.ota_order_id`，三方 `order_out_id` 取同表 `order_id`，不会把 `2011` 预售券主订单或普通前台订单发给抖音。
 - 本地办理入住事务提交后异步发送 `accommodation_status=1`；正常或提前退房提交为已离店后异步发送 `accommodation_status=3`。网络或抖音业务失败不回滚本地订单、账单和房态。
+- 办理入住会在同一事务内锁定该订单全部预留房间。任一房间维修、关闭或不存在时返回 `409` 和 `CHECK_IN_ROOM_UNAVAILABLE`，整笔入住回滚，不生成账单、不改订单和房态，也不发送入住履约通知。
 - 每种状态的请求结果保存到 `douyin_presale_booking_accommodation_syncs`，包括重试次数、抖音 `extra.logid`、错误码、错误原因和原始响应；HTTP 200 仍会校验 `extra.error_code`。
 - 后台可调用 `POST /api/douyin/presale-orders/:orderId/accommodation-sync/:status/retry` 重试，`:status` 仅接受 `1`（已入住）或 `3`（已离店）。成功记录幂等返回，不重复发送。
 

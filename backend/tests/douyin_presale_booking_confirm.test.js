@@ -11,6 +11,7 @@ jest.mock('../modules/douyin/token/token.service', () => ({
 
 jest.mock('../modules/douyin/presale-order/bookingOrder.repository', () => ({
   findByLocalOrderId: jest.fn(),
+  findUnavailableAssignedRooms: jest.fn(),
   markConfirmFailed: jest.fn(),
   markConfirmRejected: jest.fn(),
   markConfirmSucceeded: jest.fn()
@@ -28,8 +29,10 @@ describe('抖音预售券预约确认接单', () => {
       order_id: 'DYBK_001',
       ota_order_id: 'DY_BOOKING_001',
       confirm_number: 'DYBK_001',
-      confirm_status: 'PENDING'
+      confirm_status: 'PENDING',
+      assigned_rooms: ['101']
     });
+    repository.findUnavailableAssignedRooms.mockResolvedValue([]);
     jest.spyOn(console, 'log').mockImplementation(() => {});
   });
 
@@ -109,5 +112,52 @@ describe('抖音预售券预约确认接单', () => {
       rejectReason: '库存不足'
     }));
     expect(result).toEqual({ duplicate: false, logId: 'REJECT_LOG_001' });
+  });
+
+  test('手动接单时预留房间已维修，应拦截且不调用抖音接单接口', async () => {
+    repository.findUnavailableAssignedRooms.mockResolvedValue([
+      { room_number: '101', status: 'repair', is_closed: true }
+    ]);
+    const fetchImpl = jest.fn();
+
+    await expect(confirmBooking('DYBK_001', { fetchImpl })).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'BOOKING_ROOM_UNAVAILABLE'
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(repository.markConfirmSucceeded).not.toHaveBeenCalled();
+  });
+
+  test('自动接单时预留房间已维修，应向抖音回传拒单', async () => {
+    repository.findUnavailableAssignedRooms.mockResolvedValue([
+      { room_number: '101', status: 'repair', is_closed: true }
+    ]);
+    const fetchImpl = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ extra: { error_code: 0, logid: 'REJECT_REPAIR_LOG_001' }, data: { error_code: 0 } })
+    });
+
+    await expect(confirmBooking('DYBK_001', { fetchImpl, autoRejectOnUnavailable: true })).resolves.toEqual({
+      duplicate: false,
+      logId: 'REJECT_REPAIR_LOG_001'
+    });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://open.douyin.test/goodlife/v1/trip/trade/hotel/order/confirm/',
+      expect.objectContaining({
+        body: JSON.stringify({
+          order_id: 'DY_BOOKING_001',
+          confirm_result: {
+            confirm_result: 2,
+            reject_code: 1,
+            reject_reason: '预留房间已维修或关闭，无法接待'
+          }
+        })
+      })
+    );
+    expect(repository.markConfirmRejected).toHaveBeenCalledWith('DYBK_001', expect.objectContaining({
+      logId: 'REJECT_REPAIR_LOG_001',
+      rejectReason: '预留房间已维修或关闭，无法接待'
+    }));
   });
 });

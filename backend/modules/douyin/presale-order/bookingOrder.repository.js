@@ -29,6 +29,31 @@ async function findByLocalOrderId(localOrderId, client) {
   return result.rows[0] || null;
 }
 
+/** 查询预约已分配房间中维修、关闭或已不存在的房间。 */
+async function findUnavailableAssignedRooms(assignedRooms) {
+  const roomNumbers = Array.isArray(assignedRooms)
+    ? [...new Set(assignedRooms.map((roomNumber) => String(roomNumber || '').trim()).filter(Boolean))]
+    : [];
+  if (!roomNumbers.length) {
+    return [{ room_number: null, status: null, is_closed: null }];
+  }
+
+  const result = await query(
+    `WITH assigned_rooms AS (
+       SELECT DISTINCT unnest($1::text[]) AS room_number
+     )
+     SELECT assigned_rooms.room_number, rooms.status, rooms.is_closed
+     FROM assigned_rooms
+     LEFT JOIN rooms ON rooms.room_number = assigned_rooms.room_number
+     WHERE rooms.room_number IS NULL
+        OR rooms.is_closed = TRUE
+        OR rooms.status = 'repair'
+     ORDER BY assigned_rooms.room_number`,
+    [roomNumbers]
+  );
+  return result.rows;
+}
+
 /** 标记预约退款完成，整单退款时释放该预约占用的本地房间库存。 */
 async function markRefundCompleted(bookingOrder, logId, shouldReleaseInventory, client) {
   await client.query(
@@ -258,6 +283,7 @@ async function listBookings() {
 module.exports = {
   findByDouyinOrderId,
   findByLocalOrderId,
+  findUnavailableAssignedRooms,
   findPaidSourceOrder,
   getClient,
   insertBooking,

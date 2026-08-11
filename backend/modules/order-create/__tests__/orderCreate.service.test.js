@@ -3,6 +3,7 @@ jest.mock('../orderCreate.repository', () => ({
   insertOrderDay: jest.fn(),
   listBillsByOrderId: jest.fn(),
   listOrderRowsForCheckIn: jest.fn(),
+  lockRoomsForCheckIn: jest.fn(),
   listStayDates: jest.fn(),
   updateOrderDeposit: jest.fn(),
   updateOrderPaymentMethod: jest.fn(),
@@ -18,6 +19,10 @@ jest.mock('../../bill/bill.service', () => ({
   addBill: jest.fn()
 }));
 
+jest.mock('../../douyin/availability/stockPush.service', () => ({
+  scheduleRoomTypeStockSync: jest.fn()
+}));
+
 const billService = require('../../bill/bill.service');
 const orderCreateRepository = require('../orderCreate.repository');
 const orderManageRepository = require('../../order-manage/orderManage.repository');
@@ -26,6 +31,9 @@ const orderCreateService = require('../orderCreate.service');
 describe('创建订单业务服务', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    orderCreateRepository.lockRoomsForCheckIn.mockImplementation((_client, roomNumbers) => Promise.resolve(
+      roomNumbers.map((roomNumber) => ({ room_number: roomNumber, status: 'available', is_closed: false }))
+    ));
   });
 
   test('创建订单时，应当按住宿日期写入每天一条订单记录', async () => {
@@ -209,5 +217,40 @@ describe('创建订单业务服务', () => {
     expect(client.release).toHaveBeenCalled();
     expect(orderCreateRepository.insertOrderDay).toHaveBeenCalledTimes(1);
     expect(orderCreateRepository.updateOrderStatus).toHaveBeenCalledWith(client, 'ORDER_FAST_001', 'checked-in');
+  });
+
+  test('办理入住时预留房间已维修，应回滚且不写入账单或入住状态', async () => {
+    const client = {
+      query: jest.fn().mockResolvedValue({ rows: [] }),
+      release: jest.fn()
+    };
+    orderCreateRepository.getClient.mockResolvedValue(client);
+    orderCreateRepository.listOrderRowsForCheckIn.mockResolvedValue([
+      {
+        id: 1,
+        order_id: 'ORDER_REPAIR_001',
+        room_number: '403',
+        guest_name: '张三',
+        stay_date: '2025-11-01',
+        check_in_date: '2025-11-01',
+        total_price: 100,
+        deposit: 0,
+        payment_method: '现金',
+        stay_type: '客房',
+        status: 'pending'
+      }
+    ]);
+    orderCreateRepository.lockRoomsForCheckIn.mockResolvedValue([
+      { room_number: '403', status: 'repair', is_closed: true }
+    ]);
+
+    await expect(orderCreateService.checkIn('ORDER_REPAIR_001', 0)).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'CHECK_IN_ROOM_UNAVAILABLE'
+    });
+    expect(billService.addBill).not.toHaveBeenCalled();
+    expect(orderCreateRepository.updateOrderStatus).not.toHaveBeenCalled();
+    expect(orderCreateRepository.updateRoomStatus).not.toHaveBeenCalled();
+    expect(client.query).toHaveBeenLastCalledWith('ROLLBACK');
   });
 });

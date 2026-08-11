@@ -27,6 +27,15 @@ function createConfirmError(message, booking, logId = null) {
   return error;
 }
 
+/** 创建因预留房间不可用而拒绝接单的业务错误。 */
+function createUnavailableRoomError(booking, unavailableRooms) {
+  const error = createConfirmError('预留房间已维修、关闭或不存在，不能接单', booking);
+  error.statusCode = 409;
+  error.code = 'BOOKING_ROOM_UNAVAILABLE';
+  error.details = unavailableRooms;
+  return error;
+}
+
 /** 组装抖音确认接单或拒单的请求结果。 */
 function buildConfirmResult(booking, options) {
   const confirmResult = Number(options.confirmResult ?? 1);
@@ -78,6 +87,23 @@ async function confirmBooking(localOrderId, options = {}) {
     const error = createConfirmError('预约订单已拒单，不能重复处理', booking, booking.confirm_log_id || null);
     error.statusCode = 409;
     throw error;
+  }
+
+  // 接单前重验已分配房间，避免预约创建后被维修或关闭仍对外承诺。
+  if (confirmResult.confirm_result === 1) {
+    const unavailableRooms = await repository.findUnavailableAssignedRooms(booking.assigned_rooms);
+    if (unavailableRooms.length) {
+      if (options.autoRejectOnUnavailable) {
+        return confirmBooking(localOrderId, {
+          ...options,
+          autoRejectOnUnavailable: false,
+          confirmResult: 2,
+          rejectCode: 1,
+          rejectReason: '预留房间已维修或关闭，无法接待'
+        });
+      }
+      throw createUnavailableRoomError(booking, unavailableRooms);
+    }
   }
   const accountId = douyinConfig.accountId;
   if (!accountId) {
@@ -151,7 +177,7 @@ async function confirmBooking(localOrderId, options = {}) {
 /** 在创建预约响应返回后异步确认接单，不阻塞抖音 SPI。 */
 function scheduleBookingConfirmation(localOrderId) {
   setImmediate(() => {
-    confirmBooking(localOrderId).catch((error) => {
+    confirmBooking(localOrderId, { autoRejectOnUnavailable: true }).catch((error) => {
       console.error('[Douyin Presale Booking] 确认接单失败:', {
         interface: CONFIRM_ENDPOINT,
         douyinOrderId: error.douyinOrderId || null,
@@ -168,6 +194,7 @@ module.exports = {
   CONFIRM_ENDPOINT,
   confirmBooking,
   createConfirmError,
+  createUnavailableRoomError,
   buildConfirmResult,
   getDouyinErrorMessage,
   getLogId,

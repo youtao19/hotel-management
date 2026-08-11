@@ -92,6 +92,18 @@ async function listOrderRowsForCheckIn(runner, orderId) {
   return rows;
 }
 
+/** 锁定办理入住涉及的房间，防止校验通过后被并发改为维修或关房。 */
+async function lockRoomsForCheckIn(runner, roomNumbers) {
+  const { rows } = await runner.query(
+    `SELECT room_number, status, is_closed
+     FROM rooms
+     WHERE room_number = ANY($1::text[])
+     FOR UPDATE`,
+    [roomNumbers]
+  );
+  return rows;
+}
+
 /**
  * 更新订单的支付方式。
  *
@@ -176,6 +188,7 @@ module.exports = {
   insertOrderDay,
   listBillsByOrderId,
   listOrderRowsForCheckIn,
+  lockRoomsForCheckIn,
   listStayDates,
   updateOrderDeposit,
   updateOrderPaymentMethod,
