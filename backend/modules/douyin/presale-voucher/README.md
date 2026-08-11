@@ -1,10 +1,23 @@
 # 抖音预售券联调说明
 
+## 创建与更新规则
+
+官方[创建/更新预售券接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/hotel-voucher-mgmt/create-update-coupon)的 `presale_info.out_id` 是三方预售券唯一标识，首次写入后不可修改。更新已创建的券时，必须在 `presale_info.pre_sale_coupon_id` 传入抖音预售券 ID，并提交完整券信息；仅重复传同一 `out_id` 会被视作新建，可能返回“该 out_id 已绑定其他商品”。
+
 ## 本地券面图上传
 
 `POST /api/douyin/presale-vouchers/images` 接收 multipart 字段 `images`，员工可从本机选择 JPG、PNG 或 WebP 图片。后端将文件保存到 `backend/modules/douyin/presale-voucher/uploads/`，并返回 `/uploads/presale-vouchers/:filename` 的完整公网 URL；该静态路径无需 JWT，供抖音审核服务拉取图片。
 
 上传前须把 `dev.env` 的 `APP_URL` 设置为 ngrok 暴露后端服务端口后的公网 `http/https` 根地址，例如 `https://example.ngrok-free.app`。`localhost`、`127.0.0.1` 和非 HTTP(S) 地址会被拒绝，避免提交抖音无法访问的券面图。单张图片最大 5MB，一次最多 9 张。
+
+## 购买上限
+
+创建和更新预售券的 `POST /api/douyin/presale-vouchers`、`PUT /api/douyin/presale-vouchers/:id` 请求必须同时提供以下正整数，并由后端保存后同步到抖音 `trade_info.limt_buy_rule`：
+
+- `eachPersonMax`：单个用户在该券售卖期内累计最多购买的张数。
+- `eachPersonEachOrderMax`：单个用户每笔订单最多购买的张数。
+
+两个字段默认值均为 `1`；已存在的预售券迁移后也会使用此默认值。
 
 ## 商品状态接口标识
 

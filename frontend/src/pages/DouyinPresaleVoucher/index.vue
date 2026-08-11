@@ -249,6 +249,45 @@
                   </template>
                 </q-input>
               </div>
+
+              <div class="row q-col-gutter-md q-mt-xs">
+                <div class="col-12 col-md-6">
+                  <div class="field-label">单用户累计限购 (张) <span class="text-negative">*</span></div>
+                  <q-input
+                    v-model.number="form.eachPersonMax"
+                    outlined
+                    dense
+                    type="number"
+                    min="1"
+                    step="1"
+                    placeholder="售卖期内最多购买张数"
+                    :rules="[positiveInteger]"
+                    class="custom-field"
+                  >
+                    <template #prepend>
+                      <q-icon name="person" color="primary" />
+                    </template>
+                  </q-input>
+                </div>
+                <div class="col-12 col-md-6">
+                  <div class="field-label">单笔限购 (张) <span class="text-negative">*</span></div>
+                  <q-input
+                    v-model.number="form.eachPersonEachOrderMax"
+                    outlined
+                    dense
+                    type="number"
+                    min="1"
+                    step="1"
+                    placeholder="每笔订单最多购买张数"
+                    :rules="[positiveInteger, eachOrderLimit]"
+                    class="custom-field"
+                  >
+                    <template #prepend>
+                      <q-icon name="shopping_cart" color="primary" />
+                    </template>
+                  </q-input>
+                </div>
+              </div>
             </div>
 
             <!-- 模块 3：有效期限 -->
@@ -500,6 +539,7 @@ const columns = [
   { name: 'rate_plan_name', label: '绑定套餐', field: 'rate_plan_name', align: 'left' },
   { name: 'price', label: '实际价 / 划线价', field: 'actual_amount', align: 'right' },
   { name: 'inventory_count', label: '库存总量', field: row => row.inventory_is_limited ? row.inventory_count : '无限库存', align: 'center' },
+  { name: 'purchase_limit', label: '限购', field: row => `累计 ${row.each_person_max} 张 / 单笔 ${row.each_person_each_order_max} 张`, align: 'center' },
   { name: 'book_end_date', label: '可预约至', field: 'book_end_date', align: 'center' },
   { name: 'audit_status', label: '审核状态', field: 'audit_status', align: 'center' },
   { name: 'product_status', label: '商品状态', field: 'product_status', align: 'center' },
@@ -531,7 +571,7 @@ function onImgError(e) {
 
 /** 返回新增预售券的默认表单，日期不预填以避免运营误发过期券。 */
 function defaultForm() {
-  return { ratePlanId: null, name: '', originalAmount: null, actualAmount: null, inventoryIsLimited: true, inventoryCount: null, saleStartAt: '', saleEndAt: '', bookStartDate: '', bookEndDate: '', imageUrls: [] }
+  return { ratePlanId: null, name: '', originalAmount: null, actualAmount: null, inventoryIsLimited: true, inventoryCount: null, eachPersonMax: 1, eachPersonEachOrderMax: 1, saleStartAt: '', saleEndAt: '', bookStartDate: '', bookEndDate: '', imageUrls: [] }
 }
 
 /** 未输入内容时阻止提交，让后端不用承担纯界面必填提示。 */
@@ -542,6 +582,16 @@ function required(value) {
 /** 价格和库存均不允许负数，最终业务校验仍由后端执行。 */
 function nonNegative(value) {
   return (value !== null && value !== '' && Number(value) >= 0) || '请输入不小于 0 的数值'
+}
+
+/** 校验限购数量必须是大于零的整数，最终仍由后端保护业务约束。 */
+function positiveInteger(value) {
+  return (Number.isInteger(Number(value)) && Number(value) > 0) || '请输入大于 0 的整数'
+}
+
+/** 保证单笔购买数量不超过该用户在售卖期内的累计上限。 */
+function eachOrderLimit(value) {
+  return Number(value) <= Number(form.value.eachPersonMax) || '单笔限购不能大于单用户累计限购'
 }
 
 /** 确认至少有一张已由后端生成的公网券面图，后端仍会复核。 */
@@ -597,6 +647,8 @@ function openDialog(voucher = null) {
     actualAmount: Number(voucher.actual_amount),
     inventoryIsLimited: voucher.inventory_is_limited,
     inventoryCount: voucher.inventory_count,
+    eachPersonMax: voucher.each_person_max,
+    eachPersonEachOrderMax: voucher.each_person_each_order_max,
     saleStartAt: voucher.sale_start_at ? voucher.sale_start_at.replace('T', ' ').slice(0, 16) : '',
     saleEndAt: voucher.sale_end_at ? voucher.sale_end_at.replace('T', ' ').slice(0, 16) : '',
     bookStartDate: voucher.book_start_date || '',
@@ -615,6 +667,8 @@ function buildPayload() {
     originalAmount: Number(payload.originalAmount),
     actualAmount: Number(payload.actualAmount),
     inventoryCount: payload.inventoryIsLimited ? Number(payload.inventoryCount) : undefined,
+    eachPersonMax: Number(payload.eachPersonMax),
+    eachPersonEachOrderMax: Number(payload.eachPersonEachOrderMax),
     saleStartAt: payload.saleStartAt ? payload.saleStartAt.replace(/[T/]/g, match => match === 'T' ? ' ' : '-') : '',
     saleEndAt: payload.saleEndAt ? payload.saleEndAt.replace(/[T/]/g, match => match === 'T' ? ' ' : '-') : '',
     bookStartDate: payload.bookStartDate ? payload.bookStartDate.replaceAll('/', '-') : '',

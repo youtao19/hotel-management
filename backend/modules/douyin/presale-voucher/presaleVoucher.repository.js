@@ -10,7 +10,8 @@ async function findById(id) {
     `
       SELECT
         pv.id, pv.rate_plan_id, pv.name, pv.original_amount, pv.actual_amount, pv.inventory_is_limited,
-        pv.inventory_count, to_char(pv.sale_start_at, 'YYYY-MM-DD HH24:MI') AS sale_start_at,
+        pv.inventory_count, pv.each_person_max, pv.each_person_each_order_max,
+        to_char(pv.sale_start_at, 'YYYY-MM-DD HH24:MI') AS sale_start_at,
         to_char(pv.sale_end_at, 'YYYY-MM-DD HH24:MI') AS sale_end_at,
         to_char(pv.book_start_date, 'YYYY-MM-DD') AS book_start_date,
         to_char(pv.book_end_date, 'YYYY-MM-DD') AS book_end_date, pv.image_urls, pv.douyin_voucher_id,
@@ -40,7 +41,8 @@ async function list() {
     `
       SELECT
         pv.id, pv.rate_plan_id, pv.name, pv.original_amount, pv.actual_amount, pv.inventory_is_limited,
-        pv.inventory_count, to_char(pv.sale_start_at, 'YYYY-MM-DD HH24:MI') AS sale_start_at,
+        pv.inventory_count, pv.each_person_max, pv.each_person_each_order_max,
+        to_char(pv.sale_start_at, 'YYYY-MM-DD HH24:MI') AS sale_start_at,
         to_char(pv.sale_end_at, 'YYYY-MM-DD HH24:MI') AS sale_end_at,
         to_char(pv.book_start_date, 'YYYY-MM-DD') AS book_start_date,
         to_char(pv.book_end_date, 'YYYY-MM-DD') AS book_end_date, pv.image_urls, pv.douyin_voucher_id,
@@ -69,14 +71,14 @@ async function create(data) {
     `
       INSERT INTO douyin_presale_vouchers
         (rate_plan_id, name, original_amount, actual_amount, inventory_is_limited, inventory_count,
-         sale_start_at, sale_end_at, book_start_date, book_end_date, image_urls)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)
+         each_person_max, each_person_each_order_max, sale_start_at, sale_end_at, book_start_date, book_end_date, image_urls)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb)
       RETURNING id
     `,
     [
       data.ratePlanId, data.name, data.originalAmount, data.actualAmount, data.inventoryIsLimited,
-      data.inventoryCount, data.saleStartAt, data.saleEndAt, data.bookStartDate, data.bookEndDate,
-      JSON.stringify(data.imageUrls)
+      data.inventoryCount, data.eachPersonMax, data.eachPersonEachOrderMax, data.saleStartAt, data.saleEndAt,
+      data.bookStartDate, data.bookEndDate, JSON.stringify(data.imageUrls)
     ]
   );
   return findById(result.rows[0].id);
@@ -88,13 +90,15 @@ async function update(id, data) {
     `
       UPDATE douyin_presale_vouchers
       SET name = $1, original_amount = $2, actual_amount = $3, inventory_is_limited = $4,
-          inventory_count = $5, sale_start_at = $6, sale_end_at = $7, book_start_date = $8,
-          book_end_date = $9, image_urls = $10::jsonb, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $11
+          inventory_count = $5, each_person_max = $6, each_person_each_order_max = $7,
+          sale_start_at = $8, sale_end_at = $9, book_start_date = $10,
+          book_end_date = $11, image_urls = $12::jsonb, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $13
     `,
     [
       data.name, data.originalAmount, data.actualAmount, data.inventoryIsLimited, data.inventoryCount,
-      data.saleStartAt, data.saleEndAt, data.bookStartDate, data.bookEndDate, JSON.stringify(data.imageUrls), id
+      data.eachPersonMax, data.eachPersonEachOrderMax, data.saleStartAt, data.saleEndAt,
+      data.bookStartDate, data.bookEndDate, JSON.stringify(data.imageUrls), id
     ]
   );
   return findById(id);

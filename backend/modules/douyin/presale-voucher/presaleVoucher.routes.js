@@ -11,7 +11,7 @@ const datePattern = '^\\d{4}-\\d{2}-\\d{2}$';
 const dateTimePattern = '^\\d{4}-\\d{2}-\\d{2} [0-2]\\d:[0-5]\\d$';
 const voucherSchema = {
   type: 'object',
-  required: ['ratePlanId', 'name', 'originalAmount', 'actualAmount', 'inventoryIsLimited', 'saleStartAt', 'saleEndAt', 'bookStartDate', 'bookEndDate', 'imageUrls'],
+  required: ['ratePlanId', 'name', 'originalAmount', 'actualAmount', 'inventoryIsLimited', 'eachPersonMax', 'eachPersonEachOrderMax', 'saleStartAt', 'saleEndAt', 'bookStartDate', 'bookEndDate', 'imageUrls'],
   properties: {
     ratePlanId: { type: 'integer', minimum: 1 },
     name: { type: 'string', minLength: 1, maxLength: 255 },
@@ -19,6 +19,8 @@ const voucherSchema = {
     actualAmount: { type: 'number', minimum: 0 },
     inventoryIsLimited: { type: 'boolean' },
     inventoryCount: { type: 'integer', minimum: 0 },
+    eachPersonMax: { type: 'integer', minimum: 1 },
+    eachPersonEachOrderMax: { type: 'integer', minimum: 1 },
     saleStartAt: { type: 'string', pattern: dateTimePattern },
     saleEndAt: { type: 'string', pattern: dateTimePattern },
     bookStartDate: { type: 'string', pattern: datePattern },
@@ -46,6 +48,7 @@ function validatePayload(payload) {
   if (invalidImage) return '图片必须是抖音可访问的 http/https URL';
   if (!payload.inventoryIsLimited && payload.inventoryCount !== undefined) return '不限库存时不能填写库存数量';
   if (payload.inventoryIsLimited && payload.inventoryCount === undefined) return '有限库存必须填写库存数量';
+  if (payload.eachPersonEachOrderMax > payload.eachPersonMax) return '单笔限购不能大于单用户累计限购';
   if (payload.originalAmount < payload.actualAmount) return '划线价不能低于实际售价';
   if (payload.saleEndAt <= payload.saleStartAt) return '售卖结束时间必须晚于开始时间';
   if (payload.bookEndDate < payload.bookStartDate) return '可预约结束日期不能早于开始日期';

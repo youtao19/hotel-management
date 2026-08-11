@@ -48,6 +48,8 @@ function payload(ratePlanId) {
     actualAmount: 800,
     inventoryIsLimited: true,
     inventoryCount: 100,
+    eachPersonMax: 3,
+    eachPersonEachOrderMax: 2,
     saleStartAt: '2026-08-01 00:00',
     saleEndAt: '2026-08-31 23:59',
     bookStartDate: '2026-08-01',
@@ -111,6 +113,7 @@ describe('抖音预售券创建和更新', () => {
     expect(requestPayload.account_id).toBe('DY_VOUCHER_ACCOUNT');
     expect(requestPayload.presale_info.category_id).toBe('8001001');
     expect(requestPayload.presale_info.settle_type).toBe(1);
+    expect(requestPayload.presale_info.pre_sale_coupon_id).toBeUndefined();
     expect(requestPayload.presale_info.pre_sale_coupon_info.bind_rate_plans).toEqual(['DY_RATE_PLAN_001']);
     expect(requestPayload.presale_info.pre_sale_coupon_info.actual_amount).toBe(80000);
     expect(requestPayload.presale_info.trade_info.customer_can_use_date).toEqual({
@@ -118,7 +121,8 @@ describe('抖音预售券创建和更新', () => {
       use_date: { from: '2026-08-01', to: '2026-12-31' }
     });
     expect(requestPayload.presale_info.trade_info.customer_can_use_time).toEqual({ use_time_type: 1 });
-    expect(requestPayload.presale_info.trade_info.limt_buy_rule).toEqual({ each_person_max: 1, each_person_each_order_max: 1 });
+    expect(response.body.data).toMatchObject({ each_person_max: 3, each_person_each_order_max: 2 });
+    expect(requestPayload.presale_info.trade_info.limt_buy_rule).toEqual({ each_person_max: 3, each_person_each_order_max: 2 });
     expect(requestPayload.presale_info.trade_info.book_rule).toEqual({ earliest_book_day: 30 });
     expect(requestPayload.presale_info.trade_info.cancel_booking_rule).toEqual({ cancel_type: 3 });
     expect(requestPayload.presale_info.trade_info.invoic_info).toEqual({ provider: 1 });
@@ -129,6 +133,34 @@ describe('抖音预售券创建和更新', () => {
       superimposed_discounts: false
     });
     expect(requestPayload.presale_info.out_id).toBe(`voucher-${response.body.data.id}`);
+  });
+
+  test('更新预售券会保存并同步新的用户限购配置', async () => {
+    const ratePlanId = await createSyncedRatePlan();
+    const created = await request(app).post('/api/douyin/presale-vouchers').send(payload(ratePlanId));
+    const updatedPayload = { ...payload(ratePlanId), eachPersonMax: 5, eachPersonEachOrderMax: 3 };
+
+    const response = await request(app)
+      .put(`/api/douyin/presale-vouchers/${created.body.data.id}`)
+      .send(updatedPayload);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.data).toMatchObject({ each_person_max: 5, each_person_each_order_max: 3 });
+    const requestPayload = JSON.parse(global.fetch.mock.calls[1][1].body);
+    expect(requestPayload.presale_info.pre_sale_coupon_id).toBe('DY_VOUCHER_001');
+    expect(requestPayload.presale_info.trade_info.limt_buy_rule).toEqual({ each_person_max: 5, each_person_each_order_max: 3 });
+  });
+
+  test('单笔限购大于累计限购时拒绝同步', async () => {
+    const invalidPayload = payload(1);
+    invalidPayload.eachPersonMax = 1;
+    invalidPayload.eachPersonEachOrderMax = 2;
+
+    const response = await request(app).post('/api/douyin/presale-vouchers').send(invalidPayload);
+
+    expect(response.statusCode).toBe(400);
+    expect(response.body.message).toBe('单笔限购不能大于单用户累计限购');
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   test('未同步套餐不能创建预售券', async () => {

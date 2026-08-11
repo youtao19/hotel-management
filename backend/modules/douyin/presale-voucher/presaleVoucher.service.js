@@ -108,6 +108,8 @@ async function syncVoucher(id) {
   const payload = {
     account_id: accountId,
     presale_info: {
+      // 已有抖音券更新时必须携带券ID，避免同一out_id被识别为重复新建。
+      ...(voucher.douyin_voucher_id ? { pre_sale_coupon_id: voucher.douyin_voucher_id } : {}),
       // 已同步物理房型均使用此酒店类目，预售券必须与已上架的酒店商品保持同一酒店类目体系。
       category_id: '8001001',
       // account_id 按抖音规范传总账户，因此结算必须明确指定总店，避免渠道无法推断资金归属。
@@ -138,8 +140,11 @@ async function syncVoucher(id) {
         },
         // 当前没有按时段核销能力，明确传全天可用，避免抖音把缺省值识别为未配置。
         customer_can_use_time: { use_time_type: 1 },
-        // 一期未开放购买上限配置，同时限制用户累计和单笔各一张，避免超量售卖后无法履约。
-        limt_buy_rule: { each_person_max: 1, each_person_each_order_max: 1 },
+        // 购买上限由运营配置并随券同步，避免单用户累计或单笔购买超过履约能力。
+        limt_buy_rule: {
+          each_person_max: voucher.each_person_max,
+          each_person_each_order_max: voucher.each_person_each_order_max
+        },
         // 抖音要求提前预约天数为正数且不超过30天，一期采用官方示例的30天规则。
         book_rule: { earliest_book_day: 30 },
         // 当前未维护可退时间配置，按官方示例使用普通取消规则，满足预售券必须有且仅有一条规则的约束。
@@ -168,6 +173,7 @@ async function syncVoucher(id) {
     accountIdSource: 'DOUYIN_ACCOUNT_ID',
     ratePlanId: voucher.rate_plan_id,
     douyinRatePlanId: voucher.douyin_rate_plan_id,
+    douyinVoucherId: voucher.douyin_voucher_id || null,
     actualAmount: payload.presale_info.pre_sale_coupon_info.actual_amount,
     inventoryIsLimited: voucher.inventory_is_limited,
     imageCount: imageUrls.length
