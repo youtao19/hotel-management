@@ -218,6 +218,7 @@ export const ratePlanApi = {
 
 export const douyinPresaleVoucherApi = {
   getVouchers: () => api.get('/douyin/presale-vouchers'),
+  getSaleTimeDefault: () => api.get('/douyin/presale-vouchers/sale-time-default'),
   createVoucher: (payload) => api.post('/douyin/presale-vouchers', payload),
   updateVoucher: (id, payload) => api.put(`/douyin/presale-vouchers/${id}`, payload),
   uploadImages: (files) => {

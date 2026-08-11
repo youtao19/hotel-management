@@ -315,7 +315,12 @@
                     <template #append>
                       <q-icon name="event" class="cursor-pointer">
                         <q-popup-proxy cover transition-show="scale" transition-hide="scale">
-                          <q-date v-model="form.saleStartAt" mask="YYYY-MM-DD HH:mm">
+                          <q-date
+                            v-model="form.saleStartAt"
+                            mask="YYYY-MM-DD HH:mm"
+                            :options="saleStartDateOptions"
+                            :navigation-min-year-month="minimumSaleStartAt ? minimumSaleStartAt.slice(0, 7).replace('-', '/') : undefined"
+                          >
                             <div class="row items-center justify-end">
                               <q-btn v-close-popup label="确定" color="primary" flat />
                             </div>
@@ -324,7 +329,7 @@
                       </q-icon>
                       <q-icon name="access_time" class="cursor-pointer q-ml-xs">
                         <q-popup-proxy cover transition-show="scale" transition-hide="scale">
-                          <q-time v-model="form.saleStartAt" mask="YYYY-MM-DD HH:mm" format24h>
+                          <q-time v-model="form.saleStartAt" mask="YYYY-MM-DD HH:mm" format24h :options="saleStartTimeOptions">
                             <div class="row items-center justify-end">
                               <q-btn v-close-popup label="确定" color="primary" flat />
                             </div>
@@ -352,7 +357,7 @@
                     <template #append>
                       <q-icon name="event" class="cursor-pointer">
                         <q-popup-proxy cover transition-show="scale" transition-hide="scale">
-                          <q-date v-model="form.saleEndAt" mask="YYYY-MM-DD HH:mm">
+                          <q-date v-model="form.saleEndAt" mask="YYYY-MM-DD HH:mm" :options="saleEndDateOptions">
                             <div class="row items-center justify-end">
                               <q-btn v-close-popup label="确定" color="primary" flat />
                             </div>
@@ -361,7 +366,7 @@
                       </q-icon>
                       <q-icon name="access_time" class="cursor-pointer q-ml-xs">
                         <q-popup-proxy cover transition-show="scale" transition-hide="scale">
-                          <q-time v-model="form.saleEndAt" mask="YYYY-MM-DD HH:mm" format24h>
+                          <q-time v-model="form.saleEndAt" mask="YYYY-MM-DD HH:mm" format24h :options="saleEndTimeOptions">
                             <div class="row items-center justify-end">
                               <q-btn v-close-popup label="确定" color="primary" flat />
                             </div>
@@ -533,6 +538,7 @@ const formRef = ref(null)
 const form = ref(defaultForm())
 const selectedImages = ref([])
 const uploadingImages = ref(false)
+const minimumSaleStartAt = ref('')
 
 const columns = [
   { name: 'name', label: '预售券', field: 'name', align: 'left' },
@@ -569,9 +575,44 @@ function onImgError(e) {
   e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 0 24 24" fill="%23ccc"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>'
 }
 
-/** 返回新增预售券的默认表单，日期不预填以避免运营误发过期券。 */
-function defaultForm() {
-  return { ratePlanId: null, name: '', originalAmount: null, actualAmount: null, inventoryIsLimited: true, inventoryCount: null, eachPersonMax: 1, eachPersonEachOrderMax: 1, saleStartAt: '', saleEndAt: '', bookStartDate: '', bookEndDate: '', imageUrls: [] }
+/** 返回新增预售券的默认表单，售卖开始时间由后端按北京时间生成。 */
+function defaultForm(saleStartAt = '') {
+  return { ratePlanId: null, name: '', originalAmount: null, actualAmount: null, inventoryIsLimited: true, inventoryCount: null, eachPersonMax: 1, eachPersonEachOrderMax: 1, saleStartAt, saleEndAt: '', bookStartDate: '', bookEndDate: '', imageUrls: [] }
+}
+
+/** 判断日期是否不早于服务器给出的最早售卖日期。 */
+function saleStartDateOptions(date) {
+  return date.replaceAll('/', '-') >= minimumSaleStartAt.value.slice(0, 10)
+}
+
+/** 当选择最早售卖日期时，屏蔽早于服务器默认时刻的时间。 */
+function saleStartTimeOptions(hour, minute) {
+  const selectedDate = form.value.saleStartAt.slice(0, 10)
+  const minimumDate = minimumSaleStartAt.value.slice(0, 10)
+  if (selectedDate > minimumDate) return true
+  if (selectedDate < minimumDate) return false
+
+  const minimumHour = Number(minimumSaleStartAt.value.slice(11, 13))
+  const minimumMinute = Number(minimumSaleStartAt.value.slice(14, 16))
+  if (hour > minimumHour) return true
+  if (hour < minimumHour) return false
+  return minute === null || minute >= minimumMinute
+}
+
+/** 屏蔽早于售卖开始日期的结束日期，避免无效时间段。 */
+function saleEndDateOptions(date) {
+  return !form.value.saleStartAt || date.replaceAll('/', '-') >= form.value.saleStartAt.slice(0, 10)
+}
+
+/** 同日结束时间必须晚于售卖开始时间，跨日时间可自由选择。 */
+function saleEndTimeOptions(hour, minute) {
+  if (form.value.saleEndAt.slice(0, 10) !== form.value.saleStartAt.slice(0, 10)) return true
+
+  const startHour = Number(form.value.saleStartAt.slice(11, 13))
+  const startMinute = Number(form.value.saleStartAt.slice(14, 16))
+  if (hour > startHour) return true
+  if (hour < startHour) return false
+  return minute === null || minute > startMinute
 }
 
 /** 未输入内容时阻止提交，让后端不用承担纯界面必填提示。 */
@@ -636,25 +677,37 @@ async function load() {
   }
 }
 
-/** 编辑时兼容标准化日期时间格式（兼容带 T 或空格隔开的格式），避免界面显示和日期组件错位。 */
-function openDialog(voucher = null) {
+/** 打开编辑表单；新增时向后端获取北京时间两分钟后的默认售卖时间。 */
+async function openDialog(voucher = null) {
   editingVoucher.value = voucher
   selectedImages.value = []
-  form.value = voucher ? {
-    ratePlanId: voucher.rate_plan_id,
-    name: voucher.name,
-    originalAmount: Number(voucher.original_amount),
-    actualAmount: Number(voucher.actual_amount),
-    inventoryIsLimited: voucher.inventory_is_limited,
-    inventoryCount: voucher.inventory_count,
-    eachPersonMax: voucher.each_person_max,
-    eachPersonEachOrderMax: voucher.each_person_each_order_max,
-    saleStartAt: voucher.sale_start_at ? voucher.sale_start_at.replace('T', ' ').slice(0, 16) : '',
-    saleEndAt: voucher.sale_end_at ? voucher.sale_end_at.replace('T', ' ').slice(0, 16) : '',
-    bookStartDate: voucher.book_start_date || '',
-    bookEndDate: voucher.book_end_date || '',
-    imageUrls: voucher.image_urls || []
-  } : defaultForm()
+  if (!voucher) {
+    try {
+      const response = await douyinPresaleVoucherApi.getSaleTimeDefault()
+      minimumSaleStartAt.value = response.data.saleStartAt
+      form.value = defaultForm(response.data.saleStartAt)
+    } catch (error) {
+      $q.notify({ type: 'negative', message: error?.response?.data?.message || '获取售卖时间默认值失败' })
+      return
+    }
+  } else {
+    minimumSaleStartAt.value = ''
+    form.value = {
+      ratePlanId: voucher.rate_plan_id,
+      name: voucher.name,
+      originalAmount: Number(voucher.original_amount),
+      actualAmount: Number(voucher.actual_amount),
+      inventoryIsLimited: voucher.inventory_is_limited,
+      inventoryCount: voucher.inventory_count,
+      eachPersonMax: voucher.each_person_max,
+      eachPersonEachOrderMax: voucher.each_person_each_order_max,
+      saleStartAt: voucher.sale_start_at ? voucher.sale_start_at.replace('T', ' ').slice(0, 16) : '',
+      saleEndAt: voucher.sale_end_at ? voucher.sale_end_at.replace('T', ' ').slice(0, 16) : '',
+      bookStartDate: voucher.book_start_date || '',
+      bookEndDate: voucher.book_end_date || '',
+      imageUrls: voucher.image_urls || []
+    }
+  }
   dialogOpen.value = true
 }
 

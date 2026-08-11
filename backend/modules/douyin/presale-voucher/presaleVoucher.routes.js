@@ -9,6 +9,15 @@ const router = express.Router();
 const ajv = new Ajv({ allErrors: true });
 const datePattern = '^\\d{4}-\\d{2}-\\d{2}$';
 const dateTimePattern = '^\\d{4}-\\d{2}-\\d{2} [0-2]\\d:[0-5]\\d$';
+const beijingDateTimeFormatter = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Shanghai',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23'
+});
 const voucherSchema = {
   type: 'object',
   required: ['ratePlanId', 'name', 'originalAmount', 'actualAmount', 'inventoryIsLimited', 'eachPersonMax', 'eachPersonEachOrderMax', 'saleStartAt', 'saleEndAt', 'bookStartDate', 'bookEndDate', 'imageUrls'],
@@ -37,8 +46,19 @@ function parseId(value) {
   return Number.isInteger(id) && id > 0 ? id : null;
 }
 
+/** 将指定时刻格式化为北京时间的售卖时间字段格式。 */
+function formatBeijingDateTime(date = new Date()) {
+  const parts = beijingDateTimeFormatter.formatToParts(date).reduce((result, part) => ({ ...result, [part.type]: part.value }), {});
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
+}
+
+/** 返回新增预售券可直接使用的北京时间售卖开始时间。 */
+function getDefaultSaleStartAt(now = new Date()) {
+  return formatBeijingDateTime(new Date(now.getTime() + 2 * 60 * 1000));
+}
+
 /** 聚合跨字段业务校验，前端提示不能替代这里的接口边界保护。 */
-function validatePayload(payload) {
+function validatePayload(payload, requireFutureSaleStart = false) {
   if (!validateVoucher(payload)) {
     const details = (validateVoucher.errors || []).map(error => `${error.instancePath || '请求体'} ${error.message}`).join('；');
     console.warn('[Douyin Presale Voucher] 请求校验失败:', { details });
@@ -50,6 +70,11 @@ function validatePayload(payload) {
   if (payload.inventoryIsLimited && payload.inventoryCount === undefined) return '有限库存必须填写库存数量';
   if (payload.eachPersonEachOrderMax > payload.eachPersonMax) return '单笔限购不能大于单用户累计限购';
   if (payload.originalAmount < payload.actualAmount) return '划线价不能低于实际售价';
+  // 以服务端北京时间为准，避免浏览器时间偏差导致抖音拒绝过期售卖时间。
+  if (requireFutureSaleStart) {
+    const currentBeijingTime = formatBeijingDateTime();
+    if (payload.saleStartAt <= currentBeijingTime) return `售卖开始时间必须晚于当前北京时间 ${currentBeijingTime}`;
+  }
   if (payload.saleEndAt <= payload.saleStartAt) return '售卖结束时间必须晚于开始时间';
   if (payload.bookEndDate < payload.bookStartDate) return '可预约结束日期不能早于开始日期';
   return null;
@@ -84,8 +109,13 @@ router.get('/', async (req, res) => {
   }
 });
 
+/** 返回新增预售券的服务器时间默认值，前端不自行推算北京时间。 */
+router.get('/sale-time-default', (req, res) => {
+  return res.json({ data: { saleStartAt: getDefaultSaleStartAt() } });
+});
+
 router.post('/', async (req, res) => {
-  const message = validatePayload(req.body || {});
+  const message = validatePayload(req.body || {}, true);
   if (message) return res.status(400).json({ message });
   let voucher;
   try {

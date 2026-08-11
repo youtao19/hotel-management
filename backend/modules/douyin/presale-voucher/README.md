@@ -4,6 +4,12 @@
 
 官方[创建/更新预售券接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/hotel-voucher-mgmt/create-update-coupon)的 `presale_info.out_id` 是三方预售券唯一标识，首次写入后不可修改。更新已创建的券时，必须在 `presale_info.pre_sale_coupon_id` 传入抖音预售券 ID，并提交完整券信息；仅重复传同一 `out_id` 会被视作新建，可能返回“该 out_id 已绑定其他商品”。
 
+## 售卖时间默认值与校验
+
+新增预售券前，前端调用 `GET /api/douyin/presale-vouchers/sale-time-default` 获取服务器按 `Asia/Shanghai` 计算的 `saleStartAt`。该值为当前北京时间加 2 分钟，格式为 `YYYY-MM-DD HH:mm`；前端据此屏蔽更早的日期和时间。
+
+`POST /api/douyin/presale-vouchers` 会再次按服务器北京时间校验 `saleStartAt` 必须晚于当前时刻，避免浏览器时间偏差或用户停留过久后把过期售卖时间同步给抖音。更新已售卖的预售券不重复应用这条创建校验；创建和更新都要求 `saleEndAt` 晚于 `saleStartAt`。
+
 ## 本地券面图上传
 
 `POST /api/douyin/presale-vouchers/images` 接收 multipart 字段 `images`，员工可从本机选择 JPG、PNG 或 WebP 图片。后端将文件保存到 `backend/modules/douyin/presale-voucher/uploads/`，并返回 `/uploads/presale-vouchers/:filename` 的完整公网 URL；该静态路径无需 JWT，供抖音审核服务拉取图片。

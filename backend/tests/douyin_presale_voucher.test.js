@@ -50,10 +50,10 @@ function payload(ratePlanId) {
     inventoryCount: 100,
     eachPersonMax: 3,
     eachPersonEachOrderMax: 2,
-    saleStartAt: '2026-08-01 00:00',
-    saleEndAt: '2026-08-31 23:59',
-    bookStartDate: '2026-08-01',
-    bookEndDate: '2026-12-31',
+    saleStartAt: '2099-08-01 00:00',
+    saleEndAt: '2099-08-31 23:59',
+    bookStartDate: '2099-08-01',
+    bookEndDate: '2099-12-31',
     imageUrls: ['https://example.com/head.jpg', 'https://example.com/detail.jpg']
   };
 }
@@ -102,6 +102,26 @@ describe('抖音预售券创建和更新', () => {
     process.env.APP_URL = 'https://voucher-test.ngrok-free.app';
   });
 
+  test('新增预售券默认使用两分钟后的北京时间，并拒绝已过期的售卖时间', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-11T01:42:00.000Z'));
+    try {
+      const defaultResponse = await request(app).get('/api/douyin/presale-vouchers/sale-time-default');
+      expect(defaultResponse.statusCode).toBe(200);
+      expect(defaultResponse.body.data.saleStartAt).toBe('2026-08-11 09:44');
+
+      const expiredPayload = payload(1);
+      expiredPayload.saleStartAt = '2026-08-11 09:42';
+      expiredPayload.saleEndAt = '2026-08-11 10:00';
+      const response = await request(app).post('/api/douyin/presale-vouchers').send(expiredPayload);
+
+      expect(response.statusCode).toBe(400);
+      expect(response.body.message).toBe('售卖开始时间必须晚于当前北京时间 2026-08-11 09:42');
+      expect(global.fetch).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   test('创建预售券会绑定已同步套餐、调用抖音并保存券ID', async () => {
     const response = await request(app).post('/api/douyin/presale-vouchers').send(payload(await createSyncedRatePlan()));
 
@@ -118,7 +138,7 @@ describe('抖音预售券创建和更新', () => {
     expect(requestPayload.presale_info.pre_sale_coupon_info.actual_amount).toBe(80000);
     expect(requestPayload.presale_info.trade_info.customer_can_use_date).toEqual({
       use_date_type: 1,
-      use_date: { from: '2026-08-01', to: '2026-12-31' }
+      use_date: { from: '2099-08-01', to: '2099-12-31' }
     });
     expect(requestPayload.presale_info.trade_info.customer_can_use_time).toEqual({ use_time_type: 1 });
     expect(response.body.data).toMatchObject({ each_person_max: 3, each_person_each_order_max: 2 });
