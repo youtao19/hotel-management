@@ -37,7 +37,7 @@ const createQuery = `
     CONSTRAINT douyin_presale_vouchers_inventory_check CHECK (inventory_count IS NULL OR inventory_count >= 0),
     CONSTRAINT douyin_presale_vouchers_each_person_max_check CHECK (each_person_max > 0),
     CONSTRAINT douyin_presale_vouchers_each_person_each_order_max_check CHECK (each_person_each_order_max > 0),
-    CONSTRAINT douyin_presale_vouchers_cancel_booking_type_check CHECK (cancel_booking_type IN (2, 3)),
+    CONSTRAINT douyin_presale_vouchers_cancel_booking_type_check CHECK (cancel_booking_type IN (1, 2, 3)),
     CONSTRAINT douyin_presale_vouchers_cancel_booking_offset_days_check CHECK (cancel_booking_offset_days IS NULL OR cancel_booking_offset_days >= 1),
     CONSTRAINT douyin_presale_vouchers_cancel_booking_offset_hours_check CHECK (cancel_booking_offset_hours IS NULL OR cancel_booking_offset_hours BETWEEN 0 AND 23),
     CONSTRAINT douyin_presale_vouchers_cancel_booking_offset_required_check CHECK (
@@ -73,7 +73,7 @@ const createCommentQueryStrings = [
   `COMMENT ON COLUMN ${tableName}.inventory_is_limited IS '是否有限库存；false时inventory_count不参与抖音库存参数';`,
   `COMMENT ON COLUMN ${tableName}.each_person_max IS '单个抖音用户在本券售卖期内累计可购买的最大张数，必须大于0';`,
   `COMMENT ON COLUMN ${tableName}.each_person_each_order_max IS '单个抖音用户每笔订单可购买的最大张数，必须大于0';`,
-  `COMMENT ON COLUMN ${tableName}.cancel_booking_type IS '抖音取消预约类型：2限时取消，必须配置入住前免费取消截止时间；3不可取消';`,
+  `COMMENT ON COLUMN ${tableName}.cancel_booking_type IS '抖音取消预约类型：1未使用自动退，2限时取消且必须配置入住前免费取消截止时间，3不可取消';`,
   `COMMENT ON COLUMN ${tableName}.cancel_booking_offset_days IS '限时取消距入住时间的提前天数；cancel_booking_type=2时必填，必须至少1天';`,
   `COMMENT ON COLUMN ${tableName}.cancel_booking_offset_hours IS '限时取消距入住时间的提前小时数；cancel_booking_type=2时必填，范围0至23';`,
   `COMMENT ON COLUMN ${tableName}.markup_rules IS '预约加价规则数组：每项包含指定日期或节假日、适用范围、星期和每晚加价金额（元）；同步抖音时转换为分';`,

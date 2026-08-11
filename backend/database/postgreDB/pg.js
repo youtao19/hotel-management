@@ -190,7 +190,6 @@ tables.push(order_change);
 
 async function createTables() {
   for (let table of tables) {
-    console.log(`create table : ${table.tableName}`);
     try {
       await pool.query(table.createQuery);
     } catch (err) {

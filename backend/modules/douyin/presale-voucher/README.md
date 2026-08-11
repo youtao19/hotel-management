@@ -6,12 +6,13 @@
 
 ## 取消预约规则
 
-`POST /api/douyin/presale-vouchers` 和 `PUT /api/douyin/presale-vouchers/:id` 接收 `cancelBookingType`。当前仅支持 `2`（限时取消）和 `3`（不可取消）：
+`POST /api/douyin/presale-vouchers` 和 `PUT /api/douyin/presale-vouchers/:id` 接收 `cancelBookingType`。当前本地支持 `1`（未使用自动退）、`2`（限时取消）和 `3`（不可取消）：
 
+- `1`：同步为 `cancel_booking_rule: { cancel_type: 1 }`。
 - `3`：同步为 `cancel_booking_rule: { cancel_type: 3 }`。
 - `2`：还必须传 `cancelBookingOffsetDays`（至少 1）和 `cancelBookingOffsetHours`（0 至 23）。后端固定按入住时间计算，组装 `cancel_time_type: 2` 与一条 `cancel_offset`，其中 `cut_type: 1`、`cut_value: 0` 表示顾客可在入住前指定时间免费取消，超过截止时间不可取消。
 
-阶梯价取消（`4`）尚未实现，`1`（未使用自动退）不再接受或保存。
+阶梯价取消（`4`）尚未实现。
 
 ## 售卖时间默认值与校验
 

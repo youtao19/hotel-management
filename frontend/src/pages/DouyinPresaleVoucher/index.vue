@@ -355,6 +355,7 @@
                   <div class="field-label">售卖开始时间 <span class="text-negative">*</span></div>
                   <q-input
                     v-model="form.saleStartAt"
+                    @update:model-value="syncBookStartDate"
                     outlined
                     dense
                     placeholder="YYYY-MM-DD HH:mm"
@@ -369,6 +370,7 @@
                         <q-popup-proxy cover transition-show="scale" transition-hide="scale">
                           <q-date
                             v-model="form.saleStartAt"
+                            @update:model-value="syncBookStartDate"
                             mask="YYYY-MM-DD HH:mm"
                             :options="saleStartDateOptions"
                             :navigation-min-year-month="minimumSaleStartAt ? minimumSaleStartAt.slice(0, 7).replace('-', '/') : undefined"
@@ -381,7 +383,7 @@
                       </q-icon>
                       <q-icon name="access_time" class="cursor-pointer q-ml-xs">
                         <q-popup-proxy cover transition-show="scale" transition-hide="scale">
-                          <q-time v-model="form.saleStartAt" mask="YYYY-MM-DD HH:mm" format24h :options="saleStartTimeOptions">
+                          <q-time v-model="form.saleStartAt" @update:model-value="syncBookStartDate" mask="YYYY-MM-DD HH:mm" format24h :options="saleStartTimeOptions">
                             <div class="row items-center justify-end">
                               <q-btn v-close-popup label="确定" color="primary" flat />
                             </div>
@@ -397,6 +399,7 @@
                   <div class="field-label">售卖结束时间 <span class="text-negative">*</span></div>
                   <q-input
                     v-model="form.saleEndAt"
+                    @update:model-value="syncBookEndDate"
                     outlined
                     dense
                     placeholder="YYYY-MM-DD HH:mm"
@@ -409,7 +412,7 @@
                     <template #append>
                       <q-icon name="event" class="cursor-pointer">
                         <q-popup-proxy cover transition-show="scale" transition-hide="scale">
-                          <q-date v-model="form.saleEndAt" mask="YYYY-MM-DD HH:mm" :options="saleEndDateOptions">
+                          <q-date v-model="form.saleEndAt" @update:model-value="syncBookEndDate" mask="YYYY-MM-DD HH:mm" :options="saleEndDateOptions">
                             <div class="row items-center justify-end">
                               <q-btn v-close-popup label="确定" color="primary" flat />
                             </div>
@@ -418,7 +421,7 @@
                       </q-icon>
                       <q-icon name="access_time" class="cursor-pointer q-ml-xs">
                         <q-popup-proxy cover transition-show="scale" transition-hide="scale">
-                          <q-time v-model="form.saleEndAt" mask="YYYY-MM-DD HH:mm" format24h :options="saleEndTimeOptions">
+                          <q-time v-model="form.saleEndAt" @update:model-value="syncBookEndDate" mask="YYYY-MM-DD HH:mm" format24h :options="saleEndTimeOptions">
                             <div class="row items-center justify-end">
                               <q-btn v-close-popup label="确定" color="primary" flat />
                             </div>
@@ -671,6 +674,7 @@ const columns = [
 ]
 
 const cancelBookingTypeOptions = [
+  { label: '未使用自动退', value: 1 },
   { label: '限时取消', value: 2 },
   { label: '不可取消', value: 3 }
 ]
@@ -710,7 +714,17 @@ function onImgError(e) {
 
 /** 返回新增预售券的默认表单，售卖开始时间由后端按北京时间生成。 */
 function defaultForm(saleStartAt = '') {
-  return { ratePlanId: null, name: '', originalAmount: null, actualAmount: null, inventoryIsLimited: true, inventoryCount: null, eachPersonMax: 1, eachPersonEachOrderMax: 1, cancelBookingType: 3, cancelBookingOffsetDays: null, cancelBookingOffsetHours: 0, saleStartAt, saleEndAt: '', bookStartDate: '', bookEndDate: '', markupRules: [], imageUrls: [] }
+  return { ratePlanId: null, name: '', originalAmount: null, actualAmount: null, inventoryIsLimited: true, inventoryCount: null, eachPersonMax: 1, eachPersonEachOrderMax: 1, cancelBookingType: 1, cancelBookingOffsetDays: null, cancelBookingOffsetHours: 0, saleStartAt, saleEndAt: '', bookStartDate: saleStartAt.slice(0, 10), bookEndDate: '', markupRules: [], imageUrls: [] }
+}
+
+/** 将售卖开始时间的日期单向带入可预约开始日期。 */
+function syncBookStartDate(value) {
+  form.value.bookStartDate = value ? value.slice(0, 10) : ''
+}
+
+/** 将售卖结束时间的日期单向带入可预约结束日期。 */
+function syncBookEndDate(value) {
+  form.value.bookEndDate = value ? value.slice(0, 10) : ''
 }
 
 /** 新增一条默认覆盖全部星期的预约加价规则，方便运营只改日期和金额。 */

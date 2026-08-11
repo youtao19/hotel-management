@@ -29,11 +29,14 @@ function buildMarkupInfo(markupRules = []) {
 
 /** 组装抖音限时取消或不可取消规则。 */
 function buildCancelBookingRule(voucher) {
+  if (Number(voucher.cancel_booking_type) === 1) {
+    return { cancel_type: 1 };
+  }
   if (Number(voucher.cancel_booking_type) === 3) {
     return { cancel_type: 3 };
   }
   if (Number(voucher.cancel_booking_type) !== 2) {
-    throw createServiceError('取消预约类型只支持限时取消或不可取消', 400);
+    throw createServiceError('取消预约类型只支持未使用自动退、限时取消或不可取消', 400);
   }
 
   return {

@@ -30,7 +30,7 @@ const voucherSchema = {
     inventoryCount: { type: 'integer', minimum: 0 },
     eachPersonMax: { type: 'integer', minimum: 1 },
     eachPersonEachOrderMax: { type: 'integer', minimum: 1 },
-    cancelBookingType: { type: 'integer', enum: [2, 3] },
+    cancelBookingType: { type: 'integer', enum: [1, 2, 3] },
     cancelBookingOffsetDays: { type: ['integer', 'null'], minimum: 1 },
     cancelBookingOffsetHours: { type: ['integer', 'null'], minimum: 0, maximum: 23 },
     markupRules: {
