@@ -43,6 +43,7 @@ function buildTestApp(redisClient, options = {}) {
       getClient: () => redisClient
     },
     scheduleBookingConfirmation: options.scheduleBookingConfirmation,
+    scheduleNegotiatedCancelAudit: options.scheduleNegotiatedCancelAudit,
     autoConfirmEnabled: options.autoConfirmEnabled
   }));
   return app;
@@ -1090,7 +1091,7 @@ describe('抖音 Webhooks 与价量态 SPI', () => {
         order_id: douyinOrderId,
         order_out_id: localOrderId,
         cancel_id: 'DY_CANCEL_REQUEST_001',
-        cancel_type: 2,
+        cancel_type: 1,
         biz_type: 2011,
         after_sale_type: 1,
         refund_type: 11
@@ -1188,6 +1189,62 @@ describe('抖音 Webhooks 与价量态 SPI', () => {
         audit_status: 'PENDING',
         request_log_id: 'DY_SPI_CANCEL_AUDIT_LOG_001'
       })]);
+    } finally {
+      await query('DELETE FROM douyin_presale_cancel_audits WHERE cancel_id = $1', [cancelId]);
+      await query('DELETE FROM douyin_presale_orders WHERE order_id = $1', [localOrderId]);
+    }
+  });
+
+  test('用户协商退未携带 need_audit 时异步返回并自动发起审核回传', async () => {
+    const localOrderId = 'DYPS_NEGOTIATED_CANCEL_TEST_001';
+    const douyinOrderId = 'DY_NEGOTIATED_CANCEL_TEST_001';
+    const cancelId = 'DY_NEGOTIATED_CANCEL_REQUEST_001';
+    await query('DELETE FROM douyin_presale_cancel_audits WHERE cancel_id = $1', [cancelId]);
+    await query('DELETE FROM douyin_presale_orders WHERE order_id = $1', [localOrderId]);
+    await query(
+      `INSERT INTO douyin_presale_orders (
+         order_id, ota_order_id, biz_type, order_stage, raw_payload
+       ) VALUES ($1, $2, $3, $4, $5::jsonb)`,
+      [localOrderId, douyinOrderId, 2011, 'PAID', JSON.stringify({ order_id: douyinOrderId })]
+    );
+
+    const scheduleNegotiatedCancelAudit = jest.fn();
+    const negotiatedCancelApp = buildTestApp(redisClient, { scheduleNegotiatedCancelAudit });
+
+    try {
+      const body = JSON.stringify({
+        order_id: douyinOrderId,
+        order_out_id: localOrderId,
+        cancel_id: cancelId,
+        cancel_type: 2,
+        biz_type: 2011,
+        after_sale_type: 1,
+        refund_type: 21
+      });
+      const requestPath = '/douyin/spi/order/cancel?client_key=DY_CLIENT_TEST&timestamp=1777000000000';
+      const response = await request(negotiatedCancelApp)
+        .post(requestPath)
+        .set('Content-Type', 'application/json')
+        .set('x-life-clientkey', 'DY_CLIENT_TEST')
+        .set('x-life-sign', buildSpiSign(requestPath, body))
+        .set('x-bytedance-logid', 'DY_SPI_NEGOTIATED_CANCEL_LOG_001')
+        .send(body);
+
+      expect(response.body).toEqual({ data: { error_code: 0, description: 'success', cancel_mode: 2 } });
+      expect(scheduleNegotiatedCancelAudit).toHaveBeenCalledWith(cancelId);
+      const auditResult = await query(
+        'SELECT audit_status, request_log_id FROM douyin_presale_cancel_audits WHERE cancel_id = $1',
+        [cancelId]
+      );
+      expect(auditResult.rows).toEqual([expect.objectContaining({
+        audit_status: 'PENDING',
+        request_log_id: 'DY_SPI_NEGOTIATED_CANCEL_LOG_001'
+      })]);
+      const orderResult = await query(
+        'SELECT order_stage, cancel_id FROM douyin_presale_orders WHERE order_id = $1',
+        [localOrderId]
+      );
+      expect(orderResult.rows).toEqual([expect.objectContaining({ order_stage: 'PAID', cancel_id: null })]);
     } finally {
       await query('DELETE FROM douyin_presale_cancel_audits WHERE cancel_id = $1', [cancelId]);
       await query('DELETE FROM douyin_presale_orders WHERE order_id = $1', [localOrderId]);

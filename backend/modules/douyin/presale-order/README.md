@@ -70,7 +70,8 @@
 
 ## 人工取消审核
 
-- 当取消 SPI 的 `need_audit=true` 时，`POST /douyin/spi/order/cancel` 不直接变更订单，写入 `douyin_presale_cancel_audits` 并返回 `cancel_mode=2`。
+- 当取消 SPI 的 `need_audit=true` 时，`POST /douyin/spi/order/cancel` 不直接变更订单，写入 `douyin_presale_cancel_audits` 并返回 `cancel_mode=2`，等待员工审核。
+- 用户协商退 `cancel_type=2`、`refund_type=21` 也返回 `cancel_mode=2`；后端响应 SPI 后自动同意并调用 `/goodlife/v1/trip/trade/hotel/cancel/audit/` 回传抖音，回传失败保留审核记录供后台重试。
 - 后台员工通过 `GET /api/douyin/presale-orders/cancel-audits?status=PENDING` 查看申请，再调用 `POST /api/douyin/presale-orders/cancel-audits/:cancelId/decision`，请求体为 `{ "cancelResult": 1|2, "reason": "" }`；拒绝时 `reason` 必填。
 - 后端使用 `cancel_Id`（官方字段大小写）调用 `/goodlife/v1/trip/trade/hotel/cancel/audit/` 回传结论。回传成功后才完成本地状态流转；抖音响应 `extra.logid`、完整响应和失败原因都保存到审核记录，可用同一结论重试失败回传。
 - `biz_type=2011` 只处理预售券主订单的取消/退款状态；`biz_type=2012` 的同意取消会释放未入住的预约占房。日历房 `2021` 仍不在本模块范围内。

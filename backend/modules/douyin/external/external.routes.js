@@ -120,7 +120,9 @@ function summarizeCancelOrderRequest(payload = {}) {
     cancelId: payload.cancel_id || '',
     bizType: payload.biz_type || '',
     cancelType: payload.cancel_type || '',
-    afterSaleType: payload.after_sale_type || ''
+    afterSaleType: payload.after_sale_type || '',
+    refundType: payload.refund_type || '',
+    needAudit: payload.need_audit === true
   };
 }
 
@@ -145,10 +147,31 @@ async function getRedisClient(redisProvider) {
   throw new Error('Redis provider is not configured');
 }
 
+/** 自动同意用户协商退款，并在异步响应后回传审核结果。 */
+function scheduleUserNegotiatedCancelAudit(cancelId) {
+  setImmediate(() => {
+    void cancelAuditService.reviewCancelAudit(cancelId, { cancelResult: 1, reason: '' }, {})
+      .then((result) => {
+        console.log('[Douyin Presale Cancel Audit] 用户协商退自动回传成功:', {
+          cancelId,
+          douyinLogId: result.audit.callback_log_id || null
+        });
+      })
+      .catch((error) => {
+        console.error('[Douyin Presale Cancel Audit] 用户协商退自动回传失败:', {
+          cancelId,
+          douyinLogId: error.douyinLogId || null,
+          error: error.message
+        });
+      });
+  });
+}
+
 function createDouyinExternalRouter(options = {}) {
   const router = express.Router();
   const redisProvider = options.redisProvider || redisDb;
   const scheduleBookingConfirmation = options.scheduleBookingConfirmation || bookingConfirmService.scheduleBookingConfirmation;
+  const scheduleNegotiatedCancelAudit = options.scheduleNegotiatedCancelAudit || scheduleUserNegotiatedCancelAudit;
   const autoConfirmEnabled = options.autoConfirmEnabled;
 
   router.post('/webhooks', async (req, res) => {
@@ -545,21 +568,6 @@ function createDouyinExternalRouter(options = {}) {
         return res.status(401).json({ message: '抖音 SPI 签名校验失败' });
       }
 
-      // 平台明确要求审核时，先入库等待员工决定，不能在 SPI 内直接同意或拒绝。
-      if (req.body?.need_audit === true) {
-        const result = await cancelAuditService.receiveCancelAudit(req.body || {}, { logId });
-        console.log('[Douyin SPI] 已接收待人工审核的取消申请:', { logId, ...summary, duplicate: result.duplicate });
-        await saveCallbackLog({
-          type: 'spi_order_cancel',
-          stage: result.duplicate ? 'audit_duplicate' : 'audit_pending',
-          logId,
-          ...summary
-        });
-        return res.status(200).json({
-          data: { error_code: 0, description: 'success', cancel_mode: 2 }
-        });
-      }
-
       // 预售券主订单和预约加价单分开处理，避免取消预约时误改来源券状态。
       const bizType = Number(req.body?.biz_type);
       if (![2011, 2012].includes(bizType)) {
@@ -573,6 +581,33 @@ function createDouyinExternalRouter(options = {}) {
             reason: `暂未实现 biz_type=${summary.bizType} 的取消订单`
           }
         });
+      }
+
+      // 平台显式审核由员工处理，用户协商退则异步回传同意结果。
+      const requiresManualCancelAudit = req.body?.need_audit === true;
+      const isUserNegotiatedRefund = Number(req.body?.cancel_type) === 2 && Number(req.body?.refund_type) === 21;
+      const shouldUseAsyncCancelAudit = requiresManualCancelAudit || isUserNegotiatedRefund;
+      if (shouldUseAsyncCancelAudit) {
+        const result = await cancelAuditService.receiveCancelAudit(req.body || {}, { logId });
+        console.log('[Douyin SPI] 已接收异步取消申请:', {
+          logId,
+          ...summary,
+          auditMode: requiresManualCancelAudit ? 'MANUAL' : 'AUTO_APPROVE',
+          duplicate: result.duplicate
+        });
+        await saveCallbackLog({
+          type: 'spi_order_cancel',
+          stage: result.duplicate ? 'audit_duplicate' : requiresManualCancelAudit ? 'audit_pending' : 'audit_auto_approve_pending',
+          logId,
+          ...summary
+        });
+        res.status(200).json({
+          data: { error_code: 0, description: 'success', cancel_mode: 2 }
+        });
+        if (!requiresManualCancelAudit && isUserNegotiatedRefund) {
+          scheduleNegotiatedCancelAudit(result.audit.cancel_id);
+        }
+        return;
       }
 
       const result = bizType === 2012
