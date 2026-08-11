@@ -30,6 +30,7 @@ const voucherSchema = {
     inventoryCount: { type: 'integer', minimum: 0 },
     eachPersonMax: { type: 'integer', minimum: 1 },
     eachPersonEachOrderMax: { type: 'integer', minimum: 1 },
+    cancelBookingType: { type: 'integer', enum: [1, 3] },
     saleStartAt: { type: 'string', pattern: dateTimePattern },
     saleEndAt: { type: 'string', pattern: dateTimePattern },
     bookStartDate: { type: 'string', pattern: datePattern },
@@ -44,6 +45,14 @@ const validateVoucher = ajv.compile(voucherSchema);
 function parseId(value) {
   const id = Number(value);
   return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+/** 为旧调用方补齐默认的不可取消规则，避免更新时覆盖已有选择。 */
+function normalizeVoucherPayload(payload = {}, defaultCancelBookingType = 3) {
+  return {
+    ...payload,
+    cancelBookingType: payload.cancelBookingType === undefined ? defaultCancelBookingType : payload.cancelBookingType
+  };
 }
 
 /** 将指定时刻格式化为北京时间的售卖时间字段格式。 */
@@ -115,11 +124,12 @@ router.get('/sale-time-default', (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const message = validatePayload(req.body || {}, true);
+  const payload = normalizeVoucherPayload(req.body || {});
+  const message = validatePayload(payload, true);
   if (message) return res.status(400).json({ message });
   let voucher;
   try {
-    voucher = await repository.create(req.body);
+    voucher = await repository.create(payload);
     return await syncAndRespond(res, voucher.id);
   } catch (error) {
     // 本地草稿已创建时返回其 ID，前端重试必须改走更新接口。
@@ -130,15 +140,16 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   const id = parseId(req.params.id);
   if (!id) return res.status(400).json({ message: '预售券ID格式错误' });
-  const message = validatePayload(req.body || {});
-  if (message) return res.status(400).json({ message });
   try {
     const existing = await repository.findById(id);
     if (!existing) return res.status(404).json({ message: '预售券不存在' });
-    if (existing.rate_plan_id !== req.body.ratePlanId) {
+    const payload = normalizeVoucherPayload(req.body || {}, existing.cancel_booking_type);
+    const message = validatePayload(payload);
+    if (message) return res.status(400).json({ message });
+    if (existing.rate_plan_id !== payload.ratePlanId) {
       return res.status(400).json({ message: '预售券创建后不能更换绑定套餐，请新建预售券' });
     }
-    await repository.update(id, req.body);
+    await repository.update(id, payload);
     return await syncAndRespond(res, id);
   } catch (error) {
     return sendSyncError(res, error);

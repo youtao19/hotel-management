@@ -4,6 +4,10 @@
 
 官方[创建/更新预售券接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/hotel-voucher-mgmt/create-update-coupon)的 `presale_info.out_id` 是三方预售券唯一标识，首次写入后不可修改。更新已创建的券时，必须在 `presale_info.pre_sale_coupon_id` 传入抖音预售券 ID，并提交完整券信息；仅重复传同一 `out_id` 会被视作新建，可能返回“该 out_id 已绑定其他商品”。
 
+## 退款规则
+
+创建或编辑预售券时可选择“未使用自动退”或“不可取消”。`POST /api/douyin/presale-vouchers` 和 `PUT /api/douyin/presale-vouchers/:id` 接收整数 `cancelBookingType`；同步时映射到 `presale_info.trade_info.cancel_booking_rule.cancel_type`：`1` 表示“可取消”，即抖音预售券的未使用自动退；`3` 表示不可取消。旧调用方未传该字段时默认保留不可取消，更新已有券时未传则保留原规则。限时取消（`2`）和阶梯价取消（`4`）还需要时间或扣费规则，当前接口不会接受这两个值。
+
 ## 售卖时间默认值与校验
 
 新增预售券前，前端调用 `GET /api/douyin/presale-vouchers/sale-time-default` 获取服务器按 `Asia/Shanghai` 计算的 `saleStartAt`。该值为当前北京时间加 2 分钟，格式为 `YYYY-MM-DD HH:mm`；前端据此屏蔽更早的日期和时间。

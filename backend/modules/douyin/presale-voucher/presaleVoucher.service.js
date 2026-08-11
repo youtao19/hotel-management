@@ -147,8 +147,8 @@ async function syncVoucher(id) {
         },
         // 抖音要求提前预约天数为正数且不超过30天，一期采用官方示例的30天规则。
         book_rule: { earliest_book_day: 30 },
-        // 当前未维护可退时间配置，按官方示例使用普通取消规则，满足预售券必须有且仅有一条规则的约束。
-        cancel_booking_rule: { cancel_type: 3 },
+        // 可取消对应抖音的未使用自动退；限时与阶梯价取消另需时间或扣费配置。
+        cancel_booking_rule: { cancel_type: voucher.cancel_booking_type },
         // 当前未接入独立开票服务，按抖音预售券接口示例声明由商家侧提供发票。
         invoic_info: { provider: 1 }
       },
@@ -175,6 +175,7 @@ async function syncVoucher(id) {
     douyinRatePlanId: voucher.douyin_rate_plan_id,
     douyinVoucherId: voucher.douyin_voucher_id || null,
     actualAmount: payload.presale_info.pre_sale_coupon_info.actual_amount,
+    cancelBookingType: payload.presale_info.trade_info.cancel_booking_rule.cancel_type,
     inventoryIsLimited: voucher.inventory_is_limited,
     imageCount: imageUrls.length
   });

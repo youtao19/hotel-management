@@ -288,6 +288,25 @@
                   </q-input>
                 </div>
               </div>
+
+              <div class="q-mt-md">
+                <div class="field-label">退款规则 <span class="text-negative">*</span></div>
+                <q-select
+                  v-model="form.cancelBookingType"
+                  :options="cancelBookingTypeOptions"
+                  emit-value
+                  map-options
+                  outlined
+                  dense
+                  :rules="[required]"
+                  class="custom-field"
+                >
+                  <template #prepend>
+                    <q-icon name="published_with_changes" color="primary" />
+                  </template>
+                </q-select>
+                <div class="text-caption text-grey-6 q-mt-xs">“未使用自动退”会向抖音同步为“可取消”。</div>
+              </div>
             </div>
 
             <!-- 模块 3：有效期限 -->
@@ -552,6 +571,11 @@ const columns = [
   { name: 'actions', label: '操作', field: 'actions', align: 'center' }
 ]
 
+const cancelBookingTypeOptions = [
+  { label: '未使用自动退', value: 1 },
+  { label: '不可取消', value: 3 }
+]
+
 const ratePlanOptions = computed(() => ratePlans.value.filter(plan => plan.is_synced).map(plan => ({ label: `${plan.name}（${plan.douyin_rate_plan_id}）`, value: plan.id })))
 
 /** 实时计算折扣率与立省金额，增强表单输入反馈。 */
@@ -577,7 +601,7 @@ function onImgError(e) {
 
 /** 返回新增预售券的默认表单，售卖开始时间由后端按北京时间生成。 */
 function defaultForm(saleStartAt = '') {
-  return { ratePlanId: null, name: '', originalAmount: null, actualAmount: null, inventoryIsLimited: true, inventoryCount: null, eachPersonMax: 1, eachPersonEachOrderMax: 1, saleStartAt, saleEndAt: '', bookStartDate: '', bookEndDate: '', imageUrls: [] }
+  return { ratePlanId: null, name: '', originalAmount: null, actualAmount: null, inventoryIsLimited: true, inventoryCount: null, eachPersonMax: 1, eachPersonEachOrderMax: 1, cancelBookingType: 1, saleStartAt, saleEndAt: '', bookStartDate: '', bookEndDate: '', imageUrls: [] }
 }
 
 /** 判断日期是否不早于服务器给出的最早售卖日期。 */
@@ -701,6 +725,7 @@ async function openDialog(voucher = null) {
       inventoryCount: voucher.inventory_count,
       eachPersonMax: voucher.each_person_max,
       eachPersonEachOrderMax: voucher.each_person_each_order_max,
+      cancelBookingType: Number(voucher.cancel_booking_type || 3),
       saleStartAt: voucher.sale_start_at ? voucher.sale_start_at.replace('T', ' ').slice(0, 16) : '',
       saleEndAt: voucher.sale_end_at ? voucher.sale_end_at.replace('T', ' ').slice(0, 16) : '',
       bookStartDate: voucher.book_start_date || '',
@@ -722,6 +747,7 @@ function buildPayload() {
     inventoryCount: payload.inventoryIsLimited ? Number(payload.inventoryCount) : undefined,
     eachPersonMax: Number(payload.eachPersonMax),
     eachPersonEachOrderMax: Number(payload.eachPersonEachOrderMax),
+    cancelBookingType: Number(payload.cancelBookingType),
     saleStartAt: payload.saleStartAt ? payload.saleStartAt.replace(/[T/]/g, match => match === 'T' ? ' ' : '-') : '',
     saleEndAt: payload.saleEndAt ? payload.saleEndAt.replace(/[T/]/g, match => match === 'T' ? ' ' : '-') : '',
     bookStartDate: payload.bookStartDate ? payload.bookStartDate.replaceAll('/', '-') : '',

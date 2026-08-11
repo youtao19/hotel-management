@@ -13,6 +13,7 @@ const createQuery = `
     inventory_count INTEGER,
     each_person_max INTEGER NOT NULL DEFAULT 1,
     each_person_each_order_max INTEGER NOT NULL DEFAULT 1,
+    cancel_booking_type INTEGER NOT NULL DEFAULT 3,
     sale_start_at TIMESTAMPTZ NOT NULL,
     sale_end_at TIMESTAMPTZ NOT NULL,
     book_start_date DATE NOT NULL,
@@ -33,6 +34,7 @@ const createQuery = `
     CONSTRAINT douyin_presale_vouchers_inventory_check CHECK (inventory_count IS NULL OR inventory_count >= 0),
     CONSTRAINT douyin_presale_vouchers_each_person_max_check CHECK (each_person_max > 0),
     CONSTRAINT douyin_presale_vouchers_each_person_each_order_max_check CHECK (each_person_each_order_max > 0),
+    CONSTRAINT douyin_presale_vouchers_cancel_booking_type_check CHECK (cancel_booking_type IN (1, 3)),
     CONSTRAINT douyin_presale_vouchers_sale_time_check CHECK (sale_end_at > sale_start_at),
     CONSTRAINT douyin_presale_vouchers_book_date_check CHECK (book_end_date >= book_start_date)
   );
@@ -48,7 +50,8 @@ const schemaUpdateQueryStrings = [
   `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS last_product_status_log_id VARCHAR(128);`,
   `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS last_product_status_error TEXT;`,
   `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS each_person_max INTEGER NOT NULL DEFAULT 1;`,
-  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS each_person_each_order_max INTEGER NOT NULL DEFAULT 1;`
+  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS each_person_each_order_max INTEGER NOT NULL DEFAULT 1;`,
+  `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS cancel_booking_type INTEGER NOT NULL DEFAULT 3;`
 ];
 
 const createCommentQueryStrings = [
@@ -59,6 +62,7 @@ const createCommentQueryStrings = [
   `COMMENT ON COLUMN ${tableName}.inventory_is_limited IS '是否有限库存；false时inventory_count不参与抖音库存参数';`,
   `COMMENT ON COLUMN ${tableName}.each_person_max IS '单个抖音用户在本券售卖期内累计可购买的最大张数，必须大于0';`,
   `COMMENT ON COLUMN ${tableName}.each_person_each_order_max IS '单个抖音用户每笔订单可购买的最大张数，必须大于0';`,
+  `COMMENT ON COLUMN ${tableName}.cancel_booking_type IS '抖音取消预约类型：1可取消即未使用自动退，3不可取消；当前不支持需额外时间或扣费规则的2和4';`,
   `COMMENT ON COLUMN ${tableName}.image_urls IS '券图片URL数组，首张作为头图，其余作为详情图';`,
   `COMMENT ON COLUMN ${tableName}.audit_status IS '抖音审核状态：PENDING待审核、APPROVED通过、REJECTED未通过';`,
   `COMMENT ON COLUMN ${tableName}.sync_status IS '同步状态：1成功、0待同步、-1同步失败';`,
