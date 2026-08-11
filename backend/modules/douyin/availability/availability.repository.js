@@ -122,16 +122,17 @@ async function findClosedStayDates(ratePlanId, dates) {
   return result.rows.map((row) => row.stay_date);
 }
 
-/** 查询指定本地房型已同步的抖音售卖套餐。 */
-async function findSyncedRatePlansByRoomType(roomTypeCode) {
+/** 查询指定本地房型归属当前抖音账号的已同步售卖套餐。 */
+async function findSyncedRatePlansByRoomType(roomTypeCode, accountId) {
   const result = await db.query(
     `
       ${getRatePlanSelectSql()}
         AND rp.room_type_code = $1
         AND ocm.channel_item_id IS NOT NULL
+        AND ocm.channel_config ->> 'account_id' = $2
       ORDER BY rp.id
     `,
-    [roomTypeCode]
+    [roomTypeCode, accountId]
   );
   return result.rows;
 }

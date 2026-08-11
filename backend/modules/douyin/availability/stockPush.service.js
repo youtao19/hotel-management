@@ -59,9 +59,17 @@ async function syncRatePlanStock(localRatePlan, options) {
   const saveResult = Array.isArray(result?.data?.save_result)
     ? result.data.save_result.find((item) => String(item.rate_plan_id) === String(localRatePlan.rate_plan_id))
     : null;
-  const message = result?.extra?.sub_description || result?.extra?.description || saveResult?.message;
+  const message = saveResult?.message || result?.extra?.sub_description || result?.extra?.description;
   if (!response.ok || Number(result?.extra?.error_code || 0) !== 0 || !saveResult || Number(saveResult.code) !== 0) {
-    await callbackLogService.appendLog({ type: 'stock_push', stage: 'error', logId, ratePlanId: localRatePlan.rate_plan_id, error: message || `HTTP ${response.status}` });
+    await callbackLogService.appendLog({
+      type: 'stock_push',
+      stage: 'error',
+      logId,
+      ratePlanId: localRatePlan.rate_plan_id,
+      errorCode: saveResult?.code ?? result?.extra?.error_code ?? null,
+      error: message || `HTTP ${response.status}`,
+      saveResult: saveResult || null
+    });
     throw createServiceError(message || '抖音房量房态推送失败', 502, logId);
   }
   console.log('[Douyin Stock Push] 推送成功:', { localRatePlanId: localRatePlan.local_rate_plan_id, ratePlanId: localRatePlan.rate_plan_id, logId });
@@ -76,16 +84,38 @@ async function syncStock(ratePlanId, options = {}) {
   return syncRatePlanStock(localRatePlan, options);
 }
 
+/** 推送当前抖音账号下受库存变动影响的套餐。 */
+async function syncRoomTypeStock(roomTypeCode, startDate, endDate, source) {
+  const accountId = String(douyinConfig.accountId || '').trim();
+  if (!accountId) throw createServiceError('缺少抖音商家 account_id，请配置 DOUYIN_ACCOUNT_ID', 400);
+
+  const plans = await availabilityRepository.findSyncedRatePlansByRoomType(roomTypeCode, accountId);
+  for (const plan of plans) {
+    try {
+      await syncRatePlanStock(plan, { startDate, endDate, accountId });
+    } catch (error) {
+      // 单个历史或异常套餐不能阻止同房型的其他当前套餐补推。
+      console.error('[Douyin Stock Push] 自动推送失败:', {
+        roomTypeCode,
+        startDate,
+        endDate,
+        source,
+        localRatePlanId: plan.local_rate_plan_id,
+        ratePlanId: plan.rate_plan_id,
+        message: error.message,
+        douyinLogId: error.douyinLogId || null
+      });
+    }
+  }
+}
+
 /** 在库存变动后异步补推受影响房型的指定日期。 */
 function scheduleRoomTypeStockSync(roomTypeCode, startDate, endDate, source) {
-  setImmediate(async () => {
-    try {
-      const plans = await availabilityRepository.findSyncedRatePlansByRoomType(roomTypeCode);
-      for (const plan of plans) await syncRatePlanStock(plan, { startDate, endDate });
-    } catch (error) {
-      console.error('[Douyin Stock Push] 自动推送失败:', { roomTypeCode, startDate, endDate, source, message: error.message, douyinLogId: error.douyinLogId || null });
-    }
+  setImmediate(() => {
+    syncRoomTypeStock(roomTypeCode, startDate, endDate, source).catch((error) => {
+      console.error('[Douyin Stock Push] 自动推送任务失败:', { roomTypeCode, startDate, endDate, source, message: error.message, douyinLogId: error.douyinLogId || null });
+    });
   });
 }
 
-module.exports = { syncStock, scheduleRoomTypeStockSync };
+module.exports = { syncStock, syncRoomTypeStock, scheduleRoomTypeStockSync };

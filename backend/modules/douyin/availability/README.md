@@ -15,9 +15,14 @@
 
 ## 房量房态主动推送
 
-- 官方接口：[房量房态推送接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/housing-updates/room-status-api)
+- 官方接口：[房量房态推送接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/housing-update/room-status-push-api)
 - 上游请求：`POST /goodlife/v1/trip/hotel/stock/save/`
 - 权限：`life.capacity.trip_hotel_ari_pull`，日历房或酒店新预售券解决方案均需开通“房价/房态/房量更新”。
+
+关联官方接口：
+
+- [房价推送接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/housing-update/house-price-api)：`POST /goodlife/v1/trip/hotel/price/save/`，用于按日房价和属性更新。
+- [价量态变更通知接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/housing-update/presale-price-notification)：`POST /goodlife/v1/trip/hotel/ari/notify/`，通知抖音调用本系统价量态 SPI；不直接写入抖音库存。
 
 该接口按抖音 `rate_plan_id` 和入住日期推送：
 
@@ -26,6 +31,8 @@
 - `timerange`：价格库存生效的自然日范围。
 
 预售券场景应传其绑定的类型 13 预定商品 `rate_plan_id`，而非类型 12 预售券 `product_id`。单次最多 50 组 `aris`，建议按 7 天切分且不超过 30 天；HTTP 200 后仍须逐项检查 `data.save_result[].code`，并保留 `extra.logid`。
+
+顶层 `extra.error_code=0`、`extra.description="success"` 只表示请求整体受理；对应 `rate_plan_id` 的 `data.save_result[].code=0` 才表示该售卖计划通过校验。单项失败时，应记录该项的 `code`、`message` 和完整 `save_result`，不能用顶层 `description` 覆盖单项错误。
 
 ## 本地接口
 
@@ -49,6 +56,8 @@
 - 创建普通订单：推送该订单实际覆盖的房晚日期。
 - 修改订单状态或换房：推送受影响房型的订单日期。
 - 手动修改房间状态：推送该房型未来 30 个自然日。
+
+自动同步只推送渠道映射 `channel_config.account_id` 与当前 `DOUYIN_ACCOUNT_ID` 一致的套餐，历史账号的映射仅保留作追溯，不会随当前账号的房态变更写入抖音。单个套餐失败会记录其套餐 ID、抖音 `logid`、单项 `code` 和 `message`，但不会阻断同房型其他当前账号套餐的推送。
 
 自动推送失败不会回滚订单或房态变更；后端会记录失败原因和抖音 `logid`。提前退房、正常退房、订单改期尚未接入自动触发，可使用手动补推作为补偿。
 
