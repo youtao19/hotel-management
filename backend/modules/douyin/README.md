@@ -17,6 +17,10 @@
 - `PATCH /api/rate-plans/:id`
 - `DELETE /api/rate-plans/:id`
 - `POST /api/rate-plans/:id/douyin/sync`
+- `GET|PUT /api/rate-plans/:id/douyin/calendar-room/prices`
+- `POST /api/rate-plans/:id/douyin/calendar-room/prices/sync`
+- `GET|PUT /api/rate-plans/:id/douyin/presale/prices`
+- `POST /api/rate-plans/:id/douyin/presale/prices/sync`
 - `GET /api/douyin/presale-vouchers`
 - `POST /api/douyin/presale-vouchers`
 - `PUT /api/douyin/presale-vouchers/:id`
@@ -49,6 +53,9 @@ Phase 7: 抖音相关 routes、services 和原 `backend/services` 中的物理�
 - `room-type-mapping/`：前端“抖音房型匹配”页面使用的房型映射接口。
 - `rate-plan/`：本地售卖套餐接口，外部路径仍是 `/api/rate-plans`，详见 [套餐接口说明](rate-plan/README.md)。
 - `presale-product/`：本地售卖套餐同步成抖音预售券预定商品。
+- `calendar-room/`：日历房静态信息和日历房按日房价接口。
+- `presale-voucher/`：预售券资料、商品状态和预售券按日房价接口。
+- `price-save/`：日历房和预售券共用的抖音按日房价请求协议。
 - `availability/`：抖音价量 SPI、可订检查和 ARI 变更通知。
 - `channel-mapping/`：本地资源与抖音渠道资源的映射写入。
 - `physical-room/`：抖音物理房型查询、本地缓存刷新和房型相关手动脚本依赖能力。

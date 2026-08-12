@@ -56,7 +56,8 @@ function shouldSkipAppBootstrap() {
     || testPath.endsWith('/backend/tests/douyin_room_type_mapping.test.js')
     || testPath.endsWith('/backend/tests/douyin_external_route.test.js')
     || testPath.endsWith('/backend/tests/douyin_ari_notify.test.js')
-    || testPath.endsWith('/backend/tests/douyin_calendar_room.test.js');
+    || testPath.endsWith('/backend/tests/douyin_calendar_room.test.js')
+    || testPath.endsWith('/backend/tests/douyin_presale_price.test.js');
 }
 
 // 全局测试设置

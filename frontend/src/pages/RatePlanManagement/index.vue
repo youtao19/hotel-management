@@ -1627,6 +1627,22 @@ function openCalendarPriceDialog(plan) {
   calendarPriceDialogOpen.value = true
 }
 
+/** 返回当前套餐对应的按日房价接口。 */
+function getDailyPriceApi(plan) {
+  if (plan?.douyin_business_type === 'PRESALE') {
+    return {
+      get: ratePlanApi.getPresalePrices,
+      save: ratePlanApi.savePresalePrices,
+      sync: ratePlanApi.syncPresalePrices
+    }
+  }
+  return {
+    get: ratePlanApi.getCalendarRoomPrices,
+    save: ratePlanApi.saveCalendarRoomPrices,
+    sync: ratePlanApi.syncCalendarRoomPrices
+  }
+}
+
 /** 设置按日房价维护的快捷日期范围。 */
 function setCalendarPriceDays(days) {
   const start = new Date()
@@ -1662,7 +1678,7 @@ async function loadCalendarPrices() {
 
   calendarPriceLoading.value = true
   try {
-    const response = await ratePlanApi.getCalendarRoomPrices(calendarPricePlan.value.id, calendarPriceRange.value)
+    const response = await getDailyPriceApi(calendarPricePlan.value).get(calendarPricePlan.value.id, calendarPriceRange.value)
     const priceMap = new Map((response?.data || []).map(price => [price.stay_date, price]))
     calendarPriceRows.value = dates.map(stayDate => {
       const price = priceMap.get(stayDate)
@@ -1683,7 +1699,7 @@ async function loadCalendarPrices() {
 async function saveCalendarPrices() {
   calendarPriceSaving.value = true
   try {
-    await ratePlanApi.saveCalendarRoomPrices(calendarPricePlan.value.id, { prices: calendarPriceRows.value })
+    await getDailyPriceApi(calendarPricePlan.value).save(calendarPricePlan.value.id, { prices: calendarPriceRows.value })
     $q.notify({ type: 'positive', message: '抖音按日房价保存成功' })
   } catch (error) {
     $q.notify({ type: 'negative', message: getErrorMessage(error, '保存抖音按日房价失败') })
@@ -1697,8 +1713,9 @@ async function syncCalendarPrices() {
   calendarPriceSyncing.value = true
   try {
     // 先保存当前编辑值，避免推送旧价格。
-    await ratePlanApi.saveCalendarRoomPrices(calendarPricePlan.value.id, { prices: calendarPriceRows.value })
-    const response = await ratePlanApi.syncCalendarRoomPrices(calendarPricePlan.value.id, calendarPriceRange.value)
+    const dailyPriceApi = getDailyPriceApi(calendarPricePlan.value)
+    await dailyPriceApi.save(calendarPricePlan.value.id, { prices: calendarPriceRows.value })
+    const response = await dailyPriceApi.sync(calendarPricePlan.value.id, calendarPriceRange.value)
     const logIds = response?.data?.logIds || []
     $q.notify({ type: 'positive', message: logIds.length ? `房价推送成功，logid：${logIds.join(', ')}` : '房价推送成功' })
   } catch (error) {

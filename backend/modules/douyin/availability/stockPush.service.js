@@ -5,7 +5,7 @@ const douyinTokenService = require('../token/token.service');
 const callbackLogService = require('../external/callbackLog.service');
 const availabilityRepository = require('./availability.repository');
 const { ACTIVE_ORDER_STATUSES } = require('./priceVolume.service');
-const { buildDateList, MAX_ARIS_PER_REQUEST } = require('../calendar-room/calendarPrice.validator');
+const { buildDateList, MAX_ARIS_PER_REQUEST } = require('../price-save/dailyPrice.validator');
 
 /** 创建库存推送业务错误。 */
 function createServiceError(message, statusCode = 500, douyinLogId = null) {

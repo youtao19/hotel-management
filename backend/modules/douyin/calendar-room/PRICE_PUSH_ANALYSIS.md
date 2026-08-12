@@ -10,7 +10,7 @@
 
 ## 实施结果
 
-系统已调用 `/goodlife/v1/trip/hotel/price/save/`，支持主动推送日历房和预售券绑定预定商品的按日价格。预售券只使用已同步的类型 13 `rate_plan_id`，不使用类型 12 预售券 `product_id`，也不修改券面售价。
+系统通过 `price-save/` 公共协议调用 `/goodlife/v1/trip/hotel/price/save/`。日历房与预售券分别提供独立本地接口和业务校验；预售券只使用已同步的类型 13 `rate_plan_id`，不使用类型 12 预售券 `product_id`，也不修改券面售价。
 
 现有 `availability/` 模块提供的是不同方向的能力：
 
@@ -35,14 +35,16 @@
 
 ## 推荐实现结构
 
-所有新代码放在 `backend/modules/douyin/calendar-room/`；预售券房价推送仅复用其已保存的套餐映射，不调用预售券商品接口。
+第三方协议代码放在 `backend/modules/douyin/price-save/`；日历房和预售券各自保留业务路由与校验，不交叉调用。
 
 ```text
-calendar-room/
-├─ calendarPrice.repository.js   读取日历价格和抖音套餐映射
-├─ calendarPrice.validator.js    校验套餐、日期、金额和单次上限
-├─ calendarPrice.service.js      组装 aris 并调用 /price/save/
-└─ calendarPrice.routes.js       提供本地价格维护和主动推送接口
+price-save/
+├─ dailyPrice.repository.js      读取按日价格和抖音套餐映射
+├─ dailyPrice.validator.js       校验日期、金额和单次上限
+├─ dailyPrice.service.js         组装 aris 并调用 /price/save/
+└─ dailyPrice.routes.js          提供可配置的业务路由基础
+calendar-room/calendarPrice.*    仅接受 CALENDAR_ROOM
+presale-voucher/presalePrice.*   仅接受 PRESALE
 ```
 
 已提供本地接口：
@@ -50,6 +52,8 @@ calendar-room/
 1. `PUT /api/rate-plans/:id/douyin/calendar-room/prices`：保存一个或多个日期的价格。
 2. `GET /api/rate-plans/:id/douyin/calendar-room/prices?startDate=&endDate=`：查询价格日历。
 3. `POST /api/rate-plans/:id/douyin/calendar-room/prices/sync`：向抖音主动推送指定日期范围。
+
+预售券接口说明见 [预售券模块说明](../presale-voucher/README.md#预售券按日房价推送)。
 
 ## 后端同步流程
 
@@ -72,6 +76,6 @@ calendar-room/
 ## 测试与联调
 
 1. 测试日历价保存、重复日期覆盖、金额校验和日期范围校验。
-2. 测试预售券套餐、未同步日历房套餐、缺价套餐都不能推送。
+2. 测试日历房和预售券只能调用各自价格接口，未同步套餐、缺价套餐都不能推送。
 3. Mock 上游接口，断言 `rate_plan_id`、日期、金额分单位、50 组上限、`save_result` 逐项失败和 `logid`。
 4. 前端构建通过后，用已授权的日历房账号、真实物理房型和后端日志完成真实联调。

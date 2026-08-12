@@ -4,6 +4,8 @@ const addFormats = require('ajv-formats');
 const { query } = require('../../../database/postgreDB/pg');
 const douyinProductService = require('../presale-product/product.service');
 const calendarRoomRoute = require('../calendar-room/calendarRoom.routes');
+const calendarPriceRoute = require('../calendar-room/calendarPrice.routes');
+const presalePriceRoute = require('../presale-voucher/presalePrice.routes');
 const { douyinConfig } = require('../../../appSettings/douyin.config');
 
 const router = express.Router();
@@ -383,6 +385,10 @@ router.get('/:id', async (req, res) => {
 
 // 挂载日历房专属路由。
 router.use('/:id/douyin/calendar-room', calendarRoomRoute);
+// 挂载日历房按日房价路由。
+router.use('/:id/douyin/calendar-room', calendarPriceRoute);
+// 挂载预售券按日房价路由。
+router.use('/:id/douyin/presale', presalePriceRoute);
 
 /** 查询套餐已主动关闭的入住日期。 */
 router.get('/:id/douyin/stay-date-closures', async (req, res) => {

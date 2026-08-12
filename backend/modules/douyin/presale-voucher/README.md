@@ -60,12 +60,13 @@
 
 ## 预售券按日房价推送
 
-官方[房价推送接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/calendarroom/housing-updates/house-price-interface)的权限说明覆盖“酒店新预售券解决方案”。本系统复用日历房价维护入口：
+官方[房价推送接口](https://developer.open-douyin.com/docs/resource/zh-CN/local-life/develop/OpenAPI/JiuLv/presale/housing-update/house-price-api)的权限说明覆盖“酒店新预售券解决方案”。预售券使用独立入口：
 
-- `PUT /api/rate-plans/:id/douyin/calendar-room/prices`：保存预售券套餐按入住日期的价格。
-- `POST /api/rate-plans/:id/douyin/calendar-room/prices/sync`：调用 `POST /goodlife/v1/trip/hotel/price/save/` 推送价格。
+- `PUT /api/rate-plans/:id/douyin/presale/prices`：保存预售券套餐按入住日期的价格。
+- `GET /api/rate-plans/:id/douyin/presale/prices?startDate=&endDate=`：查询预售券按日价格。
+- `POST /api/rate-plans/:id/douyin/presale/prices/sync`：调用 `POST /goodlife/v1/trip/hotel/price/save/` 推送价格。
 
-预售券必须先存在已同步的类型 13 预定商品映射；后端从 `ota_channel_mappings.channel_item_id` 读取该 `rate_plan_id` 并写入 `aris[]`。该功能不调用预售券商品状态接口，也不使用或修改类型 12 的 `douyin_voucher_id`、券面售价。详细参数和日期范围限制见 [日历房价格模块说明](../calendar-room/README.md)。
+仅 `PRESALE` 套餐可调用。预售券必须先存在已同步的类型 13 预定商品映射；后端从 `ota_channel_mappings.channel_item_id` 读取该 `rate_plan_id` 并写入 `aris[]`。该功能不调用预售券商品状态接口，也不使用或修改类型 12 的 `douyin_voucher_id`、券面售价。日期范围、金额单位和抖音 `logid` 处理见 [公共房价协议](../price-save/README.md)。
 
 ## 预约加价日期
 

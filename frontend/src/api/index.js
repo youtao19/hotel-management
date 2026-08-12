@@ -203,6 +203,12 @@ export const ratePlanApi = {
 
   syncCalendarRoomPrices: (id, payload) => api.post(`/rate-plans/${id}/douyin/calendar-room/prices/sync`, payload),
 
+  getPresalePrices: (id, params) => api.get(`/rate-plans/${id}/douyin/presale/prices`, { params }),
+
+  savePresalePrices: (id, payload) => api.put(`/rate-plans/${id}/douyin/presale/prices`, payload),
+
+  syncPresalePrices: (id, payload) => api.post(`/rate-plans/${id}/douyin/presale/prices/sync`, payload),
+
   syncCalendarRoomStock: (id, payload) => api.post(`/rate-plans/${id}/douyin/calendar-room/stock/sync`, payload),
 
   closeStayDate: (id, payload) => api.post(`/rate-plans/${id}/douyin/stay-date-closures`, payload),
